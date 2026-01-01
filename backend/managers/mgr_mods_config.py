@@ -66,7 +66,7 @@ class LoadOrderManager:
                         # 统一转小写，因为 XML 中 ID 大小写可能不规范，但 ID 实际上不敏感
                         active_list.append(li.text.strip().lower())
         except Exception as e:
-            print(f"Error reading ModsConfig.xml: {e}")
+            print(f"读取 ModsConfig.xml 时出错: {e}")
             
         return active_list
 
@@ -116,10 +116,10 @@ class LoadOrderManager:
 
             # 格式化写入
             tree.write(self.mods_config_file, pretty_print=True, xml_declaration=True, encoding="utf-8")
-            print(f"Successfully saved {len(active_ids)} active mods to ModsConfig.xml")
+            print(f"已成功将 {len (active_ids)} 个启用模组保存到 ModsConfig.xml 中")
             return True
         except Exception as e:
-            print(f"Error saving ModsConfig.xml: {e}")
+            print(f"保存 ModsConfig.xml 时出错：{e}")
             return False
 
     def _create_backup(self):

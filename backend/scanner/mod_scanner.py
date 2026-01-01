@@ -42,7 +42,7 @@ class ModScanner:
         异步扫描入口。立即返回，任务在后台运行。
         """
         if self._is_scanning:
-            return {'status': 'busy', 'message': 'Scanning already in progress'}
+            return {'status': 'busy', 'message': '扫描已在进行中'}
         
         self._is_scanning = True
         # 提交到线程池
@@ -59,7 +59,7 @@ class ModScanner:
             # --- 0. 预检查与准备 ---
             valid_paths = [p for p in search_paths if p and os.path.exists(p)]
             if not valid_paths:
-                self._finish_scan({'error': 'No valid paths'})
+                self._finish_scan({'error': '没有有效路径'})
                 return
 
             # 初始化 DLC Parser
@@ -151,11 +151,9 @@ class ModScanner:
 
             # --- 3. 清理与收尾 ---
             EventBus.emit('scan-progress', {'stage': 'cleaning', 'message': '正在清理无效数据...'})
-            
-            if settings.config.delete_missing_mods_data:
-                # 注意：这里需要传入所有扫描到的 ID (包括跳过的)
-                removed_mods = ModDAO.find_missing_mods(settings.config.delete_missing_mods_data)
-                stats['removed'] = len(removed_mods)
+            # 扫描缺失的Mod，根据设置删除不存在的 Mod 数据
+            all_missing_mods = ModDAO.find_missing_mods(settings.config.delete_missing_mods_data)
+            stats['removed'] = len(all_missing_mods['deleted_mods'])
             
             # 强制发送 100% 进度
             EventBus.emit('scan-progress', {

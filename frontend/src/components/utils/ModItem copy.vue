@@ -72,7 +72,7 @@ const store = useModStore()
 
 // 使用 computed 缓存，只有当 id 变化时才重新获取对象
 // 极大地减少了父组件重绘时的计算量
-const modData = computed(() => store.getModById(props.id))
+const modData = computed(() => store.takeModById(props.id))
 const modIcon = computed(() => store.getAssetUrl(props.id))
 
 const getCardClass = (id) => {
@@ -81,7 +81,7 @@ const getCardClass = (id) => {
     ? 'ring-1 ring-accent-success z-10' 
     : 'bg-bg-surface hover:border-white/10 hover:bg-[#2d3a4f]'
   
-  const missing = store.getModById(id).is_missing ? 'bg-red-900/20 border-red-500/30' : ''
+  const missing = store.takeModById(id).is_missing ? 'bg-red-900/20 border-red-500/30' : ''
   
   return `${base} ${missing}`
 }

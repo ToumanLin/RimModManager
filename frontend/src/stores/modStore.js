@@ -25,6 +25,7 @@ export const useModStore = defineStore('mods', () => {
   const dataVersion = ref(0) // 数据版本号
 
   const activeIds = ref([]) // 绑定的启用列表
+  const inactiveIds = ref([]) // 绑定的禁用列表
   const tempIds = ref([])   // 临时列表
   const groupList = ref([]) // 分组列表
   
@@ -60,7 +61,7 @@ export const useModStore = defineStore('mods', () => {
   // ==== 智能计算 ====
   // 获取非活跃 Mod ID 列表 (全集 - 活跃 - 临时)
   // 注意：这里不负责筛选和排序，只提供原始数据
-  const inactiveIds = computed(() => {
+  const takeInactiveIds = () => {
     const activeSet = new Set(activeIds.value.map(id => id.toLowerCase()))
     const tempSet = new Set(tempIds.value.map(id => id.toLowerCase()))
     
@@ -77,13 +78,13 @@ export const useModStore = defineStore('mods', () => {
       const mB = allModsMap.value.get(b.toLowerCase())
       return (mA?.name || a).localeCompare(mB?.name || b)
     })
-  })
+  }
   // 选中的模组对象列表
   const selectedMods = computed(() => {
-    return Array.from(selectedIds.value).map(id => getModById(id))
+    return Array.from(selectedIds.value).map(id => takeModById(id))
   })
 
-
+  // ==== 核心方法 ====
   // 初始化：获取数据并分类
   const initialize = async () => {
     isLoading.value = true
@@ -108,7 +109,7 @@ export const useModStore = defineStore('mods', () => {
       isLoading.value = false
     }
   }
-  // 事件监听
+  // 注册事件监听
   const setupEventListeners = () => {
     // 防止重复添加监听器（简单判断，生产环境可以用更严谨的方式）
     if (window._modManagerEventsInitialized) return
@@ -136,28 +137,22 @@ export const useModStore = defineStore('mods', () => {
       scanProgress.value.message = '扫描完成'
       console.log("扫描统计:", e.detail)
       toast.success(`扫描完成，共计扫描${e.detail.total}个模组，新增${e.detail.stats.added}个，
-更新${e.detail.stats.updated}个，已知${e.detail.stats.skipped}个。`)
+更新${e.detail.stats.updated}个，删除${e.detail.stats.removed}个，已知${e.detail.stats.skipped}个。`)
       // [关键] 扫描结束后，主动拉取一次最新数据刷新界面
       await refreshModList()
     })
   }
-  // 获取加载顺序
-  const openLoadOrder = async (mods_config_file_path=null) => {
-    if (!window.pywebview) return
-    const res = await window.pywebview.api.open_load_order_file(mods_config_file_path)
-    if (res.status === 'success' && res.load_order) {
-      activeIds.value = res.load_order
-      // 如果有指定路径，标记为脏状态，等待保存
-      if (mods_config_file_path) isDirty.value = true
-      else isDirty.value = false
-      console.log("打开加载顺序:", res)
-      toast.success("Mod序列已加载")
-    }
+  // 从所有列表中移除指定 ID（大小写不敏感）
+  const removeIdOnAllList = (id) => {
+    const lowerId = id.toLowerCase()
+    activeIds.value = activeIds.value.filter(i => i.toLowerCase() !== lowerId)
+    inactiveIds.value = inactiveIds.value.filter(i => i.toLowerCase() !== lowerId)
+    tempIds.value = tempIds.value.filter(i => i.toLowerCase() !== lowerId)
   }
 
   // ===== Mod操作 =====
   // 获取 Mod 对象
-  const getModById = (id) => {
+  const takeModById = (id) => {
     if (!id) return null
     const lowerId = id.toLowerCase()
     if (allModsMap.value.has(lowerId)) {
@@ -173,63 +168,8 @@ export const useModStore = defineStore('mods', () => {
     }
   }
   // 获取 Mod 对象列表 (根据 ID 列表筛选)
-  const getModListByIds = (ids) => {
+  const takeModListByIds = (ids) => {
     return Array.from(allModsMap.value.values()).filter(mod => ids.includes(mod.package_id))
-  }
-  // 获取图片 URL (基于后端 FileManager)
-  const getIconUrl = (id) => {
-    const mod = getModById(id)
-    if (mod && mod.icon_url) return mod.icon_url // 列表图标
-    if (mod && mod.thumb_url) return mod.thumb_url // 缩略图
-    if (mod && mod.preview_url) return mod.preview_url // 详情大图
-    return '' // 返回空或默认图路径
-  }
-   // 单独抽离刷新列表的方法，用于初始化、扫描完成后、或手动刷新
-  const refreshModList = async (isInit = false) => {
-    try {
-      // 调用后端获取全量数据
-      const res = await window.pywebview.api.get_initial_data()
-      
-      if (res.status === 'success') {
-        // 1. 更新设置 (仅初始化时，避免覆盖用户未保存的修改)
-        if (isInit && res.settings) {
-          settings.value = res.settings
-        }
-        // 2. 更新 Mod Map
-        // 直接重建 Map，确保删除的 Mod 能被移除，新增的能被加入
-        const tempMap = new Map()
-        res.all_mods.forEach(mod => {
-          // 预先生成搜索索引字符串
-          mod._searchStr = [
-            mod.name,
-            mod.alias_name,
-            mod.package_id,
-            ...(mod.tags || []),
-            mod.author
-          ].filter(Boolean).join(' ').toLowerCase(); // 拼接成一个长字符串
-          
-          // 预先将 Tags 转为小写 Set，加速精确匹配
-          mod._tagsLower = new Set((mod.tags || []).map(t => t.toLowerCase()));
-          
-          tempMap.set(mod.package_id.toLowerCase(), mod)
-        })
-        allModsMap.value = tempMap
-        // 3. 更新分组 (防止分组内的 Mod 被删了但分组里还有 ID)
-        groupList.value = res.groups || []
-        // 4. 更新激活列表 (通常扫描不会变动 active list，但为了同步“缺失”状态，更新一下也好)
-        activeIds.value = (res.active_load_order || []).map(id => id.toLowerCase())
-        // 5. 检查路径 (仅初始化时)
-        if (isInit && !res.paths_configured) {
-          showSettings.value = true
-        }
-      }
-      // 6. 更新数据版本号
-      dataVersion.value ++;
-
-      console.log("刷新列表成功:", res)
-    } catch (e) {
-      console.error("刷新列表失败:", e)
-    }
   }
   // 选择/取消选择 Mod
   const selectMod = (id, isMulti = false, isRange = false) => {
@@ -297,6 +237,64 @@ export const useModStore = defineStore('mods', () => {
     lastSelectedId.value = null
     lastSelectedListId.value = null
   }
+  // 获取图片 URL (基于后端 FileManager)
+  const getIconUrl = (id) => {
+    const mod = takeModById(id)
+    if (mod && mod.icon_url) return mod.icon_url // 列表图标
+    if (mod && mod.thumb_url) return mod.thumb_url // 缩略图
+    if (mod && mod.preview_url) return mod.preview_url // 详情大图
+    return '' // 返回空或默认图路径
+  }
+   // 单独抽离刷新列表的方法，用于初始化、扫描完成后、或手动刷新
+  const refreshModList = async (isInit = false) => {
+    try {
+      // 调用后端获取全量数据
+      const res = await window.pywebview.api.get_initial_data()
+      
+      if (res.status === 'success') {
+        // 1. 更新设置 (仅初始化时，避免覆盖用户未保存的修改)
+        if (isInit && res.data.settings) {
+          settings.value = res.data.settings
+        }
+        // 2. 更新 Mod Map
+        // 直接重建 Map，确保删除的 Mod 能被移除，新增的能被加入
+        const tempMap = new Map()
+        res.data.all_mods.forEach(mod => {
+          // 预先生成搜索索引字符串
+          mod._searchStr = [
+            mod.name,
+            mod.alias_name,
+            mod.package_id,
+            ...(mod.tags || []),
+            mod.author
+          ].filter(Boolean).join(' ').toLowerCase(); // 拼接成一个长字符串
+          
+          // 预先将 Tags 转为小写 Set，加速精确匹配
+          mod._tagsLower = new Set((mod.tags || []).map(t => t.toLowerCase()));
+          
+          tempMap.set(mod.package_id.toLowerCase(), mod)
+        })
+        allModsMap.value = tempMap
+        // 3. 更新分组 (防止分组内的 Mod 被删了但分组里还有 ID)
+        groupList.value = res.data.groups || []
+        // 4. 更新激活列表 (通常扫描不会变动 active list，但为了同步“缺失”状态，更新一下也好)
+        activeIds.value = (res.data.active_load_order || []).map(id => id.toLowerCase())
+        inactiveIds.value = takeInactiveIds()
+        // 5. 检查路径 (仅初始化时)
+        if (isInit && !res.data.paths_configured) {
+          showSettings.value = true
+        }
+      } 
+      else { throw new Error(res.message) }
+      // 6. 更新数据版本号
+      dataVersion.value ++;
+
+      console.log("刷新列表成功:", res)
+    } catch (e) {
+      console.error("刷新列表失败:\n", e)
+      toast.error(`刷新列表失败: \n${e.message}`)
+    }
+  }
 
   // ===== Mod管理 =====
   // 扫描 Mod
@@ -309,13 +307,28 @@ export const useModStore = defineStore('mods', () => {
       const res = await window.pywebview.api.scan_mods(paths)
       
       if (res.status !== 'success' && res.status !== 'started') {
-        console.error("启动扫描失败:", res.message)
-        toast.error("扫描启动失败，请检查日志")
+        console.error("启动扫描失败:", res)
+        toast.error(`扫描启动失败: \n${res.message}`)
         return
       }
     } catch (e) {
       console.error("扫描请求异常:", e)
-      toast.error("扫描请求异常，请检查日志")
+      toast.error(`扫描请求异常: \n${e.message}`)
+    }
+  }
+  // 获取加载顺序
+  const getLoadOrder = async (mods_config_file_path=null) => {
+    if (!window.pywebview) return
+    const res = await window.pywebview.api.open_load_order_file(mods_config_file_path)
+    if (res.status === 'success' && res.data.load_order) {
+      activeIds.value = res.data.load_order
+      // 如果有指定路径，标记为脏状态，等待保存
+      if (mods_config_file_path) isDirty.value = true
+      else isDirty.value = false
+      console.log("打开加载顺序:", res)
+      toast.success("Mod序列已加载")
+    } else {
+      toast.error(`打开加载顺序失败: \n${res.message}`)
     }
   }
   // 保存Mod加载顺序
@@ -330,10 +343,11 @@ export const useModStore = defineStore('mods', () => {
         // console.log("保存加载顺序成功:", res)
         toast.success("Mod序列已保存")
         return true
-      } else {
-        console.error("保存Mod序列失败:", res.message)
-        toast.error("保存Mod序列失败，请检查日志")
-      }
+      } 
+      else { throw new Error(res.message) }
+    } catch (e) {
+      console.error("保存Mod序列异常:", e)
+      toast.error(`保存Mod序列异常: \n${e.message}`)
     } finally {
       isLoading.value = false
     }
@@ -353,13 +367,11 @@ export const useModStore = defineStore('mods', () => {
         }
         toast.success("Mod用户数据已更新")
         return true
-      } else {
-        console.error("更新Mod用户数据失败:", res.message)
-        toast.error("更新Mod用户数据失败，请检查日志")
-      }
+      } 
+      else { throw new Error(res.message) }
     } catch (e) {
-      console.error(e)
-      toast.error("更新Mod用户数据失败，请检查日志")
+      console.error("更新Mod用户数据异常:", e)
+      toast.error(`更新Mod用户数据异常: \n${e.message}`)
     } finally {
       isLoading.value = false
     }
@@ -374,10 +386,12 @@ export const useModStore = defineStore('mods', () => {
     try {
       const res = await window.pywebview.api.get_groups()
       if (res.status === 'success') {
-        groupList.value = res.groups || []
+        groupList.value = res.data.groups || []
       }
+      else { throw new Error(res.message) }
     } catch (e) {
-      console.error(e)
+      console.error("获取分组异常:", e)
+      toast.error(`获取分组异常: \n${e.message}`)
     } finally {
       isLoading.value = false
     }
@@ -390,12 +404,16 @@ export const useModStore = defineStore('mods', () => {
       const res = await window.pywebview.api.create_group(name, color)
       console.log("创建分组:", res)
       if (res.status === 'success') {
-        groupList.value.push(res.group)
+        groupList.value.push(res.data.group)
         // 排序
         groupList.value.sort((a, b) => a.sort_index - b.sort_index)
-      }
+      } 
+      else { throw new Error(res.message) }
     } catch (e) {
-      console.error(e)
+      console.error("创建分组异常:", e)
+      toast.error(`创建分组异常: \n${e.message}\n正在还原...`)
+      // 失败时才重新拉取数据进行还原
+      await getGroups() 
     } finally {
       isLoading.value = false
     }
@@ -403,119 +421,132 @@ export const useModStore = defineStore('mods', () => {
   // 删除分组
   const deleteGroup = async (groupId) => {
     if (!window.pywebview) return
-    isLoading.value = true
     try {
+      // 从列表中移除
+      groupList.value = groupList.value.filter(group => group.group_id !== groupId)
       const res = await window.pywebview.api.delete_group(groupId)
       console.log("删除分组:", res)
-      if (res.status === 'success') {
-        // 从列表中移除
-        groupList.value = groupList.value.filter(group => group.id !== groupId)
-        // 排序
-        groupList.value.sort((a, b) => a.sort_index - b.sort_index)
-      }
+      if (res.status !== 'success') throw new Error(res.message) 
     } catch (e) {
-      console.error(e)
-    } finally {
-      isLoading.value = false
-    }
+      console.error("删除分组异常:", e)
+      toast.error(`删除分组异常: \n${e.message}\n正在还原...`)
+      // 失败时才重新拉取数据进行还原
+      await getGroups() 
+    } 
   }
   // 更新分组
   const updateGroup = async (groupId, updates) => {
     if (!window.pywebview) return
-    isLoading.value = true
     try {
+      // 更新本地列表
+      const group = groupList.value.find(g => g.group_id === groupId)
+      if (group) Object.assign(group, updates)
       const res = await window.pywebview.api.update_group(groupId, updates)
       console.log("更新分组:", res)
-      if (res.status === 'success') {
-        // 更新本地列表
-        const group = groupList.value.find(g => g.id === groupId)
-        if (group) {
-          Object.assign(group, updates)
-        }
-        // 排序
-        groupList.value.sort((a, b) => a.sort_index - b.sort_index)
-      }
+      if (res.status !== 'success') throw new Error(res.message) 
     } catch (e) {
-      console.error(e)
-    } finally {
-      isLoading.value = false
+      console.error("更新分组异常:", e)
+      toast.error(`更新分组异常: \n${e.message}\n正在还原...`)
+      // 失败时才重新拉取数据进行还原
+      await getGroups() 
     }
   }
   // 分组添加模组
   const groupAddMods = async (groupId, modIds) => {
     if (!window.pywebview) return
-    isLoading.value = true
     try {
+      // 更新本地分组
+      const group = groupList.value.find(g => g.group_id === groupId)
+      if (group) {
+        group.mod_ids = [...group.mod_ids, ...modIds]
+      }
       const res = await window.pywebview.api.group_add_mods(groupId, modIds)
       console.log("分组添加模组:", res)
-      if (res.status === 'success') {
-        // 更新本地分组
-        const group = groupList.value.find(g => g.id === groupId)
-        if (group) {
-          group.mod_ids.push(...modIds)
-        }
-      }
+      if (res.status !== 'success') throw new Error(res.message) 
     } catch (e) {
-      console.error(e)
-    } finally {
-      isLoading.value = false
+      console.error("分组添加模组异常:", e)
+      toast.error(`分组添加模组异常: \n${e.message}\n正在还原...`)
+      // 失败时才重新拉取数据进行还原
+      await getGroups() 
     }
   }
   // 分组移除模组
   const groupRemoveMods = async (groupId, modIds) => {
     if (!window.pywebview) return
-    isLoading.value = true
     try {
+      // 更新本地分组
+      const group = groupList.value.find(g => g.group_id === groupId)
+      if (group) {
+        group.mod_ids = group.mod_ids.filter(id => !modIds.includes(id))
+      }
       const res = await window.pywebview.api.group_remove_mods(groupId, modIds)
       console.log("分组移除模组:", res)
-      if (res.status === 'success') {
-        // 更新本地分组
-        const group = groupList.value.find(g => g.id === groupId)
-        if (group) {
-          group.mod_ids = group.mod_ids.filter(id => !modIds.includes(id))
-        }
-      }
+      if (res.status !== 'success') throw new Error(res.message)
     } catch (e) {
-      console.error(e)
-    } finally {
-      isLoading.value = false
+      console.error("分组移除模组异常:", e)
+      toast.error(`分组移除模组异常: \n${e.message}\n正在还原...`)
+      // 失败时才重新拉取数据进行还原
+      await getGroups() 
+    } 
+  }
+  // 分组批量展开切换
+  const changeAllGroupExpansion = async (isExpanded) => {
+    if (!window.pywebview) return
+    try {
+      // 更新本地分组
+      groupList.value.forEach(group => group.is_expanded = isExpanded)
+      const res = await window.pywebview.api.update_all_expansion_state(isExpanded)
+      console.log("批量展开切换:", res)
+      if (res.status !== 'success') throw new Error(res.message)
+    } catch (e) {
+      console.error("批量展开切换异常:", e)
+      toast.error(`批量展开切换异常: \n${e.message}\n正在还原...`)
+      // 失败时才重新拉取数据进行还原
+      await getGroups() 
     }
   }
   // 分组排序
   const groupReorder = async (groupIds=groupList.value.map(g => g.group_id)) => {
     if (!window.pywebview) return
-    isLoading.value = true
     try {
+      // 更新本地分组排序
+      groupList.value.sort((a, b) => groupIds.indexOf(a.group_id) - groupIds.indexOf(b.group_id))
       const res = await window.pywebview.api.group_reorder(groupIds)
       console.log("分组排序:", res)
-      if (res.status === 'success') {
-        getGroups()
+      if (res.status !== 'success') {
+        throw new Error(res.message)
       }
     } catch (e) {
-      console.error(e)
-    } finally {
-      isLoading.value = false
+      console.error("分组排序异常:", e)
+      toast.error(`分组排序异常: \n${e.message}\n正在还原...`)
+      // 失败时才重新拉取数据进行还原
+      await getGroups() 
     }
   }
   // 分组内排序
   const groupContentReorder = async (groupId, modIds) => {
     if (!window.pywebview) return
-    isLoading.value = true
     try {
       const res = await window.pywebview.api.group_content_reorder(groupId, modIds)
       console.log("分组内排序:", res)
       if (res.status === 'success') {
         // 更新本地分组
-        const group = groupList.value.find(g => g.id === groupId)
+        const group = groupList.value.find(g => g.group_id === groupId)
         if (group) {
           group.mod_ids = modIds
         }
-      }
+      } 
+      else { throw new Error(res.message) }
     } catch (e) {
-      console.error(e)
-    } finally {
-      isLoading.value = false
+      console.error("分组内排序异常:", e)
+      toast.error(`分组内排序异常: \n${e.message}\n正在还原...`)
+      // 失败时才重新拉取数据进行还原
+      await getGroups() 
     }
+  }
+  // 根据 Mod ID 获取所属分组列表
+  const takeGroupsByModId = (modId) => {
+    return groupList.value.filter(g => g.mod_ids.includes(modId))
   }
 
   // ===== 设置相关 =====
@@ -535,7 +566,11 @@ export const useModStore = defineStore('mods', () => {
             closeSettings()
             // 可以在这里触发一次重新初始化或扫描
             await initialize() 
-        }
+        } 
+        else { throw new Error(res.message) }
+    } catch (e) {
+      console.error("应用设置异常:", e)
+      toast.error(`应用设置异常: \n${e.message}`)
     } finally {
         isLoading.value = false
     }
@@ -549,9 +584,11 @@ export const useModStore = defineStore('mods', () => {
       if (res.status === 'success') {
         // 更新本地 store
         settings.value[key] = value
-      }
+      } 
+      else { throw new Error(res.message) }
     } catch (e) {
-      console.error(e)
+      console.error("保存单项设置异常:", e)
+      toast.error(`保存单项设置异常: \n${e.message}`)
     } finally {
       isLoading.value = false
     }
@@ -572,34 +609,59 @@ export const useModStore = defineStore('mods', () => {
     if(!window.pywebview) return
     await window.pywebview.api.open_path(path)
   }
+  // 获取文件夹路径
+  const getFolderPath = async (home_path) => {
+    if(!window.pywebview) return
+    // 调用后端 API
+    const path = await window.pywebview.api.select_folder_dialog(home_path)
+    if (path) {
+        return path
+    }
+  }
+  // 获取文件路径
+  const getFilePath = async (home_path, file_types=('XML Files (*.xml)', 'All Files (*.*)')) => {
+      if(!window.pywebview) return
+      // 调用后端 API
+      const path = await window.pywebview.api.select_file_dialog(home_path, file_types)
+      if (path) {
+          return path
+      }
+  }
   // 辅助：自动检测路径
-  const autoDetectPaths = async () => {
+  const autoDetectPaths = async (updateStore=true) => {
     if(!window.pywebview) return
     const res = await window.pywebview.api.auto_detect_paths()
-    if(res.status === 'success' && res.paths) {
+    if(res.status === 'success' && res.data.paths) {
        // 更新本地 setting store
-       Object.assign(settings.value, res.paths)
-       toast.success("路径已更新")
+      if(updateStore) {
+        Object.assign(settings.value, res.data.paths)
+        toast.success("路径已更新")
+      }
+      return res.data.paths
+    }
+    else {
+      toast.error(`自动检测路径失败: ${res.message}`)
+      return
     }
   }
 
   return {
     // 状态管理
     scanProgress, dataVersion,
-    initialize, openLoadOrder,
+    initialize, getLoadOrder, removeIdOnAllList,
     // Mod 相关
     allModsMap, activeIds, tempIds, inactiveIds, selectedIds, selectedMods, lastSelectedId, lastSelectedListId, currentTargetId, 
-    getModById, getIconUrl, selectMod, clearSelection, refreshModList, scanMods, saveLoadOrder, updateModUserData, getModListByIds,
+    takeModById, getIconUrl, selectMod, clearSelection, refreshModList, scanMods, saveLoadOrder, updateModUserData, takeModListByIds,
 
     // 分组相关
     groupList, 
-    getGroups, createGroup, deleteGroup, updateGroup, groupAddMods, groupRemoveMods, groupReorder, groupContentReorder,
+    getGroups, createGroup, deleteGroup, updateGroup, changeAllGroupExpansion, groupAddMods, groupRemoveMods, groupReorder, groupContentReorder, takeGroupsByModId, 
 
     // 设置相关
     showSettings, isLoading, isDirty, settings, 
     openSettings, closeSettings, applySettings, saveSetting, markDirty,
 
     // 系统操作
-    launchGame, openPath, autoDetectPaths,
+    launchGame, openPath, autoDetectPaths, getFolderPath, getFilePath,
   }
 })

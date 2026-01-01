@@ -21,4 +21,13 @@ export default defineConfig({
     // port: 5173,
     // open: false,  
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // 核心配置在这里：
+        // api: 'modern-compiler', // (可选) 如果你使用的是非常新的 sass 版本
+        silenceDeprecations: ['import'],  // 忽略导入警告（因为 vue-toastification 的SCSS中使用了 @import,新版 sass 不支持）
+      }
+    }
+  }
 })

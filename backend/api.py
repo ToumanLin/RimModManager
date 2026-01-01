@@ -1,5 +1,6 @@
 import os
-from dataclasses import asdict
+from dataclasses import dataclass, asdict
+from typing import Any
 import webview # 引入 webview 库
 
 # 1. 引入配置管理
@@ -15,6 +16,25 @@ from backend.managers.mgr_mods_config import LoadOrderManager
 from backend.managers.mgr_files import FileManager
 from backend.scanner.parser_dlc import DLCParser
 from backend.scanner.mod_scanner import ModScanner
+
+
+@dataclass
+class ApiResponse:
+    """
+    统一 API 响应格式
+    """
+    status: str = "success"  # "success" | "error"
+    message: str = ""        # 提示信息 (用于前端 Toast)
+    data: Any = None         # 数据载体 (可以是 dict, list, None)
+
+    @classmethod
+    def success(cls, data=None, message=""):
+        return asdict(cls(status="success", data=data, message=message))
+
+    @classmethod
+    def error(cls, message, data=None):
+        return asdict(cls(status="error", message=message, data=data))
+
 
 class API:
     """
@@ -65,8 +85,8 @@ class API:
         # 0. 获取游戏版本号
         game_version = self.game_mgr.get_game_version() if self.game_mgr else ""
         settings.config.game_version = game_version
-        # 2. 获取所有 Mod 数据 (包含用户自定义数据)
-        all_mods = ModDAO.get_all_mods_with_user_data()
+        # 2. 获取所有 Mod 数据 (包含用户自定义数据), 并排除缺失的 Mod
+        all_mods = ModDAO.get_all_mods_with_user_data(ignore_missing=True)
         # 3. 获取所有分组数据 (结构化)
         all_groups = GroupDAO.get_all_groups_structured()
         # 4. 获取当前激活的加载顺序
@@ -108,15 +128,14 @@ class API:
                 mod['icon_url'] = self.file_mgr.get_asset_url(icon_path)
             else:
                 mod['icon_url'] = None 
-
-        return {
-            "status": "success",
+        
+        return ApiResponse.success({
             "paths_configured": paths_valid,
             "settings": asdict(settings.config), # 转为字典发给前端
             "all_mods": all_mods,
             "groups": all_groups,
             "active_load_order": active_load_order
-        }
+        })
 
     # =========================================================================
     #  2. 设置与路径 (Settings & Paths)
@@ -131,9 +150,9 @@ class API:
             settings.update_paths(result)
             # 重新初始化 LoadOrderManager (因为 Config 路径可能变了)
             self.load_order_mgr = LoadOrderManager()
-            return {"status": "success", "paths": result}
+            return ApiResponse.success({"paths": result})
         
-        return {"status": "error", "message": "无法自动检测到游戏路径，请手动设置"}
+        return ApiResponse.error("无法自动检测到游戏路径，请手动设置！")
 
     def save_setting(self, key, value):
         """保存单个设置项"""
@@ -141,7 +160,7 @@ class API:
         # 如果修改的是路径，可能需要刷新管理器
         if 'path' in key:
             self.load_order_mgr = LoadOrderManager()
-        return {"status": "success"}
+        return ApiResponse.success()
 
     def save_all_settings(self, settings_obj):
         """保存所有设置 (前端设置面板保存时调用)"""
@@ -151,7 +170,8 @@ class API:
         
         # 刷新管理器
         self.load_order_mgr = LoadOrderManager()
-        return {"status": "success"}
+        return ApiResponse.success()
+    
 
     # =========================================================================
     #  3. Mod 扫描与管理 (Scanning & Mods)
@@ -187,17 +207,14 @@ class API:
                 paths_to_scan.append(cfg.workshop_mods_path)
 
         if not paths_to_scan:
-            return {"status": "error", "message": "没有配置有效的扫描路径"}
+            return ApiResponse.error("没有配置有效的扫描路径")
+        
 
         # 调用异步扫描
         # 注意：这里不需要 try-catch 包裹整个逻辑，因为异常在线程内被捕获并通过事件发回了
         result = self.scanner.scan_paths_async(paths_to_scan, thumbnail_mgr=self.file_mgr, forced_update=forced_update)
         
-        return {
-            "status": "success", 
-            "message": "Background scan started",
-            "details": result
-        }
+        return ApiResponse.success({ "details": result },"后台扫描已启动")
 
     def update_mod_user_data(self, package_id, data_dict):
         """
@@ -205,24 +222,22 @@ class API:
         """
         try:
             ModDAO.update_user_data(package_id, data_dict)
-            return {"status": "success"}
+            return ApiResponse.success()
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return ApiResponse.error(str(e))
 
     # =========================================================================
     #  4. 分组管理 (Groups) - 即时保存
     # =========================================================================
 
     def get_groups(self):
-        return GroupDAO.get_all_groups_structured()
+        return ApiResponse.success(GroupDAO.get_all_groups_structured())
 
     def create_group(self, name, color):
         try:
             # 后端生成 UUID 并入库
             new_group = GroupDAO.create_group(name, color)
-            # 返回完整对象供前端渲染
-            return {
-                "status": "success",
+            data = {
                 "group": {
                     "group_id": new_group.group_id,
                     "name": new_group.name,
@@ -232,38 +247,39 @@ class API:
                     "mod_ids": []
                 }
             }
+            # 返回完整对象供前端渲染
+            return ApiResponse.success(data)
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return ApiResponse.error(str(e))
 
     def delete_group(self, group_id):
-        GroupDAO.delete_group(group_id)
-        return {"status": "success"}
+        return ApiResponse.success(GroupDAO.delete_group(group_id))
 
     def update_group(self, group_id, updates):
         """更新分组属性 (重命名、改色、折叠)"""
-        GroupDAO.update_group_info(group_id, **updates)
-        print(f"更新分组 {group_id} 为 {updates}")
-        return {"status": "success"}
+        # print(f"更新分组 {group_id} 为 {updates}")
+        return ApiResponse.success(GroupDAO.update_group_info(group_id, **updates))
 
     def group_add_mods(self, group_id, mod_ids):
         """拖拽 Mod 进分组"""
-        GroupDAO.add_mods_to_group(group_id, mod_ids)
-        return {"status": "success"}
+        return ApiResponse.success(GroupDAO.add_mods_to_group(group_id, mod_ids))
 
     def group_remove_mods(self, group_id, mod_ids):
         """从分组移除 Mod"""
-        GroupDAO.remove_mods_from_group(group_id, mod_ids)
-        return {"status": "success"}
+        return ApiResponse.success(GroupDAO.remove_mods_from_group(group_id, mod_ids))
+    
+    def update_all_expansion_state(self, is_expanded: bool):
+        """一次性展开或折叠所有分组"""
+        GroupDAO.update_all_expansion_state(is_expanded)
+        return ApiResponse.success()
 
     def group_reorder(self, group_id_list):
         """分组排序"""
-        GroupDAO.reorder_groups(group_id_list)
-        return {"status": "success"}
+        return ApiResponse.success(GroupDAO.reorder_groups(group_id_list))
 
     def group_content_reorder(self, group_id, mod_id_list):
         """分组内 Mod 排序"""
-        GroupDAO.reorder_mods_in_group(group_id, mod_id_list)
-        return {"status": "success"}
+        return ApiResponse.success(GroupDAO.reorder_mods_in_group(group_id, mod_id_list))
 
     # =========================================================================
     #  5. 加载顺序与游戏启动 (Load Order & Launch)
@@ -274,10 +290,13 @@ class API:
         :param mods_config_file_path: ModsConfig.xml 文件路径
         :return: [package_id, package_id, ...]
         """
-        active_ids = self.load_order_mgr.read_active_mods(mods_config_file_path)
-        if not active_ids:
-            return {"status": "error", "message": "Failed to read active mods"}
-        return {"status": "success", "load_order": active_ids}
+        try:
+            active_ids = self.load_order_mgr.read_active_mods(mods_config_file_path)
+            if not active_ids:
+                return ApiResponse.error("已启用的Mod为空，或读取ModsConfig.xml失败!")
+        except Exception as e:
+            return ApiResponse.error(f"读取 ModsConfig.xml 时出错: {e}")
+        return ApiResponse.success({"load_order": active_ids})
     
     def save_load_order(self, active_ids):
         """
@@ -285,19 +304,27 @@ class API:
         """
         success = self.load_order_mgr.save_active_mods(active_ids)
         if success:
-            return {"status": "success"}
-        return {"status": "error", "message": "Failed to write ModsConfig.xml"}
+            return ApiResponse.success()
+        return ApiResponse.error("保存 ModsConfig.xml 时出错!")
 
     def launch_game(self):
         """启动游戏"""
-        return self.game_mgr.launch_game()
+        try:
+            self.game_mgr.launch_game()
+        except Exception as e:
+            return ApiResponse.error(f"启动游戏时出错: {e}")
+        return ApiResponse.success()
 
     # =========================================================================
     #  6. 文件与资源操作 (Files & Assets)
     # =========================================================================
 
     def open_path(self, path):
-        return self.file_mgr.open_in_explorer(path)
+        try:
+            self.file_mgr.open_in_explorer(path)
+        except Exception as e:
+            return ApiResponse.error(f"打开路径时出错: {e}")
+        return ApiResponse.success()
     
     def open_load_order_file(self, mods_config_file_path=None):
         """
@@ -307,8 +334,8 @@ class API:
             mods_config_file_path = self.load_order_mgr.config_dir
         file = self.select_file_dialog(initial_dir=mods_config_file_path)
         if not file:
-            return {"status": "error", "message": "未选择文件"}
-        return self.get_load_order(file)
+            return ApiResponse.error("未选择文件")
+        return ApiResponse.success(self.get_load_order(file))
     
     
     def select_folder_dialog(self, initial_dir='', title="选择文件夹"):
@@ -330,7 +357,7 @@ class API:
                 return result[0]
         return None
 
-    def select_file_dialog(self, initial_dir='', title="选择文件", file_types=('XML Files (*.xml)', 'All Files (*.*)')):
+    def select_file_dialog(self, initial_dir='', file_types=('XML Files (*.xml)', 'All Files (*.*)'), title="选择文件"):
         """
         打开系统原生的文件选择框
         file_types 示例: ('XML Files (*.xml)', 'All Files (*.*)')

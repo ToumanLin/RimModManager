@@ -20,7 +20,7 @@
       </Transition>
       <!-- Mod版本 -->
       <div v-tooltip="'Mod版本'" class="absolute top-1.5 left-2 px-1 py-0.5 rounded text-[10px] text-text-main font-bold text-shadow-lg bg-bg-surface/20 border border-white/5">
-        V {{ selectedMod.version ? selectedMod.version : '未知版本' }}
+        v {{ selectedMod.version ? selectedMod.version : '未知版本' }}
       </div>
       <!-- 支持版本标签 -->
       <div v-tooltip="'支持的游戏版本'" v-show="displayVersions.length" class="absolute top-1 right-2 z-10 pointer-events-none">
@@ -162,19 +162,19 @@
           </div>
           <div class="row-span-2 col-span-3 p-2 pr-3 space-y-1 flex flex-col justify-center text-[10px] text-text-dim bg-white/5 rounded-lg border border-white/5">
             <div class="flex justify-between items-center">
-              <span class="font-bold">文件创建时间：</span>
+              <span class="flex-1 font-bold truncate min-w-0">文件创建时间：</span>
               {{ selectedMod.file_create_time ? new Date(selectedMod.file_create_time).toLocaleString() : '无' }}
             </div>
             <div class="flex justify-between items-center">
-              <span class="font-bold">文件修改时间：</span>
+              <span class="flex-1 font-bold truncate min-w-0">文件修改时间：</span>
               {{ selectedMod.file_modify_time ? new Date(selectedMod.file_modify_time).toLocaleString() : '无' }}
             </div>
             <div class="flex justify-between items-center">
-              <span class="font-bold">最后启用时间：</span>
+              <span class="flex-1 font-bold truncate min-w-0">最后启用时间：</span>
               {{ selectedMod.last_active_time ? new Date(selectedMod.last_active_time).toLocaleString() : '无' }}
             </div>
             <div class="flex justify-between items-center">
-              <span class="font-bold">工坊更新时间：</span>
+              <span class="flex-1 font-bold truncate min-w-0">工坊更新时间：</span>
               {{ selectedMod.mod_update_time ? new Date(selectedMod.mod_update_time).toLocaleString() : '无' }}
             </div>
           </div>
@@ -194,10 +194,10 @@
           <div v-for="(dep, index) in showAllDependencies ? selectedMod.dependencies_mods : selectedMod.dependencies_mods.slice(0, 5)" 
             :key="dep.package_id" 
             class="flex items-center justify-between gap-2 p-1.5 rounded-sm bg-black/20 border-l-2 transition-colors text-xs border-accent-highlight hover:bg-accent-highlight/10">
-            <span v-preview="store.getModById(dep.package_id)" class="text-gray-300">{{ displayNameByMod(dep) }}</span>
+            <span v-preview="store.takeModById(dep.package_id)" class="flex-1 text-gray-300 truncate">{{ displayNameByMod(dep) }}</span>
             <!-- 操作按钮 -->
             <div class="flex items-center gap-2">
-              <span v-if="!store.getModById(dep.package_id).is_missing" @click="targetItem(dep.package_id)" v-tooltip="'定位Mod位置'" class="hover:text-accent-highlight">
+              <span v-if="!store.takeModById(dep.package_id).is_missing" @click="targetItem(dep.package_id)" v-tooltip="'定位Mod位置'" class="hover:text-accent-highlight">
                 <svg width="15" height="15" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>
               </span>
               <span v-if="dep.workshop_url" @click="openUrl(dep.workshop_url)" @click.middle.stop="openSteamUrl(dep.workshop_url)" v-tooltip="'打开工坊页面'" class="hover:text-accent-highlight">
@@ -206,7 +206,6 @@
             </div>
 
           </div>
-          
           <!-- 展开/收起按钮（只有当数量超过5个时显示） -->
           <button v-if="selectedMod.dependencies_mods.length > 5"
             @click="showAllDependencies = !showAllDependencies"
@@ -225,10 +224,10 @@
           <!-- 不兼容项列表 -->
           <div v-for="inc in showAllIncompatible ? selectedMod.incompatible_mods : selectedMod.incompatible_mods.slice(0, 5)" :key="inc" 
               class="flex items-center justify-between gap-2 p-1.5 rounded-sm bg-black/20 border-l-2 transition-colors text-xs border-accent-danger hover:bg-accent-danger/10">
-            <span class="text-gray-300">{{ displayNameById(inc) }}</span>
+            <span v-preview="store.takeModById(inc)" class="flex-1 text-gray-300 truncate">{{ displayNameById(inc) }}</span>
             <!-- 操作按钮 -->
             <div class="flex items-center gap-2">
-              <span v-if="!store.getModById(inc).is_missing" @click="targetItem(inc)" v-tooltip="'定位Mod位置'" class="hover:text-accent-danger">
+              <span v-if="!store.takeModById(inc).is_missing" @click="targetItem(inc)" v-tooltip="'定位Mod位置'" class="hover:text-accent-danger">
                 <svg width="15" height="15" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>
               </span>
             </div>
@@ -251,10 +250,10 @@
           <!-- 前置加载项列表 -->
           <div v-for="aft in showAllLoadAfter ? selectedMod.load_after_mods : selectedMod.load_after_mods.slice(0, 5)" :key="aft" 
             class="flex items-center justify-between gap-2 p-1.5 rounded-sm bg-black/20 border-l-2 transition-colors text-xs border-accent-warm hover:bg-accent-warm/10">
-            <span class="text-gray-300">{{ displayNameById(aft) }}</span>
+            <span v-preview="store.takeModById(aft)" class="flex-1 text-gray-300 truncate">{{ displayNameById(aft) }}</span>
             <!-- 操作按钮 -->
             <div class="flex items-center gap-2">
-              <span v-if="!store.getModById(aft).is_missing" @click="targetItem(aft)" v-tooltip="'定位Mod位置'" class="hover:text-accent-warm">
+              <span v-if="!store.takeModById(aft).is_missing" @click="targetItem(aft)" v-tooltip="'定位Mod位置'" class="hover:text-accent-warm">
                 <svg width="15" height="15" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>
               </span>
             </div>
@@ -277,10 +276,10 @@
           <!-- 后置加载项列表 -->
           <div v-for="bef in showAllLoadBefore ? selectedMod.load_before_mods : selectedMod.load_before_mods.slice(0, 5)" :key="bef" 
             class="flex items-center justify-between gap-2 p-1.5 rounded-sm bg-black/20 border-l-2 transition-colors text-xs border-accent-primary hover:bg-accent-primary/10">
-            <span class="text-gray-300">{{ displayNameById(bef) }}</span>
+            <span v-preview="store.takeModById(bef)" class="flex-1 text-gray-300 truncate">{{ displayNameById(bef) }}</span>
             <!-- 操作按钮 -->
             <div class="flex items-center gap-2">
-              <span v-if="!store.getModById(bef).is_missing" @click="targetItem(bef)" v-tooltip="'定位Mod位置'" class="hover:text-accent-primary">
+              <span v-if="!store.takeModById(bef).is_missing" @click="targetItem(bef)" v-tooltip="'定位Mod位置'" class="hover:text-accent-primary">
                 <svg width="15" height="15" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>
               </span>
             </div>
@@ -320,6 +319,31 @@
                 <option v-for="t in store.knownTags" :key="t" :value="t"></option>
               </datalist>
             </div>
+          </div>
+        </div>
+
+        <!-- 分组 -->
+        <div>
+          <label v-tooltip="''" class="text-[10px] uppercase text-text-dim font-bold tracking-wider mb-1 block">分组*</label>
+          <div class="flex flex-wrap gap-1 mb-2">
+            <span v-for="group in userGroups" :key="group.group_id" 
+              class="px-1 py-0.5 rounded text-xs border border-text-dim/20 flex items-center gap-1 group hover:border-text-dim/80"
+              :style="{'backgroundColor': `rgba(${hexToRgb(group.color)},0.1)`, 'color': group.color}">
+              {{ group.name }} ({{ group.mod_ids.length }})
+              <button @click="removeModInGroup(group.group_id, selectedMod.package_id)" 
+                v-tooltip="'从该分组移出'" class="size-3 flex justify-center items-center hover:text-white font-bold rounded-full opacity-50 group-hover:opacity-100 hover:bg-accent-danger">
+                ×
+              </button>
+            </span>
+            <!-- 添加分组输入框 -->
+            <!-- <div class="relative">
+              <input type="text" v-model="newTagInput" @keydown.enter="addTag" @blur="newTagInput=''" list="known-tags"
+                placeholder="+ 添加标签" 
+                class="px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-xs text-white focus:border-accent-primary focus:outline-none w-6 focus:w-20 transition-all"/>
+              <datalist id="known-tags">
+                <option v-for="t in store.knownTags" :key="t" :value="t"></option>
+              </datalist>
+            </div> -->
           </div>
         </div>
 
@@ -437,6 +461,8 @@ watch(selectedMod, (newVal) => {
   }
 }, { immediate: true })
 
+const userGroups = computed(() => {return store.takeGroupsByModId(selectedMod.value?.package_id);})
+
 // 辅助计算：格式化描述（换行转为 <br>）
 const formattedDescription = computed(() => {
   if (!selectedMod.value?.description) return 'No description provided.'
@@ -488,10 +514,10 @@ const displayVersions = computed(() => {
 // 辅助函数：根据 mod 依赖项获取显示名称
 const displayNameByMod = (dependencies_mod) => {
   const mod_id = dependencies_mod.package_id
-  return store.getModById(mod_id)?.alias_name || store.getModById(mod_id)?.name || dependencies_mod.display_name || dependencies_mod.package_id
+  return store.takeModById(mod_id)?.alias_name || store.takeModById(mod_id)?.name || dependencies_mod.display_name || dependencies_mod.package_id
 }
 const displayNameById = (mod_id) => {
-  return store.getModById(mod_id)?.alias_name || store.getModById(mod_id)?.name || mod_id
+  return store.takeModById(mod_id)?.alias_name || store.takeModById(mod_id)?.name || mod_id
 }
 
 // 检查版本是否兼容
@@ -546,7 +572,10 @@ const openSteamUrl = (url) => {
     window.open(url, '_blank')
   }
 }
-
+// 从分组中移除模组
+const removeModInGroup =(groupId, modId) => {
+  store.groupRemoveMods(groupId, [modId]);
+}
 
 
 // 定位Mod位置

@@ -45,14 +45,14 @@ class Mod(BaseModel):
     source = CharField(default='local')             # 来源，如 steam, local, git, dlc, other
     icon_path = CharField(null=True)                # 图标路径
     preview_path = CharField(null=True)             # 预览图片路径
-    gallery_paths = UTF8JSONField(default=list)           # 画廊图片路径列表，包括本地或网络路径 ['img1.jpg', 'img2.jpg']
+    gallery_paths = UTF8JSONField(default=list)     # 画廊图片路径列表，包括本地或网络路径 ['img1.jpg', 'img2.jpg']
     
     # 深度扫描信息 (使用 JSON 存列表，方便扩展)
     supported_versions = UTF8JSONField(default=list)      # 支持游戏版本 ['1.4', '1.5']
     supported_languages = UTF8JSONField(default=list)     # 支持的语言 ['zh-cn', 'en']
     file_stats = UTF8JSONField(default=dict)              # 文件统计 {'xml_count': 50, 'dll_count': 50, 'img_count': 50, 'audio_count': 50}
-    mod_type = CharField(default='XML')             # Mod类型，如 'Assembly', 'XML', 'LanguagePack'
-    dependencies_mods = UTF8JSONField(null=True)        # 依赖Mod ['ludeon.rimworld','ludeon.rimworld2']
+    mod_type = CharField(default='XML')                   # Mod类型，如 'Assembly', 'XML', 'LanguagePack'
+    dependencies_mods = UTF8JSONField(null=True)          # 依赖Mod ['ludeon.rimworld','ludeon.rimworld2']
     load_after_mods = UTF8JSONField(default=list)         # 前置Mod ['ludeon.rimworld','ludeon.rimworld2']
     load_before_mods = UTF8JSONField(default=list)        # 后置Mod ['ludeon.rimworld','ludeon.rimworld2']
     incompatible_mods = UTF8JSONField(default=list)       # 不兼容Mod ['ludeon.rimworld','ludeon.rimworld2']

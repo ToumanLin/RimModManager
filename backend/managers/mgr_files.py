@@ -47,9 +47,18 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
                 else:
                     self.send_error(404, "File not found")
                     return
+            # 忽略连接中断错误 ---
+            except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+                # 客户端断开了连接（通常是列表快速滚动导致的），无需处理，直接返回
+                return
             except Exception as e:
-                # print(f"Asset Server Error: {e}")
-                self.send_error(500, str(e))
+                # 在控制台打印详细中文错误方便调试
+                print(f"Asset Server Error ({local_path if 'local_path' in locals() else 'unknown'}): {e}")
+                # 发送给客户端的必须是 ASCII 字符，不要发送 str(e) 因为可能包含中文
+                try:
+                    self.send_error(500, "Internal Server Error")
+                except:
+                    pass # 如果发送错误信息时连接也断了，就彻底忽略
                 return
         
         # 其他请求直接 400

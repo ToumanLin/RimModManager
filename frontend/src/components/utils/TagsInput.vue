@@ -4,7 +4,7 @@
     <div class="flex-none flex items-center justify-center">
       <slot name="left">
         <!-- 逻辑切换开关 (AND/OR) -->
-        <button @click="toggleLogic" :title="logicMode === 'AND' ? '切换为OR逻辑' : '切换为AND逻辑'"
+        <button @click="toggleLogic" v-tooltip="logicMode === 'AND' ? '切换为OR逻辑' : '切换为AND逻辑'"
           class="shrink-0 w-6 h-6 font-bold cursor-pointer border transition-all relative"
           :class="[ props.circle ? 'rounded-full' : 'rounded-md',
             logicMode === 'AND' ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30' : 'bg-accent-warning/20 text-accent-warning border-accent-warning/30',]">
@@ -65,7 +65,7 @@
         <!-- 右侧控制区 -->
         <div class="flex items-center gap-0.5 shrink-0">
           <!-- 清除按钮 -->
-          <button v-show="modelValue.length > 0 || inputValue" @click="clearAll" class="p-1 text-text-dim hover:text-accent-danger transition-colors" title="清除全部">
+          <button v-show="modelValue.length > 0 || inputValue" @click="clearAll" class="p-1 text-text-dim hover:text-accent-danger transition-colors" v-tooltip="`清除全部`">
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
           <!-- 展开/收起按钮 -->

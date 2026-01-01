@@ -4,7 +4,7 @@
     <div @click="toggle" :class="['list-none select-none px-1.5 flex text-text-dim hover:text-text-main items-center justify-between gap-0.5 rounded-lg font-medium',
       'bg-[rgba(var(--rgb-components),0.2)] hover:bg-[rgba(var(--rgb-components),0.4)]']">
       <!-- 抓取图标 -->
-      <div title="移动" class="drag-handle cursor-move p-1 text-text-dim hover:text-text-main hover:scale-130 transition-all">
+      <div v-tooltip="`移动`" class="drag-handle cursor-move p-1 text-text-dim hover:text-text-main hover:scale-130 transition-all">
         <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path
             d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z"
@@ -16,15 +16,15 @@
         </svg>
       </div>
       <!-- 颜色选择与展开显示 -->
-      <div @click.stop title="改变颜色" class="relative inline-flex items-center justify-center text-text-main hover:text-transparent transition-all">
-        <ColorPicker v-model:pureColor="groupData.color" @change="updateGroup" shape="circle" format="hex" picker-type="fk" disable-alpha round-history />
+      <div @click.stop v-tooltip="`改变颜色`" class="relative inline-flex items-center justify-center text-text-main hover:text-transparent transition-all">
+        <ColorPicker v-model:pureColor="groupData.color" @pureColorChange="saveGroupColor" shape="circle" format="hex" picker-type="fk" disable-alpha round-history />
         <svg :class="expanded ? '-rotate-180' : ''" class="absolute pointer-events-none t-0 transition-transform duration-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
         </svg>
       </div>
 
       <!-- 标题 - 根据编辑状态显示输入框或文本 -->
-      <span :title="groupData.name" :class="`flex-1 flex min-w-0 text-sm px-1 mx-1 text-text-main font-bold tracking-wider items-center gap-2`">
+      <span v-tooltip="groupData.name" :class="`flex-1 flex min-w-0 text-sm px-1 mx-1 text-text-main font-bold tracking-wider items-center gap-2`">
         <input v-show="isEditingName" v-model="editingGroupName" @click.stop @keyup.enter="saveGroupName" @blur="saveGroupName"
           class="flex-1 px-0 py-0.5 min-w-0 rounded bg-bg-deep/70 border border-white/10 text-white focus:border-accent-primary focus:outline-none" />
         <span v-show="!isEditingName" class="min-w-0 truncate">{{ groupData.name }}</span>
@@ -37,7 +37,7 @@
       <!-- 编辑/保存 与 删除 -->
       <span class="flex items-center">
         <!-- 编辑/保存按钮 -->
-        <button @click.stop="toggleEditName" title="编辑分组名称" :class="`rounded-lg p-1 hover:bg-text-dim/30 cursor-pointer text-text-dim text-xs font-bold shadow-lg hover:shadow-bg-deep/50 transition-all`">
+        <button @click.stop="toggleEditName" v-tooltip="`编辑分组名称`" :class="`rounded-lg p-1 hover:bg-text-dim/30 cursor-pointer text-text-dim text-xs font-bold shadow-lg hover:shadow-bg-deep/50 transition-all`">
           <svg v-show="!isEditingName" class="hover:text-accent-secondary" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M7 42H43" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
             <path d="M11 26.7199V34H18.3172L39 13.3081L31.6951 6L11 26.7199Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" />
@@ -48,7 +48,7 @@
           </svg>
         </button>
         <!-- 删除按钮 -->
-        <button @click.stop="deleteGroup" title="删除分组" :class="`rounded-lg p-1 hover:bg-text-dim/30 cursor-pointer 
+        <button @click.stop="deleteGroup" v-tooltip="`删除分组`" :class="`rounded-lg p-1 hover:bg-text-dim/30 cursor-pointer 
           text-text-dim hover:text-accent-danger text-xs font-bold shadow-lg hover:shadow-bg-deep/50 
           transition-all`">
           <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -73,18 +73,20 @@
             <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
           </div>
 
-          <VirtualList v-model="getGroupModIds" dataKey="id" :keeps="50" class="h-full p-1 min-h-15"
+          <VirtualList v-model="internalModList" dataKey="id" :keeps="50" class="h-full p-1 min-h-15" ref="vListRef"
             placeholderClass="ghost" wrapClass="space-y-1" :fallbackOnBody="true" :scrollSpeed="{ x: 0, y: 10 }"
-            :group="{ name: 'mods', pull: 'clone', put: 'mods', revertDrag: true }" :animation="150">
+            :group="{ name: 'mods', pull: 'clone', put: true, revertDrag: true }" :animation="150"
+            @drop="updateChildren" >
             <template v-slot:item="{ record, index, dataKey }">
 
               <div class="relative group">
-                <ModItem :id="dataKey" :index="index" :key="dataKey" :list-color="listColor"
+                <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
+                        :show-index="false" :simple="true"
                         @click.stop="handleClick($event, dataKey)">
                 </ModItem>
                 
                 <!-- 右上角移除按钮 -->
-                <button @click.stop="removeItem(dataKey)" title="移除"
+                <button @click.stop="removeItem(dataKey)" v-tooltip="`移除`"
                   class="absolute top-1 right-1 w-3 h-3 bg-accent-danger text-text-main rounded-full 
                         opacity-0 group-hover:opacity-80 transition-opacity duration-200
                         flex items-center justify-center text-xs z-10 hover:scale-110">×
@@ -100,9 +102,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue' // 引入 ref
+import { watch, ref } from 'vue' // 引入 ref
 import VirtualList from 'vue-virtual-sortable';
 import ModItem from './ModItem.vue'
+import { useDebounceFn } from '@vueuse/core'
 import { ColorPicker } from "vue3-colorpicker";
 import "vue3-colorpicker/style.css";
 
@@ -115,7 +118,23 @@ const props = defineProps({
   isDragging: { type: Boolean, default: false } // 用于外部控制样式
 })
 
-const emit = defineEmits(['toggle', 'delete-group', 'remove-item', 'update-group']) // 注册新的事件
+const internalModList = ref([])
+const vListRef = ref(null)
+const emit = defineEmits(['toggle', 'delete-group', 'remove-item', 'update-group', 'update-children'])
+
+// 计算属性computed无法直接修改props.groupData.mod_ids，因为它是只读的。
+// 监听 props 变化，同步到本地 (单向数据流：父 -> 子)
+watch(
+  () => props.groupData.mod_ids,
+  (newIds) => {
+    // 将纯 ID 转换为 VirtualList 需要的对象格式
+    // 注意：这里要创建一个新的数组引用，防止污染
+    internalModList.value = newIds.map(id => ({ id: id }))
+  },
+  { immediate: true, deep: true }
+  // 设置immediate: true后，监听器会在初始化时立即执行一次回调，无需等待数据首次变化。
+  // 设置deep: true后，监听器会 “递归遍历” 嵌套结构，感知所有层级属性的变化，确保嵌套数据修改时能触发回调。
+)
 
 // --- 数据传递与事件处理 ---
 // 切换展开状态
@@ -134,6 +153,54 @@ const removeItem = (itemId: string) => {
 const updateGroup = (data = props.groupData) => {
   emit('update-group', props.id, data)
 }
+// 保存分组名称
+const saveGroupName = () => {
+   const newName = editingGroupName.value.trim()
+  if (newName && newName !== props.groupData.name) {
+    emit('update-group', props.id, { name: newName })
+  }
+  isEditingName.value = false
+}
+// 保存分组颜色
+const saveGroupColor = useDebounceFn((color) => {
+  console.log("保存颜色:", color)
+  emit('update-group', props.id, { color: color })
+}, 1000)
+// 排序结束
+const updateChildren = (e) => {
+  const oldIds = props.groupData.mod_ids  // 原始顺序
+  const newIds = internalModList.value.map(item => item.id)  // 获取当前的最新顺序 ID列表
+  // 检查是否是当前分组的列表，排除当前列表自身的触发
+  const currentListDom = vListRef.value.$el
+  if (e.event.from === currentListDom || e.event.from === e.event.to) {
+    console.log(props.groupData.name, "排序结束:", e)
+    // 只有顺序真的变了才发请求
+    if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
+      emit('update-children', props.id, newIds)
+    }
+    return
+  }
+  console.log(props.groupData.name, "插入结束:", e)
+
+  // 去除重复, 保持新插入的位置
+  // const uniqueIds = newIds.filter((id, index) => e.item.id !== id && newIds.indexOf(id) === index || e.item.id === id && index === e.newIndex)
+  const uniqueIds = newIds.filter((id, index) => {
+    // 规则 A：这是新插入的位置吗？是就留着
+    if (index === e.newIndex && id === e.item.id) return true
+    // 规则 B：位置不对，但 ID 却和拖拽项一样？说明是旧的（Clone 残留），杀掉
+    if (id === e.item.id) return false
+    // 规则 C：其他不相干的模组，留着
+    return true
+  })
+  // （修复漏洞：如果拖入相同项到相邻位置，去重后实际列表顺序不变，但组件会渲染拖入的相同项，所以目前必须强制更新）
+  internalModList.value = uniqueIds.map(id => ({ id: id }))
+  console.log("排序前:", oldIds)
+  console.log("排序后:", uniqueIds)
+  // 只有顺序真的变了才发请求
+  if (JSON.stringify(uniqueIds) !== JSON.stringify(oldIds)) {
+    emit('update-children', props.id, uniqueIds)
+  }
+}
 
 // --- 分组名称编辑逻辑 ---
 const isEditingName = ref(false)
@@ -149,27 +216,7 @@ const toggleEditName = () => {
     isEditingName.value = true
   }
 }
-// 保存分组名称
-const saveGroupName = () => {
-  if (editingGroupName.value.trim() && editingGroupName.value !== props.groupData.name) {
-    props.groupData.name = editingGroupName.value.trim()
-    updateGroup()
-  }
-  isEditingName.value = false
-}
 
-// 计算属性：获取和设置分组内的模组 ID 列表
-const getGroupModIds = computed({
-  get() {
-    return props.groupData.mod_ids.map(id => ({ id: id }));
-  },
-  set(val: any[]) { // val 将是 { id: string }[]
-    const idList = val.map(item => item.id);
-    if (JSON.stringify(props.groupData.mod_ids) !== JSON.stringify(idList)) { // 只有数据真正改变时才更新
-      props.groupData.mod_ids = idList;
-    }
-  }
-})
 
 // ModItem 内部的点击事件，可以保持不变或根据需要调整
 const handleClick = (event, modId) => {

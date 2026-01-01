@@ -142,7 +142,7 @@ const InputGroup = {
         <button v-if="isPath"
             @click="$emit('browse')"
             class="px-3 py-2.5 bg-white/5 hover:bg-accent-primary hover:text-white text-text-dim border border-white/10 rounded-lg transition-all active:scale-95"
-            title="浏览文件夹">
+            v-tooltip="\`浏览文件夹\`">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
             </svg>
@@ -182,10 +182,10 @@ const autoDetect = async () => {
   if(!window.pywebview) return
   detecting.value = true
   try {
-    const res = await window.pywebview.api.auto_detect_paths()
-    if (res.status === 'success' && res.paths) {
+    const res = await store.autoDetectPaths(false)
+    if (res) {
       // 只更新表单，不直接保存，让用户确认
-      Object.assign(formData.value, res.paths)
+      Object.assign(formData.value, res.data.paths)
     } else {
       // 可以加个 Toast 提示失败
       alert('未能自动找到所有路径，请手动填写。')
@@ -215,7 +215,7 @@ const handleBrowse = async (fieldKey) => {
     if(!window.pywebview) return
     
     // 调用后端 API
-    const path = await window.pywebview.api.select_folder_dialog(formData.value[fieldKey])
+    const path = await store.getFolderPath(formData.value[fieldKey])
     
     // 如果用户选了路径（没点取消），则更新数据
     if (path) {

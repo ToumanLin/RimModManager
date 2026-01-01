@@ -10,7 +10,7 @@
     <span v-if="tag.key" class="opacity-70">{{ tag.originalKey }}:</span>
     
     <!-- 值区域 -->
-    <div :title="tag.value" class="flex-1 font-medium truncate min-w-0 relative">
+    <div v-tooltip="tag.value" class="flex-1 font-medium truncate min-w-0 relative">
       <!-- 编辑模式 -->
       <input v-if="isEditing" v-model="localValue" ref="inputRef" type="text" 
              class="min-w-20 w-full bg-transparent outline-none p-0 border-none text-current placeholder-current font-medium leading-none"

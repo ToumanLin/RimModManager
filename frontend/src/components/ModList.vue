@@ -25,10 +25,11 @@
         <template #right>
           <!-- 定位按钮 -->
           <button @click="executeSearch(true)" 
-            :class="`px-3 py-1 rounded-lg bg-accent-${listColor}/50 hover:bg-accent-${listColor} 
+            :class="`px-3 py-1 relative rounded-lg bg-accent-${listColor}/50 hover:bg-accent-${listColor} 
             text-text-dim hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10 
             transition-all`">
             定位
+            <div v-if="currentSearchIndex !== -1 && searchQuery.length > 0" class="text-[8px] absolute -top-2 -left-1 text-text-main bg-accent-warm px-1 rounded-lg">{{ currentSearchIndex + 1 }} / {{ searchResults.length }}</div>
           </button>
         </template>
       </TagsInput>
@@ -41,7 +42,7 @@
         </template>
         <template #right>
           <!-- 排序切换按钮 -->
-          <button @click="cycleSort" :title="sortMode"
+          <button @click="cycleSort" v-tooltip="sortMode"
             :class="`px-3 py-1 rounded-lg bg-accent-${listColor}/50 hover:bg-accent-${listColor} 
             text-text-dim hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10 
             transition-all`">
@@ -73,13 +74,14 @@
 
         <VirtualList v-model="internalListProxy" ref="vListRef" dataKey="id" :keeps="50" class="h-full p-1" placeholderClass="ghost" wrapClass="space-y-1" 
           :fallbackOnBody="true" :scrollSpeed="{x:0, y:10}" handle=".drag-handle" :sortable="allowSort"
-          :group="{ name: 'mods', pull: true, put: allowSort, revertDrag: true }" :animation="150" 
+          :group="{ name: 'mods', pull: 'clone', put: allowSort, revertDrag: true }" :animation="150" 
+          @drop="updateChildren" @drag="startDrag"
           @mousedown.left="handleMousePressed(true)" @mouseup.left="handleMousePressed(false)" @mouseleave="handleMousePressed(false)">
           <template v-slot:item="{ record, index, dataKey }">
             <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
               :is-selected="store.selectedIds.has(dataKey)"
               :search-match="currentTargetId === dataKey"
-               @toggle-select="handleClick" v-preview="store.getModById(dataKey)">
+               @toggle-select="handleClick">
             </ModItem>
           </template>
         </VirtualList>
@@ -141,7 +143,8 @@ const isFiltered = computed(() => filterQuery.value.length > 0)
 const allowSort = computed(() => sortMode.value === 'default' && !isFiltered.value)
 const allMods = computed(() => store.allModsMap ? Array.from(store.allModsMap.values()) : [])
 const currentTargetId = computed(() => store.currentTargetId)
-const currentTragetIndex = ref(-1)
+const searchResults = ref<string[]>([])
+const currentSearchIndex = ref(-1)
 
 // 显示列表：筛选 -> 排序
 const displayList = computed(() => {
@@ -150,7 +153,7 @@ const displayList = computed(() => {
   // 1. 筛选
   if (filterQuery.value.length > 0) {
     list = list.filter(id => {
-      const mod = store.getModById(id)
+      const mod = store.takeModById(id)
       return checkMatch(mod, filterQuery.value, filterLogic.value)
     })
   }
@@ -158,8 +161,8 @@ const displayList = computed(() => {
   // 2. 排序 (仅视觉)
   if (sortMode.value !== 'default') {
     list.sort((a, b) => {
-      const mA = store.getModById(a)
-      const mB = store.getModById(b)
+      const mA = store.takeModById(a)
+      const mB = store.takeModById(b)
       if (sortMode.value === 'name') return (mA?.name || a).localeCompare(mB?.name || b)
       if (sortMode.value === 'author') return (mA?.author || '').localeCompare(mB?.author || '')
       return 0
@@ -243,39 +246,60 @@ const checkMatch = (mod: any, tags: any[], logic: string) => {
   }
 }
 
-
 // VueVirtualSortable 需要对象数组 {id: ...}
 // 这里做一个中间层，处理 displayList 和 modelValue 之间的映射
-// 注意：当处于 Filter/Sort 模式时，Set 操作需要小心，我们只允许"拖出"，
 const internalListProxy = computed({
     get() {
         return displayList.value.map(id => ({ id }))
     },
     set(val: any[]) {
-        // 当发生拖拽变化时
-        if (!allowSort.value) {
-            // 如果处于筛选/排序模式，VirtualList 可能会尝试更新列表
-            // 简单处理：如果长度变短了(被拖出)，我们需要在原始 modelValue 中移除对应项
-            const newIds = new Set(val.map(v => v.id))
-            const removedIds = displayList.value.filter(id => !newIds.has(id))
-            
-            if (removedIds.length > 0) {
-                const newList = props.modelValue.filter(id => !removedIds.includes(id))
-                emit('update:modelValue', newList)
-                store.markDirty()
-            }
-            return
-        }
-
-        // 正常模式：直接更新
-        const newIds = val.map(v => v.id)
-        emit('update:modelValue', newIds)
-        store.markDirty()
+        // const newIds = val.map(v => v.id)
+        // emit('update:modelValue', newIds)
+        // // 只有在有侧边栏时才标记为脏
+        // if (props.hasSidebar) store.markDirty()
     }
 })
+const updateChildren = (e) => {
+  const oldIds = props.modelValue // 原始顺序
+  const newIds = internalListProxy.value.map(item => item.id)  // 获取当前的最新顺序 ID列表
+  const currentListDom = vListRef.value.$el
+  // console.log( e.event.from, e.event.to, currentListDom)
+  // 拖动项在当前列表
+  if (e.event.from === currentListDom || e.event.from === e.event.to) {
+    console.log(props.title, "列表排序结束:", e)
+    if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
+      emit('update:modelValue', newIds)
+      if (props.hasSidebar) store.markDirty() // 只有在有侧边栏时才标记为脏
+    }
+    return
+  }
+  console.log(props.title, "列表插入结束:", e)
 
+  // 去除重复, 保持拖动项的位置
+  // const uniqueIds = newIds.filter((id, index) => e.item.id !== id && newIds.indexOf(id) === index || e.item.id === id && index === e.newIndex)
+  const uniqueIds = newIds.filter((id, index) => {
+    // 规则 A：这是新插入的位置吗？是就留着
+    if (index === e.newIndex && id === e.item.id) return true
+    // 规则 B：位置不对，但 ID 却和拖拽项一样？说明是旧的（Clone 残留），杀掉
+    if (id === e.item.id) return false
+    // 规则 C：其他不相干的模组，留着
+    return true
+  })
+  // 从所有列表中移除拖动项防止重复
+  store.removeIdOnAllList(e.item.id)
+  // 只有顺序真的变了才发请求
+  console.log("排序前:", oldIds)
+  console.log("排序后:", uniqueIds)
+  if (JSON.stringify(uniqueIds) !== JSON.stringify(oldIds)) {
+    emit('update:modelValue', uniqueIds)  // 发送新的顺序到父组件（包括之前移除的拖动项）
+    // 只有在有侧边栏时才标记为脏
+    if (props.hasSidebar) store.markDirty()
+  }
+}
+const startDrag = (e) => {
+  console.log("开始拖拽:", e)
+}
 // --- 3. 搜索定位逻辑 (Find) ---
-const searchResults = ref<string[]>([])
 
 // 监听 currentTargetId 变化
 watch(currentTargetId, async (newVal, oldVal) => {
@@ -323,22 +347,22 @@ const executeSearch = (next = true) => {
   if (!searchQuery.value.length) {
     searchResults.value = []
     store.currentTargetId = ''
-    currentTragetIndex.value = -1
+    currentSearchIndex.value = -1
     return
   }
 
   // 在当前的 displayList 中查找，这样只能找到可见的
-  const results = displayList.value.filter(id => checkMatch(store.getModById(id), searchQuery.value, searchLogic.value))
+  const results = displayList.value.filter(id => checkMatch(store.takeModById(id), searchQuery.value, searchLogic.value))
   
   // 如果结果列表变了，重置
   if (JSON.stringify(results) !== JSON.stringify(searchResults.value)) {
     searchResults.value = results
-    currentTragetIndex.value = -1
+    currentSearchIndex.value = -1
   }
 
   if (results.length === 0) return
 
-  var index = currentTragetIndex.value
+  var index = currentSearchIndex.value
 
   if (next) {
     index++
@@ -350,7 +374,7 @@ const executeSearch = (next = true) => {
   }
   // 定位
   const targetId = results[index]
-  currentTragetIndex.value = index
+  currentSearchIndex.value = index
   // 先确保目标 ID 在可见范围内
   if (results.includes(targetId)) {
     store.currentTargetId = targetId
@@ -377,6 +401,7 @@ interface DragOriginInfo {
   index: number; // 原始索引
   ids: string[]; // 拖拽的ID（单选或多选）
 }
+
 const dragOrigin = ref<DragOriginInfo | null>(null);
 
 const mousePressed = ref(false);

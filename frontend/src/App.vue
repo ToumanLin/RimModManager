@@ -53,7 +53,7 @@
 
                 <ModList v-if="activeTab === 'Temp'" v-model="store.tempIds" title="temp" listColor="warning" 
                   class="rounded-b-none col-start-1 row-start-1 w-full"/>
-                <GroupList v-else-if="activeTab === 'Groups'" title="Groups" listColor="special" 
+                <GroupList v-else-if="activeTab === 'Groups'" v-model="store.groupList" title="Groups" listColor="special" 
                   class="rounded-b-none col-start-1 row-start-1 w-full"/>
 
               </KeepAlive>

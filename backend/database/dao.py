@@ -16,13 +16,15 @@ class ModDAO:
     """
 
     @staticmethod
-    def get_all_mods_with_user_data():
+    def get_all_mods_with_user_data(ignore_missing=False):
         """
         获取所有模组及其用户数据。
+        如果 ignore_missing 为 True，则排除缺失的 Mod。
         返回字典列表，方便前端直接使用。
         """
         query = (Mod
                  .select(Mod, UserModData)
+                 .where(Mod.path.is_null(False) | (not ignore_missing))
                  .join(UserModData, on=(Mod.package_id == UserModData.mod_id), join_type=JOIN.LEFT_OUTER)
                  .dicts())
         return list(query)
@@ -92,9 +94,11 @@ class ModDAO:
         :param delete: 
             True  -> 直接删除记录 (会级联删除 UserModData/GroupMod)
             False -> 仅将 path 设为 None (保留用户备注等数据，标记为缺失)
-        返回: 无效 Mod 的 package_id 列表
+        返回: 无效 Mod 的 package_id 列表 (包含缺失和删除的)
+        {'missing_mods': [], 'deleted_mods': []}
         """
-        missing_mods = []
+        missing_mods = []   # 之前缺失文件的 Mod
+        deleted_mods = []   # 上次删除的 Mod
         
         # 1. 遍历检查文件是否存在 (这一步比较耗时，但必须做)
         # 优化：只查询有 path 的记录，已经为 None 的不用查了
@@ -104,23 +108,29 @@ class ModDAO:
             pkg_id = mod['package_id']
             path = mod['path']
             # 检查路径是否存在 (注意：path 可能是空字符串)
-            if not path or not os.path.exists(path):
+            if not path:
                 missing_mods.append(pkg_id)
+            elif not os.path.exists(path):
+                deleted_mods.append(pkg_id)
         
-        if not missing_mods:
-            return []
+        total_invalid_mods = missing_mods + deleted_mods
+        # 从 GroupMod 中删除这些 Mod 的关联
+        GroupMod.delete().where(GroupMod.mod_id.in_(total_invalid_mods)).execute()
+        
+        if not total_invalid_mods:
+            return {'missing_mods': missing_mods, 'deleted_mods': deleted_mods}
 
         # 2. 数据库操作 (原子事务)
         with db.atomic():
             if delete:
                 # 如果要删除，直接删，不需要先 update
                 # chunked 并不是必须的，除非一次性删几万条，这里直接 in_ 即可
-                Mod.delete().where(Mod.package_id.in_(missing_mods)).execute()
+                Mod.delete().where(Mod.package_id.in_(total_invalid_mods)).execute()
             else:
                 # 如果不删除，只是标记为丢失 (path = None)
-                Mod.update(path=None).where(Mod.package_id.in_(missing_mods)).execute()
+                Mod.update(path=None).where(Mod.package_id.in_(deleted_mods)).execute()
         
-        return missing_mods
+        return {'missing_mods': missing_mods, 'deleted_mods': deleted_mods}
         
         
         
@@ -232,6 +242,14 @@ class GroupDAO:
         return query.execute()
 
     @staticmethod
+    def update_all_expansion_state(is_expanded: bool):
+        """
+        一次性展开或折叠所有分组
+        耗时: 几毫秒
+        """
+        GroupData.update(is_expanded=is_expanded).execute()
+
+    @staticmethod
     def reorder_groups(group_id_list):
         """
         重新排序分组本身。
@@ -245,13 +263,27 @@ class GroupDAO:
     def reorder_mods_in_group(group_id, mod_id_list):
         """
         重新排序分组内的 Mod。
-        前端在组内拖拽 Mod 后，发送该组新的 mod_id 顺序列表。
+        优化策略：直接删除该组旧关系，批量插入新关系。
+        这样只有 2 次 SQL IO，而不是 N 次。
         """
+        if not mod_id_list:
+            # 如果列表为空，说明清空了分组
+            GroupMod.delete().where(GroupMod.group_id == group_id).execute()
+            return
+
+        data_source = []
+        for idx, pid in enumerate(mod_id_list):
+            data_source.append({
+                'group_id': group_id,
+                'mod_id': pid,
+                'sort_index': idx
+            })
+
         with db.atomic():
-            # 这种循环更新在几百个 item 内性能是可以接受的 (SQLite很快)
-            # 如果数量级很大，可以使用 SQL CASE WHEN 语句优化
-            for idx, pid in enumerate(mod_id_list):
-                GroupMod.update(sort_index=idx).where(
-                    (GroupMod.group_id == group_id) & 
-                    (GroupMod.mod_id == pid)
-                ).execute()
+            # 1. 删除该组所有关联
+            GroupMod.delete().where(GroupMod.group_id == group_id).execute()
+            
+            # 2. 批量插入新顺序
+            # chunked 并非必须，除非 mod_id_list 超过 999 (SQLite 限制)
+            for batch in chunked(data_source, 500):
+                GroupMod.insert_many(batch).execute()
