@@ -73,15 +73,15 @@
         </div>
 
         <VirtualList v-model="internalListProxy" ref="vListRef" dataKey="id" :keeps="50" class="h-full p-1" placeholderClass="ghost" wrapClass="space-y-1" 
-          :fallbackOnBody="true" :scrollSpeed="{x:0, y:10}" handle=".drag-handle" :sortable="allowSort"
+          :fallbackOnBody="true" :scrollSpeed="{x:0, y:10}" handle=".drag-handle" :sortable="allowSort" :delay="50"
           :group="{ name: 'mods', pull: 'clone', put: allowSort, revertDrag: true }" :animation="150" 
           @drop="updateChildren" @drag="startDrag"
           @mousedown.left="handleMousePressed(true)" @mouseup.left="handleMousePressed(false)" @mouseleave="handleMousePressed(false)">
           <template v-slot:item="{ record, index, dataKey }">
             <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
-              :is-selected="store.selectedIds.has(dataKey)"
+              :is-selected="store.selectedIds.includes(dataKey)"
               :search-match="currentTargetId === dataKey"
-               @toggle-select="handleClick">
+               @click-start="handleClickStart" @click-end="handleClickEnd">
             </ModItem>
           </template>
         </VirtualList>
@@ -263,30 +263,34 @@ const updateChildren = (e) => {
   const oldIds = props.modelValue // 原始顺序
   const newIds = internalListProxy.value.map(item => item.id)  // 获取当前的最新顺序 ID列表
   const currentListDom = vListRef.value.$el
+  const selectedIds = store.selectedIds
   // console.log( e.event.from, e.event.to, currentListDom)
-  // 拖动项在当前列表
-  if (e.event.from === currentListDom || e.event.from === e.event.to) {
-    console.log(props.title, "列表排序结束:", e)
-    if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
-      emit('update:modelValue', newIds)
-      if (props.hasSidebar) store.markDirty() // 只有在有侧边栏时才标记为脏
-    }
-    return
-  }
+  // 拖动项来自当前列表
+  // if (e.event.from === currentListDom || e.event.from === e.event.to) {
+  //   console.log(props.title, "列表排序结束:", e)
+  //   if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
+  //     emit('update:modelValue', newIds)
+  //     if (props.hasSidebar) store.markDirty() // 只有在有侧边栏时才标记为脏
+  //   }
+  //   return
+  // }
+  // 拖动项来自其它列表
   console.log(props.title, "列表插入结束:", e)
-
   // 去除重复, 保持拖动项的位置
   // const uniqueIds = newIds.filter((id, index) => e.item.id !== id && newIds.indexOf(id) === index || e.item.id === id && index === e.newIndex)
   const uniqueIds = newIds.filter((id, index) => {
-    // 规则 A：这是新插入的位置吗？是就留着
+    // 检测是否是拖动项（值和索引都匹配），是则保留
     if (index === e.newIndex && id === e.item.id) return true
-    // 规则 B：位置不对，但 ID 却和拖拽项一样？说明是旧的（Clone 残留），杀掉
-    if (id === e.item.id) return false
-    // 规则 C：其他不相干的模组，留着
+    // 排除已选择的项
+    if (selectedIds.includes(id)) return false
+    // 其他未选择项，保留
     return true
   })
+  const newIndex = uniqueIds.indexOf(e.item.id)
+  // 根据拖动项，插入选中项（因选中项包含拖动项，所以插入时需要移除拖动项）
+  uniqueIds.splice(newIndex, 1, ...selectedIds)
   // 从所有列表中移除拖动项防止重复
-  store.removeIdOnAllList(e.item.id)
+  store.removeIdsOnAllList(selectedIds)
   // 只有顺序真的变了才发请求
   console.log("排序前:", oldIds)
   console.log("排序后:", uniqueIds)
@@ -395,22 +399,20 @@ const cycleSort = () => {
     else if (sortMode.value === 'name') sortMode.value = 'author'
     else sortMode.value = 'default'
 }
-// 用于记录拖拽开始时的原始状态，以支持取消拖拽返回原位
-interface DragOriginInfo {
-  list: string[]; // 原始列表的引用 (activeIds, tempIds 等)
-  index: number; // 原始索引
-  ids: string[]; // 拖拽的ID（单选或多选）
-}
 
-const dragOrigin = ref<DragOriginInfo | null>(null);
-
+// --- 选择逻辑 ---
+// 鼠标长按状态辅助函数
 const mousePressed = ref(false);
 const handleMousePressed = (state:boolean) => {
   mousePressed.value = state;
   
 }
-// --- 选中与样式 ---
-const handleClick = (event: MouseEvent, id: string, isPull=false) => {
+// 多选连选逻辑
+const selectedIds = ref(new Set()) // 选中ID集合
+const invertSelectedIds = ref(new Set()) // 反选ID集合
+const lastSelectedId = ref(null)      // 最后点击的 ID (用于 Shift 连选定位)
+// 点击开始时，多选连选逻辑，记录最后点击的ID
+const handleClickStart = (event: MouseEvent, id: string, isPull=false) => {
   // 修正输入框不会对列表项失焦，强制失焦逻辑
   // 如果当前有获得焦点的元素，且它是一个输入框，则强制让它失焦
   if (document.activeElement instanceof HTMLElement && 
@@ -427,9 +429,72 @@ const handleClick = (event: MouseEvent, id: string, isPull=false) => {
   // if (!((event.button == 0 && !isPull)||(mousePressed.value && isPull))) return; // 只响应左键点击或左键拖拽
   const isMulti = event.ctrlKey || event.metaKey
   const isRange = event.shiftKey
-  store.selectMod(id, isMulti, isRange)
-}
+  const lowerId = id.toLowerCase();
+  // 找到当前列表的所有可见ID
+  const currentListIds = internalListProxy.value.map(item => item.id.toLowerCase())
+  if (isRange) {
+    // Shift 连选逻辑
+    if (selectedIds.value.size === 0 || !lastSelectedId.value) {
+      selectedIds.value.add(lowerId);
+      return;
+    }
+    
+    // 找到最后一次选择的ID在当前列表中的索引
+    const lastIndex = currentListIds.indexOf(lastSelectedId.value);
+    // 找到当前点击的ID在当前列表中的索引
+    const currentIndex = currentListIds.indexOf(lowerId);
+    
+    if (lastIndex !== -1 && currentIndex !== -1) {
+      const start = Math.min(lastIndex, currentIndex);
+      const end = Math.max(lastIndex, currentIndex);
+      const isForward = lastIndex < currentIndex;
+      for (let i = start; i <= end; i++) {
+        // 如果当前ID已选中，则从选中集合中移除
+        if(selectedIds.value.has(currentListIds[i])) {
+          if(isForward && i === start) continue;
+          else if(!isForward && i === end) continue;
+          invertSelectedIds.value.add(currentListIds[i]);
+        }
+        selectedIds.value.add(currentListIds[i]);
+      }
+    } else {
+      selectedIds.value.add(lowerId); // 如果找不到范围，就只选中当前项
+    }
 
+  } else if (isMulti) {
+    // 如果当前ID已选中，则从选中集合中移除
+    if (selectedIds.value.has(lowerId)) {invertSelectedIds.value.add(lowerId)}
+    // Ctrl/Meta 多选逻辑
+    selectedIds.value.add(lowerId);
+  } else {
+    // 单选逻辑
+    if(selectedIds.value.has(lowerId)) return;  // 点击已选中的项，不做处理，防止影响拖拽等点击操作
+    selectedIds.value.clear();
+    selectedIds.value.add(lowerId);
+  }
+  const selectedIdsArray = currentListIds.filter(id => selectedIds.value.has(id)) // 保持顺序
+  store.selectMod(selectedIdsArray)
+}
+// 点击结束时,主要用于多选反选判定
+const handleClickEnd = (event: MouseEvent, id: string) => {
+  const isMulti = event.ctrlKey || event.metaKey
+  const isRange = event.shiftKey
+  const lowerId = id.toLowerCase();
+  const currentListIds = internalListProxy.value.map(item => item.id.toLowerCase())
+  if (isRange || isMulti) {
+    for (const id of invertSelectedIds.value) {
+      selectedIds.value.delete(id);
+    }
+    invertSelectedIds.value.clear();
+  } else {
+    // 单选直接清空已选列表并重新选中当前项
+    selectedIds.value.clear();
+    selectedIds.value.add(lowerId);
+  }
+  lastSelectedId.value = lowerId;
+  const selectedIdsArray = currentListIds.filter(id => selectedIds.value.has(id)) // 保持顺序
+  store.selectMod(selectedIdsArray)
+}
 </script>
 
 <style scoped>

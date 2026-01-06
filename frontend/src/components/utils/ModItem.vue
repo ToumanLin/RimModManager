@@ -1,13 +1,13 @@
 <!-- ModItem.vue -->
 <template>
-  <div class="flex items-center gap-1" @mousedown.left="$emit('toggle-select', $event, item_id)"
+  <div class="flex items-center gap-1" @mousedown.left="$emit('click-start', $event, item_id)" @click="$emit('click-end', $event, item_id)"
     @click.right="handleContextMenu">
     <!-- 序号（通过位数计算动态调整字体大小） -->
     <!-- :style="{ fontSize: 18-(index+1).toString().length*3 + 'px' }" -->
     <div v-if="showIndex" class="w-6 h-6 min-w-6 min-h-6 flex items-center justify-center rounded"
       :class="[props.isSelected ? `text-text-main bg-accent-${listColor}/50` : `text-accent-${listColor}/50 bg-accent-${listColor}/10 hover:text-text-main hover:bg-accent-${listColor}/50`,
         `digits-${(index+1).toString().length}`]"
-      @mouseenter="$emit('toggle-select', $event, item_id, true)">
+      @mouseenter="$emit('click-start', $event, item_id, true)">
       {{ index+1 }}
     </div>
     
@@ -134,7 +134,7 @@ const props = defineProps({
   searchMatch: { type: Boolean, default: false } // 是否是当前搜索焦点
 })
 
-defineEmits(['toggle-select'])
+defineEmits(['click-start', 'click-end'])
 
 const store = useModStore()
 const menuStore = useContextMenuStore()

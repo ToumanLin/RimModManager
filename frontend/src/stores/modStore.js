@@ -31,9 +31,7 @@ export const useModStore = defineStore('mods', () => {
   
   // 选择状态
   const currentTargetId = ref('') // 当前目标 ID (定位用)
-  const selectedIds = ref(new Set())
-  const lastSelectedId = ref(null)      // 最后点击的 ID (用于 Shift 连选定位)
-  const lastSelectedListId = ref(null)  // 最后点击所在的列表标识 (防止跨列表连选)
+  const selectedIds = ref([])
 
   // 设置状态
   const showSettings = ref(false) // 是否显示设置弹窗
@@ -142,109 +140,6 @@ export const useModStore = defineStore('mods', () => {
       await refreshModList()
     })
   }
-  // 从所有列表中移除指定 ID（大小写不敏感）
-  const removeIdOnAllList = (id) => {
-    const lowerId = id.toLowerCase()
-    activeIds.value = activeIds.value.filter(i => i.toLowerCase() !== lowerId)
-    inactiveIds.value = inactiveIds.value.filter(i => i.toLowerCase() !== lowerId)
-    tempIds.value = tempIds.value.filter(i => i.toLowerCase() !== lowerId)
-  }
-
-  // ===== Mod操作 =====
-  // 获取 Mod 对象
-  const takeModById = (id) => {
-    if (!id) return null
-    const lowerId = id.toLowerCase()
-    if (allModsMap.value.has(lowerId)) {
-      return allModsMap.value.get(lowerId)
-    }
-    // 构造缺失模组的“幽灵对象”
-    return {
-      package_id: id,
-      name: `⚠ 未知模组 (${id})`,
-      author: ['Unknown'],
-      is_missing: true,
-      description: '该模组在本地未找到，可能未下载，或已被手动删除。'
-    }
-  }
-  // 获取 Mod 对象列表 (根据 ID 列表筛选)
-  const takeModListByIds = (ids) => {
-    return Array.from(allModsMap.value.values()).filter(mod => ids.includes(mod.package_id))
-  }
-  // 选择/取消选择 Mod
-  const selectMod = (id, isMulti = false, isRange = false) => {
-    const lowerId = id.toLowerCase();
-    if (isRange) {
-      // Shift 连选逻辑
-      if (selectedIds.value.size === 0) {
-        selectedIds.value.add(lowerId);
-        return;
-      }
-
-      // 找到当前列表的所有可见ID
-      const currentListIds = [...activeIds.value, ...inactiveIds.value, ...tempIds.value]; // 假设这三者是所有可能的列表
-      
-      // 找到最近一次选择的ID
-      let lastSelectedId = null;
-      // 遍历Set，找到第一个（或最后一个，取决于实现）
-      if (selectedIds.value.size > 0) {
-        lastSelectedId = Array.from(selectedIds.value)[selectedIds.value.size - 1]; 
-      }
-      
-      if (!lastSelectedId) {
-        selectedIds.value.add(lowerId);
-        return;
-      }
-
-      const lastIndex = currentListIds.indexOf(lastSelectedId);
-      const currentIndex = currentListIds.indexOf(lowerId);
-
-      if (lastIndex !== -1 && currentIndex !== -1) {
-        const start = Math.min(lastIndex, currentIndex);
-        const end = Math.max(lastIndex, currentIndex);
-        for (let i = start; i <= end; i++) {
-          selectedIds.value.add(currentListIds[i]);
-        }
-      } else {
-        selectedIds.value.add(lowerId); // 如果找不到范围，就只选中当前项
-      }
-
-    } else if (isMulti) {
-      // Ctrl/Meta 多选逻辑
-      if (selectedIds.value.has(lowerId)) {
-        selectedIds.value.delete(lowerId);
-      } else {
-        // 检查是否所有已选项都在同一列表中
-        selectedIds.value.add(lowerId);
-        if (Array.from(selectedIds.value).every(id => activeIds.value.includes(id)) || 
-          Array.from(selectedIds.value).every(id => inactiveIds.value.includes(id)) ||
-          Array.from(selectedIds.value).every(id => tempIds.value.includes(id))) {
-          // 全部在同一列表中，允许多选
-        } else {
-          selectedIds.value.clear();
-          selectedIds.value.add(lowerId);
-        }
-      }
-    } else {
-      // 单选逻辑
-      selectedIds.value.clear();
-      selectedIds.value.add(lowerId);
-    }
-  }
-  // 清除选择
-  const clearSelection = () => {
-    selectedIds.value.clear()
-    lastSelectedId.value = null
-    lastSelectedListId.value = null
-  }
-  // 获取图片 URL (基于后端 FileManager)
-  const getIconUrl = (id) => {
-    const mod = takeModById(id)
-    if (mod && mod.icon_url) return mod.icon_url // 列表图标
-    if (mod && mod.thumb_url) return mod.thumb_url // 缩略图
-    if (mod && mod.preview_url) return mod.preview_url // 详情大图
-    return '' // 返回空或默认图路径
-  }
    // 单独抽离刷新列表的方法，用于初始化、扫描完成后、或手动刷新
   const refreshModList = async (isInit = false) => {
     try {
@@ -294,6 +189,54 @@ export const useModStore = defineStore('mods', () => {
       console.error("刷新列表失败:\n", e)
       toast.error(`刷新列表失败: \n${e.message}`)
     }
+  }
+
+  // ===== Mod操作 =====
+  // 获取 Mod 对象
+  const takeModById = (id) => {
+    if (!id) return null
+    const lowerId = id.toLowerCase()
+    if (allModsMap.value.has(lowerId)) {
+      return allModsMap.value.get(lowerId)
+    }
+    // 构造缺失模组的“幽灵对象”
+    return {
+      package_id: id,
+      name: `⚠ 未知模组 (${id})`,
+      author: ['Unknown'],
+      is_missing: true,
+      description: '该模组在本地未找到，可能未下载，或已被手动删除。'
+    }
+  }
+  // 获取 Mod 对象列表
+  const takeModListByIds = (ids) => {
+    return Array.from(allModsMap.value.values()).filter(mod => ids.includes(mod.package_id))
+  }
+  // 从所有列表中移除指定 IDs
+  const removeIdsOnAllList = (ids) => {
+    if(ids.type === 'string') ids = [ids]
+    const lowerIdsSet = new Set(ids.map(id => id.toLowerCase()))
+    activeIds.value = activeIds.value.filter(i => !lowerIdsSet.has(i))
+    inactiveIds.value = inactiveIds.value.filter(i => !lowerIdsSet.has(i))
+    tempIds.value = tempIds.value.filter(i => !lowerIdsSet.has(i))
+  }
+  // 选择/取消选择 Mod
+  const selectMod = (ids) => {
+    clearSelection();
+    if(ids.type === 'string') ids = [ids]
+    selectedIds.value = ids
+  }
+  // 清除选择
+  const clearSelection = () => {
+    selectedIds.value = []
+  }
+  // 获取图片 URL (基于后端 FileManager)
+  const getIconUrl = (id) => {
+    const mod = takeModById(id)
+    if (mod && mod.icon_url) return mod.icon_url // 列表图标
+    if (mod && mod.thumb_url) return mod.thumb_url // 缩略图
+    if (mod && mod.preview_url) return mod.preview_url // 详情大图
+    return '' // 返回空或默认图路径
   }
 
   // ===== Mod管理 =====
@@ -648,10 +591,10 @@ export const useModStore = defineStore('mods', () => {
   return {
     // 状态管理
     scanProgress, dataVersion,
-    initialize, getLoadOrder, removeIdOnAllList,
+    initialize, getLoadOrder, refreshModList, 
     // Mod 相关
-    allModsMap, activeIds, tempIds, inactiveIds, selectedIds, selectedMods, lastSelectedId, lastSelectedListId, currentTargetId, 
-    takeModById, getIconUrl, selectMod, clearSelection, refreshModList, scanMods, saveLoadOrder, updateModUserData, takeModListByIds,
+    allModsMap, activeIds, tempIds, inactiveIds, selectedIds, selectedMods, currentTargetId, 
+    takeModById, takeModListByIds, removeIdsOnAllList, getIconUrl, selectMod, clearSelection, scanMods, saveLoadOrder, updateModUserData, 
 
     // 分组相关
     groupList, 
