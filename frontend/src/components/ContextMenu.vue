@@ -1,71 +1,91 @@
+<!-- components/ContextMenu.vue -->
 <template>
-  <Transition name="fade">
-    <div 
-      v-if="store.show"
-      ref="menuRef"
-      class="fixed z-9999 min-w-[140px] bg-bg-deep/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl py-1 overflow-hidden"
-      :style="{ left: positionX + 'px', top: positionY + 'px' }"
-      @click.stop="store.close()"
-      @contextmenu.prevent
-    >
-      <div v-for="(item, idx) in store.items" :key="idx">
-        <!-- 分割线 -->
-        <div v-if="item.divider" class="h-px bg-white/10 my-1 mx-2"></div>
-        
-        <!-- 菜单项 -->
-        <div v-else @click="item.action && item.action()" 
-          class="px-3 py-1.5 text-xs cursor-pointer flex items-center gap-2 transition-colors"
-          :class="item.danger ? 'text-red-400 hover:bg-red-500/20' : 'text-text-main hover:bg-white/10'"
-        >
-          <span v-if="item.icon">{{ item.icon }}</span>
-          {{ item.label }}
-          <!-- 箭头 (如果有子菜单) -->
-          <span v-if="item.children">▶</span>
-          <!-- 子菜单 (Hover 显示) -->
-          <div v-if="item.children" 
-              class="hidden group-hover:block absolute left-full top-0 ml-1 bg-bg-deep/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl py-1 overflow-hidden"
-          >
-            <div v-for="sub in item.children" @click="sub.action()">
-                {{ sub.label }}
-            </div>
-          </div>
-        </div>
+  <Teleport to="body">
+    <Transition name="scale">
+      <div
+        v-if="store.show"
+        ref="menuRef"
+        class="fixed z-9999 min-w-[150px] py-0.5 rounded-xl border border-zinc-200/50 bg-white/80 shadow-2xl backdrop-blur-xl dark:border-zinc-700/50 dark:bg-zinc-900/90 dark:shadow-black/50 ring-1 ring-black/5"
+        :style="menuStyle"
+        @contextmenu.prevent
+      >
+        <ContextMenuItem 
+          v-for="(item, idx) in store.items" 
+          :key="idx" 
+          :item="item"
+          @close-menu="store.close()"
+        />
       </div>
-    </div>
-  </Transition>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useContextMenuStore } from '../stores/contextMenuStore'
+import { ref, computed, watch, nextTick } from 'vue'
+import { onClickOutside, useWindowSize } from '@vueuse/core'
+import { useContextMenuStore } from '../stores/contextMenuStore' // 调整你的路径
+import ContextMenuItem from './utils/ContextMenuItem.vue'
 
 const store = useContextMenuStore()
 const menuRef = ref(null)
+const { width: winWidth, height: winHeight } = useWindowSize()
 
-// 简单的防溢出逻辑：如果菜单超出屏幕，向左/向上显示
-const positionX = computed(() => {
-  const width = 140
-  if (store.x + width > window.innerWidth) return store.x - width
-  return store.x
+// 实际渲染坐标 (防止溢出)
+const actualX = ref(0)
+const actualY = ref(0)
+
+// 监听 store 打开状态，进行坐标计算
+watch(() => store.show, async (val) => {
+  if (val) {
+    await nextTick() // 等待 DOM 渲染以获取菜单真实宽高
+    if (!menuRef.value) return
+
+    const { offsetWidth, offsetHeight } = menuRef.value
+    const { x, y } = store
+
+    // X轴 边界检测
+    if (x + offsetWidth > winWidth.value) {
+      actualX.value = x - offsetWidth
+    } else {
+      actualX.value = x
+    }
+
+    // Y轴 边界检测
+    if (y + offsetHeight > winHeight.value) {
+      actualY.value = y - offsetHeight
+    } else {
+      actualY.value = y
+    }
+  }
 })
-const positionY = computed(() => {
-  // 假设菜单高度大概 200，精确计算需要 nextTick 获取 ref 高度
-  if (store.y + 200 > window.innerHeight) return store.y - 200
-  return store.y
-})
+
+const menuStyle = computed(() => ({
+  left: `${actualX.value}px`,
+  top: `${actualY.value}px`,
+}))
 
 // 点击外部关闭
-const handleClickOutside = (e) => {
-  if (menuRef.value && !menuRef.value.contains(e.target)) {
-    store.close()
-  }
-}
+onClickOutside(menuRef, () => {
+  store.close()
+})
 
-onMounted(() => window.addEventListener('click', handleClickOutside, true))
-onUnmounted(() => window.removeEventListener('click', handleClickOutside, true))
+// 监听 ESC 键关闭
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && store.show) store.close()
+})
 </script>
 
 <style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.1s ease, transform 0.1s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; transform: scale(0.95); }
+/* 主菜单弹出动画：类似于 macOS 的弹出效果 */
+.scale-enter-active {
+  transition: opacity 0.15s ease-out, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scale-leave-active {
+  transition: opacity 0.1s ease-in, transform 0.1s ease-in;
+}
+.scale-enter-from,
+.scale-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
 </style>

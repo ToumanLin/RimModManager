@@ -23,7 +23,7 @@
         v {{ selectedMod.version ? selectedMod.version : '未知版本' }}
       </div>
       <!-- 支持版本标签 -->
-      <div v-tooltip="'支持的游戏版本'" v-show="displayVersions.length" class="absolute top-1 right-2 z-10 pointer-events-none">
+      <div v-tooltip="'支持的游戏版本'" v-if="displayVersions.length" class="absolute p-0 top-1 right-2 z-10 pointer-events-none hover:opacity-20">
         <span v-for="versions in displayVersions" :key="versions" :class="{'bg-accent-success/70': versionIsCompatible(versions)}"
           class="px-1 py-0.4 m-0.5 rounded-md bg-accent-cool/60 text-amber-50 border border-text-main/30 text-[10px] font-bold text-shadow-2xs shadow-md">
           {{ versions }}
@@ -114,25 +114,25 @@
           <span v-tooltip="'注意：本统计仅涵盖通用文件，及 Mod 所支持的游戏最高版本对应的文件（不涉及其他游戏版本的文件）。'" class="text-text-dim/50 hover:text-text-main">⚠︎</span>
         </h3>
         <div class="grid grid-cols-4 gap-1.5 text-center text-text-dim">
-          <StatItem label="Defs" :value="selectedMod.file_stats.game_xml || 0" >
+          <StatItem v-tooltip="'定义XML文件数量'" label="Defs" :value="selectedMod.file_stats.game_xml || 0" >
             <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 44H38C39.1046 44 40 43.1046 40 42V14H30V4H10C8.89543 4 8 4.89543 8 6V42C8 43.1046 8.89543 44 10 44Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 4L40 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 24L32 29L27 34" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 24L16 29L21 34" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </StatItem>
-          <StatItem label="Patches" :value="selectedMod.file_stats.patch_xml || 0" >
+          <StatItem v-tooltip="'补丁XML文件数量'" label="Patches" :value="selectedMod.file_stats.patch_xml || 0" >
             <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 44H38C39.1046 44 40 43.1046 40 42V14H30V4H10C8.89543 4 8 4.89543 8 6V42C8 43.1046 8.89543 44 10 44Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 4L40 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="27" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M24 19V22" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 32V35" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M29.8281 21L27.7068 23.1213" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.8281 31L17.7068 33.1213" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 21L20.1213 23.1213" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 31L30.1213 33.1213" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 27H17.5H19" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M29 27H30.5H32" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </StatItem>
-          <StatItem label="Textures" :value="selectedMod.file_stats.image || 0" >
+          <StatItem v-tooltip="'图像纹理文件数量'" label="Textures" :value="selectedMod.file_stats.image || 0" >
             <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 44H38C39.1046 44 40 43.1046 40 42V14H30V4H10C8.89543 4 8 4.89543 8 6V42C8 43.1046 8.89543 44 10 44Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 4L40 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="17" r="4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 28V37H33V21L23.4894 31.5L15 28Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </StatItem>
-          <StatItem label="Audio" :value="selectedMod.file_stats.audio || 0" >
+          <StatItem v-tooltip="'音频文件数量'" label="Audio" :value="selectedMod.file_stats.audio || 0" >
             <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 44H38C39.1046 44 40 43.1046 40 42V14H30V4H10C8.89543 4 8 4.89543 8 6V42C8 43.1046 8.89543 44 10 44Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 4L40 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M31 20L25 22.9688V33.5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="21" cy="33" r="4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </StatItem>
-          <StatItem label="DLLs" :value="selectedMod.file_stats.code_dll || 0" highlight >
+          <StatItem v-tooltip="'程序集DLL文件数量'" label="DLLs" :value="selectedMod.file_stats.code_dll || 0" highlight >
             <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 44H38C39.1046 44 40 43.1046 40 42V14H30V4H10C8.89543 4 8 4.89543 8 6V42C8 43.1046 8.89543 44 10 44Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 4L40 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 25H24L31 25" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 31H24L31 31" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 21V35" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 21V35" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </StatItem>
-          <StatItem label="Langs" :value="selectedMod.file_stats.lang_xml || 0" >
+          <StatItem v-tooltip="'语言XML文件数量'" label="Langs" :value="selectedMod.file_stats.lang_xml || 0" >
             <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 44H38C39.1046 44 40 43.1046 40 42V14H30V4H10C8.89543 4 8 4.89543 8 6V42C8 43.1046 8.89543 44 10 44Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 4L40 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 22V36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 22H24L30 22" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </StatItem>
-          <div v-tooltip="selectedMod.mod_type" class="p-1 col-span-2 bg-white/5 rounded-lg border text-text-dim border-white/5 flex items-center justify-center">
+          <div v-tooltip="tooltipModType" class="p-1 col-span-2 bg-white/5 rounded-lg border text-text-dim border-white/5 flex items-center justify-center">
             <svg v-show="selectedMod.mod_type=='LanguagePack'" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M28.2857 37H39.7143M42 42L39.7143 37L42 42ZM26 42L28.2857 37L26 42ZM28.2857 37L34 24L39.7143 37H28.2857Z" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 6L17 9" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 11H28" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 16C10 16 11.7895 22.2609 16.2632 25.7391C20.7368 29.2174 28 32 28 32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 11C24 11 22.2105 19.2174 17.7368 23.7826C13.2632 28.3478 6 32 6 32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <svg v-show="selectedMod.mod_type=='XML'" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 13L4 25.4322L16 37" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 13L44 25.4322L32 37" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 4L21 44" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
             <svg v-show="selectedMod.mod_type=='Assembly'" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="6" width="36" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 16V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M29 16V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 19H32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 29H32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -140,7 +140,7 @@
             <svg v-show="selectedMod.mod_type=='Audio'" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M30 34.5C30 32.567 31.567 31 33.5 31H41V34.4C41 36.3882 39.3882 38 37.4 38H33.5C31.567 38 30 36.433 30 34.5Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M6 38.5C6 36.567 7.567 35 9.5 35H16V38.4C16 40.3882 14.3882 42 12.4 42H9.5C7.567 42 6 40.433 6 38.5Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M16 18.044V18.044L41 12.125" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 38V10L41 4V33.6924" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <svg v-show="selectedMod.mod_type=='Mixed'" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="16" y="16" width="27" height="27" rx="2" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="5" y="5" width="27" height="27" rx="2" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 16L16 27" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 21L21 32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <svg v-show="selectedMod.mod_type=='Unknown'" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M39 6H9C7.34315 6 6 7.34315 6 9V39C6 40.6569 7.34315 42 9 42H39C40.6569 42 42 40.6569 42 39V9C42 7.34315 40.6569 6 39 6Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 28.625V24.625C27.3137 24.625 30 21.9387 30 18.625C30 15.3113 27.3137 12.625 24 12.625C20.6863 12.625 18 15.3113 18 18.625" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path fill-rule="evenodd" clip-rule="evenodd" d="M24 37.625C25.3807 37.625 26.5 36.5057 26.5 35.125C26.5 33.7443 25.3807 32.625 24 32.625C22.6193 32.625 21.5 33.7443 21.5 35.125C21.5 36.5057 22.6193 37.625 24 37.625Z" fill="currentColor"/></svg>
-            <span class="flex-1 truncate">{{ selectedMod.mod_type }}</span>
+            <span v-if="selectedMod.mod_type" class="flex-1 truncate">{{ modTypeMap[selectedMod.mod_type] }}</span>
           </div>
         </div>
       </div>
@@ -154,7 +154,7 @@
             <svg v-else class="text-text-dim" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
           </div>
           <!-- 是否破坏存档 -->
-          <div v-tooltip="['危险：注意！中途启用或停用该Mod会破坏存档！','未知：暂时无法知道该Mod是否会破坏存档。','安全：该Mod不会破坏存档，可放心加入或移除。'][parseInt(selectedMod.save_breaking)+1]" class="col-span-1 row-span-1 p-1.5 flex items-center justify-around text-[10px] text-text-dim bg-white/5 rounded-lg border border-white/5">
+          <div v-tooltip="tooltipSaveBreaking" class="col-span-1 row-span-1 p-1.5 flex items-center justify-around text-[10px] text-text-dim bg-white/5 rounded-lg border border-white/5">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-save-off-icon lucide-save-off"><path d="M13 13H8a1 1 0 0 0-1 1v7"/><path d="M14 8h1"/><path d="M17 21v-4"/><path d="m2 2 20 20"/><path d="M20.41 20.41A2 2 0 0 1 19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 .59-1.41"/><path d="M29.5 11.5s5 5 4 5"/><path d="M9 3h6.2a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V15"/></svg>
             <svg v-show="parseInt(selectedMod.save_breaking)===-1" class=" text-accent-danger" width="18" height="18" xmlns="http://www.w3.org/2000/svg"viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m14.5 9.5-5 5"/><path d="m9.5 9.5 5 5"/></svg>
             <svg v-show="parseInt(selectedMod.save_breaking)===0" class=" text-text-main" width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M9.1 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
@@ -246,14 +246,14 @@
 
         <!-- 前置加载 -->
         <div v-if="selectedMod.load_after_mods?.length" class="space-y-1">
-          <div class="mb-1 text-[10px] font-bold uppercase tracking-wider text-accent-warm">前置加载</div>
+          <div class="mb-1 text-[10px] font-bold uppercase tracking-wider text-accent-warn">前置加载</div>
           <!-- 前置加载项列表 -->
           <div v-for="aft in showAllLoadAfter ? selectedMod.load_after_mods : selectedMod.load_after_mods.slice(0, 5)" :key="aft" 
-            class="flex items-center justify-between gap-2 p-1.5 rounded-sm bg-black/20 border-l-2 transition-colors text-xs border-accent-warm hover:bg-accent-warm/10">
+            class="flex items-center justify-between gap-2 p-1.5 rounded-sm bg-black/20 border-l-2 transition-colors text-xs border-accent-warn hover:bg-accent-warn/10">
             <span v-preview="store.takeModById(aft)" class="flex-1 text-gray-300 truncate">{{ displayNameById(aft) }}</span>
             <!-- 操作按钮 -->
             <div class="flex items-center gap-2">
-              <span v-if="!store.takeModById(aft).is_missing" @click="targetItem(aft)" v-tooltip="'定位Mod位置'" class="hover:text-accent-warm">
+              <span v-if="!store.takeModById(aft).is_missing" @click="targetItem(aft)" v-tooltip="'定位Mod位置'" class="hover:text-accent-warn">
                 <svg width="15" height="15" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>
               </span>
             </div>
@@ -261,7 +261,7 @@
           <!-- 展开/收起按钮（只有当数量超过5个时显示） -->
           <button v-if="selectedMod.load_after_mods.length > 5"
             @click="showAllLoadAfter = !showAllLoadAfter"
-            class="w-full py-1.5 mt-1 flex items-center justify-center gap-1 rounded bg-white/5 hover:bg-white/10 text-[11px] text-gray-400 hover:text-accent-warm transition-all group"
+            class="w-full py-1.5 mt-1 flex items-center justify-center gap-1 rounded bg-white/5 hover:bg-white/10 text-[11px] text-gray-400 hover:text-accent-warn transition-all group"
           >
             {{ showAllLoadAfter ? '收起' : `展开全部 (${selectedMod.load_after_mods.length})` }}
             <svg :class="{'rotate-180': showAllLoadAfter}" class="w-3 h-3 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -304,11 +304,11 @@
         <!-- 标签管理 (带自动补全) -->
         <div>
           <label v-tooltip="'可在此添加自定义标签'" class="text-[10px] uppercase text-text-dim font-bold tracking-wider mb-1 block">标签*</label>
-          <div class="flex flex-wrap gap-2 mb-2">
+          <div class="flex flex-wrap gap-1 mb-2">
             <span v-for="tag in userTags" :key="tag" 
-              class="px-2 py-0.5 rounded bg-accent-primary/20 text-accent-primary text-xs border border-accent-primary/20 flex items-center gap-1 group">
+              class="px-1 py-0.5 rounded bg-accent-primary/20 text-accent-primary text-xs border border-accent-primary/20 flex items-center gap-1 group">
               {{ tag }}
-              <button @click="removeTag(tag)" class="hover:text-white font-bold opacity-50 group-hover:opacity-100">×</button>
+              <button @click="removeTag(tag)" v-tooltip="'移除标签'" class="hover:text-white font-bold opacity-50 group-hover:opacity-100">×</button>
             </span>
             <!-- 添加标签输入框 -->
             <div class="relative">
@@ -324,7 +324,7 @@
 
         <!-- 分组 -->
         <div>
-          <label v-tooltip="''" class="text-[10px] uppercase text-text-dim font-bold tracking-wider mb-1 block">分组*</label>
+          <label v-tooltip="'可将Mod添加到多个分组'" class="text-[10px] uppercase text-text-dim font-bold tracking-wider mb-1 block">分组*</label>
           <div class="flex flex-wrap gap-1 mb-2">
             <span v-for="group in userGroups" :key="group.group_id" 
               class="px-1 py-0.5 rounded text-xs border border-text-dim/20 flex items-center gap-1 group hover:border-text-dim/80"
@@ -411,6 +411,7 @@
 <script setup >
 import { computed, ref, watch } from 'vue'
 import { useModStore } from '../stores/modStore'
+import { parseUnityRichText } from '../utils/unityTextParser'
 import ImageCloud from './utils/ImageCloud.vue';
 import LampEffect from './utils/LampEffect.vue';
 
@@ -465,9 +466,10 @@ const userGroups = computed(() => {return store.takeGroupsByModId(selectedMod.va
 
 // 辅助计算：格式化描述（换行转为 <br>）
 const formattedDescription = computed(() => {
-  if (!selectedMod.value?.description) return 'No description provided.'
-  // 简单把换行转为 <br>，防止 XSS 可用 DOMPurify，这里假设 Mod 描述相对安全或后端处理
-  return selectedMod.value.description.replace(/\n/g, '<br/>')
+  if (!selectedMod.value?.description) return '该Mod未提供描述。'
+  // console.log(selectedMod.value.description)
+  // 第二个参数 false 表示不移除图片，如果想移除则传 true
+  return parseUnityRichText(selectedMod.value.description, false)
 })
 // 辅助计算：是否有依赖项或冲突项
 const hasDependencies = computed(() => {
@@ -510,14 +512,37 @@ const displayVersions = computed(() => {
 
   return [`${firstVersion} - ${thirdLastVersion}`, ...lastTwoVersions];
 })
+const tooltipSaveBreaking = computed((index) => {
+  return ['危险：注意！中途启用或停用该Mod会破坏存档！','未知：暂时无法知道该Mod是否会破坏存档。','安全：该Mod不会破坏存档，可放心加入或移除。'][parseInt(selectedMod.value.save_breaking)+1]
+})
+const modTypeMap = {
+  'LanguagePack': '语言包',
+  'XML': '纯XML定义',
+  'Assembly': '含程序集',
+  'Texture': '纹理包',
+  'Audio': '音频包',
+  'Mixed': '混合',
+  'Unknown': '未知类型'
+}
+const tooltipModType = computed(() => {
+  return '模组类型：'+modTypeMap[selectedMod.value.mod_type]+'\n__(粗略判断)__'
+})
+
 
 // 辅助函数：根据 mod 依赖项获取显示名称
-const displayNameByMod = (dependencies_mod) => {
-  const mod_id = dependencies_mod.package_id
-  return store.takeModById(mod_id)?.alias_name || store.takeModById(mod_id)?.name || dependencies_mod.display_name || dependencies_mod.package_id
+// const displayNameByMod = (dependencies_mod) => {
+//   const mod_id = dependencies_mod.package_id
+//   return store.takeModById(mod_id)?.alias_name || store.takeModById(mod_id)?.name || dependencies_mod.display_name || dependencies_mod.package_id
+// }
+// const displayNameById = (mod_id) => {
+//   return store.takeModById(mod_id)?.alias_name || store.takeModById(mod_id)?.name || mod_id
+// }
+
+const displayNameByMod = (mod) => {
+  return store.displayModName(mod);
 }
-const displayNameById = (mod_id) => {
-  return store.takeModById(mod_id)?.alias_name || store.takeModById(mod_id)?.name || mod_id
+const displayNameById = (id) => {
+  return store.displayModName(id);
 }
 
 // 检查版本是否兼容

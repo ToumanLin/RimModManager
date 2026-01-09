@@ -95,6 +95,28 @@
                         <input type="checkbox" v-model="formData.delete_missing_mods_data" class="accent-accent-primary w-5 h-5 rounded bg-black/50 border-white/20">
                     </label>
                  </div>
+
+                  <!-- 危险操作区 -->
+                  <div class="pt-6 border-t border-white/10">
+                    <h3 class="text-sm font-bold text-red-400 mb-4 uppercase tracking-wider">危险区域</h3>
+                    
+                    <div class="flex items-center justify-between p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                      <div>
+                        <div class="text-sm font-bold text-red-200">重置数据库</div>
+                        <div class="text-xs text-red-200/60 mt-1">
+                          清除所有缓存的 Mod 信息、分组、标签和备注。<br>
+                          不会删除本地 Mod 文件。
+                        </div>
+                      </div>
+                      <button 
+                        @click="handleReset"
+                        class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-red-900/50 transition-all active:scale-95"
+                      >
+                        立即重置
+                      </button>
+                    </div>
+                  </div>
+
               </div>
 
             </div>
@@ -193,6 +215,12 @@ const autoDetect = async () => {
   } finally {
       detecting.value = false
   }
+}
+
+const handleReset = () => {
+    if (confirm('确定要清空数据库吗？这会导致所有分组和自定义备注丢失！')) {
+        store.resetDatabase()
+    }
 }
 
 // 保存

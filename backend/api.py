@@ -48,6 +48,7 @@ class API:
         # 1. 初始化数据库
         # 数据库文件放在当前工作目录的data目录下
         db_path = os.path.join(os.getcwd(), 'data', 'mod_manager.db')
+        self.is_first_db_init = not os.path.exists(db_path) # 标记是否首次初始化数据库
         init_db(db_path)
         
         # 2. 实例化各个管理器
@@ -66,7 +67,6 @@ class API:
             if os.path.exists(data_dir):
                 # 这里初始化会自动处理全量缓存和增量更新
                 self.dlc_parser = DLCParser(data_dir)
-
 
     # =========================================================================
     #  1. 初始化与全局数据 (Initialization)
@@ -128,14 +128,67 @@ class API:
                 mod['icon_url'] = self.file_mgr.get_asset_url(icon_path)
             else:
                 mod['icon_url'] = None 
-        
-        return ApiResponse.success({
+                
+        result = {
             "paths_configured": paths_valid,
             "settings": asdict(settings.config), # 转为字典发给前端
             "all_mods": all_mods,
             "groups": all_groups,
-            "active_load_order": active_load_order
-        })
+            "active_load_order": active_load_order,
+            "is_first_db_init": self.is_first_db_init
+        }
+        self.is_first_db_init = False   # 标记数据库已初始化
+        return ApiResponse.success(result)
+
+    def reset_database(self):
+        """
+        重置数据库：强制关闭连接，删除文件，重建。
+        """
+        import time
+        from backend.database.models import db, init_db, clear_db
+        
+        try:
+            # 1. 强制关闭连接
+            if not db.is_closed():
+                db.commit() # 主动提交一次事务，彻底释放 WAL 临时文件
+                db.close()
+            
+            # 关键：对于 SqliteExtDatabase，有时候即使 close 了，
+            # 内部连接池可能还持有引用。如果是 Peewee，通常 close 足够。
+            # 但为了保险，我们可以设为 None 或者再次 init。
+            
+            # 2. 定义文件路径
+            db_dir = os.path.join(os.getcwd(), 'data')
+            db_path = os.path.join(db_dir, 'mod_manager.db')
+            wal_path = db_path + '-wal'
+            shm_path = db_path + '-shm'
+
+            # 3. 尝试删除 (带重试机制，防止系统延迟释放)
+            for _ in range(3):
+                try:
+                    if os.path.exists(db_path): os.remove(db_path)
+                    if os.path.exists(wal_path): os.remove(wal_path)
+                    if os.path.exists(shm_path): os.remove(shm_path)
+                    break # 删除成功，跳出循环
+                except PermissionError:
+                    # 如果还是占用，等待 1s 重试
+                    time.sleep(1)
+            
+            # 再次检查是否删除成功，若存在则尝试清空数据库
+            if os.path.exists(db_path):
+                result = clear_db()
+                if not result:
+                    return ApiResponse.error("清空数据库失败")
+
+            self.is_first_db_init = True
+            # 4. 重新初始化
+            init_db(db_path)
+            
+            return ApiResponse.success({"message": "数据库已重置"})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return ApiResponse.error(str(e))
 
     # =========================================================================
     #  2. 设置与路径 (Settings & Paths)

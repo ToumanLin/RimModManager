@@ -50,8 +50,14 @@ class ModDAO:
         # 预处理：确保所有 JSON 字段都是 Python 对象（Peewee 会自动序列化），
         # 并补充默认时间戳（如果是新记录）
         now = datetime.datetime.now()
+        # 1. 获取所有合法的数据库字段名
+        # Mod._meta.fields 是一个字典 {field_name: FieldObject}
+        valid_field_names = set(Mod._meta.fields.keys()) # type: ignore
+        
+        # 2. 准备 upsert 时需要保留（更新）的字段列表
+        # 这里排除掉主键和其他不想被覆盖的字段
         preserve_fields = [
-            # _meta 属性是由 Peewee 的 元类（Metaclass）在运行时动态注入到 Mod 类中的
+            # _meta 属性是由 Peewee 的 元类（Metaclass）在运行时动态注入到 Mod 类中的，编辑器报错可以忽略
             field for field in Mod._meta.sorted_fields  # type: ignore
             if field.name not in exclude_names
         ]
@@ -63,7 +69,17 @@ class ModDAO:
                 # 注意：这会重置没有在 batch 里提供的字段为默认值，
                 # 但由于 Mod 表主要是扫描生成的，全量覆盖是可以接受的。
                 # 如果要保留某些非扫描字段，需要先读取再合并，或者由 UserModData 承担。
-                Mod.insert_many(batch).on_conflict(
+                
+                # 遍历 batch 中的每个字典，只保留 valid_field_names 中存在的键
+                clean_batch = []
+                for mod_data in batch:
+                    clean_data = {
+                        k: v for k, v in mod_data.items() 
+                        if k in valid_field_names
+                    }
+                    clean_batch.append(clean_data)
+                
+                Mod.insert_many(clean_batch).on_conflict(
                     conflict_target=[Mod.package_id],
                     preserve=preserve_fields # <--- 这里使用自动生成的列表
                 ).execute()

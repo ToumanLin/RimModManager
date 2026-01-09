@@ -34,7 +34,10 @@ export const vPreview = {
     const store = useHoverStore()
     // 只有当数据真变了，且当前正在 hover 这个元素时才更新 store
     if (binding.value !== binding.oldValue && store.isHovering && store.data === binding.oldValue) {
-       store.data = binding.value
+      // 延迟更新，避免闪烁
+      setTimeout(() => {
+        store.data = binding.value
+      }, 200)
     }
   },
 

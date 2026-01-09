@@ -1,6 +1,6 @@
+from enum import auto
 import json
 from peewee import Model, Field, SqliteDatabase, CharField, TextField, DateTimeField, ForeignKeyField, BooleanField, IntegerField, CompositeKey
-from playhouse.sqlite_ext import JSONField
 
 db = SqliteDatabase(None)
 
@@ -76,6 +76,7 @@ class UserModData(BaseModel):
     sign_color = CharField(null=True)           # 标记颜色，用于在UI中分类突显
     lock_previous_mod = TextField(null=True)    # 联锁的前一个Mod包名，用于固定两个Mod的顺序
     lock_next_mod = TextField(null=True)        # 联锁的后一个Mod包名，用于固定两个Mod的顺序
+    ignored_issues = UTF8JSONField(default=list)      # 存储忽略的问题 Key 列表 ["id:type:target", ...]
     
     # 这里可以添加 'category' 字段，如果一个 Mod 只能属一个主分类
     
@@ -107,7 +108,47 @@ def init_db(db_path):
         'journal_mode': 'wal',  # 提高并发读写性能
         'cache_size': -1024 * 64
     })
+    
     db.connect()    # 连接数据库
     # safe=True 表示表存在则不创建
     db.create_tables([Mod, UserModData, GroupData, GroupMod], safe=True)
     # db.close()  # 关闭数据库连接
+    
+def clear_db():
+    """
+    清空数据库
+    为了防止数据残留或锁死，采用：关闭外键 -> Drop -> Vacuum -> Create 的流程。
+    """
+    try:
+        # 1. 确保连接是打开的
+        if db.is_closed():
+            db.connect()
+        
+        # 2. 临时关闭外键约束 (防止删除顺序导致的报错)
+        db.execute_sql('PRAGMA foreign_keys = OFF;')
+        
+        # 3. 显式开启事务
+        with db.atomic():
+            # 删除所有表 (cascade=True 会处理外键依赖，但 SQLite 对 cascade 支持有限，
+            # 所以我们手动按依赖顺序删，或者直接 drop_tables)
+            # 注意顺序：先删依赖别人的(GroupMod, UserModData)，再删被依赖的(Mod, GroupData)
+            db.drop_tables([GroupMod, UserModData, Mod, GroupData])
+        
+        # 4. 【关键】执行 VACUUM
+        # 这会物理清除数据库文件中的所有数据页，重置所有自增 ID，
+        # 并强制同步 WAL 文件。这相当于把 .db 文件变成了一个全新的空文件。
+        # 注意：VACUUM 不能在事务块 (atomic) 内部执行。
+        db.execute_sql('VACUUM;')
+        
+        # 5. 重新创建表
+        with db.atomic():
+            db.create_tables([Mod, UserModData, GroupData, GroupMod])
+            
+        # 6. 恢复外键约束
+        db.execute_sql('PRAGMA foreign_keys = ON;')
+        
+        return True
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise Exception(f"清空数据库时出错: {e}")

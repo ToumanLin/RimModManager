@@ -4,7 +4,10 @@
     <div class="flex-none flex items-center justify-center">
       <slot name="left">
         <!-- 逻辑切换开关 (AND/OR) -->
-        <button @click="toggleLogic" v-tooltip="logicMode === 'AND' ? '切换为OR逻辑' : '切换为AND逻辑'"
+        <button @click="toggleLogic" 
+          v-tooltip="logicMode === 'AND' ? 
+            '当前为^^‘与’^^逻辑，检索满足^^所有^^条件的项\n[[(点击切换为^^‘或’^^逻辑)]]' : 
+            '当前为^^‘或’^^逻辑，检索满足^^任意^^条件的项\n[[(点击切换为^^‘与’^^逻辑)]]'"
           class="shrink-0 w-6 h-6 font-bold cursor-pointer border transition-all relative"
           :class="[ props.circle ? 'rounded-full' : 'rounded-md',
             logicMode === 'AND' ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30' : 'bg-accent-warning/20 text-accent-warning border-accent-warning/30',]">
@@ -30,7 +33,7 @@
     </div>
 
     <!-- 主要区域 -->
-    <div class="relative flex-1 z-50 min-w-0 w-6 outline-none">
+    <div class="relative flex-1 z-50 min-w-0 w-6 outline-none" v-tooltip="'在此输入关键词并[[回车]]确认\n可直接'+placeholderText+'\n[[(使用Tab键应用输入建议)]]'">
       <!-- 主输入容器（@keydown.tab.prevent禁止切换焦点功能） -->
       <div @keydown.tab.prevent class="w-full flex items-center gap-1 px-1 pt-0.5 outline-none bg-bg-deep/50 transition-all 
         border rounded-lg text-text-main border-text-dim/30 focus-within:border-accent-primary focus-within:bg-bg-deep/70 shadow-inner"

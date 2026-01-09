@@ -17,6 +17,33 @@ const waitForBackend = () => {
   })
 }
 
+// 错误严重等级
+export const ISSUE_LEVEL = {
+  ERROR: 'error',   // 红色：必须修复 (依赖缺失、版本不符)
+  WARN: 'warn',     // 黄色：建议修复 (排序错误)
+  INFO: 'info'      // 蓝色：提示
+}
+
+// 错误类型枚举
+export const ISSUE_TYPE = {
+  ERROR_MISSING_FILE: 'missing_file',      // 本地文件丢失
+  ERROR_MISSING_DEPENDENCY: 'missing_dependency', // 缺前置 (完全没装)
+  ERROR_INACTIVE_DEPENDENCY: 'inactive_dependency', // 前置没启用
+  ERROR_INCOMPATIBLE: 'incompatible',     // 不兼容
+  WARN_WRONG_ORDER: 'wrong_order',       // 顺序错了
+  WARN_VERSION_MISMATCH: 'version_mismatch', // 版本不对
+}
+// 定义类型到中文标题的映射
+const ISSUE_TITLE_MAP = {
+  'missing_file': '文件丢失',
+  'missing_dependency': '前置缺失',
+  'inactive_dependency': '前置未启用',
+  'incompatible': '模组冲突',
+  'wrong_order': '排序错误',
+  'version_mismatch': '版本不符',
+  'default': '其他问题'
+}
+
 // Mod 管理 Store
 export const useModStore = defineStore('mods', () => {
   const toast = createToastInterface()
@@ -151,6 +178,9 @@ export const useModStore = defineStore('mods', () => {
         if (isInit && res.data.settings) {
           settings.value = res.data.settings
         }
+        if (res.data.is_first_db_init) {
+          toast.warning("数据库正在进行首次初始化，此过程可能需要您等待一段时间，请您耐心等候。",{position: "top-center",timeout: 10000})
+        }
         // 2. 更新 Mod Map
         // 直接重建 Map，确保删除的 Mod 能被移除，新增的能被加入
         const tempMap = new Map()
@@ -208,13 +238,23 @@ export const useModStore = defineStore('mods', () => {
       description: '该模组在本地未找到，可能未下载，或已被手动删除。'
     }
   }
+  const displayModName = (modOrId) => {
+    let mod = null
+    if(typeof modOrId === 'string')
+      mod = takeModById(modOrId)
+    else if(modOrId?.package_id)
+      mod = modOrId
+
+    const res = mod?.alias_name || mod?.display_name || mod?.name || mod?.package_id
+    return res || `⚠ 未知模组 (${modOrId})`
+  }
   // 获取 Mod 对象列表
   const takeModListByIds = (ids) => {
     return Array.from(allModsMap.value.values()).filter(mod => ids.includes(mod.package_id))
   }
   // 从所有列表中移除指定 IDs
   const removeIdsOnAllList = (ids) => {
-    if(ids.type === 'string') ids = [ids]
+    if(typeof ids === 'string') ids = [ids]
     const lowerIdsSet = new Set(ids.map(id => id.toLowerCase()))
     activeIds.value = activeIds.value.filter(i => !lowerIdsSet.has(i))
     inactiveIds.value = inactiveIds.value.filter(i => !lowerIdsSet.has(i))
@@ -223,7 +263,7 @@ export const useModStore = defineStore('mods', () => {
   // 选择/取消选择 Mod
   const selectMod = (ids) => {
     clearSelection();
-    if(ids.type === 'string') ids = [ids]
+    if(typeof ids === 'string') ids = [ids]
     selectedIds.value = ids
   }
   // 清除选择
@@ -492,6 +532,199 @@ export const useModStore = defineStore('mods', () => {
     return groupList.value.filter(g => g.mod_ids.includes(modId))
   }
 
+  // ==========================================
+  //  实时问题分析器
+  // ==========================================
+  const modIssues = computed(() => {
+    const issuesMap = new Map() // Key: modId, Value: Array<Issue>
+    const activeSet = new Set(activeIds.value)
+    
+    // 辅助函数：添加问题
+    const addIssue = (id, type, level, message, targetId = null) => {
+      if (takeModById(id).ignored_issues && takeModById(id).ignored_issues.includes(type)) return
+
+      if (!issuesMap.has(id)) issuesMap.set(id, [])
+      issuesMap.get(id).push({
+        type,
+        level,
+        message,
+        targetId       // 关联的 Mod ID (如果有)
+      })
+    }
+
+    // 1. 全局检查 (遍历所有 Mod)
+    // 包括 inactive 的也要检查版本和文件完整性
+    for (const mod of allModsMap.value.values()) {
+      const id = mod.package_id.toLowerCase()
+
+      // A. 文件丢失检查
+      if (mod.is_missing) {
+        addIssue(id, ISSUE_TYPE.ERROR_MISSING_FILE, ISSUE_LEVEL.ERROR, '本地文件缺失或无法解析')
+        continue // 文件都没了，后面的检查没意义
+      }
+
+      // B. 游戏版本检查
+      // 假设 settings.game_version 是 "1.5.4104"
+      // mod.supported_versions 是 ["1.4", "1.5"]
+      if (settings.value.game_version) {
+        const gameVerMajor = settings.value.game_version.substring(0, 3) // "1.5"
+        if (mod.supported_versions && !mod.supported_versions.includes(gameVerMajor)) {
+           addIssue(id, ISSUE_TYPE.WARN_VERSION_MISMATCH, ISSUE_LEVEL.WARN, 
+             `^^版本问题^^：不支持当前游戏版本··[[${gameVerMajor}]]·· \n __(支持: ··${mod.supported_versions.join('··, ··')}··)__`)
+        }
+      }
+    }
+
+    // 2. 启用列表检查 (遍历 activeIds)
+    // 这里的顺序很重要，activeIds 是有序数组
+    activeIds.value.forEach((id, index) => {
+      const mod = allModsMap.value.get(id)
+      if (!mod) return
+
+      // C. 依赖检查 (Dependencies)
+      if (mod.dependencies_mods) {
+        mod.dependencies_mods.forEach(dep => {
+          const depId = dep.package_id.toLowerCase()
+          
+          // C1. 是否完全缺失
+          if (!allModsMap.value.has(depId)) {
+            addIssue(id, ISSUE_TYPE.ERROR_MISSING_DEPENDENCY, ISSUE_LEVEL.ERROR, 
+              `!!依赖缺失!!：${displayModName(dep)}`, depId)
+            return
+          }
+          // C2. 是否未启用
+          if (!activeSet.has(depId)) {
+            addIssue(id, ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY, ISSUE_LEVEL.ERROR, 
+              `!!依赖未启用!!：${displayModName(dep)}`, depId)
+            return
+          }
+          // C3. 排序检查 (依赖必须在当前 Mod 之前)
+          const depIndex = activeIds.value.indexOf(depId)
+          if (depIndex > index) {
+            addIssue(id, ISSUE_TYPE.WRONG_ORDER, ISSUE_LEVEL.WARN, 
+              `!!依赖后置!!：必须在依赖 [[${displayModName(dep)}]] 之后加载`, depId)
+          }
+        })
+      }
+
+      // D. Load After / Load Before 检查
+      if (mod.load_after_mods) {
+        mod.load_after_mods.forEach(dep => {
+          const depId = dep.toLowerCase()
+          // 排序检查 (前置必须在当前 Mod 之前)
+          const depIndex = activeIds.value.indexOf(depId)
+          if (depIndex !== -1 && depIndex > index) {
+            addIssue(id, ISSUE_TYPE.WARN_WRONG_ORDER, ISSUE_LEVEL.WARN, 
+              `!!排序错误!!：必须在 [[${displayModName(depId)}]] 之后加载`, depId)
+          }
+        })
+      }
+      if (mod.load_before_mods) {
+        mod.load_before_mods.forEach(dep => {
+          const depId = dep.toLowerCase()
+          // 排序检查 (前置必须在当前 Mod 之后)
+          const depIndex = activeIds.value.indexOf(depId)
+          if (depIndex !== -1 && depIndex < index) {
+            addIssue(id, ISSUE_TYPE.WARN_WRONG_ORDER, ISSUE_LEVEL.WARN, 
+              `!!排序错误!!：必须在 [[${displayModName(depId)}]] 之前加载`, depId)
+          }
+        })
+      }
+      
+      // E. 不兼容检查 (incompatible_mods)
+      if (mod.incompatible_mods) {
+        mod.incompatible_mods.forEach(badId => {
+          const lowerBad = badId.toLowerCase()
+          if (activeSet.has(lowerBad)) {
+            addIssue(id, ISSUE_TYPE.ERROR_INCOMPATIBLE, ISSUE_LEVEL.ERROR, 
+              `!!模组冲突!!：与 ${displayModName(lowerBad)} 不兼容`, lowerBad)
+          }
+        })
+      }
+    })
+
+    return issuesMap
+  })
+
+  // 辅助：获取某个 Mod 的最高级别问题
+  const getModIssueState = (id) => {
+    const issues = modIssues.value.get(id.toLowerCase())
+    if (!issues || issues.length === 0) return null
+    
+    // 优先级: ERROR > WARN > INFO
+    if (issues.some(i => i.level === 'error')) return 'error'
+    if (issues.some(i => i.level === 'warn')) return 'warn'
+    return 'info'
+  }
+
+  // 动作：忽略问题
+  const ignoreIssue = async (modId, type) => {
+    console.log(modId,'包含：',takeModById(modId).ignored_issues)
+    // 如果没有问题键，清空忽略列表
+    if (!type) {
+      await updateModUserData(modId, { ignored_issues: [] })
+      return
+    }
+    const ignored_issues = takeModById(modId).ignored_issues
+    if (ignored_issues.includes(type)) return
+    ignored_issues.push(type)
+    // 调用后端保存 (需要增加对应的 API)
+    await updateModUserData(modId, { ignored_issues: ignored_issues })
+  }
+
+  // 获取指定列表的错误统计
+  const getListIssues = (listType) => {
+    // 1. 确定目标 ID 集合
+    let targetIds = []
+    if (listType === 'active') targetIds = activeIds.value
+    else if (listType === 'inactive') targetIds = inactiveIds.value
+    else if (listType === 'temp') targetIds = tempIds.value
+    
+    // 2. 初始化结果结构
+    const result = {
+      count: 0,      // 总问题 Mod 数
+      errorCount: 0, // 严重错误数
+      warnCount: 0,  // 警告数
+      stats: {
+        [ISSUE_TYPE.ERROR_MISSING_FILE]: [],
+        [ISSUE_TYPE.ERROR_MISSING_DEPENDENCY]: [],
+        [ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY]: [],
+        [ISSUE_TYPE.ERROR_INCOMPATIBLE]: [],
+        [ISSUE_TYPE.WARN_WRONG_ORDER]: [],
+        [ISSUE_TYPE.WARN_VERSION_MISMATCH]: [],
+      } 
+    }
+
+    // 3. 遍历统计
+    targetIds.forEach(id => {
+      const issues = modIssues.value.get(id.toLowerCase())
+      if (!issues || issues.length === 0) return
+
+      result.count++
+      
+      // 统计严重程度 (只要有一个 error 就算 error 级)
+      if (issues.some(i => i.level === 'error')) result.errorCount++
+      else result.warnCount++
+
+      // 按类型聚合 Mod 名称
+      // 一个 Mod 可能有多个错误类型，都需要记录
+      // 为了避免重复，我们用 Set 辅助，或者只取第一个错误类型？
+      // 建议：统计所有出现的错误类型
+      issues.forEach(issue => {
+        const typeKey = issue.type
+        if (!result.stats[typeKey]) {
+          result.stats[typeKey] = []
+        }
+        // 避免同一个 Mod 在同一个类型下重复 (虽然一般不会)
+        if (!result.stats[typeKey].includes(id.toLowerCase())) {
+          result.stats[typeKey].push(id.toLowerCase())
+        }
+      })
+    })
+
+    return result
+  }
+
   // ===== 设置相关 =====
   // 打开/关闭设置的方法
   const openSettings = () => { showSettings.value = true }
@@ -539,13 +772,51 @@ export const useModStore = defineStore('mods', () => {
   // 辅助：标记脏状态
   const markDirty = () => { isDirty.value = true }
 
+  // 重置数据库
+  const resetDatabase = async () => {
+    if (!window.pywebview) return
+    isLoading.value = true
+    try {
+      const res = await window.pywebview.api.reset_database()
+      if (res.status === 'success') {
+        closeSettings()
+        // 提示成功
+        toast.success("数据库已重置！")
+        // 清空本地状态
+        allModsMap.value.clear()
+        activeIds.value = []
+        groupList.value = []
+        
+        // 重新初始化 (这会触发扫描)
+        await initialize()
+        // 或者直接触发扫描
+        // scanMods()
+      } else {
+        alert("重置失败: " + res.message)
+      }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   // ===== 系统操作 =====
   // 启动游戏
   const launchGame = async () => {
     const saved = await saveLoadOrder()
     if (saved) {
-      await window.pywebview.api.launch_game()
+      try{
+        openUrl("steam://rungameid/294100")
+      }
+      catch(e){
+        console.error("启动游戏异常:", e)
+        toast.error(`启动游戏异常: \n${e.message}`)
+        await window.pywebview.api.launch_game()
+      }
     }
+  }
+  // 打开Url
+  const openUrl = (url) => {
+    if(url) window.open(url, '_blank')
   }
   // 打开路径
   const openPath = async (path) => {
@@ -590,11 +861,12 @@ export const useModStore = defineStore('mods', () => {
 
   return {
     // 状态管理
-    scanProgress, dataVersion,
-    initialize, getLoadOrder, refreshModList, 
+    scanProgress, dataVersion, modIssues, ISSUE_TITLE_MAP,
+    initialize, getLoadOrder, refreshModList, getModIssueState, ignoreIssue, getListIssues,
+
     // Mod 相关
     allModsMap, activeIds, tempIds, inactiveIds, selectedIds, selectedMods, currentTargetId, 
-    takeModById, takeModListByIds, removeIdsOnAllList, getIconUrl, selectMod, clearSelection, scanMods, saveLoadOrder, updateModUserData, 
+    takeModById, takeModListByIds, displayModName, removeIdsOnAllList, getIconUrl, selectMod, clearSelection, scanMods, saveLoadOrder, updateModUserData, 
 
     // 分组相关
     groupList, 
@@ -605,6 +877,6 @@ export const useModStore = defineStore('mods', () => {
     openSettings, closeSettings, applySettings, saveSetting, markDirty,
 
     // 系统操作
-    launchGame, openPath, autoDetectPaths, getFolderPath, getFilePath,
+    launchGame, openPath, openUrl, autoDetectPaths, getFolderPath, getFilePath, resetDatabase,
   }
 })

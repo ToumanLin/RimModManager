@@ -2,7 +2,7 @@
   <div :style="{ '--drag-color': `var(--color-accent-${listColor})`, '--rgb-components': hexToRgb(groupData.color) }">
     <!-- 标题区 -->
     <div @click="toggle" :class="['list-none select-none px-1.5 flex text-text-dim hover:text-text-main items-center justify-between gap-0.5 rounded-lg font-medium',
-      'bg-[rgba(var(--rgb-components),0.2)] hover:bg-[rgba(var(--rgb-components),0.4)]']">
+      'bg-[rgba(var(--rgb-components),0.4)] hover:bg-[rgba(var(--rgb-components),0.6)] border border-white/5']">
       <!-- 抓取图标 -->
       <div v-tooltip="`移动`" class="drag-handle cursor-move p-1 text-text-dim hover:text-text-main hover:scale-130 transition-all">
         <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -63,25 +63,26 @@
     </div>
 
     <!-- 内容区 -->
-    <div class="grid transition-[grid-template-rows] duration-200"
+    <div class="grid transition-[grid-template-rows] duration-200 "
       :class="expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
       <div class="h-full overflow-hidden">
-        <div :class="`p-1 mx-1 min-h-15 bg-[rgba(var(--rgb-components),0.1)] rounded-b-lg shadow-2xsl relative`">
+        <div :class="`p-1 mx-1 min-h-15 bg-[rgba(var(--rgb-components),0.2)] border border-b-white/5 border-x-white/5 border-t-transparent rounded-b-lg shadow-2xsl relative`">
           <div v-show="groupData.mod_ids.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed text-gray-600 text-xs bg-bg-deep/30 select-none pointer-events-none">
             可拖拽模组到此
             <!-- 点阵背景 -->
             <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
           </div>
 
-          <VirtualList v-model="internalModList" dataKey="id" :keeps="50" class="h-full p-1 min-h-15" ref="vListRef"
-            placeholderClass="ghost" wrapClass="space-y-1" :fallbackOnBody="true" :scrollSpeed="{ x: 0, y: 10 }"
+          <VirtualList v-model="internalModList" dataKey="id" :keeps="50" class="h-full min-h-15" ref="vListRef"
+            placeholderClass="ghost" wrapClass="" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }"
             :group="{ name: 'mods', pull: 'clone', put: true, revertDrag: true }" :animation="150"
-            @drop="updateChildren" >
+            @drop="updateChildren" @drag="startDrag" >
             <template v-slot:item="{ record, index, dataKey }">
 
               <div class="relative group">
                 <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
-                        :show-index="false" :simple="true"
+                        :is-selected="store.selectedIds.includes(dataKey)" :show-index="false" :simple="true"
+                        @click-start="handleClickStart" @click-end="handleClickEnd"
                         @click.stop="handleClick($event, dataKey)">
                 </ModItem>
                 
@@ -108,6 +109,7 @@ import ModItem from './ModItem.vue'
 import { useDebounceFn } from '@vueuse/core'
 import { ColorPicker } from "vue3-colorpicker";
 import "vue3-colorpicker/style.css";
+import { useModStore } from '../../stores/modStore';
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -118,6 +120,7 @@ const props = defineProps({
   isDragging: { type: Boolean, default: false } // 用于外部控制样式
 })
 
+const store = useModStore()
 const internalModList = ref([])
 const vListRef = ref(null)
 const emit = defineEmits(['toggle', 'delete-group', 'remove-item', 'update-group', 'update-children'])
@@ -166,10 +169,110 @@ const saveGroupColor = useDebounceFn((color) => {
   console.log("保存颜色:", color)
   emit('update-group', props.id, { color: color })
 }, 1000)
-// 排序结束
+
+// ===== 多选连选逻辑 =====
+const selectedIds = ref(new Set()) // 选中ID集合
+const invertSelectedIds = ref(new Set()) // 反选ID集合
+const lastSelectedId = ref(null)      // 最后点击的 ID (用于 Shift 连选定位)
+// 点击开始时，多选连选逻辑，记录最后点击的ID
+const handleClickStart = (event: MouseEvent, id: string) => {
+  // 修正输入框不会对列表项失焦，强制失焦逻辑
+  // 如果当前有获得焦点的元素，且它是一个输入框，则强制让它失焦
+  if (document.activeElement instanceof HTMLElement && 
+     (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+      document.activeElement.blur()
+  }
+
+  // 只响应左键点击
+  if (event.button === 0) {
+    return
+  }
+  const isMulti = event.ctrlKey || event.metaKey
+  const isRange = event.shiftKey
+  const lowerId = id.toLowerCase();
+  // 找到当前列表的所有可见ID
+  const currentListIds = internalModList.value.map(item => item.id.toLowerCase())
+  if (isRange) {
+    // Shift 连选逻辑
+    if (selectedIds.value.size === 0 || !lastSelectedId.value) {
+      selectedIds.value.add(lowerId);
+      return;
+    }
+    
+    // 找到最后一次选择的ID在当前列表中的索引
+    const lastIndex = currentListIds.indexOf(lastSelectedId.value);
+    // 找到当前点击的ID在当前列表中的索引
+    const currentIndex = currentListIds.indexOf(lowerId);
+    
+    if (lastIndex !== -1 && currentIndex !== -1) {
+      const start = Math.min(lastIndex, currentIndex);
+      const end = Math.max(lastIndex, currentIndex);
+      const isForward = lastIndex < currentIndex;
+      for (let i = start; i <= end; i++) {
+        // 如果当前ID已选中，则从选中集合中移除
+        if(selectedIds.value.has(currentListIds[i])) {
+          if(isForward && i === start) continue;
+          else if(!isForward && i === end) continue;
+          invertSelectedIds.value.add(currentListIds[i]);
+        }
+        selectedIds.value.add(currentListIds[i]);
+      }
+    } else {
+      selectedIds.value.add(lowerId); // 如果找不到范围，就只选中当前项
+    }
+
+  } else if (isMulti) {
+    // 如果当前ID已选中，则从选中集合中移除
+    if (selectedIds.value.has(lowerId)) {invertSelectedIds.value.add(lowerId)}
+    // Ctrl/Meta 多选逻辑
+    selectedIds.value.add(lowerId);
+  } else {
+    // 单选逻辑
+    if(selectedIds.value.has(lowerId)) return;  // 点击已选中的项，不做处理，防止影响拖拽等长按操作
+    selectedIds.value.clear();
+    selectedIds.value.add(lowerId);
+  }
+  const selectedIdsArray = currentListIds.filter(id => selectedIds.value.has(id)) // 保持顺序
+  store.selectMod(selectedIdsArray)
+}
+// 点击结束时,主要用于多选反选判定
+const handleClickEnd = (event: MouseEvent, id: string) => {
+  console.log('点击结束', event, id)
+  const isMulti = event.ctrlKey || event.metaKey
+  const isRange = event.shiftKey
+  const lowerId = id.toLowerCase();
+  const currentListIds = internalModList.value.map(item => item.id.toLowerCase())
+  if (isRange || isMulti) {
+    for (const id of invertSelectedIds.value) {
+      selectedIds.value.delete(id);
+    }
+    invertSelectedIds.value.clear();
+  } else {
+    // 单选直接清空已选列表并重新选中当前项
+    selectedIds.value.clear();
+    selectedIds.value.add(lowerId);
+  }
+  if (!isRange) lastSelectedId.value = lowerId;
+  const selectedIdsArray = currentListIds.filter(id => selectedIds.value.has(id)) // 保持顺序
+  store.selectMod(selectedIdsArray)
+}
+// 全选
+const selectAll = (e) => {
+  console.log('全选',e)
+  selectedIds.value = new Set(internalModList.value.map(item => item.id.toLowerCase()))
+  store.selectMod(Array.from(selectedIds.value))
+}
+// 开始拖拽时，清空反选集合
+const startDrag = (e) => {
+  invertSelectedIds.value.clear();
+  console.log("开始拖拽:", e)
+}
+// 更新子项的排序
 const updateChildren = (e) => {
   const oldIds = props.groupData.mod_ids  // 原始顺序
   const newIds = internalModList.value.map(item => item.id)  // 获取当前的最新顺序 ID列表
+  const tempSelectedIds = store.selectedIds
+  selectedIds.value = new Set(tempSelectedIds)
   // 检查是否是当前分组的列表，排除当前列表自身的触发
   const currentListDom = vListRef.value.$el
   if (e.event.from === currentListDom || e.event.from === e.event.to) {
@@ -180,18 +283,22 @@ const updateChildren = (e) => {
     }
     return
   }
+  // 拖动项来自其它列表
   console.log(props.groupData.name, "插入结束:", e)
 
-  // 去除重复, 保持新插入的位置
+  // 去除重复, 保持拖动项的位置（保留除已选项外的其他项，已选择的项后续插入）
   // const uniqueIds = newIds.filter((id, index) => e.item.id !== id && newIds.indexOf(id) === index || e.item.id === id && index === e.newIndex)
   const uniqueIds = newIds.filter((id, index) => {
-    // 规则 A：这是新插入的位置吗？是就留着
+    // 检测是否是拖动项（值和索引都匹配），是则保留（用于标记位置）
     if (index === e.newIndex && id === e.item.id) return true
-    // 规则 B：位置不对，但 ID 却和拖拽项一样？说明是旧的（Clone 残留），杀掉
-    if (id === e.item.id) return false
-    // 规则 C：其他不相干的模组，留着
+    // 排除已选择的项（过滤重复）
+    if (tempSelectedIds.includes(id)) return false
+    // 其他未选择项，保留
     return true
   })
+  const newIndex = uniqueIds.indexOf(e.item.id)
+  // 根据拖动项，插入选中项（因选中项包含拖动项，所以插入时需要移除拖动项）
+  uniqueIds.splice(newIndex, 1, ...tempSelectedIds)
   // （修复漏洞：如果拖入相同项到相邻位置，去重后实际列表顺序不变，但组件会渲染拖入的相同项，所以目前必须强制更新）
   internalModList.value = uniqueIds.map(id => ({ id: id }))
   console.log("排序前:", oldIds)
@@ -202,7 +309,7 @@ const updateChildren = (e) => {
   }
 }
 
-// --- 分组名称编辑逻辑 ---
+// ===== 分组名称编辑逻辑 =====
 const isEditingName = ref(false)
 const editingGroupName = ref('')
 // 切换编辑状态
@@ -216,7 +323,6 @@ const toggleEditName = () => {
     isEditingName.value = true
   }
 }
-
 
 // ModItem 内部的点击事件，可以保持不变或根据需要调整
 const handleClick = (event, modId) => {

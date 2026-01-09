@@ -16,6 +16,10 @@ export const useHoverStore = defineStore('hover', () => {
   const customComponent = ref(null)
   const componentProps = ref({})
 
+   // 内部计时器
+  let timer = null
+  const DELAY_MS = 500 // 延时时长 (建议大于 CSS transition 时间)
+
   /**
    * 显示悬浮面板
    * show 接收的参数 content 可以是：
@@ -24,30 +28,42 @@ export const useHoverStore = defineStore('hover', () => {
    * 3. { component: MyCom, props: {...} } (自定义组件)
    */
   const show = (content, event) => {
+    // 【关键修复】: 在创建新计时器前，必须清除旧的！
+    // 否则快速切换目标时，旧的计时器会变成“僵尸”，在hide之后依然触发显示
+    if (timer) clearTimeout(timer)
     // 防止传入空数据报错
     if (!content) return
-    // 情况 A: 自定义组件模式
-    if (content && content.component) {
-      // 必须用 markRaw 包裹组件定义！
-      customComponent.value = markRaw(content.component)
-      componentProps.value = content.props || {}
-      type.value = 'component'
-    } // 情况 B: 普通数据模式
-    else if (typeof content === 'object') {
-      data.value = content
-      type.value = 'preview'
-    } 
-    // 情况 C: 纯文本模式
-    else {
-      data.value = content
-      type.value = 'text'
-    }
-    isHovering.value = true
+    // console.log('show', content, event)
+    // 延迟显示，避免立即显示导致的闪烁
+    timer = setTimeout(() => {
+      // 情况 A: 自定义组件模式
+      if (content && content.component) {
+        // 必须用 markRaw 包裹组件定义！
+        customComponent.value = markRaw(content.component)
+        componentProps.value = content.props || {}
+        type.value = 'component'
+      } // 情况 B: 普通数据模式
+      else if (typeof content === 'object') {
+          data.value = content
+          type.value = 'preview'
+      } 
+      // 情况 C: 纯文本模式
+      else {
+          data.value = content
+          type.value = 'text'
+      }
+      isHovering.value = true
+    }, DELAY_MS)
     if (event) updatePosition(event)
   }
 
   // 隐藏请求
   const hide = () => {
+    // 清除任何正在等待显示的计时器 (防止移出后，之前的计时器还在跑，导致突然弹出来)s
+    if (timer) {
+      clearTimeout(timer)
+      timer = null // 建议置空
+    }
     isHovering.value = false
     // 不清空 data，防止淡出动画时内容突然消失
   }

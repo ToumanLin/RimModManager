@@ -53,7 +53,8 @@ class DLCParser:
 
         # 确定 DLC Key (Core, Royalty, Ideology...)
         def_key = None
-        if pkg_id == 'ludeon.rimworld': def_key = 'Core'
+        if pkg_id == 'ludeon.rimworld': 
+            def_key = 'Core'    # Core 特殊处理
         elif pkg_id.startswith('ludeon.rimworld.'):
             # ludeon.rimworld.royalty -> Royalty (首字母大写)
             def_key = pkg_id.split('.')[-1].capitalize()

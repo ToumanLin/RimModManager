@@ -49,8 +49,8 @@
 
         <VirtualList v-model="groupList" dataKey="group_id" :keeps="50" class="h-full p-1" 
           placeholderClass="ghost" wrapClass="space-y-1.5 min-h-full "
-	        :fallbackOnBody="true" :scrollSpeed="{ x: 0, y: 10 }" handle=".drag-handle"
-          :group="{ name: 'groups', pull: true, put: 'groups', revertDrag: true }" :animation="150"
+	        :appendToBody="true" :fallbackOnBody="true" :scrollSpeed="{ x: 0, y: 10 }" handle=".drag-handle"
+          :group="{ name: 'groups', pull: true, put: true, revertDrag: true }" :animation="150"
           @drop="groupReorder">
           <template v-slot:item="{ record, index, dataKey }">
             <GroupItem :id="dataKey" :key="dataKey" :index="index" :groupData="record" :list-color="listColor"
@@ -92,7 +92,7 @@ import GroupItem from './utils/GroupItem.vue'
 const props = defineProps({
   title: { type: String, default: 'Groups' },
   modelValue: { type: Array, default: () => [] },
-  listColor: { type: String, default: 'primary' } // danger/highlight/special/cool/primary/success/tip/warm/secondary/warning
+  listColor: { type: String, default: 'primary' } // danger/highlight/special/cool/primary/success/tip/warn/secondary/warning
 })
 
 const store = useModStore()

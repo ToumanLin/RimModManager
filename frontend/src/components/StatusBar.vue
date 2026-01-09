@@ -14,7 +14,11 @@
       </div>
       
       <div>
-        已启用: <span class="text-accent-primary font-bold">{{ store.activeIds.length }}</span>
+        已启用: <span class="text-accent-success font-bold">{{ store.activeIds.length }}</span>
+      </div>
+
+      <div v-show="store.selectedIds.length > 0">
+        已选择: <span class="text-accent-primary font-bold">{{ store.selectedIds.length }}</span>
       </div>
     </div>
 
@@ -41,7 +45,7 @@
         <div class="flex items-center gap-2 min-w-[150px]">
           <span class="font-mono font-bold text-accent-primary">{{ displayPercent }}%</span>
           <span class="truncate max-w-[200px] text-[9px]" :class="{'text-accent-success': !store.scanProgress.scanning, 'text-text-dim': store.scanProgress.scanning}">
-            {{ formatMessage(store.scanProgress.message) }}
+            [{{ store.scanProgress.current }}/{{ store.scanProgress.total }}] {{ formatMessage(store.scanProgress.message) }}
           </span>
         </div>
       </div>

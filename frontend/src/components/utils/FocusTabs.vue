@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef" class="relative flex p-0.5 rounded-lg backdrop-blur-sm"
+  <div ref="containerRef" class="relative flex p-0.5 rounded-lg backdrop-blur-[5px]"
     :class="{'bg-white/5 border border-white/10 ': showBorder}"
     >
     <button

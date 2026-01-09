@@ -46,7 +46,7 @@
 
         <!-- 文本信息 -->
         <div>
-          <h3 class="font-bold text-text-main text-sm leading-tight mb-1 line-clamp-1">{{ store.data?.name }}</h3>
+          <h3 class="font-bold text-text-main text-sm leading-tight mb-1 line-clamp-1">{{ modStore.displayModName(store.data) }}</h3>
           <p class="text-xs text-text-dim mb-2 flex items-center gap-1">
             <span>{{ store.data?.author }}</span>
             <span v-if="store.data?.source === 'steam'" class="text-[9px] px-1 bg-[#1b2838] text-blue-300 rounded">Steam</span>
@@ -66,8 +66,9 @@
         </div>
       </div>
       <!-- 模式 B: 纯文本 Tooltip (data 是字符串) -->
-      <div v-else-if="store.type === 'text'" class="text-xs font-medium text-white">
-        {{ store.data }}
+      <div v-else-if="store.type === 'text'" class="text-xs font-medium text-white text-pretty wrap-break-word whitespace-pre-wrap">
+        <!-- {{ parseMarkup(store.) }} -->
+        <div v-html="parseMarkup(store.data)"></div>
       </div>
       <!-- 模式 3: 全自定义组件 -->
        <div v-else-if="store.type === 'component'">
@@ -79,11 +80,13 @@
 </template>
 
 <script setup>
-import { useHoverStore } from '../stores/hoverStore'
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Motion } from 'motion-v'
+import { useHoverStore } from '../stores/hoverStore'
+import { useModStore } from '../stores/modStore'
 
 const store = useHoverStore()
+const modStore = useModStore()
 
 // --- 1. 显隐控制逻辑 ---
 const isVisible = ref(false)
@@ -95,20 +98,7 @@ const lastX = ref(0)
 const lastY = ref(0)
 
 
-// --- 动态样式 ---
-const containerClasses = computed(() => {
-  if (store.type === 'text') {
-    // Tooltip 样式：紧凑、黑底白字、圆角小
-    return 'px-2 py-1.5 max-w-[30dvw] rounded-md break-all text-pretty whitespace-normal bg-black/50 backdrop-blur-sm border border-white/20 shadow-lg'
-  }
-  // 让组件自己决定长什么样
-  if (store.type === 'component') {
-    return 'shadow-2xl' // 可能只留个阴影，或者连阴影都不要，完全由组件内部控制
-  }
-  // Preview 样式：宽大、有背景、圆角大
-  return 'p-4 w-[320px] rounded-xl border border-white/10 bg-bg-deep/90 backdrop-blur-xl shadow-2xl flex flex-col gap-3'
-})
-
+// 监听悬停状态变化
 watch(() => store.isHovering, (hovering) => {
   if (hovering) {
     if (hideTimer) clearTimeout(hideTimer) // 如果正在准备销毁，取消销毁
@@ -129,6 +119,19 @@ watch(() => store.isHovering, (hovering) => {
   }
 })
 
+// --- 动态样式 ---
+const containerClasses = computed(() => {
+  if (store.type === 'text') {
+    // Tooltip 样式：紧凑、黑底白字、圆角小
+    return 'px-2 py-1.5 max-w-[30dvw] rounded-md break-all text-pretty whitespace-normal bg-black/50 backdrop-blur-sm border border-white/20 shadow-lg'
+  }
+  // 让组件自己决定长什么样
+  if (store.type === 'component') {
+    return 'shadow-2xl' // 可能只留个阴影，或者连阴影都不要，完全由组件内部控制
+  }
+  // Preview 样式：宽大、有背景、圆角大
+  return 'p-4 w-[320px] rounded-xl border border-white/10 bg-bg-deep/90 backdrop-blur-xl shadow-2xl flex flex-col gap-3'
+})
 // --- 2. 窗口尺寸监听 ---
 const winWidth = ref(window.innerWidth)
 const winHeight = ref(window.innerHeight)
@@ -225,7 +228,6 @@ const safeY = computed(() => {
   }
 })
 
-
 // --- 4. 速度与倾斜计算 (核心效果) ---
 let lastY_ = 0
 const rotation = ref(0)
@@ -258,6 +260,69 @@ watch(() => store.targetY, (newY) => {
     rotation.value = 0
   }, 100)
 })
+
+// --- 辅助函数：解析提示文本 (支持简单的富文本标记) ---
+const parseMarkup = (text) => {
+  if (!text) return ''
+
+  // 1. HTML 转义 (防止 XSS 和标签冲突)
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+
+  // 2. 预处理换行 (支持 \n 或 | 或 ;;)
+  // 建议根据习惯选一种，这里演示兼容 | 和 \n
+  html = html.replace(/\n/g, '<br>')
+
+  // 3. 语法解析规则配置
+  const rules = [
+    // [Custom Color] {{#hex|text}} -> <span style="color:#hex">text</span>
+    { 
+      regex: /\{\{(#[0-9a-fA-F]{3,6})\|(.*?)\}\}/g, 
+      repl: '<span style="color: $1">$2</span>' 
+    },
+    // [Bold] **text** -> font-bold
+    { 
+      regex: /\*\*(.*?)\*\*/g, 
+      repl: '<span class="font-bold text-white text-sm">$1</span>' 
+    },
+    // [Italic] __text__ -> italic opacity-80
+    { 
+      regex: /__(.*?)__/g, 
+      repl: '<span class="italic opacity-80">$1</span>' 
+    },
+    // [Error/Red] !!text!! -> text-red-400
+    { 
+      regex: /!!(.*?)!!/g, 
+      repl: '<span class="text-red-400 font-bold">$1</span>' 
+    },
+    // [Warn/Yellow] ^^text^^ -> text-yellow-400
+    { 
+      regex: /\^\^(.*?)\^\^/g, 
+      repl: '<span class="text-yellow-400 font-bold">$1</span>' 
+    },
+    // [Info/Blue] [[text]] -> text-blue-400 (类似链接)
+    { 
+      regex: /\[\[(.*?)\]\]/g, 
+      repl: '<span class="text-accent-primary font-bold">$1</span>' 
+    },
+    // [Code/Mono] `text` -> bg-black/30 font-mono
+    { 
+      regex: /··(.*?)··/g, 
+      repl: '<span class="font-mono text-[10px] bg-white/10 px-1 rounded mx-0.5 text-text-main">$1</span>' 
+    }
+  ]
+
+  // 4. 执行替换
+  rules.forEach(rule => {
+    html = html.replace(rule.regex, rule.repl)
+  })
+
+  return html
+}
 </script>
 
 <style scoped>

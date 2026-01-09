@@ -38,12 +38,12 @@ Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://
 
   - [x] 列表框架实现
   - [x] 拖拽调整顺序
-  - [ ] 多选移动实现
+  - [x] 多选移动实现
   - [x] 改查mod
   - [ ] 删除mod
   - [ ] 增加（订阅）mod
   - [ ] 错误检测及显示
-  - [ ] 浮动详情显示
+  - [x] 浮动详情显示
   - [ ] 依赖可视化
   - [ ] 列表项三级显示（图标/背景/极简）
 
@@ -61,7 +61,7 @@ Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://
 - 分组功能
 
   - [x] 分组框架实现
-  - [ ] 剪贴板模式实现
+  - [x] 剪贴板模式实现
   - [ ] 分组整体移动实现
 
   

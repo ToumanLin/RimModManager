@@ -18,9 +18,8 @@
 
 
       <!-- ================= COLUMN 2: 待选库 (Library) ================= -->
-      <div class="h-full p-1 transition-opacity"
-           :style="{ width: colWidths[1] + 'px' }">
-           <ModList v-model="store.inactiveIds" title="inactive" listColor="primary" />
+      <div class="h-full p-1 transition-opacity" :style="{ width: colWidths[1] + 'px' }">
+           <ModList v-model="store.inactiveIds" title="inactive" listColor="primary" listId="inactive" />
       </div>
 
       <!-- 分割线 2 -->
@@ -30,7 +29,7 @@
       <!-- ================= COLUMN 3: 启用/排序 (Active) ================= -->
       <div class="h-full p-1 transition-opacity"
            :style="{ width: colWidths[2] + 'px' }">
-            <ModList v-model="store.activeIds" title="active" :hasSidebar=true listColor="success" />
+            <ModList v-model="store.activeIds" title="active" :hasSidebar=true listColor="success" listId="active" />
       </div>
 
       <!-- 分割线 3 -->
@@ -51,7 +50,7 @@
               leave-to-class="opacity-0">
               <KeepAlive>
 
-                <ModList v-if="activeTab === 'Temp'" v-model="store.tempIds" title="temp" listColor="warning" 
+                <ModList v-if="activeTab === 'Temp'" v-model="store.tempIds" title="temp" listColor="warning" listId="temp"
                   class="rounded-b-none col-start-1 row-start-1 w-full"/>
                 <GroupList v-else-if="activeTab === 'Groups'" v-model="store.groupList" title="Groups" listColor="special" 
                   class="rounded-b-none col-start-1 row-start-1 w-full"/>
@@ -61,7 +60,7 @@
           </div>
 
           <!-- 标签页切换 -->
-          <div class="absolute left-22 top-2 flex text-xs font-bold ">
+          <div class="absolute left-7 top-2 flex text-xs font-bold ">
           <!-- <div class="absolute right-15 top-2 flex text-xs font-bold "> -->
             <!-- <button v-for="tab in ['Temp', 'Groups']" :key="tab" @click="activeTab = tab"
               class="flex-1 py-2 text-center transition-colors relative m-0.5 cursor-pointer "
@@ -94,11 +93,11 @@
     <!-- 状态条 -->
     <StatusBar class="relative z-20 flex-none" />
 
-    <!-- 悬浮面板 -->
-    <HoverPanel />
-
     <!-- 右键菜单 -->
     <ContextMenu />
+
+    <!-- 悬浮面板 -->
+    <HoverPanel />
     
     <!-- 设置弹窗 -->
     <SettingsModal />

@@ -219,7 +219,8 @@ class ModScanner:
         # DLC 兜底 ID
         if is_dlc_dir and not pkg_id:
             folder = os.path.basename(mod_path)
-            if folder.lower() == 'core': pkg_id = 'ludeon.rimworld'
+            if folder.lower() == 'core': 
+                pkg_id = 'ludeon.rimworld'
             else: pkg_id = f'ludeon.rimworld.{folder.lower()}'
             mod_data['package_id'] = pkg_id
 
@@ -251,6 +252,10 @@ class ModScanner:
             elif url: mod_data['source'] = 'other'
             elif is_dlc_dir: mod_data['source'] = 'dlc' # DLC
             else: mod_data['source'] = 'local'
+        
+        # 补充 supported_versions
+        if mod_data.get('source','').lower() == 'core':
+            mod_data['supported_versions'] = [settings.config.game_version[:3]]  # Core 补充支持版本
 
         # 图片
         preview_path, icon_path = self._resolve_images(mod_path, mod_data.get('icon_path', ''))
