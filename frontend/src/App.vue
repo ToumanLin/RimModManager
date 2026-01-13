@@ -19,7 +19,7 @@
 
       <!-- ================= COLUMN 2: 待选库 (Library) ================= -->
       <div class="h-full p-1 transition-opacity" :style="{ width: colWidths[1] + 'px' }">
-           <ModList v-model="store.inactiveIds" title="inactive" listColor="primary" listId="inactive" />
+           <ModList v-model="store.inactiveIds" title="未启用" listColor="primary" listId="inactive" />
       </div>
 
       <!-- 分割线 2 -->
@@ -29,7 +29,7 @@
       <!-- ================= COLUMN 3: 启用/排序 (Active) ================= -->
       <div class="h-full p-1 transition-opacity"
            :style="{ width: colWidths[2] + 'px' }">
-            <ModList v-model="store.activeIds" title="active" :hasSidebar=true listColor="success" listId="active" />
+            <ModList v-model="store.activeIds" title="启用" :hasSidebar=true listColor="success" listId="active" />
       </div>
 
       <!-- 分割线 3 -->
@@ -50,46 +50,106 @@
               leave-to-class="opacity-0">
               <KeepAlive>
 
-                <ModList v-if="activeTab === 'Temp'" v-model="store.tempIds" title="temp" listColor="warning" listId="temp"
+                <ModList v-if="activeTab === tabs[0]" v-model="store.tempIds" title="temp" listColor="warning" listId="temp"
                   class="rounded-b-none col-start-1 row-start-1 w-full"/>
-                <GroupList v-else-if="activeTab === 'Groups'" v-model="store.groupList" title="Groups" listColor="special" 
+                <GroupList v-else-if="activeTab === tabs[1]" v-model="store.groupList" title="Groups" listColor="special" 
                   class="rounded-b-none col-start-1 row-start-1 w-full"/>
+                <BackupList v-else-if="activeTab === tabs[2]" class="rounded-b-none col-start-1 row-start-1 w-full"/>
 
               </KeepAlive>
             </Transition>
           </div>
 
           <!-- 标签页切换 -->
-          <div class="absolute left-7 top-2 flex text-xs font-bold ">
-          <!-- <div class="absolute right-15 top-2 flex text-xs font-bold "> -->
-            <!-- <button v-for="tab in ['Temp', 'Groups']" :key="tab" @click="activeTab = tab"
-              class="flex-1 py-2 text-center transition-colors relative m-0.5 cursor-pointer "
-              :class="activeTab === tab ? 'text-accent-secondary' : 'text-gray-500 hover:text-text-main'"
-            >
-              {{ tab }}
-              <div v-if="activeTab === tab" class="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary"></div>
-            </button> -->
-            <FocusTabs 
-              v-model="activeTab" 
-              :tabs="['Temp', 'Groups']" 
-              :blurAmount="3"
-              borderColor="#00ffcc" 
-              class=" top-0 opacity-100"
+          <div class="absolute left-7 top-2.5 flex text-sm font-bold ">
+            <FocusTabs v-model="activeTab" :tabs="tabs" 
+            :blurAmount="3" borderColor="#059669" class=" top-0 opacity-100"
             />
           </div>
           
           <!-- 按钮组 -->
-          <div class="p-3 rounded-b-2xl grid grid-cols-2 gap-1 bg-bg-surface/80 shadow-2xl ">
-            <button class="col-span-1 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-gray-300 border border-white/5 transition-all uppercase font-bold"
-              @click="store.scanMods()">{{ store.scanProgress.scanning ? '扫描中...' : '刷新' }}</button>
-            <button class="col-span-1 py-2 rounded-lg bg-accent-primary hover:bg-[#0891b2] text-black text-[10px] font-bold shadow-lg shadow-accent-primary/10 transition-all uppercase"
-              @click="store.saveLoadOrder()">保存</button>
-            <button class="col-span-2 py-3 rounded-lg bg-accent-success hover:bg-[#059669] text-white text-xs font-bold shadow-lg shadow-accent-success/20 flex items-center justify-center gap-2 transition-all uppercase mt-1"
-              @click="store.launchGame()">启动游戏</button>
+          <div class="p-3 rounded-b-2xl grid grid-cols-2 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-white/5">
+            
+            <!-- 刷新按钮 -->
+            <button 
+              class="col-span-1 py-2 rounded-lg bg-white/5 border border-white/5 
+                     text-[10px] text-gray-300 font-bold uppercase tracking-wider
+                     hover:bg-white/10 hover:text-white hover:border-white/20
+                     active:scale-95 transition-all duration-200 group flex items-center justify-center gap-1"
+              @click="store.scanMods()"
+              :disabled="store.scanProgress.scanning"
+            >
+              <svg v-if="store.scanProgress.scanning" class="animate-spin w-3 h-3 text-accent-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <svg v-else class="w-3 h-3 text-gray-400 group-hover:text-white transition-colors" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+              <span>{{ store.scanProgress.scanning ? '扫描中...' : '刷新' }}</span>
+            </button>
+
+            <!-- 保存按钮 (Dirty 状态提示) -->
+            <button class="col-span-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider
+                     flex items-center justify-center gap-1 transition-all duration-300 relative overflow-hidden"
+              :class="[store.isDirty 
+                  ? 'bg-accent-warn text-black hover:bg-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.4)] animate-pulse-soft' 
+                  : 'bg-accent-primary text-black hover:bg-cyan-400 shadow-lg shadow-accent-primary/10'
+              ]"
+              @click="store.saveLoadOrder()"
+            >
+              <!-- Dirty 状态下的流光效果 -->
+              <div v-if="store.isDirty" class="absolute inset-0 bg-white/20 -translate-x-full animate-shimmer skew-x-12"></div>
+              
+              <svg v-if="store.isDirty" class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+              <svg v-else class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              
+              <span>{{ store.isDirty ? '保存变动' : '保存' }}</span>
+            </button>
+
+            <!-- 启动游戏 -->
+            <button class="col-span-2 py-3 mt-1 rounded-lg bg-accent-success text-white text-xs font-bold 
+                     shadow-lg shadow-accent-success/20 flex items-center justify-center gap-2 
+                     transition-all duration-200 uppercase tracking-widest
+                     hover:bg-[#059669] hover:shadow-accent-success/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+              @click="store.launchGame()"
+            >
+              <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg>
+              启动游戏
+            </button>
           </div>
+
       </div>
 
     </div>
+    <!-- 对比抽屉 -->
+    <Teleport to="body">
+      <Transition 
+        enter-active-class="transition-transform duration-300 ease-out"
+        enter-from-class="-translate-x-full"
+        enter-to-class="translate-x-0"
+        leave-active-class="transition-transform duration-300 ease-in"
+        leave-from-class="translate-x-0"
+        leave-to-class="-translate-x-full"
+      >
+        <div v-if="store.showDiffDrawer" 
+          class="fixed inset-y-8 top-18 left-0 w-[50vw] z-100 bg-transparent backdrop-blur-xl rounded-r-2xl border-y border-r border-white/10 shadow-[] flex flex-col">
+          
+          <!-- 抽屉内容：Diff 组件 -->
+          <div class="flex-1 overflow-hidden ">
+             <ListDiffView v-if="store.showDiffDrawer"
+               :list-a="store.activeIds" title-a="当前启用"
+               :list-b="store.backupIds||[]" title-b="对比文件"
+               class="rounded-b-none rounded-tl-none col-start-1 row-start-1 w-full"
+             />
+          </div>
+          
+          <!-- 底部动作栏 -->
+          <div class="p-2 px-5 bg-black/20 flex items-center justify-between">
+            <h2>加载序列差异对比</h2>
+            <button @click="store.showDiffDrawer = false" class="px-2 py-1 rounded-lg bg-accent-danger/40 hover:bg-accent-danger/70 text-sm font-bold transition-colors">关闭</button>
+          </div>
+
+        </div>
+      </Transition>
+
+    </Teleport>
+
     <!-- 状态条 -->
     <StatusBar class="relative z-20 flex-none" />
 
@@ -101,6 +161,7 @@
     
     <!-- 设置弹窗 -->
     <SettingsModal />
+
   </div>
 </template>
 
@@ -116,11 +177,15 @@ import StatusBar from './components/StatusBar.vue'
 import FocusTabs from './components/utils/FocusTabs.vue'
 import ContextMenu from './components/ContextMenu.vue'
 import HoverPanel from './components/HoverPanel.vue'
+import BackupList from './components/BackupList.vue'
+import ListDiffView from './components/ListDiffView.vue'
 
 
 
 const store = useModStore()
-const activeTab = ref('Temp')
+
+const tabs = ['临时', '分组', '备份']
+const activeTab = ref(tabs[0])
 
 // --- 拖拽调整宽度逻辑 ---
 const containerRef = ref(null)
@@ -275,6 +340,31 @@ const Resizer = (props, { emit }) => {
 
 </script>
 
-<style>
+<style scoped>
+/* 自定义动画 Keyframes */
+@keyframes shimmer {
+  0% { transform: translateX(-100%) skewX(-12deg); }
+  100% { transform: translateX(200%) skewX(-12deg); }
+}
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+}
 
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.95; transform: scale(0.98); }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* Vue Transition */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

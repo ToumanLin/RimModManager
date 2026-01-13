@@ -23,7 +23,9 @@ const props = defineProps({
   // 列表项高度（必须固定，与 CSS 一致，例如 50）
   itemHeight: { type: Number, required: true },
   // 虚拟列表的滚动容器 DOM（用于同步滚动）
-  scrollElement: { type: Object, default: null }
+  scrollElement: { type: Object, default: null },
+  // 是否筛选显示
+  isFilter: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['lineClick'])
@@ -268,7 +270,8 @@ const processGraph = () => {
     }
     
     // 映射到 *视觉* 轨道 (0-4)
-    const visualLane = logicalLane % CONFIG.maxLanes
+    // 默认 (从左往右) 筛选时 (从右往左)：
+    const visualLane = props.isFilter? (CONFIG.maxLanes - 1) - (logicalLane % CONFIG.maxLanes) : logicalLane % CONFIG.maxLanes
 
     return {
       ...group,

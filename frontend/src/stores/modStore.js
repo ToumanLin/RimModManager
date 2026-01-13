@@ -36,12 +36,33 @@ export const ISSUE_TYPE = {
 // 定义类型到中文标题的映射
 const ISSUE_TITLE_MAP = {
   'missing_file': '文件丢失',
-  'missing_dependency': '前置缺失',
-  'inactive_dependency': '前置未启用',
+  'missing_dependency': '依赖缺失',
+  'inactive_dependency': '依赖未启用',
   'incompatible': '模组冲突',
   'wrong_order': '排序错误',
   'version_mismatch': '版本不符',
   'default': '其他问题'
+}
+
+// 模组类型映射
+const modTypeMap = {
+  'LanguagePack': '语言包',
+  'XML': '纯XML',
+  'Assembly': '含程序集',
+  'Texture': '纹理包',
+  'Audio': '音频包',
+  'Mixed': '混合',
+  'Unknown': '未知类型'
+}
+
+// 来源类型显示
+const sourceTypeMap = {
+  'core': '游戏本体',
+  'dlc': 'DLC',
+  'github': 'GitHub',
+  'workshop': 'Steam 创意工坊',
+  'local': '本地文件',
+  'other': '其它来源'
 }
 
 // Mod 管理 Store
@@ -52,16 +73,20 @@ export const useModStore = defineStore('mods', () => {
   const dataVersion = ref(0) // 数据版本号
 
   const activeIds = ref([]) // 绑定的启用列表
+  const backupIds = ref([]) // 备份文件列表
   const inactiveIds = ref([]) // 绑定的禁用列表
   const tempIds = ref([])   // 临时列表
   const groupList = ref([]) // 分组列表
+  const backups = ref(null) // 备份列表
   
   // 选择状态
   const currentTargetId = ref('') // 当前目标 ID (定位用)
   const selectedIds = ref([])
+  const isDraggingGroup = ref(false) // 是否正在拖动分组
 
   // 设置状态
   const showSettings = ref(false) // 是否显示设置弹窗
+  const showDiffDrawer = ref(false)
   const isLoading = ref(false)
   const isDirty = ref(false)
   const settings = ref({
@@ -108,6 +133,9 @@ export const useModStore = defineStore('mods', () => {
   const selectedMods = computed(() => {
     return Array.from(selectedIds.value).map(id => takeModById(id))
   })
+  const lastSelectedMod = computed(() => {
+    return selectedMods.value.at(-1)
+  })
 
   // ==== 核心方法 ====
   // 初始化：获取数据并分类
@@ -132,6 +160,7 @@ export const useModStore = defineStore('mods', () => {
       toast.error("初始化失败，请检查日志")
     } finally {
       isLoading.value = false
+      getBackups()
     }
   }
   // 注册事件监听
@@ -162,7 +191,7 @@ export const useModStore = defineStore('mods', () => {
       scanProgress.value.message = '扫描完成'
       console.log("扫描统计:", e.detail)
       toast.success(`扫描完成，共计扫描${e.detail.total}个模组，新增${e.detail.stats.added}个，
-更新${e.detail.stats.updated}个，删除${e.detail.stats.removed}个，已知${e.detail.stats.skipped}个。`)
+更新${e.detail.stats.updated}个，删除${e.detail.stats.removed}个，已知${e.detail.stats.skipped}个。`,{position: "top-center",timeout: 5000})
       // [关键] 扫描结束后，主动拉取一次最新数据刷新界面
       await refreshModList()
     })
@@ -194,6 +223,10 @@ export const useModStore = defineStore('mods', () => {
             mod.author
           ].filter(Boolean).join(' ').toLowerCase(); // 拼接成一个长字符串
           
+          // 强制保证字段存在
+          if (!Array.isArray(mod.ignored_issues)) mod.ignored_issues = []
+          if (!Array.isArray(mod.tags)) mod.tags = []
+          
           // 预先将 Tags 转为小写 Set，加速精确匹配
           mod._tagsLower = new Set((mod.tags || []).map(t => t.toLowerCase()));
           
@@ -222,6 +255,26 @@ export const useModStore = defineStore('mods', () => {
   }
 
   // ===== Mod操作 =====
+  // 显示 Mod 名称（优先 alias_name -> display_name -> name -> package_id）
+  const displayModName = (modOrId) => {
+    let mod = null
+    if(typeof modOrId === 'string')
+      mod = takeModById(modOrId)
+    else if(modOrId?.package_id)
+      mod = modOrId
+
+    const res = mod?.alias_name || mod?.display_name || mod?.name || mod?.package_id
+    return res || `⚠ 未知模组 (${modOrId})`
+  }
+  const displayModType = (modOrId) => {
+    let mod = null
+    if(typeof modOrId === 'string')
+      mod = takeModById(modOrId)
+    else if(modOrId?.package_id)
+      mod = modOrId
+    const res = mod?.user_mod_type || mod?.mod_type || 'Unknown'
+    return res
+  }
   // 获取 Mod 对象
   const takeModById = (id) => {
     if (!id) return null
@@ -238,16 +291,6 @@ export const useModStore = defineStore('mods', () => {
       description: '该模组在本地未找到，可能未下载，或已被手动删除。'
     }
   }
-  const displayModName = (modOrId) => {
-    let mod = null
-    if(typeof modOrId === 'string')
-      mod = takeModById(modOrId)
-    else if(modOrId?.package_id)
-      mod = modOrId
-
-    const res = mod?.alias_name || mod?.display_name || mod?.name || mod?.package_id
-    return res || `⚠ 未知模组 (${modOrId})`
-  }
   // 获取 Mod 对象列表
   const takeModListByIds = (ids) => {
     return Array.from(allModsMap.value.values()).filter(mod => ids.includes(mod.package_id))
@@ -261,7 +304,7 @@ export const useModStore = defineStore('mods', () => {
     tempIds.value = tempIds.value.filter(i => !lowerIdsSet.has(i))
   }
   // 选择/取消选择 Mod
-  const selectMod = (ids) => {
+  const selectMods = (ids) => {
     clearSelection();
     if(typeof ids === 'string') ids = [ids]
     selectedIds.value = ids
@@ -300,16 +343,21 @@ export const useModStore = defineStore('mods', () => {
     }
   }
   // 获取加载顺序
-  const getLoadOrder = async (mods_config_file_path=null) => {
+  const getLoadOrder = async (mods_config_file_path=null, isInit=true) => {
     if (!window.pywebview) return
-    const res = await window.pywebview.api.open_load_order_file(mods_config_file_path)
-    if (res.status === 'success' && res.data.load_order) {
-      activeIds.value = res.data.load_order
+    // const res = await window.pywebview.api.open_load_order_file(mods_config_file_path)
+    const res = await window.pywebview.api.get_load_order(mods_config_file_path)
+    if (res.status === 'success') {
+      if(isInit) {
+        activeIds.value = res.data
+        toast.success("Mod序列已加载")
+      }
+      else backupIds.value = res.data
       // 如果有指定路径，标记为脏状态，等待保存
-      if (mods_config_file_path) isDirty.value = true
+      if (mods_config_file_path && isInit) isDirty.value = true
       else isDirty.value = false
       console.log("打开加载顺序:", res)
-      toast.success("Mod序列已加载")
+      return res.data
     } else {
       toast.error(`打开加载顺序失败: \n${res.message}`)
     }
@@ -325,6 +373,7 @@ export const useModStore = defineStore('mods', () => {
         isDirty.value = false
         // console.log("保存加载顺序成功:", res)
         toast.success("Mod序列已保存")
+        getBackups()
         return true
       } 
       else { throw new Error(res.message) }
@@ -348,7 +397,7 @@ export const useModStore = defineStore('mods', () => {
         if (mod) {
           Object.assign(mod, userData)
         }
-        toast.success("Mod用户数据已更新")
+        toast.success("Mod用户数据已更新", {timeout: 1000})
         return true
       } 
       else { throw new Error(res.message) }
@@ -531,6 +580,10 @@ export const useModStore = defineStore('mods', () => {
   const takeGroupsByModId = (modId) => {
     return groupList.value.filter(g => g.mod_ids.includes(modId))
   }
+  // 根据分组 ID 获取分组数据
+  const takeGroupById = (groupId) => {
+    return groupList.value.find(g => g.group_id === groupId) || null
+  }
 
   // ==========================================
   //  实时问题分析器
@@ -541,7 +594,11 @@ export const useModStore = defineStore('mods', () => {
     
     // 辅助函数：添加问题
     const addIssue = (id, type, level, message, targetId = null) => {
-      if (takeModById(id).ignored_issues && takeModById(id).ignored_issues.includes(type)) return
+      const mod = takeModById(id)
+
+      // 1. 安全检查：确保 ignored_issues 存在且是一个数组
+      const ignoredList = mod.ignored_issues || []
+      if (ignoredList.includes(type)) return
 
       if (!issuesMap.has(id)) issuesMap.set(id, [])
       issuesMap.get(id).push({
@@ -657,19 +714,34 @@ export const useModStore = defineStore('mods', () => {
     return 'info'
   }
 
-  // 动作：忽略问题
+  // 动作：忽略/取消忽略问题
+  // type: 传入错误类型字符串为忽略该问题；不传(null/undefined)为清空所有忽略(重置)
   const ignoreIssue = async (modId, type) => {
-    console.log(modId,'包含：',takeModById(modId).ignored_issues)
-    // 如果没有问题键，清空忽略列表
-    if (!type) {
-      await updateModUserData(modId, { ignored_issues: [] })
-      return
-    }
-    const ignored_issues = takeModById(modId).ignored_issues
-    if (ignored_issues.includes(type)) return
-    ignored_issues.push(type)
-    // 调用后端保存 (需要增加对应的 API)
-    await updateModUserData(modId, { ignored_issues: ignored_issues })
+      const mod = takeModById(modId)
+      // console.log('ignoreIssue', mod)
+      if (!mod) return // 幽灵对象无法保存设置
+
+      // 1. 安全获取当前列表 (创建副本，防止直接修改原引用)
+      // 如果 mod.ignored_issues 不存在，默认为空数组
+      let currentIgnored = Array.isArray(mod.ignored_issues) ? [...mod.ignored_issues] : []
+
+      // console.log('ignoreIssue', modId, type, currentIgnored)
+      if (!type) {
+          // === 模式 A: 恢复所有警告 (清空忽略列表) ===
+          if (currentIgnored.length === 0) return // 本来就是空的，无需操作
+          currentIgnored = []
+      } else {
+          // === 模式 B: 忽略特定问题 ===
+          if (currentIgnored.includes(type)) return // 已经忽略了，无需操作
+          currentIgnored.push(type)
+      }
+      // 2. 调用后端保存
+      // 注意：这里我们传入新的数组，后端保存成功后
+      mod.ignored_issues = currentIgnored
+      const res = await updateModUserData(modId, { ignored_issues: currentIgnored })
+      if (!res.status==='success') {
+        toast.error(`忽略问题失败：${res.message}`)
+      }
   }
 
   // 获取指定列表的错误统计
@@ -804,13 +876,18 @@ export const useModStore = defineStore('mods', () => {
   const launchGame = async () => {
     const saved = await saveLoadOrder()
     if (saved) {
-      try{
+      if(settings.value.game_install_path?.includes("SteamLibrary\\steamapps\\common")){
+        // 通过 steam 启动游戏
         openUrl("steam://rungameid/294100")
+        console.log("通过 steam 启动游戏")
+      }else if(settings.value.game_install_path){
+        // 直接启动游戏
+        // await window.pywebview.api.launch_game()
+        console.log("直接启动游戏程序")
       }
-      catch(e){
-        console.error("启动游戏异常:", e)
-        toast.error(`启动游戏异常: \n${e.message}`)
-        await window.pywebview.api.launch_game()
+      else{
+        console.error("启动游戏异常:")
+        toast.error(`启动游戏出现异常！`)
       }
     }
   }
@@ -818,8 +895,15 @@ export const useModStore = defineStore('mods', () => {
   const openUrl = (url) => {
     if(url) window.open(url, '_blank')
   }
+  const openSteamWorkshopUrl = (url) => {
+    if(url) {
+      const steamUrl = url.replace('https://steamcommunity.com/sharedfiles/filedetails/?id=', 'steam://url/CommunityFilePage/')
+      window.open(steamUrl, '_blank')
+    }
+  }
   // 打开路径
   const openPath = async (path) => {
+    if(!path) return
     if(!window.pywebview) return
     await window.pywebview.api.open_path(path)
   }
@@ -827,24 +911,46 @@ export const useModStore = defineStore('mods', () => {
   const getFolderPath = async (home_path) => {
     if(!window.pywebview) return
     // 调用后端 API
-    const path = await window.pywebview.api.select_folder_dialog(home_path)
-    if (path) {
-        return path
+    const res = await window.pywebview.api.select_folder_dialog(home_path)
+    if (res.status === 'success') {
+        return res.data
+    } else{
+        console.error("获取文件夹路径异常:", res.message)
+        toast.error(`获取文件夹路径异常: \n${res.message}`)
+        return
     }
   }
   // 获取文件路径
   const getFilePath = async (home_path, file_types=('XML Files (*.xml)', 'All Files (*.*)')) => {
       if(!window.pywebview) return
       // 调用后端 API
-      const path = await window.pywebview.api.select_file_dialog(home_path, file_types)
-      if (path) {
-          return path
+      const res = await window.pywebview.api.select_file_dialog(home_path, file_types)
+      if (res.status === 'success') {
+          return res.data
+      } else{
+        console.error("获取文件路径异常:", res.message)
+        toast.error(`获取文件路径异常: \n${res.message}`)
+        return
       }
+  }
+  // 获取所有备份文件路径 {today: [], earlier: [], other: []}
+  const getBackups = async () => {
+    if(!window.pywebview) return
+    const res = await window.pywebview.api.get_all_backups()
+    if(res.status === 'success' && res.data) {
+       // 更新本地 store
+      backups.value = res.data
+      console.log("获取备份文件:", backups.value)
+    }
+    else {
+      toast.error(`获取备份失败: ${res.message}`)
+      return
+    }
   }
   // 辅助：自动检测路径
   const autoDetectPaths = async (updateStore=true) => {
     if(!window.pywebview) return
-    const res = await window.pywebview.api.auto_detect_paths()
+    const res = await window.pywebview.api.auto_detect_paths(false)
     if(res.status === 'success' && res.data.paths) {
        // 更新本地 setting store
       if(updateStore) {
@@ -861,22 +967,24 @@ export const useModStore = defineStore('mods', () => {
 
   return {
     // 状态管理
-    scanProgress, dataVersion, modIssues, ISSUE_TITLE_MAP,
+    scanProgress, dataVersion, modIssues, ISSUE_TITLE_MAP, sourceTypeMap, modTypeMap, backups, showDiffDrawer,
     initialize, getLoadOrder, refreshModList, getModIssueState, ignoreIssue, getListIssues,
 
     // Mod 相关
-    allModsMap, activeIds, tempIds, inactiveIds, selectedIds, selectedMods, currentTargetId, 
-    takeModById, takeModListByIds, displayModName, removeIdsOnAllList, getIconUrl, selectMod, clearSelection, scanMods, saveLoadOrder, updateModUserData, 
+    allModsMap, backupIds, activeIds, tempIds, inactiveIds, selectedIds, selectedMods, lastSelectedMod, currentTargetId, 
+    takeModById, takeModListByIds, displayModName, displayModType, removeIdsOnAllList, getIconUrl, 
+    selectMods, clearSelection, scanMods, saveLoadOrder, updateModUserData, 
 
     // 分组相关
-    groupList, 
-    getGroups, createGroup, deleteGroup, updateGroup, changeAllGroupExpansion, groupAddMods, groupRemoveMods, groupReorder, groupContentReorder, takeGroupsByModId, 
+    groupList, isDraggingGroup,
+    getGroups, createGroup, deleteGroup, updateGroup, changeAllGroupExpansion, groupAddMods, 
+    groupRemoveMods, groupReorder, groupContentReorder, takeGroupsByModId, takeGroupById,
 
     // 设置相关
     showSettings, isLoading, isDirty, settings, 
     openSettings, closeSettings, applySettings, saveSetting, markDirty,
 
     // 系统操作
-    launchGame, openPath, openUrl, autoDetectPaths, getFolderPath, getFilePath, resetDatabase,
+    launchGame, openPath, openUrl, openSteamWorkshopUrl, autoDetectPaths, getFolderPath, getFilePath, resetDatabase, getBackups,
   }
 })

@@ -35,7 +35,7 @@ class Mod(BaseModel):
     package_id = CharField(primary_key=True, index=True) # 包名，如 "ludeon.rimworld" (全小写)
     workshop_id = CharField(null=True)              # 创意工坊ID
     name = CharField()                              # 名称
-    author = UTF8JSONField(default=list)                  # 作者，可能为多人
+    author = UTF8JSONField(default=list)            # 作者，可能为多人
     version = CharField(null=True)                  # Mod版本
     description = TextField(null=True)              # Mod描述
     
@@ -74,6 +74,7 @@ class UserModData(BaseModel):
     notes = TextField(null=True)                # 用户备注
     tags = UTF8JSONField(default=list)          # 用户打的标签 ['排队必备', '前置']
     sign_color = CharField(null=True)           # 标记颜色，用于在UI中分类突显
+    user_mod_type = CharField(null=True)        # Mod类型，如 'Assembly', 'XML', 'LanguagePack'
     lock_previous_mod = TextField(null=True)    # 联锁的前一个Mod包名，用于固定两个Mod的顺序
     lock_next_mod = TextField(null=True)        # 联锁的后一个Mod包名，用于固定两个Mod的顺序
     ignored_issues = UTF8JSONField(default=list)      # 存储忽略的问题 Key 列表 ["id:type:target", ...]

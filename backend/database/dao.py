@@ -143,8 +143,8 @@ class ModDAO:
                 # chunked 并不是必须的，除非一次性删几万条，这里直接 in_ 即可
                 Mod.delete().where(Mod.package_id.in_(total_invalid_mods)).execute()
             else:
-                # 如果不删除，只是标记为丢失 (path = None)
-                Mod.update(path=None).where(Mod.package_id.in_(deleted_mods)).execute()
+                # 如果不删除，只是标记为丢失 (path = '')
+                Mod.update(path='').where(Mod.package_id.in_(deleted_mods)).execute()
         
         return {'missing_mods': missing_mods, 'deleted_mods': deleted_mods}
         

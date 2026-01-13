@@ -29,14 +29,16 @@ class LoadOrderManager:
 
     def _init_backup_dirs(self):
         """初始化备份目录结构"""
-        # 在 Config 同级或内部建立备份文件夹，这里建议放在 Config 文件夹内部方便管理
-        # 或者放在软件自己的数据目录下，为了安全起见，我们放在软件目录下的 backups
+        # 在软件目录下用 backups 文件夹存储备份
         self.backup_root = os.path.join(os.getcwd(), "backups")
         self.today_dir = os.path.join(self.backup_root, "today")
         self.earlier_dir = os.path.join(self.backup_root, "earlier")
+        self.other_dir = os.path.join(self.backup_root, "other")
         
+        # 创建目录
         os.makedirs(self.today_dir, exist_ok=True)
         os.makedirs(self.earlier_dir, exist_ok=True)
+        os.makedirs(self.other_dir, exist_ok=True)
         
         # 每次初始化（应用启动）时执行一次轮换检查
         self._rotate_backups()
@@ -194,3 +196,15 @@ class LoadOrderManager:
                         os.remove(f) # 过期删除
             except:
                 pass
+            
+    def get_all_backups(self):
+        """获取所有备份文件路径"""
+        today_files = glob.glob(os.path.join(self.today_dir, "*.xml"))
+        earlier_files = glob.glob(os.path.join(self.earlier_dir, "*.xml"))
+        other_files = glob.glob(os.path.join(self.other_dir, "*.xml"))
+        result = {
+            "today": today_files,
+            "earlier": earlier_files,
+            "other": other_files
+        }
+        return result

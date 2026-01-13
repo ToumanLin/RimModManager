@@ -24,7 +24,7 @@ Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://
 
   - [ ] 取消mod订阅
 
-  - [ ] ~~官方dlc处理（信息/排序）~~：DLC信息位于`E:\SteamLibrary\steamapps\common\RimWorld\Data\Core\Languages\ChineseSimplified (简体中文).tar\DefInjected\ExpansionDef\ExpansionDefs.xml`
+  - [x] ~~官方dlc处理（信息/排序）~~：DLC信息位于`E:\SteamLibrary\steamapps\common\RimWorld\Data\Core\Languages\ChineseSimplified (简体中文).tar\DefInjected\ExpansionDef\ExpansionDefs.xml`
 
     `E:\SteamLibrary\steamapps\common\RimWorld\Data\Core\Defs\Misc\ExpansionDefs\ExpansionDefs.xml`
 
@@ -42,9 +42,9 @@ Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://
   - [x] 改查mod
   - [ ] 删除mod
   - [ ] 增加（订阅）mod
-  - [ ] 错误检测及显示
+  - [x] 错误检测及显示
   - [x] 浮动详情显示
-  - [ ] 依赖可视化
+  - [x] 依赖可视化
   - [ ] 列表项三级显示（图标/背景/极简）
 
   

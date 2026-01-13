@@ -194,15 +194,16 @@ class API:
     #  2. 设置与路径 (Settings & Paths)
     # =========================================================================
 
-    def auto_detect_paths(self):
+    def auto_detect_paths(self, update_config=True):
         """自动检测游戏路径"""
         result = self.game_mgr.auto_detect_paths()
         
         # 如果检测到了安装路径，自动更新设置
         if result.get('game_install_path'):
-            settings.update_paths(result)
-            # 重新初始化 LoadOrderManager (因为 Config 路径可能变了)
-            self.load_order_mgr = LoadOrderManager()
+            if update_config:   # 仅当请求时更新配置
+                settings.update_paths(result)
+                # 重新初始化 LoadOrderManager (因为 Config 路径可能变了)
+                self.load_order_mgr = LoadOrderManager()
             return ApiResponse.success({"paths": result})
         
         return ApiResponse.error("无法自动检测到游戏路径，请手动设置！")
@@ -346,10 +347,10 @@ class API:
         try:
             active_ids = self.load_order_mgr.read_active_mods(mods_config_file_path)
             if not active_ids:
-                return ApiResponse.error("已启用的Mod为空，或读取ModsConfig.xml失败!")
+                return ApiResponse.error("已启用的Mod为空，或文件读取失败!")
         except Exception as e:
-            return ApiResponse.error(f"读取 ModsConfig.xml 时出错: {e}")
-        return ApiResponse.success({"load_order": active_ids})
+            return ApiResponse.error(f"读取加载顺序文件出错: {e}")
+        return ApiResponse.success(active_ids)
     
     def save_load_order(self, active_ids):
         """
@@ -383,13 +384,25 @@ class API:
         """
         打开 ModsConfig.xml 文件
         """
+        file = ''
+        # 默认路径为 ModsConfig.xml 所在目录
         if not mods_config_file_path:
             mods_config_file_path = self.load_order_mgr.config_dir
-        file = self.select_file_dialog(initial_dir=mods_config_file_path)
+        # 检查路径是否合法，且是否为xml文件
+        if os.path.isfile(mods_config_file_path) and mods_config_file_path.endswith('.xml'):
+            file = mods_config_file_path
+        elif os.path.isdir(mods_config_file_path) :
+            file = self.select_file_dialog(initial_dir=mods_config_file_path)
+        else:
+            file = self.select_file_dialog(initial_dir=self.load_order_mgr.config_dir)
         if not file:
             return ApiResponse.error("未选择文件")
-        return ApiResponse.success(self.get_load_order(file))
+        return self.get_load_order(file)
     
+    def get_all_backups(self):
+        """获取所有备份文件路径"""
+        backups = self.load_order_mgr.get_all_backups()
+        return ApiResponse.success(backups)
     
     def select_folder_dialog(self, initial_dir='', title="选择文件夹"):
         """
