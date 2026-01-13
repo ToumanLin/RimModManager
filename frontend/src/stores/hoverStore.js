@@ -16,7 +16,7 @@ export const useHoverStore = defineStore('hover', () => {
   const customComponent = ref(null)
   const componentProps = ref({})
 
-   // 内部计时器
+  // 内部计时器
   let timer = null
   const DELAY_MS = 500 // 延时时长 (建议大于 CSS transition 时间)
 
