@@ -118,6 +118,63 @@
                   </div>
 
               </div>
+              <!-- 网络设置页 -->
+              <div v-if="currentTab === 'network'" class="space-y-6">
+                  
+                  <!-- 代理开关 -->
+                  <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <div class="relative flex flex-wrap items-center gap-1">
+                      <input v-model="formData.network.proxy.enabled" type="checkbox" value="" id="b01" class="relative w-6 h-3 scale-80 transition-colors rounded-lg appearance-none cursor-pointer hover:bg-slate-400 after:hover:bg-slate-600 checked:hover:bg-emerald-300 checked:after:hover:bg-emerald-600 focus:outline-none checked:focus:bg-emerald-400 checked:after:focus:bg-emerald-700 focus-visible:outline-none peer bg-slate-300 after:absolute after:-top-0.5 after:-left-1.5 after:h-4 after:w-4 after:rounded-full after:bg-slate-500 after:transition-all checked:bg-emerald-200 checked:after:left-3 checked:after:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:after:bg-slate-300"/>
+                      <label v-tooltip="'为不同的区块使用不同颜色便于区分'" for="b01" class="cursor-pointer text-[10px] text-text-dim peer-disabled:cursor-not-allowed hover:text-white transition-colors">
+                        启用代理
+                      </label>
+                    </div>
+                    <div v-if="formData.network.proxy.enabled" class="grid grid-cols-2 gap-4">
+                        <div class="col-span-2">
+                            <label class="text-xs text-text-dim">代理类型</label>
+                            <select v-model="formData.network.proxy.type" class="...">
+                                <option value="http">HTTP</option>
+                                <option value="socks5">SOCKS5</option>
+                            </select>
+                        </div>
+                        
+                        <InputGroup label="主机 (Host)" v-model="formData.network.proxy.host" placeholder="127.0.0.1" />
+                        <InputGroup label="端口 (Port)" type="number" v-model.number="formData.network.proxy.port" />
+                        
+                        <!-- 排除列表 -->
+                        <div class="col-span-2">
+                            <label class="text-xs text-text-dim">排除列表 (逗号分隔)</label>
+                            <textarea 
+                                v-model="bypassString" 
+                                @input="updateBypassList"
+                                class="..."
+                                rows="2"
+                            ></textarea>
+                        </div>
+                    </div>
+                  </div>
+
+                  <!-- Hosts 配置 -->
+                  <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+                      <h3 class="font-bold text-white mb-2">自定义 Hosts (仅后端生效)</h3>
+                      <!-- 简单的 Key-Value 编辑器列表 -->
+                      <div v-for="(ip, domain) in formData.network.hosts" :key="domain" class="flex gap-2 mb-2">
+                          <input :value="domain" readonly class="..." />
+                          <input v-model="formData.network.hosts[domain]" class="..." />
+                          <button @click="deleteHost(domain)">删除</button>
+                      </div>
+                      <!-- 添加新 Host 的输入框 -->
+                      <div class="flex gap-2 mt-2">
+                          <input v-model="newHostDomain" placeholder="域名" class="..." />
+                          <input v-model="newHostIp" placeholder="IP" class="..." />
+                          <button @click="addHost">添加</button>
+                      </div>
+                  </div>
+                  
+                  <div class="text-xs text-yellow-500 mt-2">
+                      注意：修改代理设置后，需要重启软件才能对界面完全生效。
+                  </div>
+              </div>
 
             </div>
 
@@ -180,10 +237,20 @@ const store = useModStore()
 const currentTab = ref('paths')
 const detecting = ref(false)
 
+
 const tabs = [
   { id: 'paths', label: '路径配置' },
   { id: 'general', label: '界面与常规' },
+  { id: 'network', label: '网络设置' },
 ]
+
+// 1. 代理排除列表 (Bypass List) 的字符串代理
+const bypassString = ref('')
+
+// 2. 添加新 Host 的临时变量
+const newHostDomain = ref('')
+const newHostIp = ref('')
+
 
 // 预设颜色
 const colors = ['#06b6d4', '#8b5cf6', '#f43f5e', '#10b981', '#f59e0b']
@@ -198,6 +265,15 @@ watch(() => store.showSettings, (val) => {
     formData.value = JSON.parse(JSON.stringify(store.settings))
   }
 })
+// 当弹窗打开或 formData 加载完成后，将数组转为字符串显示
+watch(() => formData.value.network?.proxy?.bypass_list, (list) => {
+    if (list && Array.isArray(list)) {
+        bypassString.value = list.join(', ')
+    } else {
+        bypassString.value = ''
+    }
+}, { immediate: true })
+
 
 // 自动检测路径
 const autoDetect = async () => {
@@ -242,6 +318,49 @@ const handleBrowse = async (fieldKey) => {
     // 如果用户选了路径（没点取消），则更新数据
     if (path) {
         formData.value[fieldKey] = path
+    }
+}
+
+
+// 1. 更新 Bypass List (Textarea -> Array)
+const updateBypassList = () => {
+    if (!formData.value.network) return
+    
+    // 分割字符串，去空，去空格
+    const list = bypassString.value
+        .split(/[,;\n]/) // 支持逗号、分号、换行符分隔
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
+        
+    formData.value.network.proxy.bypass_list = list
+}
+
+// 2. 添加 Host
+const addHost = () => {
+    const domain = newHostDomain.value.trim()
+    const ip = newHostIp.value.trim()
+    
+    if (!domain || !ip) {
+        // 可以加个简单的提示
+        return
+    }
+    
+    // 初始化 hosts 对象（如果为空）
+    if (!formData.value.network) formData.value.network = {}
+    if (!formData.value.network.hosts) formData.value.network.hosts = {}
+    
+    // 写入
+    formData.value.network.hosts[domain] = ip
+    
+    // 清空输入框
+    newHostDomain.value = ''
+    newHostIp.value = ''
+}
+
+// 3. 删除 Host
+const deleteHost = (domain) => {
+    if (formData.value.network?.hosts) {
+        delete formData.value.network.hosts[domain]
     }
 }
 

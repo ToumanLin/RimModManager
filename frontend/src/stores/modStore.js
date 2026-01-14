@@ -965,7 +965,7 @@ export const useModStore = defineStore('mods', () => {
     }
   }
   // 获取文件路径
-  const getFilePath = async (home_path, file_types=('XML Files (*.xml)', 'All Files (*.*)')) => {
+  const getFilePath = async (home_path, file_types=('XML Files (*.xml;*.rws)', 'All Files (*.*)')) => {
       if(!window.pywebview) return
       // 调用后端 API
       const res = await window.pywebview.api.select_file_dialog(home_path, file_types)

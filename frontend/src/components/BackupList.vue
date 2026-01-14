@@ -95,7 +95,7 @@
             :is-selected="selectedPath === item.path"
             @select="selectItem"
             @load="handleLoad"
-            @delete="handleDelete"
+            @remove="handleRemove"
           />
         </div>
       </section>
@@ -176,7 +176,7 @@ import { zhCN } from 'date-fns/locale'
 // --- 子组件：BackupItem ---
 const BackupItem = {
   props: ['item', 'isSelected'],
-  emits: ['select', 'load', 'delete', 'exportOrder'],
+  emits: ['select', 'load', 'delete', 'remove', 'exportOrder'],
   template: `
     <div 
       class="relative flex items-center py-1 px-2 rounded-lg border transition-all duration-200 cursor-pointer select-none"
@@ -224,7 +224,18 @@ const BackupItem = {
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-archive-restore-icon lucide-archive-restore"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg>
             </span>
           </button>
-          <button @click.stop="$emit('delete', item)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
+          <button v-if="item.type === 'import'" @click.stop="$emit('remove', item)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
+            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
+            text-text-dim/70 bg-accent-danger/10 
+            hover:bg-accent-danger/60 hover:text-text-main hover:scale-110 active:scale-100
+            group-hover:bg-accent-danger/40 group-hover:text-text-dim group-hover:shadow-2xl/20
+            group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
+            v-tooltip="'从列表移除'">
+            <span class="relative only:-mx-6">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-minus-icon lucide-circle-minus"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+            </span>
+          </button>
+          <button v-else @click.stop="$emit('delete', item)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
             inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
             text-text-dim/70 bg-accent-danger/10 
             hover:bg-accent-danger/60 hover:text-text-main hover:scale-110 active:scale-100
@@ -311,6 +322,9 @@ const parsedData = computed(() => {
                     if (diffDays === 1) distanceNow = '昨天'
                     else if (diffDays === 2) distanceNow = '前天'
                     else distanceNow = `${diffDays} 天前`
+                } else {
+                    // Other: 直接显示文件名去后缀
+                    displayTitle = name.replace('.xml', '')
                 }
             } else {
                 // 如果是 other 或无法解析时间，直接显示文件名去后缀
@@ -380,6 +394,18 @@ const handleDelete = async (item) => {
     await store.deletePath(item.path)
     refresh()
 }
+
+const handleRemove = async (item) => {
+    // 调用后端删除接口
+    rawData.value.import = rawData.value.import.filter(i => i.path !== item.path)
+    if (store.currentBackupFile == item.path) {
+        store.currentBackupFile = ''
+        store.backupIds = []
+    }
+    refresh()
+}
+
+
 
 const exportOrder = async (path) => {
     // 调用后端另存为接口
