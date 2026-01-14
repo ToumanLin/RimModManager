@@ -188,6 +188,17 @@
       </Transition>
     </Teleport>
 
+    <!-- 日志 --><!-- translate-x-1/2  -->
+    <div v-show="store.showLogDrawer" class="fixed bottom-4 left-4 w-4/9 h-7/9 bg-black/50 backdrop-blur-md rounded-lg p-4 border border-white/10 overflow-auto z-999">
+      <LogViewer />
+    </div>
+
+    <!-- 测试 -->
+    <div v-show="store.showTestDrawer" class="fixed bottom-4 left-4 w-5/9 h-7/9 bg-black/50 backdrop-blur-md rounded-lg p-4 border border-white/10 overflow-auto z-999">
+      <Temp2 />
+      <Temp3 />
+    </div>
+
     <!-- 状态条 -->
     <StatusBar class="relative z-20 flex-none" />
 
@@ -217,6 +228,9 @@ import ContextMenu from './components/ContextMenu.vue'
 import HoverPanel from './components/HoverPanel.vue'
 import BackupList from './components/BackupList.vue'
 import ListDiffView from './components/ListDiffView.vue'
+import LogViewer from './components/LogViewer.vue'
+import Temp3 from './components/utils/temp3.vue'
+import Temp2 from './components/utils/temp2.vue'
 
 
 

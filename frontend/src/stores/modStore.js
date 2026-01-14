@@ -88,6 +88,8 @@ export const useModStore = defineStore('mods', () => {
   // 设置状态
   const showSettings = ref(false) // 是否显示设置弹窗
   const showDiffDrawer = ref(false)
+  const showLogDrawer = ref(false)// 日志抽屉状态
+  const showTestDrawer = ref(false)// 测试抽屉状态
   const isLoading = ref(false)
   const isDirty = ref(false)
   const settings = ref({
@@ -1037,7 +1039,7 @@ export const useModStore = defineStore('mods', () => {
     groupRemoveMods, groupReorder, groupContentReorder, takeGroupsByModId, takeGroupById,
 
     // 设置相关
-    showSettings, isLoading, isDirty, settings, 
+    showSettings, isLoading, isDirty, settings, showLogDrawer, showTestDrawer,
     openSettings, closeSettings, applySettings, saveSetting, markDirty,
 
     // 系统操作

@@ -23,13 +23,15 @@ class GameManager:
         """
         paths = {
             'game_install_path': '',
+            'game_data_path': '',
             'local_mods_path': '',
             'workshop_mods_path': '',
             'game_config_path': ''
         }
         
         # 1. 检测 Config 路径 (各平台固定)
-        paths['game_config_path'] = self._detect_config_path()
+        paths['game_data_path'] = self._detect_gamedata_path()
+        paths['game_config_path'] = os.path.join(paths['game_data_path'], 'Config')
 
         # 2. 检测 安装路径 (主要针对 Windows Steam)
         install_loc = self._detect_steam_install_path()
@@ -114,7 +116,7 @@ class GameManager:
 
     # --- 内部辅助方法 ---
 
-    def _detect_config_path(self):
+    def _detect_gamedata_path(self):
         """检测 Config 文件夹位置 (%APPDATA%/LocalLow/Ludeon Studios/...)"""
         if platform.system() == 'Windows':
             user_profile = os.getenv('USERPROFILE')
@@ -122,17 +124,17 @@ class GameManager:
             # 所以最好手动拼 LocalLow
             if user_profile:
                 base = os.path.join(user_profile, 'AppData', 'LocalLow')
-                path = os.path.join(base, 'Ludeon Studios', 'RimWorld by Ludeon Studios', 'Config')
+                path = os.path.join(base, 'Ludeon Studios', 'RimWorld by Ludeon Studios')
                 if os.path.exists(path):
                     return path
         elif platform.system() == 'Darwin':
             home = os.path.expanduser('~')
-            path = os.path.join(home, 'Library', 'Application Support', 'RimWorld', 'Config')
+            path = os.path.join(home, 'Library', 'Application Support', 'RimWorld')
             if os.path.exists(path):
                 return path
         else: # Linux
             home = os.path.expanduser('~')
-            path = os.path.join(home, '.config', 'unity3d', 'Ludeon Studios', 'RimWorld by Ludeon Studios', 'Config')
+            path = os.path.join(home, '.config', 'unity3d', 'Ludeon Studios', 'RimWorld by Ludeon Studios')
             if os.path.exists(path):
                 return path
         return ''

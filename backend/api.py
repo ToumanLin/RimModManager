@@ -1,9 +1,12 @@
 import os
+import time
+import functools
 from dataclasses import dataclass, asdict
 from typing import Any
 
 # 1. 引入配置管理
 from backend.settings import settings
+from backend.utils.logger import logger
 
 # 2. 引入数据库层
 from backend.database.models import init_db
@@ -15,6 +18,43 @@ from backend.managers.mgr_mods_config import LoadOrderManager
 from backend.managers.mgr_files import FileManager
 from backend.scanner.parser_dlc import DLCParser
 from backend.scanner.mod_scanner import ModScanner
+
+
+def log_api_call(func):
+    """ 
+    装饰器：记录 API 调用、参数及耗时 
+    仅在 DEBUG 模式或发生错误时记录详细信息
+    """
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        start_time = time.time()
+        func_name = func.__name__
+        
+        # 截断过长的参数显示（如巨大的文件内容）
+        safe_args = [str(a)[:50] + '...' if len(str(a)) > 50 else a for a in args]
+        
+        try:
+            # 执行原函数
+            result = func(self, *args, **kwargs)
+            
+            duration = (time.time() - start_time) * 1000
+            
+            # 只有慢请求或显式 Debug 才记录 INFO，否则记录 DEBUG 避免刷屏
+            if duration > 500: 
+                logger.warning(f"API [SLOW] {func_name} took {duration:.2f}ms")
+            else:
+                logger.debug(f"API {func_name}({safe_args}) took {duration:.2f}ms")
+                
+            return result
+            
+        except Exception as e:
+            duration = (time.time() - start_time) * 1000
+            logger.error(f"API {func_name} failed after {duration:.2f}ms: {str(e)}", exc_info=True)
+            # 这里的异常通常需要返回给前端一个标准格式
+            return ApiResponse.error(f"System Error: {str(e)}")
+            
+    return wrapper
+
 
 
 @dataclass
@@ -42,7 +82,7 @@ class API:
     """
 
     def __init__(self):
-        print("API Layer Initializing...")
+        logger.info("API Layer Initializing...")
         
         # 1. 初始化数据库
         # 数据库文件放在当前工作目录的data目录下
@@ -56,7 +96,7 @@ class API:
         self.game_mgr = GameManager()
         self.load_order_mgr = LoadOrderManager() # 内部会自动从 settings 读取路径
         self.scanner = ModScanner()
-        print("API Layer Ready.")
+        logger.info("API Layer Ready.")
 
 
     def _ensure_dlc_parser(self):
@@ -70,7 +110,7 @@ class API:
     # =========================================================================
     #  1. 初始化与全局数据 (Initialization)
     # =========================================================================
-
+    @log_api_call
     def get_initial_data(self):
         """
         前端启动时调用，一次性获取所有必要数据。
@@ -138,7 +178,7 @@ class API:
         }
         self.is_first_db_init = False   # 标记数据库已初始化
         return ApiResponse.success(result)
-
+    @log_api_call
     def reset_database(self):
         """
         重置数据库：强制关闭连接，删除文件，重建。
@@ -192,7 +232,7 @@ class API:
     # =========================================================================
     #  2. 设置与路径 (Settings & Paths)
     # =========================================================================
-
+    @log_api_call
     def auto_detect_paths(self, update_config=True):
         """自动检测游戏路径"""
         result = self.game_mgr.auto_detect_paths()
@@ -229,7 +269,7 @@ class API:
     # =========================================================================
     #  3. Mod 扫描与管理 (Scanning & Mods)
     # =========================================================================
-
+    @log_api_call
     def scan_mods(self, specific_paths=None, forced_update=False):
         """
         触发后台模组扫描。
@@ -337,6 +377,8 @@ class API:
     # =========================================================================
     #  5. 加载顺序与游戏启动 (Load Order & Launch)
     # =========================================================================
+    
+    @log_api_call
     def get_load_order(self):
         """
         获取当前的加载顺序

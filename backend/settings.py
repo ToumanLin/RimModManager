@@ -37,6 +37,7 @@ class AppConfig:
     """
     # --- 路径设置 ---
     game_install_path: str = ""
+    game_data_path: str = ""  # RimWorld 数据文件夹 (Ludeon Studios...)
     game_config_path: str = ""  # RimWorld 配置文件夹 (Ludeon Studios...)
     workshop_mods_path: str = ""
     local_mods_path: str = ""
@@ -62,6 +63,12 @@ class AppConfig:
     
     # --- 网络设置 ---
     network: NetworkConfig = field(default_factory=NetworkConfig)
+    
+    # --- 开发与调试设置 ---
+    debug_mode: bool = True  # 开发模式开关
+    log_retention_days: int = 7  # 日志保留天数
+    log_level: str = "INFO"  # 默认日志等级 DEBUG, INFO, WARNING, ERROR
+    
 
 class SettingsManager:
     _instance = None
@@ -85,6 +92,11 @@ class SettingsManager:
         """ 确保配置目录存在 """
         if not CONFIG_DIR.exists():
             CONFIG_DIR.mkdir(parents=True)
+        # 确保日志目录存在
+        log_dir = Path(os.getcwd()) / "data" / "logs"
+        if not log_dir.exists():
+            log_dir.mkdir(parents=True)
+            
 
     def _load(self) -> AppConfig:
         if not CONFIG_FILE.exists():

@@ -1,11 +1,19 @@
+import builtins
 import webview
 import os
-from icecream.builtins import install as ic_install
-ic_install()    # 全局启用 icecream，利用 Python 的动态特性实现“一次安装，到处运行”。
+from backend.utils.logger import logger_manager, logger 
+
+
+from icecream import ic as print
+builtins.print = print  # 重定向 print 到 logger.debug
+# from icecream.builtins import install as ic_install
+# ic_install()    # 全局启用 icecream，利用 Python 的动态特性实现“一次安装，到处运行”。
+
 
 from backend.api import API
 from backend.settings import settings
 from backend.utils.event_bus import EventBus
+
 
 def get_webview_proxy_args():
     """生成 WebView2 的启动参数"""
@@ -38,6 +46,10 @@ def get_entrypoint():
         return "http://localhost:5173"
 
 if __name__ == '__main__':
+    # 记录启动信息
+    logger.info(f"Starting RimModManager... Ver: {settings.config.game_version or 'Dev'}")
+    logger.debug(f"Debug Mode: {settings.config.debug_mode}")
+    
     api = API()
     window_width = int(settings.config.window_width)  # 默认1400px
     window_height = int(settings.config.window_height)  # 默认900px
@@ -70,5 +82,9 @@ if __name__ == '__main__':
     )
     # 注册窗口到事件总线
     EventBus.set_window(window) # type: ignore
-    # 启动
-    webview.start(debug=True) # debug=True 允许在窗口里按 F12 看控制台
+    # 捕获全局未处理异常
+    try: # 启动
+        webview.start(debug=settings.config.debug_mode) # debug=True 允许在窗口里按 F12 看控制台
+    except Exception as e:
+        logger.critical("Application crashed!", exc_info=True)
+        raise e

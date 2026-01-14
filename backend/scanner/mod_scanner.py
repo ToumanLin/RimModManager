@@ -25,6 +25,7 @@ from backend.scanner.analyzer import ModAnalyzer
 from backend.scanner.parser_dlc import DLCParser
 from backend.managers.mgr_files import FileManager
 from backend.settings import settings
+from backend.utils.logger import logger # 引入日志
 from backend.utils.event_bus import EventBus # 引入事件总线
 
 class ModScanner:
@@ -53,6 +54,8 @@ class ModScanner:
         """
         后台执行的扫描主逻辑
         """
+        logger.info(f"Scan started. Paths: {search_paths}")
+        start_time = time.time()
         try:
             EventBus.emit('scan-start')
             
@@ -175,7 +178,10 @@ class ModScanner:
             }
             self._finish_scan(result)
 
+            duration = time.time() - start_time
+            logger.info(f"Scan finished in {duration:.2f}s. Added: {stats['added']}, Updated: {stats['updated']}")
         except Exception as e:
+            logger.error("Scan task failed abruptly", exc_info=True)
             import traceback
             traceback.print_exc()
             result = {
