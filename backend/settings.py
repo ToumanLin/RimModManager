@@ -3,11 +3,31 @@ import os
 import shutil
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # 配置文件路径
 CONFIG_DIR = Path(os.getcwd()) / "data"
 CONFIG_FILE = CONFIG_DIR / "config.json"
+
+@dataclass
+class ProxyConfig:
+    enabled: bool = False
+    # 代理类型: 'http' 或 'socks5'
+    type: str = 'http' 
+    host: str = ''
+    port: int = 0
+    username: str = ''
+    password: str = ''
+    # 排除列表 (不走代理的域名/IP)
+    bypass_list: List[str] = field(default_factory=lambda: [
+        "127.0.0.1", "localhost", "::1", 
+    ])
+
+@dataclass
+class NetworkConfig:
+    proxy: ProxyConfig = field(default_factory=ProxyConfig)
+    # 自定义 Hosts (域名 -> IP 映射)
+    hosts: Dict[str, str] = field(default_factory=dict) 
 
 @dataclass
 class AppConfig:
@@ -39,6 +59,9 @@ class AppConfig:
     
     # --- 缓存忽略列表 (示例) ---
     ignored_paths: list = field(default_factory=lambda: [".git", "__pycache__"])
+    
+    # --- 网络设置 ---
+    network: NetworkConfig = field(default_factory=NetworkConfig)
 
 class SettingsManager:
     _instance = None
@@ -64,34 +87,42 @@ class SettingsManager:
             CONFIG_DIR.mkdir(parents=True)
 
     def _load(self) -> AppConfig:
-        """加载配置，并处理旧配置文件缺少新字段的情况"""
-        # 1. 实例化默认配置
-        default_cfg = AppConfig()
-        
         if not CONFIG_FILE.exists():
-            return default_cfg
+            return AppConfig()
 
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # 2. 智能合并：将读取的数据覆盖默认值
-            # 这样如果 config.json 少了某个新字段，default_cfg 会保留该字段的默认值
-            # 过滤掉 AppConfig 中不存在的废弃字段
-            valid_keys = default_cfg.__dict__.keys()
-            filtered_data = {k: v for k, v in data.items() if k in valid_keys}
+            # 创建默认对象
+            cfg = AppConfig()
             
-            # 更新属性
-            for key, value in filtered_data.items():
-                setattr(default_cfg, key, value)
+            # 递归更新逻辑
+            # 1. 更新顶层字段
+            for k, v in data.items():
+                if hasattr(cfg, k) and k != 'network':
+                    setattr(cfg, k, v)
+            
+            # 2. 显式处理 network 嵌套
+            if 'network' in data:
+                net_data = data['network']
+                # 处理 proxy
+                if 'proxy' in net_data:
+                    # 使用解包语法更新 ProxyConfig
+                    # 注意过滤掉未知的字段，防止报错
+                    valid_keys = ProxyConfig.__dataclass_fields__.keys()
+                    clean_proxy_data = {k: v for k, v in net_data['proxy'].items() if k in valid_keys}
+                    cfg.network.proxy = ProxyConfig(**clean_proxy_data)
                 
-            return default_cfg
-            
+                # 处理 hosts
+                if 'hosts' in net_data:
+                    cfg.network.hosts = net_data['hosts']
+
+            return cfg
+
         except Exception as e:
-            print(f"Error loading settings: {e}, using defaults.")
-            # 可以在这里备份一下损坏的配置文件
-            shutil.copy(CONFIG_FILE, CONFIG_FILE.with_suffix(".json.bak"))
-            return default_cfg
+            print(f"Config load error: {e}")
+            return AppConfig()
 
     def save(self):
         """保存当前配置到磁盘"""

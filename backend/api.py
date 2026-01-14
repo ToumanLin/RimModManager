@@ -363,7 +363,7 @@ class API:
         if not mods_config_file_path:
             mods_config_file_path = self.load_order_mgr.config_dir
         # 检查路径是否合法，且是否为xml文件
-        if os.path.isfile(mods_config_file_path) and mods_config_file_path.endswith('.xml'):
+        if os.path.isfile(mods_config_file_path) and (mods_config_file_path.endswith('.xml') or mods_config_file_path.endswith('.rws')):
             file = mods_config_file_path
         elif os.path.isdir(mods_config_file_path) :
             file = self.file_mgr.select_file_dialog(initial_dir=mods_config_file_path)

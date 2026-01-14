@@ -238,10 +238,10 @@ class FileManager:
         return None
 
     @staticmethod
-    def select_file_dialog(initial_dir='', file_types=('XML Files (*.xml)', 'All Files (*.*)'), title="选择文件"):
+    def select_file_dialog(initial_dir='', file_types=('XML Files (*.xml;*.rws)', 'All Files (*.*)'), title="选择文件"):
         """
         打开系统原生的文件选择框
-        file_types 示例: ('XML Files (*.xml)', 'All Files (*.*)')
+        file_types 示例: ('XML Files (*.xml;*.rws)', 'All Files (*.*)')
         """
         if len(webview.windows) > 0:
             window = webview.windows[0]
@@ -256,7 +256,7 @@ class FileManager:
         return None
     
     @staticmethod
-    def save_file_dialog(initial_dir='', default_filename='ModsConfig.xml', file_types=('XML Files (*.xml)', 'All Files (*.*)')):
+    def save_file_dialog(initial_dir='', default_filename='ModsConfig.xml', file_types=('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
         """
         打开系统原生的文件保存框
         """

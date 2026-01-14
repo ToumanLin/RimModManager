@@ -3,10 +3,22 @@ import shutil
 import glob
 import datetime
 
+# --- 模块测试准备 ---
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    # Path(__file__).resolve() 获取当前文件的绝对路径
+    # .parents[2] 表示向上跳 3 级 (文件->scanner->backend->项目根目录)
+    project_root = Path(__file__).resolve().parents[2]
+    # 调试打印，确保路径对不对
+    print(f"Project Root: {project_root}")
+    # sys.path 需要字符串类型，所以要用 str() 转换一下
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
 from backend.managers.mgr_files import FileManager
 from backend.settings import settings
 from lxml import html
-
 etree = html.etree
 
 class LoadOrderManager:
@@ -62,7 +74,9 @@ class LoadOrderManager:
             tree = etree.parse(mods_config_file_path, parser)
             root = tree.getroot()
             # 结构一般是 <ModsConfigData><activeMods><li>id</li>...</activeMods></ModsConfigData>
-            active_node = root.find("activeMods")
+            active_node = root.xpath("//activeMods") or root.xpath("//modIds")
+            if active_node is None: print("无法解析非标准 ModsConfig.xml 文件！")
+            active_node = active_node[0]
             if active_node is not None:
                 for li in active_node.findall("li"):
                     if li.text:
@@ -241,3 +255,10 @@ class LoadOrderManager:
             "other": other_files
         }
         return result
+
+
+
+if __name__ == "__main__":
+    mgr = LoadOrderManager()
+    a = mgr.read_active_mods(r"C:\Users\Administrator\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Saves\林亚.rws")
+    print(a)
