@@ -261,6 +261,17 @@ export const useModStore = defineStore('mods', () => {
     }
   }
 
+  const checkResult = (res, workname) => {
+    console.log(workname, res)
+    if (res.status === 'success'){
+      return true
+      toast.success(`${workname}成功`)
+    }else if(res.status === 'waring'){
+      toast.warning(`${workname}注意: \n${res.message}`)
+    }else toast.error(`${workname}失败: \n${res.message}`)
+    return false
+  }
+
   // ===== Mod操作 =====
   // 显示 Mod 名称（优先 alias_name -> display_name -> name -> package_id）
   const displayModName = (modOrId) => {
@@ -310,7 +321,7 @@ export const useModStore = defineStore('mods', () => {
     inactiveIds.value = inactiveIds.value.filter(i => !lowerIdsSet.has(i))
     tempIds.value = tempIds.value.filter(i => !lowerIdsSet.has(i))
   }
-  // 选择/取消选择 Mod
+  // 选择 Mod
   const selectMods = (ids) => {
     clearSelection();
     if(typeof ids === 'string') ids = [ids]
@@ -375,14 +386,13 @@ export const useModStore = defineStore('mods', () => {
     try {
       // 使用默认路径
       const res = await window.pywebview.api.save_load_order(activeIds.value)
-      if (res.status === 'success') {
+      if (checkResult(res, "保存Mod加载顺序")) {
         isDirty.value = false
         // console.log("保存加载顺序成功:", res)
         toast.success("Mod序列已保存")
         getBackups()
         return true
       } 
-      else { throw new Error(res.message) }
     } catch (e) {
       console.error("保存Mod序列异常:", e)
       toast.error(`保存Mod序列异常: \n${e.message}`)
@@ -396,12 +406,11 @@ export const useModStore = defineStore('mods', () => {
     try {
       // 使用默认路径
       const res = await window.pywebview.api.export_load_order(activeIds.value, target_path, trigger_dialog)
-      if (res.status === 'success') {
+      if (checkResult(res, "导出Mod加载顺序")) {
         // console.log("导出加载顺序成功:", res)
         toast.success("Mod序列已导出")
         return true
       } 
-      else { throw new Error(res.message) }
     } catch (e) {
       console.error("导出Mod序列异常:", e)
       toast.error(`导出Mod序列异常: \n${e.message}`)
@@ -421,7 +430,7 @@ export const useModStore = defineStore('mods', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.update_mod_user_data(modId, userData)
-      if (res.status === 'success') {
+      if (checkResult(res, "更新Mod用户数据")) {
         // 更新本地 Map
         const mod = allModsMap.value.get(modId.toLowerCase())
         if (mod) {
@@ -430,7 +439,6 @@ export const useModStore = defineStore('mods', () => {
         toast.success("Mod用户数据已更新", {timeout: 1000})
         return true
       } 
-      else { throw new Error(res.message) }
     } catch (e) {
       console.error("更新Mod用户数据异常:", e)
       toast.error(`更新Mod用户数据异常: \n${e.message}`)
@@ -447,10 +455,9 @@ export const useModStore = defineStore('mods', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.get_groups()
-      if (res.status === 'success') {
+      if (checkResult(res, "获取分组")) {
         groupList.value = res.data.groups || []
       }
-      else { throw new Error(res.message) }
     } catch (e) {
       console.error("获取分组异常:", e)
       toast.error(`获取分组异常: \n${e.message}`)
@@ -464,13 +471,12 @@ export const useModStore = defineStore('mods', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.create_group(name, color)
-      console.log("创建分组:", res)
-      if (res.status === 'success') {
+      // console.log("创建分组:", res)
+      if (checkResult(res, "创建分组")) {
         groupList.value.push(res.data.group)
         // 排序
         groupList.value.sort((a, b) => a.sort_index - b.sort_index)
       } 
-      else { throw new Error(res.message) }
     } catch (e) {
       console.error("创建分组异常:", e)
       toast.error(`创建分组异常: \n${e.message}\n正在还原...`)
@@ -487,8 +493,10 @@ export const useModStore = defineStore('mods', () => {
       // 从列表中移除
       groupList.value = groupList.value.filter(group => group.group_id !== groupId)
       const res = await window.pywebview.api.delete_group(groupId)
-      console.log("删除分组:", res)
-      if (res.status !== 'success') throw new Error(res.message) 
+      // console.log("删除分组:", res)
+      if (checkResult(res, "删除分组")) {
+        toast.success("分组已删除", {timeout: 1000})
+      } 
     } catch (e) {
       console.error("删除分组异常:", e)
       toast.error(`删除分组异常: \n${e.message}\n正在还原...`)
@@ -504,8 +512,10 @@ export const useModStore = defineStore('mods', () => {
       const group = groupList.value.find(g => g.group_id === groupId)
       if (group) Object.assign(group, updates)
       const res = await window.pywebview.api.update_group(groupId, updates)
-      console.log("更新分组:", res)
-      if (res.status !== 'success') throw new Error(res.message) 
+      // console.log("更新分组:", res)
+      if (checkResult(res, "更新分组")) {
+        // toast.success("分组已更新", {timeout: 1000})
+      } 
     } catch (e) {
       console.error("更新分组异常:", e)
       toast.error(`更新分组异常: \n${e.message}\n正在还原...`)
@@ -523,8 +533,10 @@ export const useModStore = defineStore('mods', () => {
         group.mod_ids = [...group.mod_ids, ...modIds]
       }
       const res = await window.pywebview.api.group_add_mods(groupId, modIds)
-      console.log("分组添加模组:", res)
-      if (res.status !== 'success') throw new Error(res.message) 
+      // console.log("分组添加模组:", res)
+      if (checkResult(res, "分组添加模组")) {
+        // toast.success("模组已添加到分组", {timeout: 1000})
+      } 
     } catch (e) {
       console.error("分组添加模组异常:", e)
       toast.error(`分组添加模组异常: \n${e.message}\n正在还原...`)
@@ -542,8 +554,10 @@ export const useModStore = defineStore('mods', () => {
         group.mod_ids = group.mod_ids.filter(id => !modIds.includes(id))
       }
       const res = await window.pywebview.api.group_remove_mods(groupId, modIds)
-      console.log("分组移除模组:", res)
-      if (res.status !== 'success') throw new Error(res.message)
+      // console.log("分组移除模组:", res)
+      if (checkResult(res, "分组移除模组")) {
+        // toast.success("模组已从分组移除", {timeout: 1000})
+      } 
     } catch (e) {
       console.error("分组移除模组异常:", e)
       toast.error(`分组移除模组异常: \n${e.message}\n正在还原...`)
@@ -558,8 +572,10 @@ export const useModStore = defineStore('mods', () => {
       // 更新本地分组
       groupList.value.forEach(group => group.is_expanded = isExpanded)
       const res = await window.pywebview.api.update_all_expansion_state(isExpanded)
-      console.log("批量展开切换:", res)
-      if (res.status !== 'success') throw new Error(res.message)
+      // console.log("批量展开切换:", res)
+      if (checkResult(res, "批量展开切换")) {
+        // toast.success("所有分组已切换展开状态", {timeout: 1000})
+      } 
     } catch (e) {
       console.error("批量展开切换异常:", e)
       toast.error(`批量展开切换异常: \n${e.message}\n正在还原...`)
@@ -574,10 +590,10 @@ export const useModStore = defineStore('mods', () => {
       // 更新本地分组排序
       groupList.value.sort((a, b) => groupIds.indexOf(a.group_id) - groupIds.indexOf(b.group_id))
       const res = await window.pywebview.api.group_reorder(groupIds)
-      console.log("分组排序:", res)
-      if (res.status !== 'success') {
-        throw new Error(res.message)
-      }
+      // console.log("分组排序:", res)
+      if (checkResult(res, "分组排序")) {
+        // toast.success("分组已排序", {timeout: 1000})
+      } 
     } catch (e) {
       console.error("分组排序异常:", e)
       toast.error(`分组排序异常: \n${e.message}\n正在还原...`)
@@ -590,8 +606,8 @@ export const useModStore = defineStore('mods', () => {
     if (!window.pywebview) return
     try {
       const res = await window.pywebview.api.group_content_reorder(groupId, modIds)
-      console.log("分组内排序:", res)
-      if (res.status === 'success') {
+      // console.log("分组内排序:", res)
+      if (checkResult(res, "分组内排序")) {
         // 更新本地分组
         const group = groupList.value.find(g => g.group_id === groupId)
         if (group) {
@@ -834,15 +850,14 @@ export const useModStore = defineStore('mods', () => {
     isLoading.value = true
     try {
         const res = await window.pywebview.api.save_all_settings(newSettings)
-        if (res.status === 'success') {
+        if (checkResult(res, "应用设置")) {
             // 更新本地 store
             Object.assign(settings.value, newSettings)
             // 如果路径变了，可能需要重新扫描，这里简单起见先关闭弹窗
             closeSettings()
             // 可以在这里触发一次重新初始化或扫描
             await initialize() 
-        } 
-        else { throw new Error(res.message) }
+        }
     } catch (e) {
       console.error("应用设置异常:", e)
       toast.error(`应用设置异常: \n${e.message}`)
@@ -856,11 +871,10 @@ export const useModStore = defineStore('mods', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.save_setting(key, value)
-      if (res.status === 'success') {
+      if (checkResult(res, "保存单项设置")) {
         // 更新本地 store
         settings.value[key] = value
       } 
-      else { throw new Error(res.message) }
     } catch (e) {
       console.error("保存单项设置异常:", e)
       toast.error(`保存单项设置异常: \n${e.message}`)
@@ -870,14 +884,13 @@ export const useModStore = defineStore('mods', () => {
   }
   // 辅助：标记脏状态
   const markDirty = () => { isDirty.value = true }
-
   // 重置数据库
   const resetDatabase = async () => {
     if (!window.pywebview) return
     isLoading.value = true
     try {
       const res = await window.pywebview.api.reset_database()
-      if (res.status === 'success') {
+      if (checkResult(res, "重置数据库")) {
         closeSettings()
         // 提示成功
         toast.success("数据库已重置！")
@@ -890,8 +903,6 @@ export const useModStore = defineStore('mods', () => {
         await initialize()
         // 或者直接触发扫描
         // scanMods()
-      } else {
-        alert("重置失败: " + res.message)
       }
     } finally {
       isLoading.value = false
@@ -901,8 +912,8 @@ export const useModStore = defineStore('mods', () => {
   // ===== 系统操作 =====
   // 启动游戏
   const launchGame = async () => {
-    const saved = await saveLoadOrder()
-    if (saved) {
+    const res = await saveLoadOrder()
+    if (checkResult(res, "保存加载顺序")) {
       if(settings.value.game_install_path?.includes("SteamLibrary\\steamapps\\common")){
         // 通过 steam 启动游戏
         openUrl("steam://rungameid/294100")
@@ -925,11 +936,9 @@ export const useModStore = defineStore('mods', () => {
       await window.pywebview.api.open_load_order_file(mods_config_file_path) : 
       await window.pywebview.api.get_load_order()
     
-    if (res.status === 'success') {
+    if (checkResult(res, "打开加载顺序")) {
       console.log("打开加载顺序:", res)
       return res.data
-    } else {
-      toast.error(`打开加载顺序失败: \n${res.message}`)
     }
   }
   // 打开Url
@@ -948,7 +957,7 @@ export const useModStore = defineStore('mods', () => {
     if(!window.pywebview) return
     console.log("打开路径:", path)
     const res = await window.pywebview.api.open_path(path)
-    if(res.status==='error') toast.error(`打开路径异常: \n${res.message}`)
+    checkResult(res, "打开路径")
   }
   const openBackupPath = async () => {
     openPath(settings.value.home_path+"\\backups")
@@ -958,7 +967,7 @@ export const useModStore = defineStore('mods', () => {
     if(!window.pywebview) return
     // 调用后端 API
     const res = await window.pywebview.api.select_folder_dialog(home_path)
-    if (res.status === 'success') {
+    if (checkResult(res, "获取文件夹路径")) {
         return res.data
     } else{
         console.error("获取文件夹路径异常:", res.message)
@@ -971,33 +980,25 @@ export const useModStore = defineStore('mods', () => {
       if(!window.pywebview) return
       // 调用后端 API
       const res = await window.pywebview.api.select_file_dialog(home_path, file_types)
-      if (res.status === 'success') {
+      if (checkResult(res, "获取文件路径")) {
           return res.data
-      } else{
-        console.error("获取文件路径异常:", res.message)
-        toast.error(`获取文件路径异常: \n${res.message}`)
-        return
       }
   }
   // 获取所有备份文件路径 {today: [], earlier: [], other: []}
   const getBackups = async () => {
     if(!window.pywebview) return
     const res = await window.pywebview.api.get_all_backups()
-    if(res.status === 'success' && res.data) {
+    if (checkResult(res, "获取备份文件")) {
        // 更新本地 store
       backups.value = res.data
       console.log("获取备份文件:", backups.value)
-    }
-    else {
-      toast.error(`获取备份失败: ${res.message}`)
-      return
     }
   }
   // 辅助：自动检测路径
   const autoDetectPaths = async (updateStore=true) => {
     if(!window.pywebview) return
     const res = await window.pywebview.api.auto_detect_paths(false)
-    if(res.status === 'success' && res.data.paths) {
+    if (checkResult(res, "自动检测路径") && res.data.paths) {
        // 更新本地 setting store
       if(updateStore) {
         Object.assign(settings.value, res.data.paths)
@@ -1005,21 +1006,14 @@ export const useModStore = defineStore('mods', () => {
       }
       return res.data.paths
     }
-    else {
-      toast.error(`自动检测路径失败: ${res.message}`)
-      return
-    }
   }
   // 删除文件/文件夹
   const deletePath = async (path) => {
     if(!window.pywebview) return
     const res = await window.pywebview.api.delete_path(path)
-    if(res.status === 'success') {
+    if (checkResult(res, "删除文件/文件夹")) {
       toast.success(`文件/文件夹已删除: \n${path}`)
       return true
-    } else{
-      toast.error(`删除文件/文件夹异常: \n${res.message}`)
-      return false
     }
   }
 

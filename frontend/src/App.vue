@@ -71,7 +71,7 @@
           <div class="p-3 rounded-b-2xl grid grid-cols-2 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-white/5">
             
             <!-- 刷新按钮 -->
-            <button 
+            <button :class="{'scan': store.scanProgress.scanning}"
               class="col-span-1 py-1 rounded-lg bg-white/5 border border-white/5 
                      text-sm text-gray-300 font-bold uppercase tracking-wider
                      hover:bg-white/10 hover:text-white hover:border-white/20
@@ -79,9 +79,8 @@
               @click="store.scanMods()"
               :disabled="store.scanProgress.scanning"
             >
-              <svg v-if="store.scanProgress.scanning" class="animate-spin w-3 h-3 text-accent-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-              <svg v-else class="w-3 h-3 text-gray-400 group-hover:text-white transition-colors" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
-              <span>{{ store.scanProgress.scanning ? '扫描中...' : '刷新' }}</span>
+              <!-- <svg v-if="store.scanProgress.scanning" class="animate-spin w-3 h-3 text-accent-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> -->
+              <span >{{ store.scanProgress.scanning ? '扫描中...' : '刷新' }}</span>
             </button>
 
             <!-- 保存按钮 (Dirty 状态提示) -->
@@ -189,12 +188,12 @@
     </Teleport>
 
     <!-- 日志 --><!-- translate-x-1/2  -->
-    <div v-show="store.showLogDrawer" class="fixed bottom-4 left-4 w-4/9 h-7/9 bg-black/50 backdrop-blur-md rounded-lg p-4 border border-white/10 overflow-auto z-999">
+    <div v-show="store.showLogDrawer" @click.self="store.showLogDrawer = false" class="fixed top-0 left-0 w-full h-full p-20 bg-black/50 backdrop-blur-2xl rounded-lg z-999">
       <LogViewer />
     </div>
 
     <!-- 测试 -->
-    <div v-show="store.showTestDrawer" class="fixed bottom-4 left-4 w-5/9 h-7/9 bg-black/50 backdrop-blur-md rounded-lg p-4 border border-white/10 overflow-auto z-999">
+    <div v-show="store.showTestDrawer" class="fixed bottom-4 left-4 w-5/9 h-7/9 bg-black/50 backdrop-blur-md p-4 border border-white/10 overflow-auto z-999">
       <Temp2 />
       <Temp3 />
     </div>
@@ -418,5 +417,81 @@ const Resizer = (props, { emit }) => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 扫描效果 */
+.scan {
+  position: relative;
+  font-weight: 600;
+}
+.scan span {
+  animation: cut 2s infinite;
+  transition: 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.scan:hover {
+  scale: 1.05;
+}
+.scan::after {
+  position: absolute;
+  content: "";
+  width: 100%;
+  height: 6px;
+  border-radius: 4px;
+  background-color: rgba(0, 242, 234, 0.5);
+  top: 0px;
+  filter: blur(10px);
+  animation: scan 2s infinite;
+  left: 0;
+  z-index: 0;
+  transition: 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.scan::before {
+  position: absolute;
+  content: "";
+  width: 98%;
+  height: 6px;
+  background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 242, 234, 0.1) 48%,
+      rgba(0, 242, 234, 0.5) 50%,
+      rgba(0, 242, 234, 0.1) 52%,
+      transparent 100%
+    );
+  top: 0px;
+  animation: scan 2s infinite;
+  left: 1%;
+  z-index: 1;
+  filter: opacity(0.9);
+  transition: 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes scan {
+  0% {
+    top: 10%;
+  }
+  25% {
+    top: 80%;
+  }
+  50% {
+    top: 10%;
+  }
+  75% {
+    top: 80%;
+  }
+}
+@keyframes cut {
+  0% {
+    clip-path: inset(0 0 0 0);
+  }
+  25% {
+    clip-path: inset(100% 0 0 0);
+  }
+  50% {
+    clip-path: inset(0 0 100% 0);
+  }
+  75% {
+    clip-path: inset(0 0 0 0);
+  }
 }
 </style>

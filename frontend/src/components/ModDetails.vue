@@ -398,18 +398,45 @@
   </div>
 
   <!-- 无选中Mod时 -->
-  <div v-else class="flex flex-col items-center justify-center h-full text-text-dim">
-    <div class="text-4xl opacity-20 mb-2">❖</div>
-    <div class="text-xs uppercase tracking-widest opacity-50">Select a Mod</div>
-    <!-- <LampEffect>
-      <ImageCloud 
-        :images="imageUrls" 
-        :size="400" 
-        :imageSize="50"
-        class="border border-white/20"
-      />
-      
-    </LampEffect> -->
+  <div v-else class="flex flex-col h-full text-text-dim">
+    
+    
+    <LampEffect>
+      <template #top>
+        <div class="flex flex-col items-center justify-end p-3 h-30">
+          <div class="text-4xl opacity-80 mb-2">❖</div>
+          <div class="text-xs uppercase tracking-widest">Select a Mod</div>
+        </div>
+      </template>
+      <template #bottom>
+        <div class="relative">
+          
+          <!-- <div class="absolute top-10 left-1/2 -translate-x-1/2">
+            <div class="loader">
+              <div class="box">
+                <div class="logo">
+                  
+                </div>
+              </div>
+              <div class="box"></div>
+              <div class="box"></div>
+              <div class="box"></div>
+              <div class="box"></div>
+            </div>
+          </div> -->
+          
+          <div class="z-999">
+            <ImageCloud 
+              :images="imageUrls" 
+              :size="300" 
+              :imageSize="50"
+            />
+          </div>
+
+        </div>
+      </template>
+    </LampEffect>
+    
   </div>
 
 </template>
@@ -676,5 +703,102 @@ const hexToRgb = (hex) => {
   为了确保图片在动画过程中能够重叠，
   img 标签在 template 里已经加了 absolute inset-0 
 */
+  .loader {
+    --size: 250px;
+    --duration: 5s;
+    --logo-color: grey;
+    --background: linear-gradient(
+      0deg,
+      rgba(21, 30, 49, 0.2) 0%,
+      rgba(35, 51, 85, 0.2) 100%
+    );
+    height: var(--size);
+    aspect-ratio: 1;
+    position: relative;
+  }
 
+  .loader .box {
+    position: absolute;
+    background: rgba(67, 101, 152, 0.15);
+    background: var(--background);
+    border-radius: 50%;
+    border-top: 1px solid rgba(100, 100, 100, 1);
+    box-shadow: rgba(0, 0, 0, 0.3) 0px 10px 10px -0px;
+    backdrop-filter: blur(5px);
+    animation: ripple var(--duration) infinite ease-in-out;
+  }
+
+  .loader .box:nth-child(1) {
+    inset: 40%;
+    z-index: 99;
+  }
+
+  .loader .box:nth-child(2) {
+    inset: 30%;
+    z-index: 98;
+    border-color: rgba(100, 100, 100, 0.8);
+    animation-delay: 0.5s;
+  }
+
+  .loader .box:nth-child(3) {
+    inset: 20%;
+    z-index: 97;
+    border-color: rgba(100, 100, 100, 0.6);
+    animation-delay: 1s;
+  }
+
+  .loader .box:nth-child(4) {
+    inset: 10%;
+    z-index: 96;
+    border-color: rgba(100, 100, 100, 0.4);
+    animation-delay: 1.5s;
+  }
+
+  .loader .box:nth-child(5) {
+    inset: 0%;
+    z-index: 95;
+    border-color: rgba(100, 100, 100, 0.2);
+    animation-delay: 2s;
+  }
+
+  .loader .logo {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    padding: 30%;
+  }
+
+  .loader .logo svg {
+    fill: var(--logo-color);
+    width: 100%;
+    animation: color-change var(--duration) infinite ease-in-out;
+  }
+
+  @keyframes ripple {
+    0% {
+      transform: scale(1);
+      box-shadow: rgba(0, 0, 0, 0.3) 0px 10px 10px -0px;
+    }
+    50% {
+      transform: scale(1.3);
+      box-shadow: rgba(0, 0, 0, 0.3) 0px 20px 20px -0px;
+    }
+    100% {
+      transform: scale(1);
+      box-shadow: rgba(0, 0, 0, 0.3) 0px 10px 10px -0px;
+    }
+  }
+
+  @keyframes color-change {
+    0% {
+      fill: var(--logo-color);
+    }
+    50% {
+      fill: white;
+    }
+    100% {
+      fill: var(--logo-color);
+    }
+  }
 </style>
