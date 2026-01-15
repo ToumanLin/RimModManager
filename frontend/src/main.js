@@ -3,6 +3,8 @@ import { createPinia } from 'pinia' // 注册 Pinia
 import Toast from "vue-toastification";
 // import "vue-toastification/dist/index.css";
 import './toast.scss'
+import VueVirtualScroller from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import './style.css'
 import App from './App.vue'
 import {vPreview} from './directives/vPreview.js'
@@ -18,9 +20,11 @@ const options = {
   newestOnTop: true
 }
 
-
+app.use(VueVirtualScroller)
 app.use(Toast, options);
 app.use(pinia) 
+
+
 
 app.directive('preview', vPreview) // 注册预览面板指令
 app.directive('tooltip', vTooltip) // 注册 Tooltip 指令
