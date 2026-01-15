@@ -78,6 +78,8 @@ export const useModStore = defineStore('mods', () => {
   const tempIds = ref([])   // 临时列表
   const groupList = ref([]) // 分组列表
   const backups = ref(null) // 备份列表
+
+  const conflictList = ref([]) // 重复包名冲突列表
   
   // 选择状态
   const currentTargetId = ref('') // 当前目标 ID (定位用)
@@ -193,9 +195,17 @@ export const useModStore = defineStore('mods', () => {
     window.addEventListener('scan-complete', async (e) => {
       scanProgress.value.scanning = false
       scanProgress.value.message = '扫描完成'
+      // 冲突处理
+      if (e.detail.conflicts && e.detail.conflicts.length > 0) {
+        console.warn("发现冲突:", e.detail.conflicts)
+        conflictList.value = e.detail.conflicts
+        // 注意：有冲突时暂不提示 "扫描完成" 的 Toast，以免遮挡，或者提示 Warning
+        toast.warning(`扫描完成，发现 ${e.detail.conflicts.length} 个包名重复冲突需要处理！`, {timeout: 10000})
+      } else {
+        toast.success(`扫描完成，共计扫描${e.detail.total}个模组，新增${e.detail.stats.added}个，\n更新${e.detail.stats.updated}个，删除${e.detail.stats.removed}个，已知${e.detail.stats.skipped}个。`,{position: "top-center",timeout: 5000})
+      }
+
       console.log("扫描统计:", e.detail)
-      toast.success(`扫描完成，共计扫描${e.detail.total}个模组，新增${e.detail.stats.added}个，
-更新${e.detail.stats.updated}个，删除${e.detail.stats.removed}个，已知${e.detail.stats.skipped}个。`,{position: "top-center",timeout: 5000})
       // [关键] 扫描结束后，主动拉取一次最新数据刷新界面
       await refreshModList()
     })
@@ -1020,6 +1030,7 @@ export const useModStore = defineStore('mods', () => {
   return {
     // 状态管理
     scanProgress, dataVersion, modIssues, ISSUE_TITLE_MAP, sourceTypeMap, modTypeMap, backups, showDiffDrawer, currentBackupFile,
+    conflictList,
     initialize, getLoadOrder, refreshModList, getModIssueState, ignoreIssue, getListIssues, applyBackup, getBackupOrder, 
 
     // Mod 相关

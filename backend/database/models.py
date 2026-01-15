@@ -64,6 +64,10 @@ class Mod(BaseModel):
     file_modify_time = DateTimeField(null=True)     # 文件修改时间，用于增量扫描更新
     last_active_time = DateTimeField(null=True)     # 上次启用时间，用于排查错误时找到最近启用的Mod
     last_moved_time = DateTimeField(null=True)      # 上次调整顺序的时间，用于排查错误时找到最近的修改点
+    
+    # 存储重复但被禁用(About.xml.disabled)的同名Mod路径
+    # 格式: ["D:/Mods/Harmony_Old", "E:/Steam/Harmony"]
+    shadow_paths = UTF8JSONField(default=list)
 
 class UserModData(BaseModel):
     """

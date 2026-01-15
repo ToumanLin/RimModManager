@@ -206,6 +206,9 @@
 
     <!-- 悬浮面板 -->
     <HoverPanel />
+
+    <!-- 重复包名冲突弹窗 -->
+    <ConflictResolver />
     
     <!-- 设置弹窗 -->
     <SettingsModal />
@@ -228,6 +231,7 @@ import HoverPanel from './components/HoverPanel.vue'
 import BackupList from './components/BackupList.vue'
 import ListDiffView from './components/ListDiffView.vue'
 import LogViewer from './components/LogViewer.vue'
+import ConflictResolver from './components/ConflictResolver.vue'
 import Temp3 from './components/utils/temp3.vue'
 import Temp2 from './components/utils/temp2.vue'
 

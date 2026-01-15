@@ -1,15 +1,17 @@
 import os
 import time
 import functools
+import shutil
 from dataclasses import dataclass, asdict
 from typing import Any
+from send2trash import send2trash
 
 # 1. 引入配置管理
 from backend.settings import settings
 from backend.utils.logger import logger
 
 # 2. 引入数据库层
-from backend.database.models import init_db
+from backend.database.models import Mod, init_db
 from backend.database.dao import ModDAO, GroupDAO
 
 # 3. 引入业务逻辑管理器
@@ -325,6 +327,75 @@ class API:
         except Exception as e:
             return ApiResponse.error(str(e))
 
+    def resolve_scan_conflicts(self, operations):
+        """
+        处理扫描发现的冲突。
+        operations: List[Dict]
+        [
+            { 'action': 'disable', 'target_path': '...', 'keep_id': '...' },
+            { 'action': 'delete', 'target_path': '...' }
+        ]
+        """
+        results = []
+        try:
+            for op in operations:
+                action = op.get('action')
+                target_path = op.get('target_path')
+                
+                if not target_path or not os.path.exists(target_path):
+                    results.append({'path': target_path, 'status': 'error', 'msg': '路径不存在'})
+                    continue
+
+                if action == 'disable':
+                    # 方案：重命名 About.xml -> About.xml.disabled
+                    about_xml = os.path.join(target_path, 'About', 'About.xml')
+                    disabled_xml = os.path.join(target_path, 'About', 'About.xml.disabled')
+                    
+                    if os.path.exists(about_xml):
+                        try:
+                            # 如果目标已存在，先删除旧的disabled (极其罕见)
+                            if os.path.exists(disabled_xml):
+                                os.remove(disabled_xml)
+                            os.rename(about_xml, disabled_xml)
+                            
+                            # 尝试更新 shadow_paths，如果失败（Mod不存在）则忽略
+                            # 因为下次扫描时，保留的 Mod 会入库。
+                            keep_id = op.get('keep_id')
+                            if keep_id:
+                                self._add_shadow_path(keep_id, target_path)
+                                
+                            results.append({'path': target_path, 'status': 'success'})
+                        except Exception as e:
+                            results.append({'path': target_path, 'status': 'error', 'msg': str(e)})
+                    else:
+                        results.append({'path': target_path, 'status': 'skipped', 'msg': 'About.xml not found'})
+
+                elif action == 'delete':
+                    # 方案：移入回收站
+                    try:
+                        send2trash(os.path.abspath(target_path))
+                        results.append({'path': target_path, 'status': 'success'})
+                    except Exception as e:
+                        results.append({'path': target_path, 'status': 'error', 'msg': str(e)})
+
+            return ApiResponse.success(results, "冲突处理完成")
+        except Exception as e:
+            return ApiResponse.error(f"处理出错: {str(e)}")
+        
+    def _add_shadow_path(self, package_id, path):
+        """辅助方法：更新 Mod 的 shadow_paths 字段"""
+        try:
+            mod = Mod.get_or_none(Mod.package_id == package_id)
+            if mod:
+                # 获取现有列表 (peewee JSON field 自动反序列化)
+                current_paths = mod.shadow_paths or []
+                if path not in current_paths:
+                    current_paths.append(path)
+                    mod.shadow_paths = current_paths
+                    mod.save()
+        except Exception as e:
+            print(f"Error updating shadow paths: {e}")
+    
     # =========================================================================
     #  4. 分组管理 (Groups) - 即时保存
     # =========================================================================
