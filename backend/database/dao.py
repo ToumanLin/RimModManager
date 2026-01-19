@@ -1,6 +1,7 @@
 import datetime
 import os
 import re
+from typing import Any, Dict, List
 import uuid
 from peewee import chunked, fn, JOIN
 from backend.database.models import db, Mod, UserModData, GroupData, GroupMod
@@ -16,7 +17,7 @@ class ModDAO:
     """
 
     @staticmethod
-    def get_all_mods_with_user_data(ignore_missing=False):
+    def get_all_mods_with_user_data(ignore_missing: bool = False):
         """
         获取所有模组及其用户数据。
         如果 ignore_missing 为 True，则排除缺失的 Mod。
@@ -39,7 +40,7 @@ class ModDAO:
         return {row['package_id']: row['file_modify_time'] for row in query}
 
     @staticmethod
-    def batch_upsert_mods(mods_data_list):
+    def batch_upsert_mods(mods_data_list: List[Dict[str, Any]]):
         """
         批量插入或更新 Mod 数据 (核心扫描逻辑)。
         使用原子事务处理。
@@ -85,13 +86,12 @@ class ModDAO:
                 ).execute()
 
     @staticmethod
-    def update_user_data(package_id, data_dict):
+    def update_user_data(package_id: str, data_dict: Dict[str, Any]):
         """
         更新用户自定义数据 (Tags, Notes 等)。
         """
         with db.atomic():
             user_data, created = UserModData.get_or_create(mod_id=package_id)
-            
             # 动态设置属性
             updated = False
             for key, value in data_dict.items():
@@ -104,7 +104,172 @@ class ModDAO:
         return True
 
     @staticmethod
-    def find_missing_mods(delete=False):
+    def batch_upsert_user_data(user_data_list: List[Dict[str, Any]]):
+        """
+        批量插入或更新用户自定义数据 (Tags, Notes 等)。
+        使用原子事务处理。
+        """
+        if not user_data_list:
+            return
+        # 1. 动态获取字段信息
+        # 排除主键 mod_id (作为冲突检测目标) 和其他不应通过此接口更新的字段
+        exclude_fields = {'mod_id'}
+        # 获取所有有效字段名
+        valid_field_names = set(UserModData._meta.fields.keys()) # type: ignore
+        # 确定冲突时需要更新的字段 (On Conflict Update)
+        # 获取 user_data_list 中出现过的所有键，取交集，确保只更新传入的字段
+        input_keys = set().union(*(d.keys() for d in user_data_list))
+        update_fields = [
+            field for field in UserModData._meta.sorted_fields  # type: ignore
+            if field.name in input_keys and field.name not in exclude_fields
+        ]
+        with db.atomic():
+            for batch in chunked(user_data_list, 100):
+                # 数据清洗：移除数据库模型中不存在的字段，防止报错
+                clean_batch = []
+                for user_data in batch:
+                    clean_data = {
+                        k: v for k, v in user_data.items() 
+                        if k in valid_field_names
+                    }
+                    clean_batch.append(clean_data)
+                if not clean_batch: continue
+                # 执行 Upsert
+                # 如果记录不存在 -> Insert
+                # 如果记录存在 (mod_id冲突) -> Update preserve 列表中的字段
+                UserModData.insert_many(clean_batch).on_conflict(
+                    conflict_target=[UserModData.mod_id], 
+                    preserve=update_fields 
+                ).execute()
+    
+    @staticmethod
+    def link_mods(mod_ids: List[str]):
+        """
+        Mod 联锁操作。
+        :param mod_ids: 有序的 Mod ID 列表，例如 ['core', 'royalty', 'ideology']
+        """
+        if not mod_ids or len(mod_ids) < 1:
+            return
+        user_data_batch = []
+        total_len = len(mod_ids)
+        for i, pkg_id in enumerate(mod_ids):
+            # 计算前驱和后继
+            prev_id = mod_ids[i-1] if i > 0 else None
+            next_id = mod_ids[i+1] if i < total_len - 1 else None
+            # 构建数据字典
+            user_data_batch.append({
+                'mod_id': pkg_id,
+                'lock_previous_mod': prev_id,
+                'lock_next_mod': next_id
+            })
+        # 直接复用批量更新方法，一次性写入数据库
+        # 这会自动处理“记录不存在则创建”的情况
+        ModDAO.batch_upsert_user_data(user_data_batch)
+        return {'link_mods': user_data_batch}
+        
+    @staticmethod
+    def unlink_mods(mod_ids: List[str]):
+        """
+        解除指定 Mods 的联锁状态 (将前后锁置空)。
+        :param mod_ids: list[str] 要解锁的 Mod ID 列表
+        """
+        if not mod_ids: return
+        # 构造更新数据：将两个字段设为 None
+        data = [ {'mod_id': mid, 'lock_previous_mod': None, 'lock_next_mod': None} for mid in mod_ids ]
+        ModDAO.batch_upsert_user_data(data)
+        return {'unlink_mods': mod_ids}
+    
+    @staticmethod
+    def set_user_mods_type(mod_ids: List[str], new_type: str):
+        """
+        批量设置用户自定义 Mod 类型
+        """
+        data = [{'mod_id': mid, 'user_mod_type': new_type} for mid in mod_ids]
+        ModDAO.batch_upsert_user_data(data)
+        
+    @staticmethod
+    def set_mods_color(mod_ids: List[str], color_hex: str):
+        """
+        批量设置 Mod 颜色。
+        """
+        if not mod_ids: return
+        # 验证颜色格式
+        if color_hex and not re.match(r'^#[0-9a-fA-F]{6}$', color_hex):
+            raise ValueError("Invalid color format. Use #RRGGBB.")
+        # 构造数据调用 batch_upsert
+        data = [{'mod_id': mid, 'sign_color': color_hex} for mid in mod_ids]
+        ModDAO.batch_upsert_user_data(data)
+        
+    @staticmethod
+    def add_tags_to_mods(mod_ids: List[str], new_tags: List[str]):
+        """
+        向指定 Mod 追加标签（自动去重）。
+        """
+        if not mod_ids or not new_tags: return
+        
+        with db.atomic():
+            # 1. 查出已有的记录
+            existing_records = UserModData.select().where(UserModData.mod_id.in_(mod_ids))
+            existing_map = {r.mod_id_id: r for r in existing_records} # Peewee 中外键ID属性常带_id后缀
+            batch_data = []
+            for mid in mod_ids:
+                record = existing_map.get(mid)
+                current_tags = record.tags if record and record.tags else []
+                # 集合运算：合并并去重
+                # 注意：JSONField 读取出来通常是 List
+                updated_tags = list(set(current_tags + new_tags))
+                batch_data.append({
+                    'mod_id': mid,
+                    'tags': updated_tags
+                })
+                
+            # 2. 写入
+            ModDAO.batch_upsert_user_data(batch_data)
+    
+    @staticmethod
+    def remove_tags_from_mods(mod_ids: List[str], remove_tags: List[str]):
+        """
+        从指定 Mod 中批量移除标签。
+        :param mod_ids: list[str] Mod ID 列表
+        :param remove_tags: list[str] 要移除的标签列表
+        """
+        if not mod_ids or not remove_tags: return
+        
+        # 转换为集合提高查找效率
+        remove_set = set(remove_tags)
+
+        with db.atomic():
+            # 1. 查出已有的记录（只查涉及的 Mod）
+            existing_records = UserModData.select().where(UserModData.mod_id.in_(mod_ids))
+            existing_map = {r.mod_id_id: r for r in existing_records}
+            
+            batch_data = []
+            for mid in mod_ids:
+                record = existing_map.get(mid)
+                
+                # 如果数据库里没记录，或者记录里没标签，直接跳过（不用更新）
+                if not record or not record.tags:
+                    continue
+                
+                current_tags = record.tags # 这是一个 list
+                
+                # 过滤逻辑：保留不在 remove_set 中的标签
+                # 使用列表推导式保持原有顺序（虽然 Tag 顺序通常不重要，但保持更好）
+                new_tags = [t for t in current_tags if t not in remove_set]
+                
+                # 只有当标签数量确实发生变化时才加入更新队列（性能优化）
+                if len(new_tags) != len(current_tags):
+                    batch_data.append({
+                        'mod_id': mid,
+                        'tags': new_tags
+                    })
+            
+            # 2. 只有在有数据变动时才执行数据库写入
+            if batch_data:
+                ModDAO.batch_upsert_user_data(batch_data)
+    
+    @staticmethod
+    def find_missing_mods(delete: bool = False):
         """
         查找并处理数据库中路径无效的 Mod。
         :param delete: 
@@ -147,12 +312,11 @@ class ModDAO:
                 Mod.update(path='').where(Mod.package_id.in_(deleted_mods)).execute()
         
         return {'missing_mods': missing_mods, 'deleted_mods': deleted_mods}
-        
-        
+    
     @staticmethod
     def clean_invalid_shadow_paths():
         """
-        [新增] 清理所有 Mod 中失效的 shadow_paths。
+        清理所有 Mod 中失效的 shadow_paths。
         遍历检查物理路径是否存在，不存在则移除。
         返回: 清理了多少个失效路径
         """
@@ -188,6 +352,7 @@ class ModDAO:
                     # print(f"Cleaned {removed_num} shadow paths for {mod.package_id}")
 
         return cleaned_count
+    
     
     
         
@@ -239,12 +404,14 @@ class GroupDAO:
         return groups
 
     @staticmethod
-    def create_group(name, color='#ffffff'):
+    def create_group(name: str, color: str = '#ffffff'):
         """创建新分组"""
+        # 验证颜色格式
+        if not color or not re.match(r'^#[0-9a-fA-F]{6}$', color):
+            color = '#ffffff'
         new_id = uuid.uuid4().hex
         # 获取当前最大的 sort_index，以便排在最后
         max_idx = GroupData.select(fn.MAX(GroupData.sort_index)).scalar() or 0
-        
         return GroupData.create(
             group_id=new_id,
             name=name,
@@ -254,12 +421,12 @@ class GroupDAO:
         )
 
     @staticmethod
-    def delete_group(group_id):
+    def delete_group(group_id: str):
         """删除分组 (级联删除 GroupMod 会由数据库外键约束或Peewee处理)"""
         return GroupData.delete().where(GroupData.group_id == group_id).execute()
 
     @staticmethod
-    def update_group_info(group_id, **kwargs):
+    def update_group_info(group_id: str, **kwargs):
         """
         更新分组属性 (重命名、改色、折叠状态)。
         kwargs: {'name': 'NewName', 'color': '...', 'is_expanded': False}
@@ -267,7 +434,7 @@ class GroupDAO:
         return GroupData.update(**kwargs).where(GroupData.group_id == group_id).execute()
 
     @staticmethod
-    def add_mods_to_group(group_id, mod_ids):
+    def add_mods_to_group(group_id: str, mod_ids: List[str]):
         """
         向分组添加 Mod (支持批量)。
         自动处理重复添加的情况（如果是联合主键，需要 try-except 或 ignore）。
@@ -290,7 +457,7 @@ class GroupDAO:
             GroupMod.insert_many(data_source).on_conflict_ignore().execute()
 
     @staticmethod
-    def remove_mods_from_group(group_id, mod_ids):
+    def remove_mods_from_group(group_id: str, mod_ids: List[str]):
         """从分组移除 Mod"""
         query = GroupMod.delete().where(
             (GroupMod.group_id == group_id) & 
@@ -307,7 +474,7 @@ class GroupDAO:
         GroupData.update(is_expanded=is_expanded).execute()
 
     @staticmethod
-    def reorder_groups(group_id_list):
+    def reorder_groups(group_id_list: List[str]):
         """
         重新排序分组本身。
         前端拖拽分组位置后，发送新的 group_id 顺序列表。
@@ -317,7 +484,7 @@ class GroupDAO:
                 GroupData.update(sort_index=idx).where(GroupData.group_id == gid).execute()
 
     @staticmethod
-    def reorder_mods_in_group(group_id, mod_id_list):
+    def reorder_mods_in_group(group_id: str, mod_id_list: List[str]):
         """
         重新排序分组内的 Mod。
         优化策略：直接删除该组旧关系，批量插入新关系。
@@ -344,3 +511,11 @@ class GroupDAO:
             # chunked 并非必须，除非 mod_id_list 超过 999 (SQLite 限制)
             for batch in chunked(data_source, 500):
                 GroupMod.insert_many(batch).execute()
+    
+    
+    
+    
+    
+    
+    
+    

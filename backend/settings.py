@@ -105,16 +105,13 @@ class SettingsManager:
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
             # 创建默认对象
             cfg = AppConfig()
-            
             # 递归更新逻辑
             # 1. 更新顶层字段
             for k, v in data.items():
                 if hasattr(cfg, k) and k != 'network':
                     setattr(cfg, k, v)
-            
             # 2. 显式处理 network 嵌套
             if 'network' in data:
                 net_data = data['network']

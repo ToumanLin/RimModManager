@@ -67,12 +67,13 @@ class ModAnalyzer:
             # 判断当前文件夹的性质
             rel_path = os.path.relpath(root, mod_path).replace('\\', '/')
             path_parts = rel_path.split('/')
+            lower_path_parts = [part.lower() for part in path_parts]
             
-            is_about_dir = 'About' in path_parts
-            is_lang_dir = 'Languages' in path_parts
-            is_defs_dir = 'Defs' in path_parts
-            is_patches_dir = 'Patches' in path_parts
-            is_assemblies_dir = 'Assemblies' in path_parts
+            is_about_dir = 'about' in lower_path_parts
+            is_lang_dir = 'languages' in lower_path_parts
+            is_defs_dir = 'defs' in lower_path_parts
+            is_patches_dir = 'patches' in lower_path_parts
+            is_assemblies_dir = 'assemblies' in lower_path_parts
 
             # --- 语言探测 ---
             # 只要在 Languages 文件夹下，尝试提取语言代码

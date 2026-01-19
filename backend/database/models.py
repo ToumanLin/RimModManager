@@ -56,7 +56,7 @@ class Mod(BaseModel):
     load_after_mods = UTF8JSONField(default=list)         # 前置Mod ['ludeon.rimworld','ludeon.rimworld2']
     load_before_mods = UTF8JSONField(default=list)        # 后置Mod ['ludeon.rimworld','ludeon.rimworld2']
     incompatible_mods = UTF8JSONField(default=list)       # 不兼容Mod ['ludeon.rimworld','ludeon.rimworld2']
-    save_breaking = IntegerField(default=0)         # 是否破坏存档 (ModSync)，-1: 破坏, 0：未知, 1: 不破坏 
+    save_breaking = IntegerField(default=0)               # 是否破坏存档 (ModSync)，-1: 破坏, 0：未知, 1: 不破坏 
     
     # 时间戳 (用于增量扫描)
     mod_update_time = DateTimeField(null=True)      # mod更新时间（通常为steam workshop），用于记录提示
@@ -73,7 +73,7 @@ class UserModData(BaseModel):
     """
     存储用户对 Mod 的自定义数据 (与 Mod 表 1对1，避免重新扫描时丢失)
     """
-    mod_id = ForeignKeyField(Mod, backref='user_data', on_delete='CASCADE') # 外键关联 Mod 表
+    mod_id = ForeignKeyField(Mod, backref='user_data', on_delete='CASCADE', primary_key=True) # 外键关联 Mod 表
     alias_name = CharField(null=True)           # 别名
     notes = TextField(null=True)                # 用户备注
     tags = UTF8JSONField(default=list)          # 用户打的标签 ['排队必备', '前置']
@@ -113,7 +113,6 @@ def init_db(db_path):
         'journal_mode': 'wal',  # 提高并发读写性能
         'cache_size': -1024 * 64
     })
-    
     db.connect()    # 连接数据库
     # safe=True 表示表存在则不创建
     db.create_tables([Mod, UserModData, GroupData, GroupMod], safe=True)

@@ -3,7 +3,7 @@ import time
 import functools
 import shutil
 from dataclasses import dataclass, asdict
-from typing import Any
+from typing import Any, Dict, List
 from send2trash import send2trash
 
 # 1. 引入配置管理
@@ -105,7 +105,6 @@ class API:
         self.load_order_mgr = LoadOrderManager() # 内部会自动从 settings 读取路径
         self.scanner = ModScanner()
         logger.info("API Layer Ready.")
-
 
     def _ensure_dlc_parser(self):
         """懒加载 DLC Parser"""
@@ -241,7 +240,7 @@ class API:
     #  2. 设置与路径 (Settings & Paths)
     # =========================================================================
     @log_api_call
-    def auto_detect_paths(self, update_config=True):
+    def auto_detect_paths(self, update_config: bool = True):
         """自动检测游戏路径"""
         result = self.game_mgr.auto_detect_paths()
         
@@ -255,7 +254,7 @@ class API:
         
         return ApiResponse.error("无法自动检测到游戏路径，请手动设置！")
 
-    def save_setting(self, key, value):
+    def save_setting(self, key: str, value: Any):
         """保存单个设置项"""
         settings.set(key, value)
         # 如果修改的是路径，可能需要刷新管理器
@@ -263,12 +262,11 @@ class API:
             self.load_order_mgr = LoadOrderManager()
         return ApiResponse.success()
 
-    def save_all_settings(self, settings_obj):
+    def save_all_settings(self, settings_obj: dict):
         """保存所有设置 (前端设置面板保存时调用)"""
         # 批量更新
         for k, v in settings_obj.items():
             settings.set(k, v) # settings.set 内部会自动 save，这里可能稍微有点IO冗余，但安全
-        
         # 刷新管理器
         self.load_order_mgr = LoadOrderManager()
         return ApiResponse.success()
@@ -278,7 +276,7 @@ class API:
     #  3. Mod 扫描与管理 (Scanning & Mods)
     # =========================================================================
     @log_api_call
-    def scan_mods(self, specific_paths=None, forced_update=False):
+    def scan_mods(self, specific_paths: List[str]|None = None, forced_update: bool = False):
         """
         触发后台模组扫描。
         立即返回状态，前端通过监听 'scan-progress' 和 'scan-complete' 事件获取更新。
@@ -286,38 +284,31 @@ class API:
         :param forced_update: 可选，是否强制更新所有 Mod 的数据。默认 False。
         """
         paths_to_scan = []
-        
         if specific_paths:
             paths_to_scan = specific_paths
         else:
             # 默认扫描策略：DLC + Local + Workshop
             cfg = settings.config
-            
             # 1. DLC (Data 目录)
             if cfg.game_install_path and os.path.exists(cfg.game_install_path):
                 data_dir = os.path.join(cfg.game_install_path, 'Data')
                 if os.path.exists(data_dir):
                     paths_to_scan.append(data_dir)
-            
             # 2. Local Mods
             if cfg.local_mods_path and os.path.exists(cfg.local_mods_path):
                 paths_to_scan.append(cfg.local_mods_path)
-            
             # 3. Workshop Mods
             if cfg.workshop_mods_path and os.path.exists(cfg.workshop_mods_path):
                 paths_to_scan.append(cfg.workshop_mods_path)
-
         if not paths_to_scan:
             return ApiResponse.error("没有配置有效的扫描路径")
-        
-
         # 调用异步扫描
         # 注意：这里不需要 try-catch 包裹整个逻辑，因为异常在线程内被捕获并通过事件发回了
         result = self.scanner.scan_paths_async(paths_to_scan, thumbnail_mgr=self.file_mgr, forced_update=forced_update)
-        
         return ApiResponse.success({ "details": result },"后台扫描已启动")
 
-    def update_mod_user_data(self, package_id, data_dict):
+    @log_api_call
+    def update_mod_user_data(self, package_id: str, data_dict: dict):
         """
         即时保存用户对 Mod 的修改 (标签, 备注, 颜色等)
         """
@@ -327,7 +318,62 @@ class API:
         except Exception as e:
             return ApiResponse.error(str(e))
 
-    def resolve_scan_conflicts(self, operations):
+    @log_api_call
+    def set_mods_color(self, mod_ids: List[str], color: str):
+        """批量设置 Mod 颜色"""
+        try:
+            ModDAO.set_mods_color(mod_ids, color)
+            return ApiResponse.success(message="颜色已设置")
+        except Exception as e:
+            return ApiResponse.error((mod_ids, color, str(e)))
+    
+    @log_api_call
+    def set_user_mods_type(self, mod_ids: List[str], new_type: str):
+        """批量设置用户自定义 Mod 类型"""
+        try:
+            ModDAO.set_user_mods_type(mod_ids, new_type)
+            return ApiResponse.success(message="类型已设置")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def link_mods(self, mod_ids: List[str]):
+        """批量设置 Mod 联锁"""
+        try:
+            result = ModDAO.link_mods(mod_ids)
+            return ApiResponse.success(data=result)
+        except Exception as e:
+            return ApiResponse.error(str(e))
+        
+    @log_api_call
+    def unlink_mods(self, mod_ids: List[str]):
+        """批量解除 Mod 联锁"""
+        try:
+            result = ModDAO.unlink_mods(mod_ids)
+            return ApiResponse.success(data=result)
+        except Exception as e:
+            return ApiResponse.error(str(e))
+    
+    @log_api_call
+    def add_tags_to_mods(self, mod_ids: List[str], tags: List[str]):
+        """批量添加标签"""
+        try:
+            ModDAO.add_tags_to_mods(mod_ids, tags)
+            return ApiResponse.success(message="标签已添加")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+    
+    @log_api_call
+    def remove_tags_from_mods(self, mod_ids: List[str], tags: List[str]):
+        """批量移除标签"""
+        try:
+            ModDAO.remove_tags_from_mods(mod_ids, tags)
+            return ApiResponse.success(message="标签已移除")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+    
+    @log_api_call
+    def resolve_scan_conflicts(self, operations: List[Dict]):
         """
         处理扫描发现的冲突。
         operations: List[Dict]
@@ -382,7 +428,7 @@ class API:
         except Exception as e:
             return ApiResponse.error(f"处理出错: {str(e)}")
         
-    def _add_shadow_path(self, package_id, path):
+    def _add_shadow_path(self, package_id: str, path: str):
         """辅助方法：更新 Mod 的 shadow_paths 字段"""
         try:
             mod = Mod.get_or_none(Mod.package_id == package_id)
@@ -403,7 +449,7 @@ class API:
     def get_groups(self):
         return ApiResponse.success(GroupDAO.get_all_groups_structured())
 
-    def create_group(self, name, color):
+    def create_group(self, name: str, color: str):
         try:
             # 后端生成 UUID 并入库
             new_group = GroupDAO.create_group(name, color)
@@ -422,19 +468,19 @@ class API:
         except Exception as e:
             return ApiResponse.error(str(e))
 
-    def delete_group(self, group_id):
+    def delete_group(self, group_id: str):
         return ApiResponse.success(GroupDAO.delete_group(group_id))
 
-    def update_group(self, group_id, updates):
+    def update_group(self, group_id: str, updates: dict):
         """更新分组属性 (重命名、改色、折叠)"""
         # print(f"更新分组 {group_id} 为 {updates}")
         return ApiResponse.success(GroupDAO.update_group_info(group_id, **updates))
 
-    def group_add_mods(self, group_id, mod_ids):
+    def group_add_mods(self, group_id: str, mod_ids: List[str]):
         """拖拽 Mod 进分组"""
         return ApiResponse.success(GroupDAO.add_mods_to_group(group_id, mod_ids))
 
-    def group_remove_mods(self, group_id, mod_ids):
+    def group_remove_mods(self, group_id: str, mod_ids: List[str]):
         """从分组移除 Mod"""
         return ApiResponse.success(GroupDAO.remove_mods_from_group(group_id, mod_ids))
     
@@ -443,11 +489,11 @@ class API:
         GroupDAO.update_all_expansion_state(is_expanded)
         return ApiResponse.success()
 
-    def group_reorder(self, group_id_list):
+    def group_reorder(self, group_id_list: List[str]):
         """分组排序"""
         return ApiResponse.success(GroupDAO.reorder_groups(group_id_list))
 
-    def group_content_reorder(self, group_id, mod_id_list):
+    def group_content_reorder(self, group_id: str, mod_id_list: List[str]):
         """分组内 Mod 排序"""
         return ApiResponse.success(GroupDAO.reorder_mods_in_group(group_id, mod_id_list))
 
@@ -473,7 +519,7 @@ class API:
             "active_ids": active_ids
         })
     
-    def open_load_order_file(self, mods_config_file_path=None):
+    def open_load_order_file(self, mods_config_file_path: str|None = None):
         """
         打开 ModsConfig.xml 文件
         """
@@ -498,8 +544,7 @@ class API:
             return ApiResponse.error("解析文件出错!")
         return ApiResponse.success(result)
     
-    
-    def save_load_order(self, active_ids):
+    def save_load_order(self, active_ids: List[str]):
         """
         保存当前激活列表到 ModsConfig.xml
         :param active_ids: 激活的 Mod 列表
@@ -511,7 +556,7 @@ class API:
         except Exception as e:
             return ApiResponse.error(f"保存 ModsConfig.xml 时出错: {e}")
     
-    def export_load_order(self, active_ids, target_path=None, trigger_dialog=True):
+    def export_load_order(self, active_ids: List[str], target_path: str|None = None, trigger_dialog: bool = True):
         """
         导出当前加载顺序到 ModsConfig.xml
         :param active_ids: 激活的 Mod 列表
@@ -537,7 +582,7 @@ class API:
     #  6. 文件与资源操作 (Files & Assets)
     # =========================================================================
 
-    def open_path(self, path):
+    def open_path(self, path: str):
         try:
             self.file_mgr.open_in_explorer(path)
             print(f"打开路径: {path}")
@@ -546,7 +591,7 @@ class API:
             print(f"打开路径时出错: {e}")
             return ApiResponse.error(f"打开路径时出错: {e}")
     
-    def delete_path(self, path):
+    def delete_path(self, path: str):
         """删除文件/文件夹"""
         try:
             success = self.file_mgr.delete_path(path)
@@ -563,7 +608,7 @@ class API:
         except Exception as e:
             return ApiResponse.error(f"获取备份文件时出错: {e}")
     
-    def select_folder_dialog(self, initial_dir=''):
+    def select_folder_dialog(self, initial_dir: str = ''):
         """
         打开系统原生的文件夹选择框
         """
@@ -575,7 +620,7 @@ class API:
             return ApiResponse.error(f"选择文件夹时出错: {e}")
         return ApiResponse.error("未选择文件夹")
     
-    def select_file_dialog(self, initial_dir='', file_types=('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
+    def select_file_dialog(self, initial_dir: str = '', file_types = ('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
         """
         打开系统原生的文件选择框
         """
@@ -587,7 +632,7 @@ class API:
             return ApiResponse.error(f"选择文件时出错: {e}")
         return ApiResponse.error("未选择文件")
 
-    def save_file_dialog(self, initial_dir='', file_types=('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
+    def save_file_dialog(self, initial_dir: str = '', file_types = ('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
         """
         打开系统原生的文件保存框
         """
@@ -614,7 +659,7 @@ class API:
             return ApiResponse.error(str(e))
 
     @log_api_call
-    def read_game_log(self, filename):
+    def read_game_log(self, filename: str):
         """ 读取并解析指定的游戏日志 """
         # 这是一个可能耗时的操作，@log_api_call 会帮我们记录耗时
         result = self.game_log_mgr.read_and_parse_log(filename)
