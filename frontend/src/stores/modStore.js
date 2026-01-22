@@ -87,6 +87,8 @@ export const useModStore = defineStore('mods', () => {
   // 数据状态
   const allModsMap = ref(new Map()) // 使用 Map 加速查找
   const dataVersion = ref(0) // 数据版本号
+  const appVersion = ref('') // 应用版本号
+  const build = ref('') // 构建类型
 
   const activeIds = ref([]) // 绑定的启用列表
   const savedActiveIds = ref([]) // 原始启用列表快照
@@ -351,7 +353,10 @@ export const useModStore = defineStore('mods', () => {
           tempMap.set(mod.package_id.toLowerCase(), mod)
         })
         allModsMap.value = tempMap
-
+        // 更新激活加载时间
+        activeLoadModifyTime.value = res.data.active_load_modify_time
+        appVersion.value = res.data.app_version
+        build.value = res.data.build
 
         // 5. 检查路径 (仅初始化时)
         if (isInit && !res.data.paths_configured) {
@@ -1500,7 +1505,8 @@ export const useModStore = defineStore('mods', () => {
     groupRemoveMods, groupReorder, groupContentReorder, takeGroupsByModId, takeGroupById,
 
     // 设置相关
-    showSettings, isLoading, isDirty, settings, showLogDrawer, showTestDrawer, showRuleDrawer,
+    showSettings, isLoading, isDirty, settings, showLogDrawer, showTestDrawer, showRuleDrawer, 
+    appVersion, build,
     openSettings, closeSettings, applySettings, saveSetting,
 
     // 系统操作

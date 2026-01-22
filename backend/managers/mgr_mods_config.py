@@ -65,8 +65,11 @@ class LoadOrderManager:
             mods_config_file_path = self.mods_config_file
         if not mods_config_file_path or not os.path.exists(mods_config_file_path):
             print(f"ModsConfig.xml not found: {mods_config_file_path}")
-            return []
-        
+            return {
+                'active_mods': [],
+                'modify_time': 0
+            }
+        modify_time = int(os.path.getmtime(mods_config_file_path)*1000)
         active_list = []
         try:
             # 使用 recover=True 容错解析
@@ -85,7 +88,10 @@ class LoadOrderManager:
         except Exception as e:
             print(f"读取 ModsConfig.xml 时出错: {e}")
             
-        return active_list
+        return {
+            'active_mods': active_list,
+            'modify_time': modify_time
+        }
 
     def save_active_mods(self, active_ids, target_path=None, trigger_dialog=False):
         """
@@ -248,9 +254,9 @@ class LoadOrderManager:
         earlier_files = glob.glob(os.path.join(self.earlier_dir, "*.xml"))
         other_files = glob.glob(os.path.join(self.other_dir, "*.xml"))
         result = {
-            "today": today_files,
-            "earlier": earlier_files,
-            "other": other_files
+            "today": [{'path': f,'modify_time': int(os.path.getmtime(f)*1000) } for f in today_files],
+            "earlier": [{'path': f,'modify_time': int(os.path.getmtime(f)*1000) } for f in earlier_files],
+            "other": [{'path': f,'modify_time': int(os.path.getmtime(f)*1000) } for f in other_files]
         }
         return result
 

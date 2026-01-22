@@ -8,7 +8,7 @@
       <h1 class="font-bold tracking-wider text-lg bg-linear-to-r from-white to-gray-400 bg-clip-text text-transparent">
         <span class="text-accent-primary animate-breathe ">RIM</span> MODMANAGER
       </h1>
-      <span class="px-2 py-0.5 rounded text-[10px] bg-white/5 text-text-dim border border-white/5">DEV BUILD</span>
+      <span class="px-2 py-0.5 rounded text-[10px] bg-white/5 text-text-dim border border-white/5 ">{{ store.appVersion }}-{{ store.build }}</span>
     </div>
 
     <div class="flex items-center gap-3">
@@ -19,7 +19,12 @@
 
       <button @click="store.showLogDrawer = !store.showLogDrawer" v-tooltip="`日志页面`"
         class="p-2 rounded-full hover:bg-glow text-text-dim hover:text-white transition bg-transparent">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-clock-icon lucide-clipboard-clock"><path d="M16 14v2.2l1.6 1"/><path d="M16 4h2a2 2 0 0 1 2 2v.832"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h2"/><circle cx="16" cy="16" r="6"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M16 14v2.2l1.6 1"/><path d="M16 4h2a2 2 0 0 1 2 2v.832"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h2"/><circle cx="16" cy="16" r="6"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+      </button>
+
+      <button @click="store.showRuleDrawer = !store.showRuleDrawer" v-tooltip="`规则页面`"
+        class="p-2 rounded-full hover:bg-glow text-text-dim hover:text-white transition bg-transparent">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13"/><path d="m8 6 2-2"/><path d="m18 16 2-2"/><path d="m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
       </button>
 
       <div v-tooltip="`打开文件夹`" class="p-2 rounded-full group/folder relative hover:bg-glow text-text-dim hover:text-white transition bg-transparent">

@@ -1,6 +1,6 @@
-from enum import auto
 import json
 from peewee import Model, Field, SqliteDatabase, CharField, TextField, DateTimeField, ForeignKeyField, BooleanField, IntegerField, CompositeKey
+from backend._version import __db_version__
 
 db = SqliteDatabase(None)
 
@@ -107,6 +107,10 @@ class GroupMod(BaseModel):
         # 联合主键，防止同一个 Mod 在同一个组里出现两次
         primary_key = CompositeKey('group_id', 'mod_id')
 
+class SystemInfo(BaseModel):
+    key = CharField(primary_key=True)
+    value = CharField()
+
 def init_db(db_path):
     """初始化数据库"""
     db.init(db_path, pragmas={
@@ -117,6 +121,20 @@ def init_db(db_path):
     # safe=True 表示表存在则不创建
     db.create_tables([Mod, UserModData, GroupData, GroupMod], safe=True)
     # db.close()  # 关闭数据库连接
+    # 检查数据库版本
+    CURRENT_DB_VERSION = __db_version__ 
+    try:
+        ver_record = SystemInfo.get_or_none(SystemInfo.key == 'db_version')
+        if not ver_record:
+            # 新库，写入版本
+            SystemInfo.create(key='db_version', value=CURRENT_DB_VERSION)
+        elif ver_record.value != CURRENT_DB_VERSION:
+            # 版本不匹配！需要迁移或重置
+            print(f"数据库版本过期: {ver_record.value} -> {CURRENT_DB_VERSION}")
+            pass 
+    except Exception as e:
+        print(f"DB Version check failed: {e}")
+    
     
 def clear_db():
     """

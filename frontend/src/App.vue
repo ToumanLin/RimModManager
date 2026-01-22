@@ -68,7 +68,7 @@
           </div>
           
           <!-- 按钮组 -->
-          <div class="p-3 rounded-b-2xl grid grid-cols-2 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-white/5">
+          <div class="p-3 rounded-b-2xl grid grid-cols-3 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-white/5">
             
             <!-- 刷新按钮 -->
             <button :class="{'scan': store.scanProgress.scanning}"
@@ -82,13 +82,21 @@
               <!-- <svg v-if="store.scanProgress.scanning" class="animate-spin w-3 h-3 text-accent-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> -->
               <span >{{ store.scanProgress.scanning ? '扫描中...' : '刷新' }}</span>
             </button>
+            
+            <!-- 自动排序按钮 -->
+            <button class="col-span-1 py-1 rounded-lg text-sm font-bold uppercase tracking-wider bg-accent-tip/80 text-black hover:bg-accent-tip shadow-lg shadow-accent-primary/10
+                     flex items-center justify-center gap-1 transition-all duration-300 relative overflow-hidden"
+                     @click="store.autoSortMods()"
+            >
+              <span >自动排序</span>
+            </button>
 
             <!-- 保存按钮 (Dirty 状态提示) -->
             <button class="col-span-1 py-1 rounded-lg text-sm font-bold uppercase tracking-wider
                      flex items-center justify-center gap-1 transition-all duration-300 relative overflow-hidden"
               :class="[store.isDirty 
-                  ? 'bg-accent-warn text-black hover:bg-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.4)] animate-pulse-soft' 
-                  : 'bg-accent-primary text-black hover:bg-cyan-400 shadow-lg shadow-accent-primary/10'
+                  ? 'bg-accent-secondary text-black hover:bg-accent-warn shadow-[0_0_15px_rgba(234,179,8,0.4)] animate-pulse-soft' 
+                  : 'bg-accent-primary/60 text-black hover:bg-accent-primary shadow-lg shadow-accent-primary/10'
               ]"
               @click="store.saveLoadOrder()"
             >
@@ -102,7 +110,7 @@
             </button>
 
             <!-- 启动游戏 -->
-            <button class="col-span-2 py-3 mt-1 rounded-lg bg-accent-success text-white text-mdfont-bold 
+            <button class="col-span-3 py-3 mt-1 rounded-lg bg-accent-success text-white text-mdfont-bold 
                      shadow-lg shadow-accent-success/20 flex items-center justify-center gap-2 
                      transition-all duration-200 uppercase tracking-widest
                      hover:bg-[#059669] hover:shadow-accent-success/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
@@ -201,6 +209,17 @@
     
     <DebugPanel />
 
+    <!-- 重复包名冲突弹窗 -->
+    <ConflictResolver />
+    
+    <!-- 设置弹窗 -->
+    <SettingsModal />
+
+    <!-- 规则面板 -->
+    <div v-show="store.showRuleDrawer" @click.self="store.showRuleDrawer = false" class="fixed top-0 left-0 w-full h-full p-20 bg-black/50 backdrop-blur-2xl rounded-lg z-999">
+      <RulePanel />
+    </div>
+
     <!-- 状态条 -->
     <StatusBar class="relative z-20 flex-none" />
 
@@ -209,13 +228,6 @@
 
     <!-- 悬浮面板 -->
     <HoverPanel />
-
-    <!-- 重复包名冲突弹窗 -->
-    <ConflictResolver />
-    
-    <!-- 设置弹窗 -->
-    <SettingsModal />
-
   </div>
 </template>
 
@@ -239,6 +251,7 @@ import Temp3 from './components/utils/temp3.vue'
 import Temp2 from './components/utils/temp2.vue'
 import Temp4 from './components/utils/temp4.vue'
 import DebugPanel from './components/DebugPanel.vue'
+import RulePanel from './components/RulePanel.vue'
 
 const store = useModStore()
 

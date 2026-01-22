@@ -11,6 +11,7 @@ from send2trash import send2trash
 # 1. 引入配置管理
 from backend.settings import settings
 from backend.utils.logger import logger
+from backend._version import __version__, __build__
 
 # 2. 引入数据库层
 from backend.database.models import Mod, init_db
@@ -23,6 +24,7 @@ from backend.managers.mgr_files import FileManager
 from backend.scanner.parser_dlc import DLCParser
 from backend.scanner.mod_scanner import ModScanner
 from backend.managers.mgr_game_logs import GameLogManager
+from backend.managers.mgr_sorter import OrderSorter
 
 
 def log_api_call(func):
@@ -106,6 +108,7 @@ class API:
         self.game_log_mgr = GameLogManager()
         self.load_order_mgr = LoadOrderManager() # 内部会自动从 settings 读取路径
         self.scanner = ModScanner()
+        self.sorter = OrderSorter()
         logger.info("API Layer Ready.")
 
     def _ensure_dlc_parser(self):
@@ -178,6 +181,8 @@ class API:
                 mod['icon_url'] = None 
                 
         result = {
+            "app_version": __version__,
+            "build": __build__,
             "paths_configured": paths_valid,
             "settings": asdict(settings.config), # 转为字典发给前端
             "all_mods": all_mods,
@@ -665,7 +670,139 @@ class API:
             return ApiResponse.error(f"保存文件时出错: {e}")
         return ApiResponse.error("未选择文件")
     
+    # =========================================================================
+    #  7. 排序管理 (Sort Management)
+    # =========================================================================
+
+    @log_api_call
+    def auto_sort_mods(self, active_ids: List[str]):
+        """
+        前端点击“自动排序”时调用
+        """
+        try:
+            result = self.sorter.sort(active_ids)
+            # result 包含: sorted_ids, auto_activated, warnings
+            msg = "排序完成"
+            if result.get('auto_activated'):
+                msg += f" (自动激活了 {len(result['auto_activated'])} 个联锁项)"
+            
+            return ApiResponse.success(result, msg)
+        except Exception as e:
+            logger.error(f"Auto sort failed: {e}", exc_info=True)
+            return ApiResponse.error(f"排序失败: {str(e)}")
+        
+    @log_api_call
+    def check_load_order_health(self, active_ids: List[str]):
+        """
+        常态化健康检查：检测当前顺序是否违反 About.xml、社区规则或用户规则
+        前端通常在拖拽停止后调用
+        """
+        try:
+            issues = self.sorter.check_health(active_ids)
+            # 返回的是 List[dict]，每个 dict 包含 mod_id, type, level, message, source
+            return ApiResponse.success(issues)
+        except Exception as e:
+            return ApiResponse.error(f"健康检查失败: {str(e)}")
+        
+    # =========================================================================
+    #  9. 规则管理 (Rule Management)
+    # =========================================================================
+
+    @log_api_call
+    def get_all_rules(self):
+        """
+        获取所有规则（用于规则管理界面显示）
+        """
+        return ApiResponse.success({
+            "community_rules_count": len(self.sorter.rule_mgr.community_rules),
+            "user_mod_rules": self.sorter.rule_mgr.user_mod_rules,
+            "user_dynamic_rules": self.sorter.rule_mgr.user_dynamic_rules
+        })
+
+    @log_api_call
+    def rule_update_single(self, package_id: str, rule_content: dict):
+        """保存单个规则"""
+        try:
+            success = self.sorter.rule_mgr.update_single_mod_rule(package_id, rule_content)
+            return ApiResponse.success() if success else ApiResponse.error("保存失败")
+        except Exception as e:
+            return ApiResponse.error(f"保存失败: {str(e)}")
+        
+    @log_api_call
+    def rule_delete_single(self, package_id: str):
+        """删除单个规则"""
+        try:
+            success = self.sorter.rule_mgr.delete_single_mod_rule(package_id)
+            return ApiResponse.success() if success else ApiResponse.error("删除失败")
+        except Exception as e:
+            return ApiResponse.error(f"删除失败: {str(e)}")
     
+    @log_api_call
+    def rule_toggle_dynamic(self, rule_id: str, enabled: bool):
+        """切换动态规则的启用状态"""
+        try:
+            success = self.sorter.rule_mgr.toggle_dynamic_rule(rule_id, enabled)
+            return ApiResponse.success() if success else ApiResponse.error("切换失败")
+        except Exception as e:
+            return ApiResponse.error(f"切换失败: {str(e)}")
+    
+    @log_api_call
+    def rule_update_dynamic(self, rule_obj: dict):
+        """保存动态规则"""
+        try:
+            success = self.sorter.rule_mgr.upsert_dynamic_rule(rule_obj)
+            return ApiResponse.success() if success else ApiResponse.error("保存失败")
+        except Exception as e:
+            return ApiResponse.error(f"保存失败: {str(e)}")
+
+    @log_api_call
+    def rule_delete_dynamic(self, rule_id: str):
+        """删除动态规则"""
+        try:
+            success = self.sorter.rule_mgr.delete_dynamic_rule(rule_id)
+            return ApiResponse.success() if success else ApiResponse.error("删除失败")
+        except Exception as e:
+            return ApiResponse.error(f"删除失败: {str(e)}")
+
+    @log_api_call
+    def rule_update_community(self, raw_json: str):
+        """重写社区库"""
+        try:
+            success = self.sorter.rule_mgr.overwrite_community_rules(raw_json)
+            return ApiResponse.success() if success else ApiResponse.error("重写失败")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def rule_export_bundle(self, dynamic_rule_ids: List[str], initial_dir: str = '', file_types = ('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
+        """弹出对话框并导出"""
+        try:
+            bundle = self.sorter.rule_mgr.create_export_bundle(dynamic_rule_ids)
+            # 调用文件管理器弹出保存框
+            default_name = f"RimOrder_Rules_{datetime.now().strftime('%m%d')}.json"
+            path = self.file_mgr.save_file_dialog(initial_dir, default_name, file_types)
+            if path:
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(bundle, f, indent=4, ensure_ascii=False)
+                return ApiResponse.success(message="导出成功")
+            return ApiResponse.warning("已取消")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def rule_import_bundle(self):
+        """弹出对话框并导入"""
+        try:
+            path = self.file_mgr.select_file_dialog(file_types=('JSON Files (*.json)',))
+            if path:
+                with open(path, 'r', encoding='utf-8') as f:
+                    bundle = json.load(f)
+                self.sorter.rule_mgr.process_import_bundle(bundle)
+                return ApiResponse.success(message="规则包导入成功")
+            return ApiResponse.warning("已取消")
+        except Exception as e:
+            return ApiResponse.error(f"导入失败: {e}")
+
     # =========================================================================
     #  10. 日志管理 (Log Management)
     # =========================================================================
