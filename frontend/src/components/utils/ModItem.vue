@@ -125,7 +125,7 @@
 <script setup>
 import { computed, h, nextTick  } from 'vue'
 import { MOD_COLOR_LIST, ISSUE_TYPE, MOD_TYPE_MAP, ISSUE_TITLE_MAP, MOD_TYPE_ICON_MAP } from '../../utils/constants'
-import { useAppStore } from '@/stores/appStore'
+import { useAppStore } from '../../stores/appStore'
 import { useModStore } from '../../stores/modStore'
 import { useGroupStore } from '../../stores/groupStore'
 import { useRuleStore } from '../../stores/ruleStore'

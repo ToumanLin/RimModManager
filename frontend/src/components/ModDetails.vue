@@ -415,9 +415,15 @@
         </div>
 
         <!-- 别名 -->
-        <div class="mb-2">
+        <div class="mb-2 flex flex-row items-center justify-around">
           <input v-model="userAliasName" @blur="saveUserData" placeholder="在此添加自定义别名"
-              class="w-full bg-black/20 border border-white/10 rounded p-2 text-xs text-white focus:border-accent-primary focus:outline-none"/>
+              class="flex-1 w-full bg-black/20 border border-white/10 rounded p-2 text-xs text-white focus:border-accent-primary focus:outline-none"/>
+          <!-- 翻译按钮 -->
+          <button @click="translateModInfo" v-tooltip="'通过AI生成Mod别名及备注，需要配置AI'" :disabled="isUsingAI"
+            class="min-w-8 h-6 px-1.5 ml-1 flex items-center justify-center text-xs rounded-sm bg-text-dim/50 hover:bg-accent-primary hover:text-white transition-colors active:bg-accent-cool">
+            <span v-if="!isUsingAI">AI生成</span>
+            <svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          </button>
         </div>
 
         <!-- 备注 -->
@@ -471,11 +477,7 @@
           </div> -->
           
           <div class="z-999">
-            <ImageCloud 
-              :images="imageUrls" 
-              :size="300" 
-              :imageSize="50"
-            />
+            <ImageCloud :images="imageUrls" :size="300" :imageSize="50"/>
           </div>
 
         </div>
@@ -489,9 +491,9 @@
 <script setup >
 import { computed, ref, watch, nextTick } from 'vue'
 import { refDebounced, onClickOutside  } from '@vueuse/core' // 引入防抖函数
-import { MOD_COLOR_LIST, MOD_TYPE_MAP, SOURCE_TYPE_MAP } from '@/utils/constants'
+import { MOD_COLOR_LIST, MOD_TYPE_MAP, SOURCE_TYPE_MAP } from '../utils/constants'
 import { useModStore } from '../stores/modStore'
-import { useAppStore } from '@/stores/appStore'
+import { useAppStore } from '../stores/appStore'
 import { useGroupStore } from '../stores/groupStore'
 import { parseUnityRichText } from '../utils/unityTextParser'
 import { hexToRgba, hexToRgb } from '../utils/colorDeal'
@@ -530,6 +532,7 @@ const userAliasName = ref('')
 const userNotes = ref('')
 const newTagInput = ref('')
 const presetColors = MOD_COLOR_LIST
+const isUsingAI = ref(false)
 
 // === 标签管理逻辑 ===
 const tagInput = ref('')
@@ -769,6 +772,21 @@ const openSteamUrl = (url) => {
 // 定位Mod位置
 const targetItem = (mod_id) => {
   modStore.currentTargetId = mod_id
+}
+
+const translateModInfo = async () => {
+  if (!selectedMod.value) return
+  isUsingAI.value = true
+  const res = await appStore.useAI('alias_generation',{
+    name: selectedMod.value.name,
+    description: selectedMod.value.description,
+  })
+  if (res) {
+    userAliasName.value = res.alias_name
+    userNotes.value = res.notes
+    saveUserData()
+  }
+  isUsingAI.value = false
 }
 
 </script>

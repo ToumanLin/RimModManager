@@ -1,6 +1,7 @@
+# backend/settings.py
+
 import json
 import os
-import shutil
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Dict, Any, List
@@ -9,6 +10,7 @@ from typing import Dict, Any, List
 HOME_DIR = Path(os.getcwd())
 CONFIG_DIR = HOME_DIR / "data"
 CONFIG_FILE = CONFIG_DIR / "config.json"
+
 # 定义缩略图缓存目录
 CACHE_DIR = HOME_DIR / "cache" / "thumbnails"
 # 规则文件存放路径
@@ -38,7 +40,15 @@ class NetworkConfig:
     # 自定义 Hosts (域名 -> IP 映射)
     hosts: Dict[str, str] = field(default_factory=dict) 
 
-
+@dataclass
+class AIConfig:
+    enabled: bool = False
+    provider: str = "openai"  # openai, anthropic, google
+    base_url: str = "https://api.openai.com/v1"  # 允许自定义，如 DeepSeek, LocalAI
+    api_key: str = ""
+    model: str = "gpt-3.5-turbo"
+    temperature: float = 0.7
+    max_tokens: int = 2000
 
 @dataclass
 class SteamConfig:
@@ -85,6 +95,7 @@ class AppConfig:
     # --- 网络设置 ---
     network: NetworkConfig = field(default_factory=NetworkConfig)
     steam: SteamConfig = field(default_factory=SteamConfig)
+    ai: AIConfig = field(default_factory=AIConfig)
     
     # --- 开发与调试设置 ---
     debug_mode: bool = True  # 开发模式开关
