@@ -36,15 +36,66 @@ export const useAppStore = defineStore('app', () => {
   const downloadTasks = ref(new Map()) // 使用 Map 存储 {id: taskObject}
   // 全局设置
   const settings = ref({
+    // --- 路径 (Paths) ---
     game_install_path: '',
+    game_data_path: '',
+    game_config_path: '',
     workshop_mods_path: '',
     local_mods_path: '',
-    game_config_path: '',
     home_path: '',
-    game_version: '',
-    enable_auto_scan: true,
+    community_rules_url: '',
+    community_rules_path: '',
+    user_rules_path: '',
+
+    // --- 界面 (UI) ---
+    language: 'ZH-cn',
+    theme: 'system',
     window_width: 1400,
     window_height: 900,
+    font_size: 14,
+    open_url_on_system: false,
+
+    // --- 高级 (Advanced) ---
+    backup_retention_days: 30,
+    enable_auto_scan: true,
+    delete_missing_mods_data: false,
+
+    // --- 网络 (Network) - 深度嵌套 ---
+    network: {
+      proxy: {
+        enabled: false,
+        type: 'http',
+        host: '',
+        port: 0,
+        username: '',
+        password: '',
+        bypass_list: ['127.0.0.1', 'localhost']
+      },
+      hosts: {} // Object: { 'domain': 'ip' }
+    },
+
+    // --- Steam ---
+    steam: {
+      steamcmd_path: '',
+      use_steam_client: true,
+      steam_appid: 294100
+    },
+
+    // --- AI ---
+    ai: {
+      enabled: false,
+      provider: 'openai',
+      base_url: 'https://api.openai.com/v1',
+      api_key: '',
+      model: 'gpt-3.5-turbo',
+      temperature: 0.7,
+      max_tokens: 2000
+    },
+
+    // --- 调试 (Debug) ---
+    debug_mode: true,
+    log_retention_days: 7,
+    log_level: 'INFO'
   })
 
 
@@ -98,16 +149,13 @@ export const useAppStore = defineStore('app', () => {
       await waitForBackend()
       // 注册事件监听
       setupEventListeners()
-      
-      // 级联初始化其他 Store
-      const modStore = useModStore()
-      
       // 获取初始数据 (这里包含 settings, version 等)
       await refreshData(true) 
       // 界面渲染完毕后，根据设置决定是否启动后台扫描
-      if (settings.value.enable_auto_scan !== false) {
+      if (settings.value.enable_auto_scan !== false && settings.value.game_install_path) {
         console.log("启动自动扫描...")
         toast.info("自动扫描已启动...")
+        const modStore = useModStore()
         modStore.scanMods()
       }
       // 检查 Steam 工具
@@ -135,7 +183,8 @@ export const useAppStore = defineStore('app', () => {
         if (isInit && res.data.settings) {
           settings.value = res.data.settings
         }
-        if (res.data.is_first_db_init) {
+        // console.log('allmods', res.data.is_first_db_init , res.data.paths_configured , !res.data.all_mods||res.data.all_mods?.length==0)
+        if (res.data.is_first_db_init && res.data.paths_configured && (!res.data.all_mods||res.data.all_mods?.length==0)) {
           toast.warning("数据库正在进行首次初始化，此过程可能需要您等待一段时间，请您耐心等候。",{position: "top-center",timeout: 10000})
         }
         // 更新 Groups (防止分组内的 Mod 被删了但分组里还有 ID)
@@ -148,8 +197,10 @@ export const useAppStore = defineStore('app', () => {
         appVersion.value = res.data.app_version || 'Unknown'  // 版本
         buildMode.value = res.data.build_mode || ''           // 构建模式
         // 检查路径 (主要路径无效则打开设置)
-        if (!res.data.paths_configured) uiState.showSettingsPanel = true
-        console.log("刷新数据成功:", res)
+        if (!res.data.paths_configured) {
+          toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
+          uiState.showSettingsPanel = true
+        }
       }
     } catch (e) {
       toast.error(`刷新数据失败: \n${e.message}`)
@@ -229,10 +280,18 @@ export const useAppStore = defineStore('app', () => {
       if (checkResult(res, "应用设置")) {
         // 更新本地 store
         Object.assign(settings.value, newSettings)
-        // 如果路径变了，可能需要重新扫描，这里简单起见先关闭弹窗
+        // 如果路径变了，可能需要重新扫描
         closeSettingsPanel()
-        // 可以在这里触发一次重新初始化或扫描
-        await initialize() 
+        // 刷新数据
+        // 如果启用了自动扫描且路径有变化，触发扫描
+        if (newSettings.game_install_path && settings.value.enable_auto_scan) {
+          // const modStore = useModStore()
+          // modStore.scanMods()
+          await initialize()
+        }else{
+          await refreshData()
+        }
+
       }
     } catch (e) {
       console.error("应用设置异常:", e)
@@ -336,7 +395,6 @@ export const useAppStore = defineStore('app', () => {
         return res.data
     } else{
         console.error("获取文件夹路径异常:", res.message)
-        toast.error(`获取文件夹路径异常: \n${res.message}`)
         return
     }
   }
@@ -445,6 +503,10 @@ export const useAppStore = defineStore('app', () => {
   // 使用AI功能
   const useAI = async (task_key, params) => {
     if (!window.pywebview) return
+    if (!settings.value.ai.enabled) {
+      toast.warning("AI功能未启用！")
+      return
+    }
     const res = await window.pywebview.api.ai_execute_task(task_key, params)
     if (checkResult(res, `使用AI ${task_key}`)) {
       return JSON.parse(res.data)

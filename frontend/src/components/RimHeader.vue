@@ -12,7 +12,7 @@
     </div>
 
     <div class="flex items-center gap-3">
-      <button @click="appStore.toggleUiState('showTestDrawer')" v-tooltip="`测试页面`"
+      <button v-if="appStore.settings.debug_mode" @click="appStore.toggleUiState('showTestDrawer')" v-tooltip="`测试页面`"
           class="p-2 rounded-full hover:bg-glow text-text-dim hover:text-white transition bg-transparent">
         测试页面
       </button>

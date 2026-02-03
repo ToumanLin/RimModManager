@@ -367,52 +367,6 @@ const onDrop = async (e, ruleType) => {
   // 调用 RuleStore 添加规则
   await ruleStore.addUserModRule(targetMod.value?.package_id, ruleType, sourceId)
 }
-// 更新子项的排序
-const updateChildren = (e) => {
-  return 
-  console.log("更新子项排序:", e)
-  const oldIds = props.groupData.mod_ids  // 原始顺序
-  const newIds = internalModList.value.map(item => item.id)  // 获取当前的最新顺序 ID列表
-  const tempSelectedIds = modStore.selectedIds
-  // 检查是否是当前分组的列表，排除当前列表自身的触发
-  const currentListDom = vListRef.value.$el
-  if (e.event.from === currentListDom || e.event.from === e.event.to) {
-    console.log(props.groupData.name, "排序结束:", e)
-    // 只有顺序真的变了才发请求
-    if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
-      emit('update-children', props.id, newIds)
-    }
-    return
-  }
-
-  // 拖动项来自分组，不允许插入
-  if (e.item?.group_id) {
-    console.log("分组错误插入:", e)
-    return
-  }
-
-  console.log(props.groupData.name, "插入结束:", e)
-  // 去除重复, 保持拖动项的位置（保留除已选项外的其他项，已选择的项后续插入）
-  const uniqueIds = newIds.filter((id, index) => {
-    // 检测是否是拖动项（值和索引都匹配），是则保留（用于标记位置）
-    if (index === e.newIndex && id === e.item.id) return true
-    // 排除已选择的项（过滤重复）
-    if (tempSelectedIds.includes(id)) return false
-    // 其他未选择项，保留
-    return true
-  })
-  const newIndex = uniqueIds.indexOf(e.item.id)
-  // 根据拖动项，插入选中项（因选中项包含拖动项，所以插入时需要移除拖动项）
-  uniqueIds.splice(newIndex, 1, ...tempSelectedIds)
-  // （修复漏洞：如果拖入相同项到相邻位置，去重后实际列表顺序不变，但组件会渲染拖入的相同项，所以目前必须强制更新）
-  internalModList.value = uniqueIds.map(id => ({ id: id }))
-  console.log("排序前:", oldIds)
-  console.log("排序后:", uniqueIds)
-  // 只有顺序真的变了才发请求
-  if (JSON.stringify(uniqueIds) !== JSON.stringify(oldIds)) {
-    // emit('update-children', props.id, uniqueIds)
-  }
-}
 </script>
 
 <style scoped>

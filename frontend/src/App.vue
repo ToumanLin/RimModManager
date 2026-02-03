@@ -210,7 +210,7 @@
 
     <!-- 测试 -->
     <div v-if="appStore.settings.debug_mode">
-      <Test class="fixed bottom-4 left-4 " v-show="appStore.uiState.showTestDrawer" />
+      <TestPage class="fixed bottom-4 left-4 " v-show="appStore.uiState.showTestDrawer" />
       <DebugPanel />
     </div>
     <!-- 重复包名冲突弹窗 -->
@@ -238,7 +238,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, h, provide } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, h, provide, defineAsyncComponent, shallowRef } from 'vue'
 import { useModStore } from './stores/modStore'
 import { useAppStore } from './stores/appStore'
 import { useRuleStore } from './stores/ruleStore'
@@ -286,6 +286,25 @@ const resizeState = reactive({
   startX: 0,
   startLeftW: 0,
   startRightW: 0
+})
+
+// 定义异步组件
+const TestPage = defineAsyncComponent({
+  // 加载函数：利用 Vite 的环境变量模式
+  loader: () => {
+    // 只有在开发模式下才尝试加载，生产模式直接返回一个空组件
+    if (import.meta.env.DEV) {
+      return import('./components/temp/test.vue').catch(() => {
+        // console.warn('测试组件加载失败，可能文件已被删除。')
+        return { render: () => null } // 加载失败时返回一个什么都不渲染的组件
+      })
+    }
+    return Promise.resolve({ render: () => null }) // 生产环境逻辑
+  },
+  // 加载失败时使用的组件 (可选)
+  errorComponent: { render: () => null },
+  // 如果加载时间超过此值，则显示加载中组件 (可选)
+  timeout: 3000
 })
 
 // --- 拖拽逻辑 ---
