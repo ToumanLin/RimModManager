@@ -98,7 +98,7 @@ class AppConfig:
     ai: AIConfig = field(default_factory=AIConfig)
     
     # --- 开发与调试设置 ---
-    debug_mode: bool = True  # 开发模式开关
+    debug_mode: bool = False  # 开发模式开关
     log_retention_days: int = 7  # 日志保留天数
     log_level: str = "INFO"  # 默认日志等级 DEBUG, INFO, WARNING, ERROR
     

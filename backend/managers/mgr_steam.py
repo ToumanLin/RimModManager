@@ -1,7 +1,9 @@
 # backend/managers/mgr_steam.py
 import os
+from pathlib import Path
 import platform
 import subprocess
+import sys
 import threading
 import time
 import re
@@ -121,16 +123,26 @@ class SteamManager:
 
     def _copy_steamworks_from_package(self, dll_name, api_name):
         """
-        尝试找到 pip 安装的 steamworkspy 目录，并将其中的 DLL 复制到项目根目录
+        尝试找到 pip 安装的 steamworks 目录，并将其中的 DLL 复制到项目根目录
         """
         try:
             # 找到 steamworks 包的位置
-            spec = importlib.util.find_spec("steamworkspy")
+            spec = importlib.util.find_spec("steamworks")
             if not spec or not spec.origin:
+                logger.error("Failed to find steamworks package.")
                 return False
             
-            # 获取包所在的文件夹路径 (例如 .../site-packages/steamworkspy/__init__.py -> .../site-packages/steamworks)
+            # 获取包所在的文件夹路径 (例如 .../site-packages/steamworks/__init__.py -> .../site-packages/steamworks)
             package_dir = os.path.dirname(spec.origin)
+            
+            if getattr(sys, 'frozen', False):
+                # --- 打包后的环境 ---
+                # sys.executable 指向 .exe 文件的绝对路径
+                base_dir = Path(sys.executable).parent
+                # 额外：处理 --contents-directory lib 情况
+                # 如果内部资源在 _MEIPASS 目录下 (即 lib 文件夹内)
+                meipass_dir = Path(getattr(sys, '_MEIPASS', base_dir))
+                package_dir = str(meipass_dir / "steamworks")
             
             # 源文件路径
             src_dll = os.path.join(package_dir, dll_name)

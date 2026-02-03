@@ -245,7 +245,8 @@ export const useAppStore = defineStore('app', () => {
         toast.success(`下载完成: ${d.filename}`)
       }
       if (d.status === 'error') {
-        toast.error(`下载失败: ${d.filename}\n${d.error}`)
+        toast.error(`下载失败: ${d.filename}\n请尝试更换网络环境后重新下载`)
+        console.error(`下载失败: ${d.filename}\n${d.error}`)
       }
     })
   }
@@ -282,7 +283,6 @@ export const useAppStore = defineStore('app', () => {
         Object.assign(settings.value, newSettings)
         // 如果路径变了，可能需要重新扫描
         closeSettingsPanel()
-        // 刷新数据
         // 如果启用了自动扫描且路径有变化，触发扫描
         if (newSettings.game_install_path && settings.value.enable_auto_scan) {
           // const modStore = useModStore()
@@ -436,10 +436,9 @@ export const useAppStore = defineStore('app', () => {
     if (!window.pywebview) return
     const res = await window.pywebview.api.check_steam_tools()
     if (checkResult(res, "检查Steam工具")) {
-      toast.success(`检查Steam工具成功！`)
+      
     } else {
       console.error("检查Steam工具异常:", res.message)
-      toast.error(`检查Steam工具异常: \n${res.message}`)
     }
   }
   // 打开Steam创意工坊
