@@ -119,22 +119,34 @@ def init_db(db_path):
         'cache_size': -1024 * 64
     })
     db.connect()    # 连接数据库
-    # safe=True 表示表存在则不创建
-    db.create_tables([Mod, UserModData, GroupData, GroupMod, SystemInfo], safe=True)
-    # db.close()  # 关闭数据库连接
+    
     # 检查数据库版本
     CURRENT_DB_VERSION = __db_version__ 
-    try:
-        ver_record = SystemInfo.get_or_none(SystemInfo.key == 'db_version')
-        if not ver_record:
-            # 新库，写入版本
-            SystemInfo.create(key='db_version', value=CURRENT_DB_VERSION)
-        elif ver_record.value != CURRENT_DB_VERSION:
-            # 版本不匹配！需要迁移或重置
-            logger.warning(f"数据库版本过期: {ver_record.value} -> {CURRENT_DB_VERSION}")
-            pass 
-    except Exception as e:
-        logger.error(f"DB Version check failed: {e}")
+    # 确保基础表存在
+    db.create_tables([SystemInfo], safe=True)
+    # 获取当前数据库版本
+    version_record = SystemInfo.get_or_none(SystemInfo.key == 'db_version')
+    
+    if not version_record:
+        # 情况 A: 全新安装，直接创建所有表，safe=True 表示表存在则不创建
+        db.create_tables([Mod, UserModData, GroupData, GroupMod], safe=True)
+        SystemInfo.create(key='db_version', value=CURRENT_DB_VERSION)
+    else:
+        # 情况 B: 旧版本存在，检查是否需要迁移
+        old_v = version_record.value
+        if old_v != CURRENT_DB_VERSION:
+            logger.info(f"检测到版本更新: {old_v} -> {CURRENT_DB_VERSION}. 正在备份并升级...")
+            # 升级前建议备份 .db 文件
+            import shutil
+            shutil.copy2(db_path, db_path + ".bak")
+            
+            # 执行迁移
+            from backend.database.migrator import run_migrations
+            run_migrations(old_v)
+            
+            # 确保其他新加的表（如果迁移里没写的话）也能创建
+            db.create_tables([Mod, UserModData, GroupData, GroupMod], safe=True)
+    
     
     
 def clear_db():
