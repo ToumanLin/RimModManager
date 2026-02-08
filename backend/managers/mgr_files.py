@@ -192,7 +192,7 @@ class FileManager:
     def open_in_explorer(path):
         """在资源管理器中打开"""
         if not path or not os.path.exists(path):
-            raise FileNotFoundError('路径不存在！')
+            raise FileNotFoundError(f"路径不存在：{path}")
 
         if os.path.isfile(path):
             path = os.path.dirname(path)

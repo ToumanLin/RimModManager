@@ -31,7 +31,7 @@ class GameManager:
         
         # 1. 检测 Config 路径 (各平台固定)
         paths['user_data_path'] = self._detect_userdata_path()
-        paths['game_config_path'] = os.path.join(paths['user_data_path'], 'Config')
+        paths['game_config_path'] = os.path.join(paths['user_data_path'], 'Config') if paths['user_data_path'] else ''
 
         # 2. 检测 安装路径 (主要针对 Windows Steam)
         install_loc = self._detect_steam_install_path()
@@ -47,11 +47,6 @@ class GameManager:
             local_mods = os.path.join(install_loc, "Mods")
             if os.path.exists(local_mods):
                 paths['local_mods_path'] = local_mods
-                
-            # 推导 DLC 路径
-            # dlc_path = os.path.join(install_loc, "Data")
-            # if os.path.exists(dlc_path):
-            #     paths['game_dlc_path'] = dlc_path
             
             # 推导 Workshop Mods
             # Steam 结构: steamapps/common/RimWorld -> steamapps/workshop/content/294100
@@ -90,18 +85,22 @@ class GameManager:
         启动 RimWorld。
         :param custom_args: 启动参数列表，例如 ['-savedatafolder=D:/Profile1']
         """
-        from backend.settings import settings
-        install_path = settings.config.game_install_path
-        if not install_path or not os.path.exists(install_path):
-            raise Exception("游戏安装路径未配置或不存在")
+        if not custom_args or not custom_args[0]:
+            from backend.settings import settings
+            install_path = settings.config.game_install_path
+            if not install_path or not os.path.exists(install_path):
+                raise Exception("游戏安装路径未配置或不存在")
 
-        target_exe = self.detect_executable(install_path)
-        if not target_exe:
-            raise Exception(f"在安装目录下找不到可执行文件")
+            target_exe = self.detect_executable(install_path)
+            if not target_exe:
+                raise Exception(f"在安装目录下找不到可执行文件")
+        else:
+            target_exe = custom_args[0]
+            install_path = os.path.dirname(target_exe)
 
         system_name = platform.system()
         # 确保 custom_args 是列表
-        args = custom_args if custom_args else []
+        args = custom_args[1:] if custom_args else []
 
         try:
             if system_name == 'Windows':

@@ -170,8 +170,8 @@ class API:
 
     def _ensure_dlc_parser(self):
         """懒加载 DLC Parser"""
-        if not self.dlc_parser and settings.config.game_install_path:
-            dlc_dir = os.path.join(settings.config.game_install_path, 'Data')
+        if not self.dlc_parser and settings.config.game_dlc_path:
+            dlc_dir = settings.config.game_dlc_path
             if os.path.exists(dlc_dir):
                 # 这里初始化会自动处理全量缓存和增量更新
                 self.dlc_parser = DLCParser(dlc_dir)
@@ -193,21 +193,17 @@ class API:
             # 非空检查兜底
             paths_valid = self.game_mgr.detect_executable(settings.config.game_install_path) is not None
         self._ensure_dlc_parser()   # 确保 DLC Parser 初始化
-        # 获取游戏版本号
-        game_version = self.game_mgr.get_game_version(settings.config.game_install_path) if self.game_mgr else ""
-        settings.config.game_version = game_version
         # 初始化profile检查
-        if settings.config.current_profile_id=='default' and not self.profile_mgr.get_current_profile().game_install_path:
-            # 初始化默认profile
-            self.profile_mgr.update_profile('default',{
-                'name': 'Default',
-                'description': 'Default profile',
-                'game_version': game_version,
-                'game_install_path': settings.config.game_install_path,
-                'user_data_path': settings.config.user_data_path,
-                'is_steam': "steamlibrary" in settings.config.game_install_path.lower(),
-                'use_workshop_mods': "steamlibrary" in settings.config.game_install_path.lower(),
-            })
+        # if settings.config.current_profile_id=='default' and not self.profile_mgr.get_current_profile().game_install_path:
+        #     # 初始化默认profile
+        #     self.profile_mgr.update_profile('default',{
+        #         'name': 'Default',
+        #         'description': 'Default profile',
+        #         'game_version': game_version,
+        #         'game_install_path': settings.config.game_install_path,
+        #         'user_data_path': settings.config.user_data_path,
+        #         'use_workshop_mods': "steamlibrary" in settings.config.game_install_path.lower(),
+        #     })
         
         # 2. 获取当前环境的 Mod 数据 (包含用户自定义数据), 并排除缺失的 Mod
         # 传入 None 让 DAO 自动读取 settings.current_profile_id
@@ -336,6 +332,7 @@ class API:
         
         return ApiResponse.error("无法自动检测到游戏路径，请手动设置！")
 
+    @log_api_call
     def save_setting(self, key: str, value: Any):
         """保存单个设置项"""
         # 如果修改的是核心路径，同步到当前环境
@@ -345,15 +342,16 @@ class API:
             updates = {key: value}
             if key == 'use_workshop_mods': updates = {'use_workshop_mods': value}
             self.profile_mgr.update_profile(pid, updates)
-        
-        settings.set(key, value)
-        # 应用并触发同步逻辑
-        self.profile_mgr.activate_profile(pid)
+            # 应用并触发同步逻辑
+            self.profile_mgr.activate_profile(pid)
         # 如果修改的是路径，可能需要刷新管理器
-        if 'path' in key:
+        elif 'path' in key:
             self.load_order_mgr = LoadOrderManager()
+        else:
+            settings.set(key, value)
         return ApiResponse.success(data=asdict(settings.config))
 
+    @log_api_call
     def save_all_settings(self, settings_obj: dict):
         """保存所有设置 (前端设置面板保存时调用)"""
         # 批量更新
@@ -387,18 +385,17 @@ class API:
         :param forced_update: 可选，是否强制更新所有 Mod 的数据。默认 False。
         """
         paths_to_scan = []
-        if specific_paths:
-            paths_to_scan = specific_paths
+        if specific_paths: paths_to_scan = specific_paths
         else:
+            # 确保当前 Profile 已激活
+            self.profile_mgr.activate_profile(settings.config.current_profile_id)
             # 根据 Settings 动态构建扫描路径
-            # 注意：settings 中的路径已经由 ProfileManager 根据当前环境切换过了
             cfg = settings.config
             # 1. DLC (Data 目录)
-            if cfg.game_install_path and os.path.exists(cfg.game_install_path):
-                data_dir = os.path.join(cfg.game_install_path, 'Data')
-                if os.path.exists(data_dir):
-                    paths_to_scan.append(data_dir)
-            
+            if cfg.game_dlc_path and os.path.exists(cfg.game_dlc_path):
+                dlc_path = cfg.game_dlc_path
+                if os.path.exists(dlc_path):
+                    paths_to_scan.append(dlc_path)
             # 2. Local Mods (当前环境的 Mods 目录)
             if cfg.local_mods_path and os.path.exists(cfg.local_mods_path):
                 paths_to_scan.append(cfg.local_mods_path)
@@ -731,11 +728,11 @@ class API:
         except Exception as e:
             return ApiResponse.error(f"导出加载顺序时出错: {e}")
 
-    def launch_game(self):
+    def launch_game(self, profile_id: str):
         """启动游戏"""
         try:
             # 1. 获取当前 Profile 的启动参数
-            launch_args = self.profile_mgr.get_launch_args_only() 
+            launch_args = self.profile_mgr.get_launch_args(profile_id) 
             # 2. 调用游戏管理器启动游戏
             self.game_mgr.launch_game(custom_args=launch_args)
             # 3. 记录最后一次游玩时间到数据库
@@ -748,13 +745,15 @@ class API:
             logger.error(f"Launch Game Error: {e}")
             return ApiResponse.error(f"启动游戏时出错: {e}")
     
-    def get_game_info(self, install_path: str|None = None):
+    def get_game_info(self, install_path: str):
         """获取游戏信息"""
+        if not install_path:
+            return ApiResponse.error("未指定游戏安装路径")
         try:
             exe = self.game_mgr.detect_executable(install_path)
             version = self.game_mgr.get_game_version(install_path)
             if not exe :
-                return ApiResponse.error("无法获取游戏信息")
+                return ApiResponse.warning("无法获取游戏信息，请检查游戏安装路径是否正确！")
             return ApiResponse.success({
                 "exe": exe,
                 "version": version
@@ -802,7 +801,7 @@ class API:
                 return ApiResponse.success(folder)
         except Exception as e:
             return ApiResponse.error(f"选择文件夹时出错: {e}")
-        return ApiResponse.error("未选择文件夹")
+        return ApiResponse.warning("未选择文件夹")
     
     def select_file_dialog(self, initial_dir: str = '', file_types = ('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
         """
@@ -814,7 +813,7 @@ class API:
                 return ApiResponse.success(file)
         except Exception as e:
             return ApiResponse.error(f"选择文件时出错: {e}")
-        return ApiResponse.error("未选择文件")
+        return ApiResponse.warning("未选择文件")
 
     def save_file_dialog(self, initial_dir: str = '', file_types = ('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
         """
@@ -826,7 +825,7 @@ class API:
                 return ApiResponse.success(file)
         except Exception as e:
             return ApiResponse.error(f"保存文件时出错: {e}")
-        return ApiResponse.error("未选择文件")
+        return ApiResponse.warning("未选择文件")
     
     # =========================================================================
     #  7. 排序管理 (Sort Management)

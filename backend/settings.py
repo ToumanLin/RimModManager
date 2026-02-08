@@ -89,8 +89,10 @@ class AppConfig:
     """
     # --- 路径设置 ---
     game_install_path: str = ""
-    user_data_path: str = ""    # 用户数据文件夹 (Ludeon Studios...)
-    game_config_path: str = ""  # RimWorld 配置文件夹 (Ludeon Studios...)
+    user_data_path: str = ""    # 用户数据文件夹
+    game_config_path: str = ""  # RimWorld 配置文件夹
+    game_saves_path: str = ""   # RimWorld 存档文件夹
+    game_dlc_path: str = ""     # RimWorld DLC 文件夹
     local_mods_path: str = ""
     workshop_mods_path: str = ""
     use_workshop_mods: bool = True

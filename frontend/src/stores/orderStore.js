@@ -51,7 +51,7 @@ export const useOrderStore = defineStore('order', () => {
   const saveLoadOrder = async () => {
     const modStore = useModStore()
     if (!modStore.isDirty) {
-      toast.info("Mod序列未修改")
+      toast.info("Mod序列未发生变化")
       return true
     }
     if (!window.pywebview) return false

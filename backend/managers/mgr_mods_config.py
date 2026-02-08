@@ -170,6 +170,8 @@ class LoadOrderManager:
 
             # 4. 格式化写入
             tree.write(write_path, pretty_print=True, xml_declaration=True, encoding="utf-8")
+            # 同步备份到 backup_root
+            tree.write(os.path.join(self.backup_root, f'Latest_ModsConfig_{settings.config.current_profile_id}.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
             logger.info(f"成功保存 {len(active_ids)} 个模组到: {write_path}")
             return True
             

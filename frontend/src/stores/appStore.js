@@ -58,9 +58,11 @@ export const useAppStore = defineStore('app', () => {
     // --- 路径 (Paths) ---
     game_install_path: '',
     user_data_path: '',
+    game_saves_path: '',
     game_config_path: '',
-    workshop_mods_path: '',
+    game_dlc_path: '',
     local_mods_path: '',
+    workshop_mods_path: '',
     use_workshop_mods: true,
     home_path: '',
     community_rules_url: '',
@@ -259,10 +261,12 @@ export const useAppStore = defineStore('app', () => {
       ruleStore.fetchRules()
       // 调用后端获取全量数据
       const res = await window.pywebview.api.get_initial_data()
-      if (checkResult(res, '刷新数据', true)) {
+      if (checkResult(res, '刷新数据')) {
         // 覆盖更新 Settings，以后端属性为主 (仅初始化时，避免覆盖用户未保存的修改)
         if (isInit && res.data.settings) {
           settings.value = res.data.settings
+        }else{
+          Object.assign(settings.value, res.data.settings)
         }
         // console.log('allmods', res.data.is_first_db_init , res.data.paths_configured , !res.data.all_mods||res.data.all_mods?.length==0)
         if (res.data.is_first_db_init && res.data.paths_configured && (!res.data.all_mods||res.data.all_mods?.length==0)) {
@@ -433,19 +437,19 @@ export const useAppStore = defineStore('app', () => {
   
   // === 系统操作 ===
   // 启动游戏
-  const launchGame = async () => {
+  const launchGame = async (profile_id=null) => {
     const orderStore = useOrderStore()
     const res = await orderStore.saveLoadOrder()
     if (!res) return
-    if(settings.value.game_install_path?.includes("SteamLibrary\\steamapps\\common")){
+    if((!profile_id || profile_id === 'default') && settings.value.game_install_path?.includes("SteamLibrary\\steamapps\\common")){
       // 通过 steam 启动游戏
       window.open("steam://rungameid/294100", '_blank')
       toast.success("正在通过 steam 启动游戏……")
       console.log("通过 steam 启动游戏")
-    }else if(settings.value.game_install_path){
+    }else if(profile_id || settings.value.game_install_path){
       if (!window.pywebview) return
       // 直接启动游戏
-      const res = await window.pywebview.api.launch_game()
+      const res = await window.pywebview.api.launch_game(profile_id)
       if (checkResult(res, "直接启动游戏程序")) {
         toast.success("直接启动游戏程序成功！")
       } else {
@@ -472,9 +476,10 @@ export const useAppStore = defineStore('app', () => {
     }
   }
   // 获取游戏信息
-  const getGameInfo = async () => {
+  const getGameInfo = async (path) => {
+    if(!path) return
     if(!window.pywebview) return
-    const res = await window.pywebview.api.get_game_info()
+    const res = await window.pywebview.api.get_game_info(path)
     if (checkResult(res, "获取游戏信息")) {
       return res.data
     }
@@ -494,6 +499,8 @@ export const useAppStore = defineStore('app', () => {
     const res = await window.pywebview.api.select_file_dialog(home_path, file_types)
     if (checkResult(res, "获取文件路径")) {
       return res.data
+    } else if (res.status === 'error') {
+        console.error("获取文件路径异常:", res.message)
     }
   }
   // 获取文件夹路径
@@ -503,9 +510,8 @@ export const useAppStore = defineStore('app', () => {
     const res = await window.pywebview.api.select_folder_dialog(home_path)
     if (checkResult(res, "获取文件夹路径")) {
         return res.data
-    } else{
+    } else if (res.status === 'error') {
         console.error("获取文件夹路径异常:", res.message)
-        return
     }
   }
   // 删除文件/文件夹

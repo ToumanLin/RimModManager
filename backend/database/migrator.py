@@ -2,6 +2,7 @@
 from playhouse.migrate import SqliteMigrator, migrate
 from backend.database.models import GameProfile, GroupData, GroupMod, ModAsset, UserModData, db, SystemInfo
 from backend.utils.logger import logger 
+from backend.settings import settings
 
 def run_migrations(old_version):
     migrator = SqliteMigrator(db)
@@ -25,7 +26,7 @@ def _2to3(old_version):
     数据库迁移主函数
     """
     # 1. 备份原始数据
-    # 因为我们在 init_db 里已经备份过 .db 文件了，这里可以直接操作
+    # init_db 里已经备份过 .db 文件，这里可以直接操作
     
     try:
         # 检查旧表是否存在 (通过原始 SQL)
@@ -111,33 +112,64 @@ def _2to3(old_version):
                 GameProfile.create(
                     id='default',
                     name='Default Profile',
-                    game_install_path='', # 留给后续扫描补全
-                    user_data_path='',
-                    is_steam=False
+                    game_install_path=settings.config.game_install_path, # 留给后续扫描补全
+                    user_data_path=settings.config.user_data_path,
                 )
 
             # ---------------------------------------------------------
             # 第三步：注入转换后的数据
             # ---------------------------------------------------------
             
-            # 3.1 注入 UserModData (先注入，因为 GroupMod 依赖它作为外键)
+            # 用于记录实际插入成功的 ID，用于过滤脏数据
+            valid_mod_ids = set()
+            valid_group_ids = set()
+
+            # 3.1 注入 UserModData
             if old_user_data:
-                # 过滤掉可能的重复项 (因为多个物理路径可能指向同一个 package_id)
-                seen_ids = set()
                 unique_user_data = []
+                seen_ids = set()
                 for d in old_user_data:
-                    if d['mod_id'] not in seen_ids:
+                    # 确保 mod_id 存在且不重复
+                    if d['mod_id'] and d['mod_id'] not in seen_ids:
                         unique_user_data.append(d)
                         seen_ids.add(d['mod_id'])
-                UserModData.insert_many(unique_user_data).execute()
+                        valid_mod_ids.add(d['mod_id']) # 记录有效ID
+                
+                if unique_user_data:
+                    # 分批插入防止 SQL 语句过长
+                    for i in range(0, len(unique_user_data), 100):
+                        UserModData.insert_many(unique_user_data[i:i+100]).execute()
 
             # 3.2 注入 GroupData
             if old_groups:
+                for g in old_groups:
+                    # 记录有效的 Group ID (注意：GroupData主键是 group_id)
+                    if g.get('group_id'):
+                        valid_group_ids.add(g['group_id'])
                 GroupData.insert_many(old_groups).execute()
 
-            # 3.3 注入 GroupMod
+            # 3.3 注入 GroupMod (关键修复点)
             if old_group_mods:
-                GroupMod.insert_many(old_group_mods).execute()
+                clean_group_mods = []
+                skipped_count = 0
+                
+                for gm in old_group_mods:
+                    mod_id = gm.get('mod_id')
+                    group_id = gm.get('group_id')
+                    
+                    # 【核心修复】：只有当 mod_id 和 group_id 都存在于刚才插入的新表中时，才保留这条关系
+                    if mod_id in valid_mod_ids and group_id in valid_group_ids:
+                        clean_group_mods.append(gm)
+                    else:
+                        skipped_count += 1
+                
+                if skipped_count > 0:
+                    logger.warning(f"迁移过程中清理了 {skipped_count} 条无效的分组关联记录(脏数据)。")
+
+                if clean_group_mods:
+                    # 同样建议分批插入
+                    for i in range(0, len(clean_group_mods), 100):
+                        GroupMod.insert_many(clean_group_mods[i:i+100]).execute()
 
             # 恢复外键
             db.execute_sql('PRAGMA foreign_keys = ON;')

@@ -52,8 +52,8 @@ export const useProfileStore = defineStore('profile', () => {
   // 切换环境 (核心逻辑)
   const switchProfile = async (profileId) => {
     if (profileId === currentProfileId.value) return
-    
     appStore.isLoading = true
+    isLoading.value = true
     try {
       const res = await window.pywebview.api.activate_profile(profileId)
       if (appStore.checkResult(res, '切换环境')) {
@@ -74,6 +74,7 @@ export const useProfileStore = defineStore('profile', () => {
       }
     } finally {
       appStore.isLoading = false
+      isLoading.value = false
     }
   }
 

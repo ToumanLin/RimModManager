@@ -16,6 +16,7 @@ from backend.utils.logger import logger
 class ProfileManager:
     def __init__(self):
         self.current_profile = GameProfile.get_or_none(GameProfile.id == settings.config.current_profile_id)
+        self.update_version()
         self._ensure_default_profile()
 
     def _ensure_default_profile(self):
@@ -26,12 +27,15 @@ class ProfileManager:
                 GameProfile.create(
                     id='default',
                     name='Default',
-                    game_install_path=settings.config.game_install_path,
+                    description='Default Profile',
                     user_data_path=settings.config.user_data_path,
-                    is_steam="steamlibrary" in settings.config.game_install_path.lower(),
+                    game_install_path=settings.config.game_install_path,
+                    game_version=GameManager.get_game_version(settings.config.game_install_path),
                     use_workshop_mods="steamlibrary" in settings.config.game_install_path.lower() # 默认非Steam版不加载工坊
                 )
             self.activate_profile('default')  # 切换到默认环境
+        else:
+            self._update_paths(self.current_profile)    # 更新默认profile的路径
 
     def create_profile(self, data: Dict[str, Any], copy_current_data: bool = False):
         """
@@ -48,8 +52,15 @@ class ProfileManager:
         # 注意：这里使用绝对路径
         data_dir = data.get('user_data_path') or str(CONFIG_DIR / "profiles" / profile_id)
         
+        # 检测路径是否存在，然后初始化目录结构
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
+        game_config_path = os.path.join(data_dir, "Config")
+        if not os.path.exists(game_config_path):
+            os.makedirs(game_config_path)
+        game_saves_path = os.path.join(data_dir, "Saves")
+        if not os.path.exists(game_saves_path):
+            os.makedirs(game_saves_path)
             
         # 如果需要继承数据
         if copy_current_data:
@@ -60,10 +71,9 @@ class ProfileManager:
                 id=profile_id,
                 name=data.get('name', 'Profile'),
                 description=data.get('description', ''),
-                game_install_path=data.get('game_install_path', settings.config.game_install_path),
                 user_data_path=data_dir,
+                game_install_path=data.get('game_install_path', settings.config.game_install_path),
                 game_version=GameManager.get_game_version(data.get('game_install_path', settings.config.game_install_path)),
-                is_steam="steamlibrary" in data.get('game_install_path', '').lower(),
                 use_workshop_mods=data.get('use_workshop_mods', False)
             )
         # 同步到磁盘
@@ -83,6 +93,12 @@ class ProfileManager:
         if profile:
             self._sync_profile_to_disk(profile)
         return True
+
+    def update_version(self):
+        """检查环境游戏版本是否与当前游戏版本匹配"""
+        if not self.current_profile: return False
+        self.current_profile.game_version = GameManager.get_game_version(self.current_profile.game_install_path)
+        self.current_profile.save()
 
     def delete_profile(self, profile_id):
         """删除环境 (及隔离区数据)"""
@@ -131,33 +147,38 @@ class ProfileManager:
         """
         profile = GameProfile.get_or_none(GameProfile.id == profile_id)
         if not profile: return False
-        
         self.current_profile = profile
+        self.update_version()
+        self._update_paths(profile)
+        return True
         
+    def _update_paths(self, profile):
         # 动态更新全局设置中的路径，指向隔离区
-        settings.set('current_profile_id', profile.id)
+        settings.config.current_profile_id = profile.id
         
         # 指向隔离环境的 Config 目录
-        # RimWorld 的结构是: <Root>/Config, <Root>/Saves
-        settings.config.game_config_path = os.path.join(profile.user_data_path, "Config")
-        settings.config.user_data_path = profile.user_data_path
-        settings.config.local_mods_path = os.path.join(profile.game_install_path, "Mods")
-        
-        # 更新游戏安装目录（用于扫描 Core）
-        settings.config.game_install_path = profile.game_install_path
         settings.config.game_version = profile.game_version
+        # 更新游戏安装目录（用于扫描 mod
+        settings.config.game_install_path = profile.game_install_path
+        settings.config.local_mods_path = os.path.join(profile.game_install_path, "Mods")
+        settings.config.game_dlc_path = os.path.join(profile.game_install_path, "Data")
+        # RimWorld 的结构是: <Root>/Config, <Root>/Saves
+        settings.config.user_data_path = profile.user_data_path
+        # 检测路径是否存在
+        if os.path.exists(profile.user_data_path):
+            settings.config.game_config_path = os.path.join(profile.user_data_path, "Config")
+            if not os.path.exists(settings.config.game_config_path):
+                os.makedirs(settings.config.game_config_path)
+            settings.config.game_saves_path = os.path.join(profile.user_data_path, "Saves")
+            if not os.path.exists(settings.config.game_saves_path):
+                os.makedirs(settings.config.game_saves_path)
         
         # 控制是否扫描工坊
-        if profile.id != 'default':
-            settings.config.use_workshop_mods = profile.use_workshop_mods # 根据设置屏蔽扫描
-        else:
-            settings.config.use_workshop_mods = True # 恢复扫描
-            pass
-            
+        settings.config.use_workshop_mods = profile.use_workshop_mods if profile.id != 'default' else True
+        
         # 强制持久化到 config.json
         settings.save()
-
-        return True
+        
 
     def get_launch_args(self, profile_id: str = ''):
         """

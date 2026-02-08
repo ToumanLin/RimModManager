@@ -44,7 +44,6 @@ class GameProfile(BaseModel):
     game_install_path = CharField()                   # 游戏安装路径
     user_data_path = CharField()                      # 【核心】自定义的数据存储路径 (-savedatafolder)
     # 策略配置
-    is_steam = BooleanField(default=False)            # 是否是 Steam 版
     use_workshop_mods = BooleanField(default=True)         # 是否加载公共工坊 Mod
     # 状态
     last_played_time = BigIntegerField(default=0)        # 最后一次活动时间
