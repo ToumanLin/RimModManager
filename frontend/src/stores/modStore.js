@@ -185,9 +185,15 @@ export const useModStore = defineStore('mods', () => {
         mod.last_active_time = data.active_load_modify_time || Date.now()
       }
       // 强制保证列表字段存在且格式正确
-      if (!Array.isArray(mod.ignored_issues)) mod.ignored_issues = []
-      if (!Array.isArray(mod.tags)) mod.tags = []
       if (!Array.isArray(mod.author) && !mod.author) mod.author = ['Unknown'] 
+      if (!Array.isArray(mod.supported_versions)) mod.supported_versions = []
+      if (!Array.isArray(mod.supported_languages)) mod.supported_languages = []
+      if (!Array.isArray(mod.gallery_paths)) mod.gallery_paths = []
+      if (!Array.isArray(mod.load_after_mods)) mod.load_after_mods = []
+      if (!Array.isArray(mod.load_before_mods)) mod.load_before_mods = []
+      if (!Array.isArray(mod.incompatible_mods)) mod.incompatible_mods = []
+      if (!Array.isArray(mod.tags)) mod.tags = []
+      if (!Array.isArray(mod.ignored_issues)) mod.ignored_issues = []
       tempMap.set(mod.package_id.toLowerCase(), mod)
     })
     allModsMap.value = tempMap
@@ -626,7 +632,7 @@ export const useModStore = defineStore('mods', () => {
         const gameVerMajor = appStore.settings.game_version.substring(0, 3) // 获取当前游戏主版本号（前三位）
         if (mod.supported_versions && !mod.supported_versions.includes(gameVerMajor)) {
            _addIssue(id, ISSUE_TYPE.WARN_VERSION_MISMATCH, ISSUE_LEVEL.WARN, 
-             `^^版本问题^^：不支持当前游戏版本··[[${gameVerMajor}]]·· \n __(支持: ··${mod.supported_versions.join('··, ··')}··)__`)
+             `^^版本问题^^：不支持当前游戏版本··[[${gameVerMajor}]]·· \n __(支持: ··${(mod.supported_versions || []).join('··, ··')}··)__`)
         }
       }
 

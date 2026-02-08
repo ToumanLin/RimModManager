@@ -4,7 +4,6 @@ import winreg
 import subprocess
 import platform
 from pathlib import Path
-from backend.settings import settings
 
 class GameManager:
     """
@@ -16,6 +15,7 @@ class GameManager:
         尝试自动检测 RimWorld 的关键路径。
         返回字典: {
             'game_install_path': str,
+            'user_data_path': str,
             'local_mods_path': str,
             'workshop_mods_path': str,
             'game_config_path': str
@@ -23,15 +23,15 @@ class GameManager:
         """
         paths = {
             'game_install_path': '',
-            'game_data_path': '',
+            'user_data_path': '',
             'local_mods_path': '',
             'workshop_mods_path': '',
             'game_config_path': ''
         }
         
         # 1. 检测 Config 路径 (各平台固定)
-        paths['game_data_path'] = self._detect_gamedata_path()
-        paths['game_config_path'] = os.path.join(paths['game_data_path'], 'Config')
+        paths['user_data_path'] = self._detect_userdata_path()
+        paths['game_config_path'] = os.path.join(paths['user_data_path'], 'Config')
 
         # 2. 检测 安装路径 (主要针对 Windows Steam)
         install_loc = self._detect_steam_install_path()
@@ -40,13 +40,18 @@ class GameManager:
         if install_loc and os.path.exists(install_loc):
             paths['game_install_path'] = ''
             # 检测 可执行文件是否存在(多平台)
-            if self._detect_executable(install_loc):
+            if self.detect_executable(install_loc):
                  paths['game_install_path'] = install_loc
             
             # 推导 Local Mods
             local_mods = os.path.join(install_loc, "Mods")
             if os.path.exists(local_mods):
                 paths['local_mods_path'] = local_mods
+                
+            # 推导 DLC 路径
+            # dlc_path = os.path.join(install_loc, "Data")
+            # if os.path.exists(dlc_path):
+            #     paths['game_dlc_path'] = dlc_path
             
             # 推导 Workshop Mods
             # Steam 结构: steamapps/common/RimWorld -> steamapps/workshop/content/294100
@@ -57,7 +62,8 @@ class GameManager:
 
         return paths
     
-    def _detect_executable(self, install_path):
+    @staticmethod
+    def detect_executable(install_path):
         """检测游戏可执行文件"""
         system_name = platform.system()
         
@@ -79,38 +85,52 @@ class GameManager:
                 return p
         return None
 
-    def launch_game(self):
+    def launch_game(self, custom_args: list = []):
         """
-        启动 RimWorld 可执行文件
+        启动 RimWorld。
+        :param custom_args: 启动参数列表，例如 ['-savedatafolder=D:/Profile1']
         """
+        from backend.settings import settings
         install_path = settings.config.game_install_path
         if not install_path or not os.path.exists(install_path):
-            return {"status": "error", "message": "游戏安装路径未配置或不存在"}
+            raise Exception("游戏安装路径未配置或不存在")
 
-        # 检测可执行文件
-        system_name = platform.system()
-        target_exe = self._detect_executable(install_path)
-        
+        target_exe = self.detect_executable(install_path)
         if not target_exe:
-            return {"status": "error", "message": f"在安装目录下找不到可执行文件: {target_exe}"}
+            raise Exception(f"在安装目录下找不到可执行文件")
+
+        system_name = platform.system()
+        # 确保 custom_args 是列表
+        args = custom_args if custom_args else []
 
         try:
-            # 非阻塞启动
             if system_name == 'Windows':
-                # CREATE_NEW_CONSOLE 防止关闭管理器时游戏也被关闭
-                subprocess.Popen([target_exe], cwd=install_path, creationflags=subprocess.CREATE_NEW_CONSOLE)
-            elif system_name == 'Darwin':
-                subprocess.Popen(['open', target_exe])
-            else:
-                subprocess.Popen([target_exe], cwd=install_path)
-                
-            return {"status": "success", "message": "游戏启动指令已发送"}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+                # Windows 拼接方式：[exe_path, arg1, arg2]
+                cmd = [target_exe] + args
+                # creationflags=subprocess.CREATE_NEW_CONSOLE 确保游戏进程独立于管理器
+                subprocess.Popen(cmd, cwd=install_path, creationflags=subprocess.CREATE_NEW_CONSOLE)
 
-    def get_game_version(self):
+            elif system_name == 'Darwin': # macOS
+                # macOS 下如果是 .app 文件夹，需要使用 open 命令
+                if target_exe.endswith('.app'):
+                    # open -a "Path/To/RimWorld.app" --args -savedatafolder="..."
+                    cmd = ['open', '-a', target_exe, '--args'] + args
+                else:
+                    cmd = [target_exe] + args
+                subprocess.Popen(cmd)
+
+            else: # Linux
+                cmd = [target_exe] + args
+                subprocess.Popen(cmd, cwd=install_path)
+
+            return True
+        except Exception as e:
+            raise Exception(f"执行启动指令失败: {str(e)}")
+
+    @staticmethod
+    def get_game_version(game_install_path):
         """获取游戏版本号"""
-        version_file = os.path.join(settings.config.game_install_path, 'Version.txt')
+        version_file = os.path.join(game_install_path, 'Version.txt')
         if os.path.exists(version_file):
             try:
                 with open(version_file, 'r', encoding='utf-8-sig') as f: 
@@ -123,7 +143,7 @@ class GameManager:
 
     # --- 内部辅助方法 ---
 
-    def _detect_gamedata_path(self):
+    def _detect_userdata_path(self):
         """检测 Config 文件夹位置 (%APPDATA%/LocalLow/Ludeon Studios/...)"""
         if platform.system() == 'Windows':
             user_profile = os.getenv('USERPROFILE')

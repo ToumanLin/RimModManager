@@ -322,7 +322,7 @@ const testPrompt = ref("介绍一下自己")
 const testResponse = ref("")
 // 测试模型
 const testModel = async () => {
-  const res = await appStore.chatWithAI(testPrompt.value)
+  const res = await appStore.chatWithAI(testPrompt.value, formData.value.ai)
   if (res) {
     testResponse.value = res
     console.log("模型测试结果:", res)
