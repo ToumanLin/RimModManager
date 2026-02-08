@@ -4,6 +4,7 @@
     <!-- Label -->
     <label v-if="label" class="block text-xs text-text-dim uppercase font-bold tracking-widest px-1" :class="[mini?'':'mb-1']"  @click="toggleMenu" >
       {{ label }}
+      <label v-if="description" v-tooltip="description" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
     </label>
     
     <!-- 主输入区域 -->
@@ -78,6 +79,7 @@ import { onClickOutside } from '@vueuse/core'
 const props = defineProps({
   label: String,
   placeholder: { type: String, default: '请选择...' },
+  description: String,
   modelValue: [String, Number, Boolean],
   options: { type: Array, default: () => [] }, // { label, value, ... }
   mini: { type: Boolean, default: false },

@@ -2,7 +2,9 @@
 <template>
   <div class="space-y-1.5 w-full max-w-full overflow-hidden">
     <div class="flex justify-between items-center px-1">
-      <label class="text-xs text-text-dim uppercase font-bold tracking-widest">{{ label }}</label>
+      <label class="text-xs text-text-dim uppercase font-bold tracking-widest">{{ label }}
+        <label v-if="description" v-tooltip="description" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
+      </label>
       <button v-if="modelValue" @click="openInExplorer" 
         class="text-xs text-accent-primary/60 hover:text-accent-primary transition-colors hover:underline"
       >
@@ -23,7 +25,7 @@
           type="text"
           :value="modelValue"
           @input="$emit('update:modelValue', $event.target.value)"
-          placeholder="请输入或粘贴路径..."
+          :placeholder="placeholder || '请输入或粘贴路径...'"
           class="flex-1 bg-transparent text-sm text-white/90 font-mono outline-none min-w-0 "
           :class="{ 'direction-rtl': !isFocused }"
           @focus="isFocused = true"
@@ -60,7 +62,10 @@ import { useAppStore } from '../../../stores/appStore'
 
 const props = defineProps({
   label: String,
-  modelValue: String
+  modelValue: String,
+  readOnly: Boolean,
+  placeholder: String,
+  description: String,
 })
 
 defineEmits(['browse', 'update:modelValue'])

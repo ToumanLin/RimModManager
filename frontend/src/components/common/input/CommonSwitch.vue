@@ -3,7 +3,9 @@
   <div :aria-disabled="disabled" class="flex items-center justify-between p-2 aria-disabled:pointer-events-none aria-disabled:opacity-50" 
     :class="[mini?'':'input-glass']">
     <div class="flex flex-col">
-      <span class="text-sm font-bold text-white tracking-wide">{{ label }}<label v-if="description && mini" v-tooltip="description" class="text-text-dim ml-1 cursor-help underline hover:text-text-main">?</label></span>
+      <span class="text-sm font-bold text-white tracking-wide">{{ label }}
+        <label v-if="description && mini" v-tooltip="description" class="text-text-dim ml-1 italic cursor-help underline hover:text-text-main">?</label>
+      </span>
       <span v-if="description && !mini" class="text-[0.7rem] text-text-dim mt-0.5">{{ description }}</span>
     </div>
 
