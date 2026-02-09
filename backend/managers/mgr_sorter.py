@@ -408,7 +408,7 @@ class OrderSorter:
             
             # A. 确定排序名称 (Name)
             # 优先用别名 -> 名字 -> ID
-            if settings.config.sort_mods_by == "alias":
+            if settings.config.sort_mods_by == "alias_name":
                 display_name = first_mod_data.get('alias_name') or first_mod_data.get('name') or first_mod_id
             elif settings.config.sort_mods_by == "name":
                 display_name = first_mod_data.get('name') or first_mod_id

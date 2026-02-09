@@ -139,7 +139,7 @@ export const useAppStore = defineStore('app', () => {
     delete_missing_mods_data: false,
     prefer_steam_launch: true,           // 是否优先通过 Steam 启动游戏
     sort_mods_by: "name",                 // 自动排序排列方式: name, id, alias
-    coexist_mod_name_with: "workshop_id", // 共存Mod生成方式: workshop_id, package_id, name, alias
+    coexist_mod_folder_name_type: "workshop_id", // 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: true,       // 是否显示共存Mod提示
 
     // --- 调试 (Debug) ---
@@ -322,6 +322,7 @@ export const useAppStore = defineStore('app', () => {
       const modStore = useModStore()
       await modStore.scanComplete(e.detail)
     })
+
     // 监听：下载进度
     window.addEventListener('download-progress', (e) => {
       const d = e.detail
@@ -351,6 +352,28 @@ export const useAppStore = defineStore('app', () => {
         }
       }
     })
+
+    // 监听：本地化进度
+    window.addEventListener('localize-progress', (e) => {
+        // 复用 scanProgress 的状态，或者建立独立的 localizeProgress
+        Object.assign(scanProgress, {
+            scanning: true, // 借用这个状态让进度条显示
+            ...e.detail
+        });
+    });
+    // 监听：本地化完成
+    window.addEventListener('localize-complete', (e) => {
+        scanProgress.scanning = false;
+        const { success_count, error_count, errors } = e.detail;
+        console.log(`本地化完成。成功: ${success_count}, 失败: ${error_count}`, errors)
+        if (error_count > 0) {
+            toast.warning(`本地化完成。成功: ${success_count}, 失败: ${error_count}`);
+        } else {
+            toast.success(`成功本地化 ${success_count} 个模组`);
+        }
+        const modStore = useModStore()
+        modStore.scanMods()
+    });
   }
 
   // --- 设置相关 ---
@@ -521,9 +544,36 @@ export const useAppStore = defineStore('app', () => {
   // 删除文件/文件夹
   const deletePath = async (path) => {
     if(!window.pywebview) return
+    const confirmStore = useConfirmStore()
+    const confirm = await confirmStore.confirmAction(
+      '删除确认', `确定要删除 ${path} 吗？\n文件/文件夹将被移至回收站。`,
+      { type: 'error' }
+    );
+    if(!confirm) return
     const res = await window.pywebview.api.delete_path(path)
     if (checkResult(res, "删除文件/文件夹")) {
       toast.success(`已删除: \n${path}`)
+      // 刷新Mod列表
+      const modStore = useModStore()
+      modStore.scanMods()
+      return true
+    }
+  }
+  // 批量删除文件/文件夹
+  const deletePaths = async (paths) => {
+    if(!window.pywebview) return
+    const confirmStore = useConfirmStore()
+    const confirm = await confirmStore.confirmAction(
+      '删除确认', `确定要删除这 ${paths.length} 个文件/文件夹吗？\n这些文件/文件夹将被移至回收站。`,
+      { type: 'error' }
+    );
+    if(!confirm) return
+    const res = await window.pywebview.api.delete_paths(paths)
+    if (checkResult(res, "批量删除文件/文件夹")) {
+      toast.success(`已删除 ${paths.length} 个文件/文件夹`)
+      // 刷新Mod列表
+      const modStore = useModStore()
+      modStore.scanMods()
       return true
     }
   }
@@ -732,8 +782,8 @@ export const useAppStore = defineStore('app', () => {
     appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, updateState, aiState,
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup,
     // 游戏相关
-    getGameInfo, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, openUrl, startDownload, waitForDownload, 
-    saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, 
+    getGameInfo, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, startDownload, waitForDownload, 
+    saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, 
     getAiConfig, saveAIConfig, useAI, fetchAiModels, chatWithAI
   }

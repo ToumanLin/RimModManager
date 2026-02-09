@@ -4,10 +4,12 @@ import { createToastInterface } from 'vue-toastification'
 import { useAppStore } from './appStore'
 import { useGroupStore } from './groupStore'
 import { ISSUE_LEVEL, ISSUE_TYPE, ISSUE_TITLE_MAP } from '../utils/constants'
+import { useConfirmStore } from './confirmStore'
 
 export const useModStore = defineStore('mods', () => {
   const toast = createToastInterface()
   const appStore = useAppStore()
+  const confirmStore = useConfirmStore()
   const checkResult = appStore.checkResult
   
   // === State ===
@@ -355,8 +357,15 @@ export const useModStore = defineStore('mods', () => {
       toast.success(`扫描完成，共计扫描${detail.total}个模组，新增${detail.stats.added}个，\n更新${detail.stats.updated}个，删除${detail.stats.removed}个，已知${detail.stats.skipped}个。`,{position: "top-center",timeout: 5000})
     }
     // 扫描结束后，主动拉取一次最新数据刷新界面
-    appStore.refreshData()
     console.log("扫描统计:", detail)
+    await appStore.refreshData()
+    // 状态注入
+    if (coexistenceList.value.length > 0){
+      // 处理可共存Mod，标记为 is_coexistence = true
+      coexistenceList.value.forEach(item => {
+        takeModById(item.package_id)['is_coexistence'] = true
+      })
+    }
   }
   // 自动排序 Mod
   const autoSortMods = async (mod_ids) => {
@@ -395,6 +404,31 @@ export const useModStore = defineStore('mods', () => {
       toast.error(`自动排序Mod异常: \n${e.message}`)
     }
     return false
+  }
+  // 创建本地共存
+  const localizeSelectedMods = async () => {
+    if (selectedIds.value.length === 0) return;
+    // 过滤出选中的工坊模组（如果是本地模组则没必要转换）
+    const workshopIds = selectedMods.value
+      .filter(m => m.source === 'workshop')
+      .map(m => m.package_id);
+    if (workshopIds.length === 0) {
+      toast.info("选中的模组中没有来自工坊的项");
+      return;
+    }
+    const confirm = await confirmStore.confirmAction(
+      '本地化确认',
+      `确定要将选中的 ${workshopIds.length} 个工坊模组复制到本地目录吗？\n复制后将独立占用磁盘空间，Steam 的更新将不再影响这些本地副本。`,
+      { type: 'info' }
+    );
+    if (confirm) {
+      appStore.isLoading = true;
+      const res = await window.pywebview.api.localize_workshop_mods(workshopIds);
+      if (appStore.checkResult(res, '模组本地化')) {
+        // 成功后会在完成时刷新数据
+      }
+      appStore.isLoading = false;
+    }
   }
 
   // --- Mod数据操作 ---
@@ -607,6 +641,7 @@ export const useModStore = defineStore('mods', () => {
       return false
     }
   }
+
 
   // --- 实时问题分析 ---
   // 排序问题检测器
@@ -926,7 +961,7 @@ export const useModStore = defineStore('mods', () => {
     // Actions
     setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, 
     updateInactiveIds, takeInactiveIds, removeIdsOnAllList, selectMods, clearSelection, 
-    scanMods, scanComplete, autoSortMods, 
+    scanMods, scanComplete, autoSortMods, localizeSelectedMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, 
     setModsColor, setModsType, addModsTags, removeModsTags, selectModsTag, selectModsGroup, 
     getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, 

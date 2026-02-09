@@ -115,7 +115,7 @@ class AppConfig:
     open_url_on_system: bool = False          # 是否在系统默认浏览器打开链接
     prefer_steam_launch: bool = True         # 是否通过 Steam 启动游戏
     sort_mods_by: str = "name"                # 排序方式: name, id, alias
-    coexist_mod_name_with: str = "workshop_id" # 共存Mod生成方式: workshop_id, package_id, name, alias
+    coexist_mod_folder_name_type: str = "workshop_id" # 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: bool = True      # 是否显示共存Mod提示
     
     

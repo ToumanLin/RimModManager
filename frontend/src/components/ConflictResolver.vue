@@ -165,7 +165,7 @@ watch(
     () => appStore.settings.show_coexistence_message
   ],
   ([conflictsVal, coexistencesVal, showCoexistence]) => {
-    console.log('showCoexistence', showCoexistence, coexistencesVal, conflictsVal)
+    // console.log('处理冲突', showCoexistence, coexistencesVal, conflictsVal)
     // 1. 汇总最终需要显示的列表
     const totalList = [];
 

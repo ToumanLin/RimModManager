@@ -4,6 +4,7 @@ from enum import Enum
 import gc
 import json
 import os
+import re
 import threading
 import time
 import functools
@@ -14,7 +15,7 @@ from dataclasses import dataclass, asdict
 from typing import Any, Dict, List
 from send2trash import send2trash
 from datetime import datetime
-from peewee import Model
+from peewee import Model, JOIN
 from playhouse.shortcuts import model_to_dict
 
 # 1. 引入配置管理
@@ -24,7 +25,7 @@ from backend._version import __version__, __build__
 from backend.utils.tools import current_ms
 
 # 2. 引入数据库层
-from backend.database.models import ModAsset, init_db
+from backend.database.models import ModAsset, UserModData, init_db
 from backend.database.dao import ModDAO, GroupDAO
 
 # 3. 引入业务逻辑管理器
@@ -179,6 +180,7 @@ class API:
         from backend.database.models import close_db
         logger.info("Closing database connection...")
         close_db()
+    
     # =========================================================================
     #  1. 初始化与全局数据 (Initialization)
     # =========================================================================
@@ -262,6 +264,7 @@ class API:
         if paths_valid and context_mods: 
             self.is_first_db_init = False   # 标记数据库已初始化
         return ApiResponse.success(result)
+    
     @log_api_call
     def reset_database(self):
         """
@@ -778,10 +781,20 @@ class API:
         """删除文件/文件夹"""
         try:
             success = self.file_mgr.delete_path(path)
-            if success:
-                return ApiResponse.success()
+            if success: return ApiResponse.success()
+            return ApiResponse.warning("路径不存在或无法删除")
         except Exception as e:
             return ApiResponse.error(f"删除路径时出错: {e}")
+        
+    def delete_paths(self, paths: List[str]):
+        """批量删除文件/文件夹"""
+        try:
+            success_count, error_list = self.file_mgr.delete_paths(paths)
+            if success_count == len(paths):
+                return ApiResponse.success()
+            return ApiResponse.warning(f"成功删除 {success_count} 个路径，{len(error_list)} 个路径删除失败")
+        except Exception as e:
+            return ApiResponse.error(f"批量删除路径时出错: {e}")
     
     def get_all_backups(self):
         """获取所有备份文件路径"""
@@ -826,6 +839,32 @@ class API:
         except Exception as e:
             return ApiResponse.error(f"保存文件时出错: {e}")
         return ApiResponse.warning("未选择文件")
+    
+    
+    
+    @log_api_call
+    def localize_workshop_mods(self, mod_ids: List[str]):
+        """
+        将工坊模组转为本地模组，并推送实时进度
+        """
+        cfg = settings.config
+        local_root = cfg.local_mods_path
+        
+        # 1. 准备任务 (使用 JOIN 一次性查出所有需要的数据)
+        # 这里的退回顺序逻辑直接在 Python 循环中处理，清晰易维护
+        query = (ModAsset.select(ModAsset, UserModData.alias_name)
+                 .join(UserModData, on=(ModAsset.package_id == UserModData.mod_id), join_type=JOIN.LEFT_OUTER)
+                 .where(ModAsset.package_id << [mid.lower() for mid in mod_ids], ModAsset.source == 'workshop')
+                 .dicts())
+        try:
+            # 2. 执行任务
+            res = self.file_mgr.localize_workshop_mods(query, local_root, cfg.coexist_mod_folder_name_type)
+            if not res: return ApiResponse.warning("没有可转换的工坊模组")
+        except Exception as e:
+            logger.error(f"Localize workshop mods failed: {e}", exc_info=True)
+            return ApiResponse.error(f"本地化任务失败: {str(e)}")
+        
+        return ApiResponse.success(message="本地化任务已在后台启动")
     
     # =========================================================================
     #  7. 排序管理 (Sort Management)

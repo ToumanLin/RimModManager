@@ -1,16 +1,20 @@
 from concurrent.futures import ThreadPoolExecutor
 import os
+import re
 import shutil
 import tempfile
 import threading
 import subprocess
 import platform
+import time
+from typing import List
 from urllib.parse import unquote, quote
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from PIL import Image
 import webview # 引入 webview 库
 from send2trash import send2trash
 from backend.settings import CACHE_DIR
+from backend.utils.event_bus import EventBus
 from backend.utils.logger import logger
 
 
@@ -218,8 +222,41 @@ class FileManager:
             if os.path.isfile(abs_path) or os.path.isdir(abs_path):
                 send2trash(abs_path)
                 return True
+            return False
         except Exception as e:
             raise Exception(f"删除路径时出错: {e}")
+    
+    @staticmethod
+    def delete_paths(paths: list):
+        """
+        批量删除文件/文件夹到回收站
+        :param paths: 路径列表
+        :return: (success_count, error_list)
+        """
+        success_count = 0
+        error_list = []
+        if not paths: return 0, []
+        for path in paths:
+            if not path: continue
+            try:
+                # 1. 转换为绝对路径
+                abs_path = os.path.abspath(path)
+                # 2. 检查是否存在
+                if os.path.exists(abs_path):
+                    # 3. 移至回收站 (比直接删除更安全)
+                    send2trash(abs_path)
+                    success_count += 1
+                else:
+                    # 如果路径本来就不存在，可以视为删除成功的一种
+                    # 或者记录为跳过，这里我们直接累加成功，减少用户困惑
+                    success_count += 1
+                    
+            except Exception as e:
+                logger.error(f"批量删除出错: {path} -> {e}")
+                error_list.append(f"删除失败 ({os.path.basename(path)}): {str(e)}")
+
+        return success_count, error_list
+    
     
     @staticmethod
     def select_folder_dialog(initial_dir=''):
@@ -280,6 +317,114 @@ class FileManager:
                 return result[0]
                 
         return None
+    
+    @staticmethod
+    def localize_workshop_mods(query, local_root: str, folder_name_type: str = 'workshop_id'):
+        """
+        将工坊模组转为本地模组，并推送实时进度
+        :param query: 包含工坊模组信息的查询结果
+        :param local_root: 本地模组存储根目录
+        :param folder_name_type: 文件夹命名类型，可选 'alias_name', 'name', 'package_id', 'workshop_id'
+        """
+        tasks = []
+        for mod_data in query:
+            # 核心退回逻辑：alias_name > name > package_id > workshop_id
+            display_name = mod_data.get('workshop_id')
+            if(folder_name_type=='alias_name'): display_name = ( mod_data.get('alias_name') or mod_data.get('name') or mod_data.get('package_id') or mod_data.get('workshop_id') )
+            elif(folder_name_type=='name'): display_name = ( mod_data.get('name') or mod_data.get('package_id') or mod_data.get('workshop_id') )
+            elif( folder_name_type=='package_id' ): display_name = ( mod_data.get('package_id') or mod_data.get('workshop_id') )
+            else: display_name = mod_data.get('workshop_id')
+            
+            # 净化文件名
+            safe_name = FileManager.sanitize_filename(display_name)
+            folder_name = f"_{safe_name}_"
+            tasks.append({
+                'src': mod_data['path'],
+                'dst': os.path.join(local_root, folder_name),
+                'label': display_name # 用于进度显示
+            })
+        if not tasks: return False
+            
+        # 2. 定义进度回调函数，通过 EventBus 发送到前端
+        def on_progress(current, total, label):
+            percent = int((current / total) * 100)
+            EventBus.emit('localize-progress', {
+                'current': current,
+                'total': total,
+                'percent': percent,
+                'message': f"正在本地化 ({current}/{total}): {label}"
+            })
+        # 3. 在后台线程执行，避免阻塞 UI（如果是大批量复制）
+        def run_task():
+            success, errors, total = FileManager.copy_folders_with_progress(tasks, on_progress)
+            # 执行完成后触发扫描以更新数据库和软链接
+            # 强制发送 100% 进度
+            EventBus.emit('scan-progress', {
+                'stage': 'finished',
+                'current': total,
+                'total': total,
+                'percent': 100,
+                'message': '本地化完成'
+            })
+            
+            # 给前端一点点时间处理 100% 的状态，再发送 complete
+            time.sleep(0.2) 
+            # 发送完成事件
+            EventBus.emit('localize-complete', {
+                'success_count': len(success),
+                'error_count': len(errors),
+                'errors': errors
+            })
+        threading.Thread(target=run_task, daemon=True).start()
+        return True
+    
+    @staticmethod
+    def copy_folders_with_progress(tasks, progress_callback=None):
+        """
+        带进度回调的批量复制
+        :param tasks: [{'src': '...', 'dst': '...', 'label': '...'}]
+        :param progress_callback: 函数，接收 (current, total, label)
+        """
+        total = len(tasks)
+        success_list = []
+        error_list = []
+
+        for i, task in enumerate(tasks):
+            src = task['src']
+            dst = task['dst']
+            label = task.get('label', os.path.basename(src))
+
+            # 触发进度回调
+            if progress_callback:
+                progress_callback(i + 1, total, label)
+
+            try:
+                # 自动处理重名
+                final_dst = dst
+                counter = 1
+                while os.path.exists(final_dst):
+                    final_dst = f"{dst}_{counter}"
+                    counter += 1
+                
+                shutil.copytree(src, final_dst)
+                success_list.append(final_dst)
+            except Exception as e:
+                logger.error(f"Copy failed: {src} -> {dst}: {e}")
+                error_list.append(f"模组 {label} 复制失败: {str(e)}")
+
+        return success_list, error_list, total
+    
+    @staticmethod
+    def sanitize_filename(name):
+        """清理文件名，确保路径合法"""
+        if not name:
+            return "Unknown_Mod"
+        # 1. 替换 Windows/Linux 非法字符为下划线
+        name = re.sub(r'[\\/:*?"<>|]', '_', str(name))
+        # 2. 移除不可见字符
+        name = "".join(ch for ch in name if ch.isprintable())
+        # 3. 限制长度防止路径过长报错 (Windows 建议总路径 < 260)
+        return name.strip()[:64]
     
     
     # =========================================================
