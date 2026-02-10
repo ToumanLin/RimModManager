@@ -331,7 +331,7 @@ class RuleManager:
         
         # UserModData: 仅补充缺失字段，不覆盖已有非空字段
         for item in env.get("user_mod_data", []):
-            pid = item.get('package_id')
+            pid = item.get('mod_id')
             # 查现有数据
             # 这是一个优化的合并逻辑：先查数据库，对比后再更新
             # 但为了简单和性能，直接依赖 DAO 的 upsert 可能太粗暴

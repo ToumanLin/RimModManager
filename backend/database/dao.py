@@ -501,7 +501,7 @@ class GroupDAO:
     """
 
     @staticmethod
-    def get_all_groups_structured_old():
+    def get_all_groups_structured():
         """
         【关键方法】获取完整的分组数据结构，供前端渲染。
         返回格式:
@@ -542,7 +542,7 @@ class GroupDAO:
         return groups
     
     @staticmethod
-    def get_all_groups_structured(allowed_ids: List[str]):
+    def get_groups_structured_by_mod_ids(allowed_ids: List[str]):
         """
         获取结构化分组数据，并根据给定的 ID 集合过滤内容。
         :param allowed_ids: 当前环境下可见的模组 package_id 集合 (Set 提高查找效率)

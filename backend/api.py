@@ -244,7 +244,7 @@ class API:
         # 3. 获取所有分组数据 (结构化)
         # 传入当前的 assets 列表 ID，用于过滤掉分组中存在但当前环境下不可见的 Mod
         current_assets_ids = [m['package_id'] for m in context_mods]
-        all_groups = GroupDAO.get_all_groups_structured(current_assets_ids)
+        all_groups = GroupDAO.get_groups_structured_by_mod_ids(current_assets_ids)
         # 4. 获取当前激活的加载顺序
         active_load_order = self.load_order_mgr.read_active_mods()
         
@@ -632,7 +632,7 @@ class API:
         context_mods = ModDAO.get_profile_mods() 
         # 传入当前的 assets 列表 ID，用于过滤掉分组中存在但当前环境下不可见的 Mod
         current_assets_ids = [m['package_id'] for m in context_mods]
-        return ApiResponse.success(GroupDAO.get_all_groups_structured(current_assets_ids))
+        return ApiResponse.success(GroupDAO.get_groups_structured_by_mod_ids(current_assets_ids))
 
     def create_group(self, name: str, color: str):
         try:
@@ -1357,7 +1357,7 @@ class API:
             # 如果是非手动检查，且版本是被跳过的，则返回无更新
             if not manual and info.version == settings.config.ignored_update_version:
                 return ApiResponse.success({ "has_update": False })
-            settings.set('last_update_check_time', time.time())
+            settings.set('last_update_check_time', current_ms())
             # 将 dataclass 转为字典传给前端
             return ApiResponse.success(asdict(info))
         except Exception as e:

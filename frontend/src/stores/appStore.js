@@ -232,7 +232,7 @@ export const useAppStore = defineStore('app', () => {
       if (settings.value.enable_auto_update_check) {
         // 距离上次检查超过1天则检查更新
         const lastCheckTime = settings.value.last_update_check_time
-        if (lastCheckTime && Date.now() - lastCheckTime > 24 * 60 * 60 * 1000) {
+        if (!lastCheckTime || Date.now() - lastCheckTime > 24 * 60 * 60 * 1000) {
           console.log("正在执行启动检查更新...")
           // 传入 false 表示静默检查
           checkUpdate(false) 
@@ -742,7 +742,7 @@ export const useAppStore = defineStore('app', () => {
           const ok = await confirmStore.confirmAction(
             `发现新版本 v${info.version}`,
             `来源: ${info.source_name}\n文件大小: ${info.file_size || '未知'}\n\n更新内容:\n${info.changelog}`,
-            { confirmText: '立即更新', cancelText: manual ? '以后再说' : '忽略此版本', type: 'success' }
+            { confirmText: '立即更新', cancelText: manual ? '以后再说' : '忽略此版本', type: 'success', isHtml: true }
           )
 
           if (ok) {

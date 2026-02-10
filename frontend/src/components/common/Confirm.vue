@@ -58,7 +58,8 @@
               </h3>
               
               <div v-if="confirmStore.state.message" class="text-xs text-text-dim/90 leading-relaxed text-pretty font-medium">
-                <span>{{ confirmStore.state.message }}</span>
+                <span v-if="confirmStore.state.isHtml" v-html="confirmStore.state.message"></span>
+                <span v-else>{{ confirmStore.state.message }}</span>
               </div>
             </div>
           </div>

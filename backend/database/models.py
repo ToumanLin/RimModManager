@@ -189,7 +189,7 @@ def init_db(db_path):
     
 def close_db():
     if db.is_closed(): 
-        logger.info("数据库已关闭，无需操作")
+        logger.info("数据库已关闭")
         return
     try:
         # 强制执行检查点，将 WAL 内容写回磁盘并截断日志
