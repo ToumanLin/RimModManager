@@ -59,6 +59,7 @@ def log_api_call(func):
         safe_args = [str(a)[:50] + '...' if len(str(a)) > 50 else a for a in args]
         
         try:
+            EventBus.resume() # 在执行操作前恢复事件总线
             # 执行原函数
             result = func(self, *args, **kwargs)
             

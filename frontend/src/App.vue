@@ -58,16 +58,25 @@
                 <div class="p-3 rounded-b-2xl grid grid-cols-3 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-white/5">
             
                   <!-- 刷新按钮 -->
-                  <button :class="{'scan': appStore.scanProgress.scanning}"
-                    class="col-span-1 py-1 rounded-lg bg-white/5 border border-white/5 
-                          text-sm text-gray-300 font-bold uppercase tracking-wider
-                          hover:bg-white/10 hover:text-white hover:border-white/20
+                  <button :class="{'scan': appStore.scanProgress.scanning}" v-tooltip="'默认增量扫描文件，只扫描存在变动的文件'"
+                    class="col-span-1 py-1 rounded-lg bg-text-main/5 border border-text-main/5 group
+                          text-sm text-gray-300 font-bold uppercase tracking-wider relative
+                          hover:bg-text-main/10 hover:text-text-main hover:border-text-main/20
                           active:scale-95 transition-all duration-200 group flex items-center justify-center gap-1"
                     @click="modStore.scanMods()"
                     :disabled="appStore.scanProgress.scanning"
                   >
                     <!-- <svg v-if="appStore.scanProgress.scanning" class="animate-spin w-3 h-3 text-accent-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> -->
                     <span >{{ appStore.scanProgress.scanning ? '扫描中...' : '刷新' }}</span>
+                    
+                    <button v-show="!appStore.scanProgress.scanning" v-tooltip="'强制刷新，会扫描所有文件，包括未变动的文件，比较耗时'"
+                      class="absolute bottom-full py-1 px-2 mb-1.5 rounded-lg bg-accent-secondary/50 border border-text-main/10 transition-all duration-500
+                          text-sm text-text-dim font-bold uppercase tracking-wider opacity-0 invisible group-hover:opacity-100 group-hover:visible
+                          hover:bg-accent-secondary/80 hover:text-text-main hover:border-text-main"
+                          @click.stop="modStore.scanMods(null, true)">
+                      强制刷新
+                    </button>
+
                   </button>
                   <!-- 自动排序按钮 -->
                   <button class="col-span-1 py-1 rounded-lg text-sm font-bold uppercase tracking-wider bg-accent-tip/80 text-black hover:bg-accent-tip shadow-lg shadow-accent-primary/10

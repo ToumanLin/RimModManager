@@ -160,19 +160,31 @@ if %ERRORLEVEL% GEQ 8 (
     goto retry_move
 )
 
+echo 正在清理临时文件...
+:: 在启动程序之前删除目录
+if exist "{extract_path}" (
+    rd /s /q "{extract_path}"
+)
+:: 如果删除失败，尝试循环等待一会（防止 robocopy 句柄未释放）
+if exist "{extract_path}" (
+    timeout /t 1 /nobreak > nul
+    rd /s /q "{extract_path}"
+)
+
 echo 更新成功，正在清理环境并重启...
 
-:: 【关键】清除 PyInstaller 环境残留，防止 DLL 找不到
+:: 清除 PyInstaller 环境残留，防止 DLL 找不到
 set _MEIPASS=
 set _MEIPASS2=
 set PYI_EXPLODE_PATH=
 
-:: 重启。使用 /d 指定工作目录，且不带环境变量启动
+:: 删除可能的残留压缩包
+if exist "{temp_zip_path}" del /f /q "{temp_zip_path}"
+
+:: 启动新程序
 start "" /d "{install_root}" "{exe_name}"
 
-:: 清理并自删
-rd /s /q "{extract_path}"
-del "{temp_zip_path}"
+:: 确保脚本退出后能删掉自己
 (goto) 2>nul & del "%~f0"
 exit
 """
