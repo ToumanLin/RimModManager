@@ -232,6 +232,7 @@ export const useAppStore = defineStore('app', () => {
       if (settings.value.enable_auto_update_check) {
         // 距离上次检查超过1天则检查更新
         const lastCheckTime = settings.value.last_update_check_time
+        console.log("上次检查时间:", lastCheckTime, Date.now(),Date.now() - lastCheckTime)
         if (!lastCheckTime || Date.now() - lastCheckTime > 24 * 60 * 60 * 1000) {
           console.log("正在执行启动检查更新...")
           // 传入 false 表示静默检查
@@ -805,6 +806,13 @@ export const useAppStore = defineStore('app', () => {
         const filePath = await waitForDownload(task_id)
         // 下载完成后，自动执行安装
         toast.success("下载已就绪，正在准备安装...")
+        const confirmStore = useConfirmStore()
+        const ok = await confirmStore.confirmAction(
+          "确认安装更新？",
+          `压缩包已经下载到：${filePath}\n是否继续安装更新？安装后将重启应用程序。`,
+          { confirmText: '确认安装', cancelText: '取消', type: 'warning' }
+        )
+        if (!ok) return toast.info("用户取消安装")
         await window.pywebview.api.install_update(filePath)
       }
     } catch (e) {

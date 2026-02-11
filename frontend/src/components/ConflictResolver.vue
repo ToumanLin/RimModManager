@@ -1,8 +1,7 @@
 <template>
   <transition name="fade">
-    <div v-if="visible" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div
-        class="w-5/7 max-h-9/10 flex flex-col bg-bg-deep border border-accent-danger/30 rounded-xl shadow-2xl overflow-hidden">
+    <div v-if="visible" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50 backdrop-blur-sm" >
+      <div class="w-3/4 max-h-9/10 flex flex-col bg-bg-deep border border-accent-danger/30 rounded-xl shadow-2xl overflow-hidden">
 
         <!-- Header -->
         <div class="px-6 py-4 bg-accent-danger/10 border-b border-accent-danger/20 flex items-center justify-between shrink-0">
@@ -16,10 +15,16 @@
                   class="text-accent-success font-bold">保留版本</span>。</p>
             </div>
           </div>
-          <common-switch v-model="appStore.settings.show_coexistence_message" @click="appStore.saveSetting('show_coexistence_message', appStore.settings.show_coexistence_message)"
-            label="显示共存问题" mini description="关闭后，仅显示冲突的包ID，不显示版本共存问题"
-            class="w-45 text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-white transition-colors"
-          />
+          <div class="flex items-center gap-3">
+            <common-switch v-model="appStore.settings.show_coexistence_message" @click="appStore.saveSetting('show_coexistence_message', appStore.settings.show_coexistence_message)"
+              label="显示共存问题" mini description="关闭后，仅显示冲突的包ID，不显示版本共存问题"
+              class="w-45 text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-white transition-colors"
+            />
+            <button v-tooltip="'我管你这的那的，下次再说！'" class="text-sm text-text-dim hover:text-accent-danger transition-colors" @click="visible = false">
+              <x-circle></x-circle>
+            </button>
+          </div>
+          
         </div>
 
         <!-- 滚动列表区 -->
@@ -142,6 +147,7 @@ import { useModStore } from '../stores/modStore'
 import { useAppStore } from '../stores/appStore'
 import { useToast } from "vue-toastification"
 import CommonSwitch from './common/input/CommonSwitch.vue'
+import { XCircle } from 'lucide-vue-next'
 
 const appStore = useAppStore()
 const modStore = useModStore()

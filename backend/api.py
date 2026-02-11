@@ -1377,10 +1377,10 @@ class API:
         """
         try:
             info = self.update_mgr.check_all()
+            settings.set('last_update_check_time', current_ms())
             # 如果是非手动检查，且版本是被跳过的，则返回无更新
             if not manual and info.version == settings.config.ignored_update_version:
                 return ApiResponse.success({ "has_update": False })
-            settings.set('last_update_check_time', current_ms())
             # 将 dataclass 转为字典传给前端
             return ApiResponse.success(asdict(info))
         except Exception as e:
