@@ -10,7 +10,7 @@
 @source inline('{hover:,focus:,}{bg}-accent-{primary,danger,highlight,special,cool,success,tip,warn,secondary,warning}/{10,20,30,40,50,60}');
 @source inline('{hover:,focus:,}{border,text}-accent-{primary,danger,highlight,special,cool,success,tip,warn,secondary,warning}/{10,20,30,40,50}');
 
-/* 这里定义我们的 RimWorld 主题颜色 */
+/* 这里定义主题颜色 */
 @theme {
   /* 基础背景色 - 深邃的蓝黑 */
   --color-bg-deep: #0f172a; 
@@ -357,7 +357,7 @@ button:focus-visible {
 }
 
 :root {
-  --highlight-color: var(--color-accent-secondary); 
+  --highlight-color: 234,179,8; 
 }
 
 /* 1. 剧烈颤抖 (Shake) - 适合错误或强提醒 */
@@ -405,7 +405,14 @@ button:focus-visible {
 .highlight-effect-shake {
   animation: highlight-shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
   outline: 2px solid rgba(var(--highlight-color), 1);
+  border-radius: 5px;
+  padding: 2px 3px;
+  color: rgba(var(--highlight-color), 1);
   box-shadow: 0 0 15px rgba(var(--highlight-color), 0.6);
+  -webkit-border-radius: 5px;
+  -moz-border-radius: 5px;
+  -ms-border-radius: 5px;
+  -o-border-radius: 5px;
 }
 
 /* 模式 B: 摇摆 (Wobble) */

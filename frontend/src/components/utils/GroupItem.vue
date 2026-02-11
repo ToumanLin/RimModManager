@@ -62,44 +62,54 @@
         </button>
       </span>
     </div>
+    <Transition
+      enter-active-class="grid transition-[grid-template-rows] duration-200 ease-out"
+      enter-from-class="grid-rows-[0fr]"
+      enter-to-class="grid-rows-[1fr]"
+      leave-active-class="grid transition-[grid-template-rows] duration-200 ease-in"
+      leave-from-class="grid-rows-[1fr]"
+      leave-to-class="grid-rows-[0fr]"
+    >
+      <!-- 内容区 -->
+      <div v-show="expanded" >
+        <!-- pointer-events-none 确保分组本身被拖拽时禁用鼠标交互，进而禁止被意外拖入内部列表 -->
+        <div class="min-h-0 overflow-hidden" :class="{ 'pointer-events-none': groupStore.isDraggingGroup }">
+          <div class="p-1 mx-1 min-h-15 bg-[rgba(var(--rgb-components),0.2)] border border-b-white/5 border-x-white/5 border-t-transparent rounded-b-lg shadow-2xsl relative">
+            <div v-show="groupData.mod_ids.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed text-gray-600 text-xs bg-bg-deep/30 select-none pointer-events-none">
+              可拖拽模组到此
+              <!-- 点阵背景 -->
+              <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+            </div>
 
-    <!-- 内容区 -->
-    <div class="grid transition-[grid-template-rows] duration-200 "
-      :class="expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
-      <!-- pointer-events-none 确保分组本身被拖拽时禁用鼠标交互，进而禁止被意外拖入内部列表 -->
-      <div class="max-h-[50vh] overflow-hidden" :class="{ 'pointer-events-none': groupStore.isDraggingGroup }">
-        <div class="p-1 mx-1 min-h-15 bg-[rgba(var(--rgb-components),0.2)] border border-b-white/5 border-x-white/5 border-t-transparent rounded-b-lg shadow-2xsl relative">
-          <div v-show="groupData.mod_ids.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed text-gray-600 text-xs bg-bg-deep/30 select-none pointer-events-none">
-            可拖拽模组到此
-            <!-- 点阵背景 -->
-            <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+            <VirtualList v-model="internalModList" dataKey="id" :keeps="50" class="max-h-[45vh] min-h-15 transition-all duration-200" ref="vListRef"
+              placeholderClass="ghost" wrapClass="mb-5" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }"
+              :group="{ name: 'mods', pull: 'clone', put:['mods'], revertDrag: true }" :animation="150" :size="itemHeight"
+              @drop="updateChildren" @drag="startDrag"
+              v-selectable-list="{ data: groupData.mod_ids, clickClass: 'select-trigger', swipeClass: 'swipe-trigger'}">
+              <template v-slot:item="{ record, index, dataKey }">
+
+                <div class="relative group">
+                  <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
+                          :is-selected="modStore.selectedIds.includes(dataKey)" 
+                          :show-index="appStore.settings.ui.show_group_index"  
+                          :show-icon="appStore.settings.ui.show_group_icon"
+                          :simple="true">
+                  </ModItem>
+                  
+                  <!-- 右上角移除按钮（阻止冒泡，避免触发选择） -->
+                  <button @click.stop="removeItem(dataKey)" @mousedown.stop v-tooltip="`移除`"
+                    class="absolute top-1 right-1 w-3 h-3 bg-accent-danger text-text-main rounded-full 
+                          opacity-0 group-hover:opacity-80 transition-opacity duration-200
+                          flex items-center justify-center text-xs z-10 hover:scale-110">×
+                  </button>
+                </div>
+
+              </template>
+            </VirtualList>
           </div>
-
-          <VirtualList v-model="internalModList" dataKey="id" :keeps="50" class="max-h-[45vh] min-h-15" ref="vListRef"
-            placeholderClass="ghost" wrapClass="" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }"
-            :group="{ name: 'mods', pull: 'clone', put:['mods'], revertDrag: true }" :animation="150" :size="itemHeight"
-            @drop="updateChildren" @drag="startDrag"
-            v-selectable-list="{ data: groupData.mod_ids, clickClass: 'select-trigger',}">
-            <template v-slot:item="{ record, index, dataKey }">
-
-              <div class="relative group">
-                <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
-                        :is-selected="modStore.selectedIds.includes(dataKey)" :show-index="false" :simple="true">
-                </ModItem>
-                
-                <!-- 右上角移除按钮（阻止冒泡，避免触发选择） -->
-                <button @click.stop="removeItem(dataKey)" @mousedown.stop v-tooltip="`移除`"
-                  class="absolute top-1 right-1 w-3 h-3 bg-accent-danger text-text-main rounded-full 
-                        opacity-0 group-hover:opacity-80 transition-opacity duration-200
-                        flex items-center justify-center text-xs z-10 hover:scale-110">×
-                </button>
-              </div>
-
-            </template>
-          </VirtualList>
         </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
 

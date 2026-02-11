@@ -50,57 +50,69 @@
             <!-- 版本选项列表 -->
             <div class="p-3 grid gap-2 grid-cols-1">
               <!-- key 改为 mod.path，选中判断改为 selections[group.package_id] -->
-              <div v-for="mod in group.items" :key="mod.path" @click="selectVersion(group.package_id, mod.path)"
-                class="relative flex items-center p-3 rounded-lg border transition-all cursor-pointer group/item"
-                :class="selections[group.package_id] === mod.path
-                  ? 'bg-accent-success/10 border-accent-success ring-1 ring-accent-success/50'
-                  : 'bg-black/20 border-white/5 opacity-70 hover:opacity-100 hover:border-white/20'">
-                <!-- 选中标记 -->
-                <div class="w-5 h-5 rounded-full border flex items-center justify-center mr-4 shrink-0 transition-colors"
-                  :class="selections[group.package_id] === mod.path ? 'border-accent-success bg-accent-success text-black' : 'border-white/30'">
-                  <svg v-if="selections[group.package_id] === mod.path" class="size-4" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="4">
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                </div>
-
-                <!-- Mod 信息 -->
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="font-bold text-sm text-white truncate">{{ mod.name }}</span>
-                    <span class="px-1.5 py-0.5 rounded bg-white/10 text-xs font-mono text-accent-primary">
-                      v{{ mod.version || '?' }}</span>
-                    <!-- 来源高亮 -->
-                    <span class="text-xs px-1 rounded"
-                      :class="mod.source === 'local' ? 'text-accent-success border border-accent-success/30' : (mod.source === 'workshop' ? 'text-accent-primary border border-accent-primary/10' : 'text-text-dim border border-text-dim/10')">
-                      {{ mod.source }}</span>
+              <div v-for="mod in group.items" :key="mod.path" class="flex items-center">
+                
+                <div @click="selectVersion(group.package_id, mod.path)"
+                  class="relative flex-1 flex items-center p-3 rounded-lg border transition-all cursor-pointer group/item"
+                  :class="selections[group.package_id] === mod.path
+                    ? 'bg-accent-success/10 border-accent-success ring-1 ring-accent-success/50'
+                    : 'bg-black/20 border-white/5 opacity-70 hover:opacity-100 hover:border-white/20'">
+                  <!-- 选中标记 -->
+                  <div class="w-5 h-5 rounded-full border flex items-center justify-center mr-4 shrink-0 transition-colors"
+                    :class="selections[group.package_id] === mod.path ? 'border-accent-success bg-accent-success text-black' : 'border-white/30'">
+                    <svg v-if="selections[group.package_id] === mod.path" class="size-4" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" stroke-width="4">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
                   </div>
-                  <div class="text-xs text-text-dim mt-1 truncate font-mono" :title="mod.path">{{ mod.path }}</div>
+
+                  <!-- Mod 信息 -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-sm text-white truncate">{{ mod.name }}</span>
+                      <span class="px-1.5 py-0.5 rounded bg-white/10 text-xs font-mono text-accent-primary cursor-help" v-tooltip="`版本：${mod.version || '?'}`">
+                        v{{ mod.version || '?' }}</span>
+                      <span class="px-1.5 py-0.5 rounded bg-white/10 text-xs font-mono text-accent-success cursor-help" v-tooltip="`支持游戏版本：${mod.supported_versions?.join(', ') || '?'}`">
+                        {{ mod.supported_versions?.at(-1) || '?' }}</span>
+                      <!-- 来源高亮 -->
+                      <span class="text-xs px-1 rounded"
+                        :class="mod.source === 'local' ? 'text-accent-success border border-accent-success/30' : (mod.source === 'workshop' ? 'text-accent-primary border border-accent-primary/10' : 'text-text-dim border border-text-dim/10')">
+                        {{ mod.source }}</span>
+                    </div>
+                    <div class="text-xs text-text-dim mt-1 truncate font-mono" v-tooltip="mod.path">{{ mod.path }}</div>
+                  </div>
+
+                  <!-- 未选中时的操作配置 (禁用/删除) -->
+                  <!-- 只有当此项未被选中时才显示 -->
+                  <div v-if="selections[group.package_id] !== mod.path" @click.stop
+                    class="ml-4 flex items-center gap-3 px-3 py-1.5 rounded bg-black/40 border border-white/5">
+                    <span class="text-xs text-text-dim">处理方式:</span>
+                    <!-- radio 的 name 使用 mod.path 保证唯一性 -->
+                    <label class="flex items-center gap-1 cursor-pointer hover:text-white transition-colors">
+                      <input type="radio" :name="`act-${mod.path}`" value="disable" v-model="actionMap[mod.path]"
+                        class="accent-accent-primary w-3 h-3">
+                      <span class="text-xs">禁用</span>
+                    </label>
+                    <label class="flex items-center gap-1 cursor-pointer hover:text-accent-danger transition-colors">
+                      <input type="radio" :name="`act-${mod.path}`" value="delete" v-model="actionMap[mod.path]"
+                        class="accent-accent-danger w-3 h-3">
+                      <span class="text-xs">删除</span>
+                    </label>
+                  </div>
+
+                  <!-- 选中状态文字 -->
+                  <div v-else
+                    class="ml-4 px-3 py-1.5 rounded bg-accent-success/20 text-accent-success text-xs font-bold border border-accent-success/20">
+                    将保留并使用
+                  </div>
+
                 </div>
 
-                <!-- 未选中时的操作配置 (禁用/删除) -->
-                <!-- 只有当此项未被选中时才显示 -->
-                <div v-if="selections[group.package_id] !== mod.path" @click.stop
-                  class="ml-4 flex items-center gap-3 px-3 py-1.5 rounded bg-black/40 border border-white/5">
-                  <span class="text-xs text-text-dim">处理方式:</span>
-                  <!-- radio 的 name 使用 mod.path 保证唯一性 -->
-                  <label class="flex items-center gap-1 cursor-pointer hover:text-white transition-colors">
-                    <input type="radio" :name="`act-${mod.path}`" value="disable" v-model="actionMap[mod.path]"
-                      class="accent-accent-primary w-3 h-3">
-                    <span class="text-xs">禁用</span>
-                  </label>
-                  <label class="flex items-center gap-1 cursor-pointer hover:text-accent-danger transition-colors">
-                    <input type="radio" :name="`act-${mod.path}`" value="delete" v-model="actionMap[mod.path]"
-                      class="accent-accent-danger w-3 h-3">
-                    <span class="text-xs">删除</span>
-                  </label>
-                </div>
-
-                <!-- 选中状态文字 -->
-                <div v-else
-                  class="ml-4 px-3 py-1.5 rounded bg-accent-success/20 text-accent-success text-xs font-bold border border-accent-success/20">
-                  将保留并使用
-                </div>
+                <button v-tooltip="'打开文件路径'" class="m-2 text-text-dim hover:text-accent-cool transition-colors"
+                  @click="appStore.openPath(mod.path)">
+                  <Folder class="size-7"></Folder>
+                </button>
+              
 
               </div>
             </div>
@@ -147,7 +159,7 @@ import { useModStore } from '../stores/modStore'
 import { useAppStore } from '../stores/appStore'
 import { useToast } from "vue-toastification"
 import CommonSwitch from './common/input/CommonSwitch.vue'
-import { XCircle } from 'lucide-vue-next'
+import { Folder, XCircle } from 'lucide-vue-next'
 
 const appStore = useAppStore()
 const modStore = useModStore()

@@ -495,12 +495,8 @@ const executeSearch = (next = true) => {
     searchResults.value = results
     currentSearchIndex.value = -1
   }
-
-
   if (results.length === 0) return
-
   var index = currentSearchIndex.value
-
   if (next) {
     index++
     if (index >= results.length) {
@@ -515,7 +511,6 @@ const executeSearch = (next = true) => {
   if (results.includes(targetId)) {
     modStore.currentTargetId = targetId
   }
-  
 }
 
 // 开始拖拽时，清空反选集合

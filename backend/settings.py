@@ -80,6 +80,9 @@ class UIConfig:
     show_list_mod_icon: bool = True  # 是否显示 Mod 图标
     show_list_modtype_icon: bool = True  # 是否显示 Mod 类型图标
     
+    show_group_index: bool = True  # 是否显示分组索引列
+    show_group_icon: bool = True  # 是否显示分组图标
+    
 
 @dataclass
 class AppConfig:
