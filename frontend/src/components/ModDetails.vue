@@ -422,8 +422,14 @@
 
         <!-- 备注 -->
         <div>
-            <textarea v-model="userNotes" @blur="saveUserData" placeholder="在此添加自定义备注"
-              class="w-full bg-black/20 border border-white/10 rounded p-2 text-sm text-gray-300 focus:border-accent-primary focus:outline-none h-20 resize-none custom-scrollbar"></textarea>
+            <textarea v-model="userNotes" @blur="saveUserData" placeholder="在此添加自定义备注" :class="[expandTextarea?'min-h-100':'']"
+              class="w-full bg-black/20 border border-white/10 rounded p-2 text-sm text-gray-300 
+              focus:border-accent-primary focus:outline-none min-h-20 resize-none custom-scrollbar">
+            </textarea>
+            <button @click="expandTextarea=!expandTextarea" v-tooltip="'展开/收起'" class="w-full -mb-2 flex justify-center items-center cursor-pointer rounded-md hover:bg-white/10 transition-colors">
+              <ChevronUp v-if="expandTextarea" class="size-5"/>
+              <ChevronDown v-else class="size-5"/>
+            </button>
         </div>
         
       </div>
@@ -497,7 +503,7 @@ import { hexToRgba, hexToRgb } from '../utils/colorDeal'
 import ImageCloud from './utils/ImageCloud.vue';
 import LampEffect from './utils/LampEffect.vue';
 import LuxBreatheIcon from './utils/LuxBreatheIcon.vue'
-import { Copy } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Copy } from 'lucide-vue-next'
 
 // 随机选30个Mod的图标URL
 const imageUrls = computed(() => Array.from(modStore.allModsMap.values())
@@ -548,6 +554,7 @@ const showAllDependencies = ref(false);
 const showAllIncompatible = ref(false);
 const showAllLoadBefore = ref(false);
 const showAllLoadAfter = ref(false);
+const expandTextarea = ref(false)
 
 // 1. 获取原始数据
 const rawSelectedMod = computed(() => modStore.lastSelectedMod)

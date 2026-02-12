@@ -258,14 +258,14 @@ if __name__ == "__main__":
     excludes = [
         '__pycache__', '.git', '.venv', '.idea', '.vscode', 
         'build', 'dist', 'node_modules', 
-        'cache', 'temp', 'backups'
+        'cache', 'temp', 'backups','Downloads','updates'
     ]
     
     tree_text = filestree(
         target_dir, 
         exclude_dirs=excludes, 
         use_gitignore=True, # 开启 gitignore 支持
-        max_depth=4         # 限制深度，防止太长
+        max_depth=5         # 限制深度，防止太长
     )
     
     output_file = 'files_tree.txt'
