@@ -59,7 +59,7 @@
 
         <!-- 列表渲染 -->
         <template v-else>
-          <!-- 虚拟滚动优化：实际场景建议用 virtual-list，这里用 v-for 演示结构 -->
+          <!-- 虚拟滚动优化 -->
           <div v-for="(log, index) in filteredLogs" :key="log.id || index"
               class="group/row flex gap-2 py-0.5 px-2 hover:bg-text-main/5 rounded-sm border-l-2 border-transparent transition-colors wrap-break-word"
               :class="getLevelBorderClass(log.level)">

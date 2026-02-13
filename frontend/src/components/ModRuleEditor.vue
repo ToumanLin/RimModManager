@@ -70,7 +70,7 @@
 
             <VirtualList v-model="userAfterRules" dataKey="id" :keeps="50" class="h-full min-h-15" handle="0"
               placeholderClass="ghost" wrapClass="" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }"
-              :sortable="false" :size="itemHeight"
+              :sortable="false" :size="itemHeight" :delay="appStore.settings.ui.drag_delay"
               :group="{ name: '00', pull:false, put:['mods'], revertDrag: true }" :animation="150"
               @drop="onDrop($event,'loadAfter')">
               <template v-slot:item="{ record, index, dataKey }">
@@ -151,7 +151,7 @@
 
             <VirtualList v-model="userBeforeRules" dataKey="id" :keeps="50" class="h-full min-h-15" handle="0"
               placeholderClass="ghost" wrapClass="" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }"
-              :sortable="false" :size="itemHeight"
+              :sortable="false" :size="itemHeight" :delay="appStore.settings.ui.drag_delay"
               :group="{ name: '00', pull:false, put:['mods'], revertDrag: true }" :animation="150"
               @drop="onDrop($event,'loadBefore')">
               <template v-slot:item="{ record, index, dataKey }">
@@ -232,7 +232,7 @@
 
             <VirtualList v-model="userIncompatibleWithRules" dataKey="id" :keeps="50" class="h-full min-h-15" handle="0"
               placeholderClass="ghost" wrapClass="" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }"
-              :sortable="false" :size="itemHeight"
+              :sortable="false" :size="itemHeight" :delay="appStore.settings.ui.drag_delay"
               :group="{ name: '00', pull:false, put:['mods'], revertDrag: true }" :animation="150"
               @drop="onDrop($event,'incompatibleWith')">
               <template v-slot:item="{ record, index, dataKey }">
@@ -282,6 +282,7 @@ import { useConfirmStore } from '../stores/confirmStore'
 
 import ModItem from './utils/ModItem.vue'
 import VirtualList from 'vue-virtual-sortable';
+import { useAppStore } from '../stores/appStore'
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -289,6 +290,7 @@ const props = defineProps({
   listColor: { type: String, default: 'primary' } // danger/highlight/special/cool/primary/success/tip/warn/secondary/warning
 })
 
+const appStore = useAppStore()
 const modStore = useModStore()
 const ruleStore = useRuleStore()
 const confirmStore = useConfirmStore()

@@ -86,6 +86,7 @@ export const useAppStore = defineStore('app', () => {
     ui: {
       theme: 'system',
       font_size: 14,
+      drag_delay: 30,            // 拖动判定延迟 (毫秒)
       tooltip_hover_time: 1000,  // 鼠标悬停显示提示时间 (毫秒)
       show_mod_hover_panel: true,  // 是否显示 Mod 悬停面板
 

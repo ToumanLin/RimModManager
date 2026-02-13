@@ -82,7 +82,7 @@
             </div>
 
             <VirtualList v-model="internalModList" dataKey="id" :keeps="50" class="max-h-[45vh] min-h-15 transition-all duration-200" ref="vListRef"
-              placeholderClass="ghost" wrapClass="mb-5" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }"
+              placeholderClass="ghost" wrapClass="mb-5" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }" :delay="appStore.settings.ui.drag_delay"
               :group="{ name: 'mods', pull: 'clone', put:['mods'], revertDrag: true }" :animation="150" :size="itemHeight" handle=".drag-handle"
               @drop="updateChildren" @drag="startDrag"
               v-selectable-list="{ data: groupData.mod_ids, clickClass: 'select-trigger', swipeClass: 'swipe-trigger'}">

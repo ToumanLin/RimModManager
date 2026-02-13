@@ -59,7 +59,7 @@
         </div>
 
         <VirtualList v-model="groupList" dataKey="group_id" :keeps="50" class="h-full p-1" 
-          placeholderClass="ghost" wrapClass="space-y-2 min-h-full " ref="vListRef"
+          placeholderClass="ghost" wrapClass="space-y-2 min-h-full " ref="vListRef" :delay="appStore.settings.ui.drag_delay"
 	        :appendToBody="true" :fallbackOnBody="true" :scrollSpeed="{ x: 0, y: 10 }" handle=".drag-handle"
           :group="{ name: 'groups', pull:'clone', put: true, revertDrag: true }" :animation="150"
           @drop="groupReorder" @drag="stratDrag">
@@ -101,6 +101,7 @@ import { useGroupStore } from '../stores/groupStore'
 import VirtualList from 'vue-virtual-sortable';
 import GroupItem from './utils/GroupItem.vue'
 import { CircleQuestionMarkIcon } from 'lucide-vue-next';
+import { useAppStore } from '../stores/appStore';
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -109,6 +110,7 @@ const props = defineProps({
   listColor: { type: String, default: 'primary' } // danger/highlight/special/cool/primary/success/tip/warn/secondary/warning
 })
 
+const appStore = useAppStore()
 const modStore = useModStore()
 const groupStore = useGroupStore()
 
