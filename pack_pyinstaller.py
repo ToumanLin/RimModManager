@@ -2,7 +2,7 @@ import os
 import sys
 import subprocess
 import tempfile
-from typing import Callable, Optional, List
+from typing import List
 
 # 尝试导入 pathspec 用于 gitignore 匹配
 try:

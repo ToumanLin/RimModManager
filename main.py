@@ -1,4 +1,5 @@
 import multiprocessing
+import socket
 import sys
 import os
 from pathlib import Path
@@ -33,12 +34,35 @@ def get_webview_proxy_args():
         "proxy_bypass_list": bypass_str
     }
 
+def is_port_available(host: str = "localhost", port: int = 5173, timeout: float = 0.5) -> bool:
+    """
+    检测指定主机的端口是否可达（用于判断前端开发服务器是否启动）
+    :param host: 主机地址
+    :param port: 端口号
+    :param timeout: 超时时间（秒），避免阻塞
+    :return: 端口可达返回 True，否则 False
+    """
+    try:
+        # 创建 socket 连接，检测端口是否开放
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        # 超时/连接拒绝/系统错误，均视为端口不可用
+        return False
+
 # 获取前端文件的路径
 def get_entrypoint():
     """
     获取前端入口地址
     支持：开发模式、PyInstaller 标准模式、PyInstaller lib 归拢模式
     """
+    # 定义前端开发服务器地址
+    dev_server = "http://localhost:5173"
+    # 1. 优先检测开发服务器端口是否可用
+    if is_port_available("localhost", 5173):
+        print(f"[Debug] 开发服务器端口可用，使用: {dev_server}")
+        return dev_server
+    
     # 1. 获取程序根目录 (Base Directory)
     if getattr(sys, 'frozen', False):
         # --- 打包后的环境 ---
@@ -67,7 +91,7 @@ def get_entrypoint():
         return str(path_internal)
     # 4. 兜底回退：本地开发服务器
     logger.debug(f"[Debug] Local assets not found. Searched in:\n - {path_external}\n - {path_internal}")
-    return "http://localhost:5173"
+    return dev_server
 
     
 def on_resized(width, height):

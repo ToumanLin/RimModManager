@@ -333,7 +333,7 @@ class ModScanner:
 
     def _finish_scan(self, result):
         """扫描结束，通知前端并发送最终统计"""
-        print(f"Scan finished: {result['stats']}")
+        logger.info(f"Scan finished: {result['stats']}")
         # 获取最新全量数据，或者让前端自己再调一次 get_all_mods
         # 建议直接通知前端 "scan-complete"，让前端决定是否刷新列表
         

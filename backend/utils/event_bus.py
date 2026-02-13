@@ -1,7 +1,6 @@
 # backend/utils/event_bus.py
 from webview import WebViewException, Window
 
-
 class EventBus:
     _instance = None   # 存储单例实例的变量
     _window = None
