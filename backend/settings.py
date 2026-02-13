@@ -6,10 +6,12 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Dict, Any, List
 
+
 # 配置文件路径
 HOME_DIR = Path(os.getcwd())
 CONFIG_DIR = HOME_DIR / "data"
 CONFIG_FILE = CONFIG_DIR / "config.json"
+UPDATE_CACHE_DIR = HOME_DIR / "updates"
 
 # 定义缩略图缓存目录
 CACHE_DIR = HOME_DIR / "cache" / "thumbnails"
@@ -242,9 +244,9 @@ class SettingsManager:
             # 类型校验（可选，简单的做一下防止 int 变 str）
             target_type = type(getattr(self.config, key))
             if target_type != type(value) and target_type != str: # str比较宽松
-                 # 尝试转换，或者打印警告
-                 # value = target_type(value)
-                 pass
+                # 尝试转换，或者打印警告
+                # value = target_type(value)
+                pass
             
             setattr(self.config, key, value)
             self.save()

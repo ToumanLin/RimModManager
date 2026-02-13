@@ -36,7 +36,7 @@ from backend.scanner.mod_scanner import ModScanner
 from backend.managers.mgr_game_logs import GameLogManager
 from backend.managers.mgr_sorter import OrderSorter
 from backend.managers.mgr_network import NetworkManager
-from backend.managers.mgr_download import DownloadManager
+from backend.managers.mgr_download import DownloadManager, TaskStatus
 from backend.managers.mgr_steam import SteamManager
 from backend.managers.mgr_sub_browser import SubBrowserManager
 from backend.managers.mgr_ai import AIManager
@@ -611,7 +611,7 @@ class API:
                     mod.shadow_paths = current_paths
                     mod.save()
         except Exception as e:
-            print(f"Error updating shadow paths: {e}")
+            logger.error(f"Error updating shadow paths: {e}")
     
     @log_api_call
     def perform_database_cleanup(self):
@@ -814,10 +814,10 @@ class API:
     def open_path(self, path: str):
         try:
             self.file_mgr.open_in_explorer(path)
-            print(f"打开路径: {path}")
+            logger.info(f"打开路径: {path}")
             return ApiResponse.success()
         except Exception as e:
-            print(f"打开路径时出错: {e}")
+            logger.error(f"打开路径时出错: {e}")
             return ApiResponse.error(f"打开路径时出错: {e}")
     
     @log_api_call
@@ -960,6 +960,7 @@ class API:
         """
         return ApiResponse.success({
             "community_rules": self.sorter.rule_mgr.community_rules, # 返回完整字典
+            "community_rules_update_time": self.sorter.rule_mgr.community_rules_update_time,
             "user_mod_rules": self.sorter.rule_mgr.user_mod_rules,
             "user_dynamic_rules": self.sorter.rule_mgr.user_dynamic_rules,
             "settings": self.sorter.rule_mgr.settings,
@@ -1052,33 +1053,43 @@ class API:
     @log_api_call
     def rule_update_community(self):
         """
-        更新社区规则库 (同步阻塞模式)
+        更新社区规则库
         """
         try:
-            file_folder: str = os.path.dirname(settings.config.community_rules_path)
-            file_name: str = os.path.basename(settings.config.community_rules_path)
+            # 1. 路径准备
+            # 注意：settings.config.community_rules_path 是完整文件路径 (例如 .../rules/community.json)
+            full_path = settings.config.community_rules_path
+            file_folder = os.path.dirname(full_path)
+            file_name = os.path.basename(full_path)
             url = settings.config.community_rules_url
+            
             if not os.path.exists(file_folder):
-                os.makedirs(file_folder)
-            # print(f"Downloading community rules to: {file_folder}\\{file_name}\nfrom: {url}")
-            # 2. 添加任务 (复用 DownloadManager，这样前端状态栏会有进度条！)
-            task_id = self.download_mgr.add_task(url, file_folder, file_name)
-            # 3. 【关键】阻塞等待下载完成 (最长等待 60秒)
-            logger.info(f"Waiting for community rules download... task_id={task_id}")
-            success = self.download_mgr.wait_for_task(task_id, timeout=60)
-            if not success:
-                # 检查是超时还是下载报错
-                task = self.download_mgr.tasks.get(task_id)
-                error_msg = task.error_msg if task else "Timeout"
-                return ApiResponse.error(f"下载失败: {error_msg}")
-            # 4. 【关键】下载完成后，通知 RuleManager 重新加载磁盘文件
-            self.sorter.rule_mgr.load_all() 
+                os.makedirs(file_folder, exist_ok=True)
 
-            return ApiResponse.success(message="社区规则库更新完成")
+            logger.info(f"Start updating community rules from: {url}")
+            # 定义回调函数：下载完了自动加载规则
+            def on_rules_ready(task):
+                logger.info("Rules ready, reloading...")
+                self.sorter.rule_mgr.load_all()
+                EventBus.send_toast("社区规则库更新完毕！", type="success")
+            
+            def on_rules_error(task):
+                logger.error(f"Rules download failed: {task.error_msg}")
+                EventBus.send_toast("社区规则库更新失败！", type="error")
+
+            task_id = self.download_mgr.add_task(
+                url=url, 
+                dest_dir=file_folder, 
+                filename=file_name,
+                on_complete=on_rules_ready,
+                on_error=on_rules_error
+            )
+
+            return ApiResponse.success(data={"task_id": task_id}, message="社区规则库开始更新")
             
         except Exception as e:
             logger.error(f"Update community rules failed: {e}")
-            return ApiResponse.error(str(e))
+            return ApiResponse.error(f"系统错误: {str(e)}")
 
     @log_api_call
     def rule_export_bundle(self, dynamic_rule_ids: List[str], initial_dir: str = ''):
@@ -1193,6 +1204,64 @@ class API:
             self.browser_window = SubBrowserManager(self)
         self.browser_window.open(url, title)
 
+    # ==========================================
+    #  更新管理 (Updates)
+    # ==========================================
+    @log_api_call
+    def check_update(self, manual=True):
+        """
+        检查版本更新
+        :param manual: 是否为用户手动触发
+        """
+        try:
+            # 1. 让管理器去聚合检查（含本地缓存检查）
+            info = self.update_mgr.check_all()
+            # 记录检查时间
+            settings.set('last_update_check_time', current_ms())
+            # 2. 自动忽略逻辑
+            # 如果不是手动检查，且版本是被用户标记忽略的，且本地没有已经下载好的包
+            # (如果本地已经下好了，即使是忽略版本也应该提示安装，避免浪费空间)
+            ignored_ver = settings.config.ignored_update_version
+            if not manual and info.version == ignored_ver and info.local_status != 'ready':
+                return ApiResponse.success({ "has_update": False })
+            # 3. 返回给前端
+            # info.to_dict() 包含了 local_status ('remote'|'downloading'|'ready')
+            return ApiResponse.success(info.to_dict())
+        except Exception as e:
+            logger.error(f"Check update failed: {e}")
+            return ApiResponse.error(f"检查更新失败: {str(e)}")
+
+    @log_api_call
+    def trigger_update_action(self):
+        """
+        [统一入口] 触发更新操作
+        根据当前状态，自动决定是 '开始下载' 还是 '直接安装'
+        """
+        try:
+            # 获取当前缓存的更新信息
+            info = self.update_mgr.current_update_info
+            if not info or not info.has_update:
+                return ApiResponse.error("当前没有可用的更新信息，请先检查更新")
+            # A. 如果本地已就绪 -> 执行安装
+            if info.local_status == "ready":
+                self.update_mgr.execute_hot_swap() # 这会重启程序
+                return ApiResponse.success(message="正在重启进行安装...")
+            # B. 否则 -> 开始下载
+            else:
+                result = self.update_mgr.perform_update_download()
+                # result 格式: {"status": "downloading", "task_id": "..."}
+                return ApiResponse.success(result, message="开始下载更新包")
+                
+        except Exception as e:
+            logger.error(f"Update action failed: {e}")
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def ignore_version(self, version_str):
+        """跳过当前版本"""
+        settings.set('ignored_update_version', version_str)
+        return ApiResponse.success()
+    
     
     # =========================================================================
     #  12. Steam 集成 (Steam Integration)
@@ -1366,48 +1435,6 @@ class API:
         except Exception as e:
             return ApiResponse.error(str(e))
     
-    
-    # ==========================================
-    #  更新管理 (Updates)
-    # ==========================================
-    @log_api_call
-    def check_update(self, manual=True):
-        """
-        检查版本更新
-        :param manual: 是否为用户手动触发（手动触发不检查跳过版本）
-        """
-        try:
-            info = self.update_mgr.check_all()
-            settings.set('last_update_check_time', current_ms())
-            # 如果是非手动检查，且版本是被跳过的，则返回无更新
-            if not manual and info.version == settings.config.ignored_update_version:
-                return ApiResponse.success({ "has_update": False })
-            # 将 dataclass 转为字典传给前端
-            return ApiResponse.success(asdict(info))
-        except Exception as e:
-            return ApiResponse.error(f"检查更新失败: {str(e)}")
-
-    @log_api_call
-    def install_update(self, temp_exe_path):
-        """
-        启动热更新脚本并关闭主程序
-        :param temp_exe_path: 已经下载好的新版本临时文件路径
-        """
-        try:
-            if not os.path.exists(temp_exe_path):
-                return ApiResponse.error("更新包文件不存在")
-            
-            # 调用管理器执行热交换
-            self.update_mgr.execute_hot_swap(temp_exe_path)
-            return ApiResponse.success(message="更新脚本已启动")
-        except Exception as e:
-            return ApiResponse.error(str(e))
-
-    @log_api_call
-    def ignore_version(self, version_str):
-        """跳过当前版本"""
-        settings.set('ignored_update_version', version_str)
-        return ApiResponse.success()
     
     
     # ==========================================

@@ -7,6 +7,8 @@ from typing import List, Dict, Any, Optional
 from backend.utils.logger import logger
 from backend.database.dao import ModDAO, GroupDAO
 from backend.settings import RULES_DIR, USER_RULES_PATH, settings
+from backend.utils.tools import current_ms
+from backend._version import __version__
 
 class RuleActionType:
     WEIGHT_SET = "weight_set"       # 强制设置权重 (0-1000)
@@ -19,6 +21,7 @@ class RuleManager:
     def __init__(self):
         # 内存中的规则缓存
         self.community_rules: Dict[str, Any] = {}
+        self.community_rules_update_time: int = 0
         self.user_mod_rules: Dict[str, Any] = {}
         self.user_dynamic_rules: List[Dict[str, Any]] = []
         self.settings = {
@@ -42,6 +45,7 @@ class RuleManager:
                     data = json.load(f)
                     # 兼容不同格式，有些可能是 { "rules": {...} }，有些直接是 {...}
                     self.community_rules = data.get("rules", data)
+                    self.community_rules_update_time = int(data.get("timestamp", data))*1000
                     
             # 加载用户规则
             user_file_path = Path(settings.config.user_rules_path)
@@ -296,7 +300,8 @@ class RuleManager:
             
         # 2. 这里的策略是全量导出 UserModData 和 Groups，因为规则可能依赖这些环境
         return {
-            "version": "1.0",
+            "version": __version__,
+            "timestamp": current_ms(),
             "export_date": datetime.datetime.now().isoformat(),
             "user_rules": {
                 "mod_rules": self.user_mod_rules,

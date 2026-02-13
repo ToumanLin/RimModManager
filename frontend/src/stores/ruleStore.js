@@ -42,6 +42,7 @@ export const useRuleStore = defineStore('rules', () => {
 
   // --- State ---
   const communityModRules = ref({}) // { pkg_id: { loadAfter: ... } }
+  const communityRulesUpdateTime = ref(0)
   const userModRules = ref({})   // { pkg_id: { loadAfter: ... } }
   const userDynamicRules = ref([])
   const settings = ref({})
@@ -60,6 +61,7 @@ export const useRuleStore = defineStore('rules', () => {
       const res = await window.pywebview.api.get_all_rules()
       if (appStore.checkResult(res, '获取规则')) {
         communityModRules.value = res.data.community_rules
+        communityRulesUpdateTime.value = res.data.community_rules_update_time
         userModRules.value = res.data.user_mod_rules
         userDynamicRules.value = res.data.user_dynamic_rules
         settings.value = res.data.settings
@@ -267,9 +269,11 @@ export const useRuleStore = defineStore('rules', () => {
     try {
         // 调用 API
         const res = await window.pywebview.api.rule_update_community()
-        if (appStore.checkResult(res, '更新社区库', true)) {
-            // 重新获取规则数据 (此时后端内存已是最新)
-            await fetchRules() 
+        if (appStore.checkResult(res, '更新社区库')) {
+          const task_id = res.data.task_id
+          const filePath = await appStore.waitForDownload(task_id)
+          // 重新获取规则数据 (此时后端内存已是最新)
+          await fetchRules() 
         }
     } catch (error) {
         toast.error("更新社区库失败: " + error.message)
@@ -287,7 +291,7 @@ export const useRuleStore = defineStore('rules', () => {
   }
   
   return {
-    communityModRules, userModRules, userDynamicRules, currentId,
+    communityModRules, communityRulesUpdateTime, userModRules, userDynamicRules, currentId,
     targetId, currentConstraints, settings, DYNAMIC_RULE_PROPS, DYNAMIC_RULE_ACTIONS, DYNAMIC_RULE_OPERATORS,
     fetchRules, addUserModRule, removeUserModRuleItem, deleteUserModRule, updateComment,
     toggleDynamicRule, deleteDynamicRule, updateCommunity, handleExport, handleImport,
