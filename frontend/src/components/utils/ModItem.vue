@@ -1,7 +1,7 @@
 <!-- ModItem.vue -->
 <template>
   <div class="py-[2px] flex items-center gap-1 select-none relative" :data-id="item_id"
-    @contextmenu="handleContextMenu" @dblclick="handleDoubleClick">
+    @contextmenu="handleContextMenu" @dblclick="handleDoubleClick" @click.left="handleClick">
     <!-- 序号（通过位数计算动态调整字体大小） -->
     <!-- :style="{ fontSize: 18-(index+1).toString().length*3 + 'px' }" -->
     <div v-if="showIndex" class="swipe-trigger w-6 h-6 p-3 flex items-center justify-center rounded"
@@ -232,6 +232,21 @@ const getCardStyle = (id) => {
 const handleDoubleClick = () => {
   if (appStore.settings.ui.double_click_active_mod) {
     modStore.changeModsActive([props.item_id], !isActive.value)
+  }
+}
+const handleClick = (e) => {
+  if (e.altKey) { //  alt 键点击触发
+    ruleStore.currentId = props.item_id
+    return
+  }
+  if (e.ctrlKey) { //  ctrl 键点击触发
+    return
+  }
+  if (e.shiftKey) { //  shift 键点击触发
+    return
+  }
+  if (e.button === 0) { // 左键点击
+    return
   }
 }
 // 删除选中项文件
