@@ -8,6 +8,7 @@ import { useGroupStore } from './groupStore'
 import { useOrderStore } from './orderStore'
 import { useRuleStore } from './ruleStore'
 import { useConfirmStore } from './confirmStore'
+import { useProfileStore } from './profileStore'
 
 export const useAppStore = defineStore('app', () => {
   const toast = createToastInterface()
@@ -24,6 +25,7 @@ export const useAppStore = defineStore('app', () => {
     showLogDrawer: false,        // 是否显示日志抽屉
     showTestDrawer: false,       // 是否显示测试抽屉
     showRuleDrawer: false,       // 是否显示规则抽屉
+    showProfileDrawer: false,    // 是否显示环境抽屉
   })
   // 扫描进度
   const scanProgress = reactive({
@@ -37,7 +39,12 @@ export const useAppStore = defineStore('app', () => {
   const updateState = reactive({
     hasUpdate: false,
     info: null,    // 存储后端返回的 UpdateInfo
-    isChecking: false
+    isChecking: false,
+    // 下载过程状态
+    downloadStatus: 'idle', // idle | downloading | verifying | ready | error
+    progress: 0,
+    speed: '0 B/s',
+    errorMsg: ''
   })
   // AI相关状态
   const aiState = reactive({
@@ -55,14 +62,19 @@ export const useAppStore = defineStore('app', () => {
   const settings = ref({
     // --- 路径 (Paths) ---
     game_install_path: '',
-    game_data_path: '',
+    user_data_path: '',
+    game_saves_path: '',
     game_config_path: '',
-    workshop_mods_path: '',
+    game_dlc_path: '',
     local_mods_path: '',
+    workshop_mods_path: '',
+    use_workshop_mods: true,
     home_path: '',
     community_rules_url: '',
     community_rules_path: '',
     user_rules_path: '',
+    game_version: '',
+    current_profile_id: 'default',
 
     // --- 系统 ---
     language: 'ZH-cn',
@@ -74,8 +86,10 @@ export const useAppStore = defineStore('app', () => {
     ui: {
       theme: 'system',
       font_size: 14,
+      drag_delay: 30,            // 拖动判定延迟 (毫秒)
       tooltip_hover_time: 1000,  // 鼠标悬停显示提示时间 (毫秒)
       show_mod_hover_panel: true,  // 是否显示 Mod 悬停面板
+      double_click_active_mod: true,  // 是否双击启用/停用 Mod
 
       show_mod_details_panel: true,  // 是否显示 Mod 详情面板
       show_icons_cloud: true,  // 是否显示动态图标云
@@ -91,6 +105,10 @@ export const useAppStore = defineStore('app', () => {
       show_list_icon: true,       // 是否显示 Mod 图标
       show_list_mod_icon: true,       // 是否显示 Mod 图标
       show_list_modtype_icon: true,  // 是否显示 Mod 类型图标
+
+      show_group_index: true,  // 是否显示分组索引列
+      show_group_icon: true,  // 是否显示分组图标
+
     },
 
 
@@ -130,6 +148,10 @@ export const useAppStore = defineStore('app', () => {
     backup_retention_days: 30,
     enable_auto_scan: true,
     delete_missing_mods_data: false,
+    prefer_steam_launch: true,           // 是否优先通过 Steam 启动游戏
+    sort_mods_by: "name",                 // 自动排序排列方式: name, id, alias
+    coexist_mod_folder_name_type: "workshop_id", // 共存Mod生成方式: workshop_id, package_id, name, alias
+    show_coexistence_message: true,       // 是否显示共存Mod提示
 
     // --- 调试 (Debug) ---
     debug_mode: true,
@@ -206,13 +228,24 @@ export const useAppStore = defineStore('app', () => {
       await waitForBackend()
       // 注册事件监听
       setupEventListeners()
+
+      // 先获取 Profile 列表和当前 ID
+      const profileStore = useProfileStore()
+      await profileStore.fetchProfiles()
+
       // 获取初始数据 (这里包含 settings, version 等)
-      await refreshData(true) 
+      await refreshData(true)
+      // 同步当前 Profile ID 到 profileStore
+      if (settings.value.current_profile_id) {
+        profileStore.currentProfileId = settings.value.current_profile_id
+      }
       // 自动检查更新逻辑
       if (settings.value.enable_auto_update_check) {
         // 距离上次检查超过1天则检查更新
-        const lastCheckTime = settings.value.last_update_check_time
-        if (lastCheckTime && Date.now() - lastCheckTime > 24 * 60 * 60 * 1000) {
+        const lastCheckTime = settings.value.last_update_check_time || 0
+        const duration = Date.now() - lastCheckTime
+        console.log("上次检查时间:", lastCheckTime, Date.now(), duration)
+        if (!lastCheckTime || duration > 24 * 60 * 60 * 1000 || duration<0) {
           console.log("正在执行启动检查更新...")
           // 传入 false 表示静默检查
           checkUpdate(false) 
@@ -220,8 +253,8 @@ export const useAppStore = defineStore('app', () => {
       }
       // 界面渲染完毕后，根据设置决定是否启动后台扫描
       if (settings.value.enable_auto_scan !== false && settings.value.game_install_path) {
-        console.log("启动自动扫描...")
-        toast.info("自动扫描已启动...")
+        console.log("自动扫描开始...")
+        toast.info("自动扫描开始...", {timeout: 1000})
         const modStore = useModStore()
         modStore.scanMods()
       }
@@ -245,10 +278,12 @@ export const useAppStore = defineStore('app', () => {
       ruleStore.fetchRules()
       // 调用后端获取全量数据
       const res = await window.pywebview.api.get_initial_data()
-      if (checkResult(res, '刷新数据', true)) {
+      if (checkResult(res, '刷新数据')) {
         // 覆盖更新 Settings，以后端属性为主 (仅初始化时，避免覆盖用户未保存的修改)
         if (isInit && res.data.settings) {
           settings.value = res.data.settings
+        }else{
+          Object.assign(settings.value, res.data.settings)
         }
         // console.log('allmods', res.data.is_first_db_init , res.data.paths_configured , !res.data.all_mods||res.data.all_mods?.length==0)
         if (res.data.is_first_db_init && res.data.paths_configured && (!res.data.all_mods||res.data.all_mods?.length==0)) {
@@ -300,11 +335,11 @@ export const useAppStore = defineStore('app', () => {
       const modStore = useModStore()
       await modStore.scanComplete(e.detail)
     })
+
     // 监听：下载进度
     window.addEventListener('download-progress', (e) => {
       const d = e.detail
       downloadTasks.value.set(d.id, d)
-
       // --- 核心：检查是否有正在等待该任务的 Promise ---
       const callback = downloadCallbacks.get(d.id)
       
@@ -317,7 +352,6 @@ export const useAppStore = defineStore('app', () => {
           downloadCallbacks.delete(d.id)
         }
       }
-
       if (d.status === 'error') {
         const errorMsg = `下载失败: ${d.filename}\n${d.error || ''}`
         toast.error(errorMsg)
@@ -328,6 +362,73 @@ export const useAppStore = defineStore('app', () => {
           downloadCallbacks.delete(d.id)
         }
       }
+    })
+
+    // 监听后端 EventBus 发出的 'update-status' 事件
+    window.addEventListener('update-status', (event) => {
+        const data = event.detail // { status, percent, speed, msg, path ... }
+        console.log('[Frontend] Update Status:', data)
+        
+        // 同步状态到 UI
+        updateState.downloadStatus = data.status
+        
+        if (data.status === 'downloading') {
+            updateState.progress = data.percent || 0
+            updateState.speed = data.speed || '0 B/s'
+        } 
+        else if (data.status === 'verifying') {
+            updateState.speed = '正在校验文件完整性...'
+            updateState.progress = 99
+        }
+        else if (data.status === 'ready') {
+            updateState.progress = 100
+            updateState.speed = '下载完成'
+            // 更新 info 里的状态，让按钮变色
+            if (updateState.info) updateState.info.local_status = 'ready'
+            
+            // 可选：下载完成后自动弹窗提示安装
+            _showInstallPrompt(data) 
+        }
+        else if (data.status === 'error') {
+            updateState.errorMsg = data.msg
+            toast.error(`更新出错: ${data.msg}`)
+        }
+    })
+
+    // 监听：本地化进度
+    window.addEventListener('localize-progress', (e) => {
+        // 复用 scanProgress 的状态，或者建立独立的 localizeProgress
+        Object.assign(scanProgress, {
+            scanning: true, // 借用这个状态让进度条显示
+            ...e.detail
+        });
+    });
+    // 监听：本地化完成
+    window.addEventListener('localize-complete', (e) => {
+        scanProgress.scanning = false;
+        const { success_count, error_count, errors } = e.detail;
+        console.log(`本地化完成。成功: ${success_count}, 失败: ${error_count}`, errors)
+        if (error_count > 0) {
+            toast.warning(`本地化完成。成功: ${success_count}, 失败: ${error_count}`);
+        } else {
+            toast.success(`成功本地化 ${success_count} 个模组`);
+        }
+        const modStore = useModStore()
+        modStore.scanMods()
+    });
+    // 监听：游戏暂停
+    window.addEventListener('app-suspending', () => {
+      console.log('检测到游戏启动，停止所有界面活动...');
+      // 1. 设置全局加载状态，屏蔽用户操作
+      isLoading.value = true;
+      // 2. 停止所有正在轮询的定时器（如果有的话）
+      if (scanProgress.scanning) scanProgress.scanning = false;
+      // 3. 可以在这里做最后的自动保存
+    });
+    // 监听：后端弹窗
+    window.addEventListener('backend-popup', (e) => {
+      console.log('收到后端弹窗:', e)
+      _backendPopup(e)
     })
   }
 
@@ -404,6 +505,14 @@ export const useAppStore = defineStore('app', () => {
       isLoading.value = false
     }
   }
+  // 数据库孤立数据清理
+  const performDatabaseCleanup = async () => {
+    const res = await window.pywebview.api.perform_database_cleanup()
+    if (checkResult(res, '数据库深度清理')) {
+      toast.success('无效数据清理完成，正在刷新列表...')
+      await refreshData()
+    }
+  }
   // 变更 UI 状态
   const toggleUiState = (key) => {
     uiState[key] = !uiState[key]
@@ -411,19 +520,19 @@ export const useAppStore = defineStore('app', () => {
   
   // === 系统操作 ===
   // 启动游戏
-  const launchGame = async () => {
+  const launchGame = async (profile_id=null) => {
     const orderStore = useOrderStore()
     const res = await orderStore.saveLoadOrder()
     if (!res) return
-    if(settings.value.game_install_path?.includes("SteamLibrary\\steamapps\\common")){
+    if(settings.value.prefer_steam_launch && (!profile_id || profile_id === 'default') && settings.value.game_install_path?.includes("SteamLibrary\\steamapps\\common")){
       // 通过 steam 启动游戏
       window.open("steam://rungameid/294100", '_blank')
       toast.success("正在通过 steam 启动游戏……")
       console.log("通过 steam 启动游戏")
-    }else if(settings.value.game_install_path){
+    }else if(profile_id || settings.value.game_install_path){
       if (!window.pywebview) return
       // 直接启动游戏
-      const res = await window.pywebview.api.launch_game()
+      const res = await window.pywebview.api.launch_game(profile_id)
       if (checkResult(res, "直接启动游戏程序")) {
         toast.success("直接启动游戏程序成功！")
       } else {
@@ -449,6 +558,15 @@ export const useAppStore = defineStore('app', () => {
       return res.data.paths
     }
   }
+  // 获取游戏信息
+  const getGameInfo = async (path) => {
+    if(!path) return
+    if(!window.pywebview) return
+    const res = await window.pywebview.api.get_game_info(path)
+    if (checkResult(res, "获取游戏信息")) {
+      return res.data
+    }
+  }
   // 打开路径
   const openPath = async (path) => {
     if(!window.pywebview) return
@@ -464,6 +582,8 @@ export const useAppStore = defineStore('app', () => {
     const res = await window.pywebview.api.select_file_dialog(home_path, file_types)
     if (checkResult(res, "获取文件路径")) {
       return res.data
+    } else {
+        console.error("获取文件路径异常:", res.message)
     }
   }
   // 获取文件夹路径
@@ -473,17 +593,43 @@ export const useAppStore = defineStore('app', () => {
     const res = await window.pywebview.api.select_folder_dialog(home_path)
     if (checkResult(res, "获取文件夹路径")) {
         return res.data
-    } else{
+    } else if (res.status === 'error') {
         console.error("获取文件夹路径异常:", res.message)
-        return
     }
   }
   // 删除文件/文件夹
   const deletePath = async (path) => {
     if(!window.pywebview) return
+    const confirmStore = useConfirmStore()
+    const confirm = await confirmStore.confirmAction(
+      '删除确认', `确定要删除 ${path} 吗？\n文件/文件夹将被移至回收站。`,
+      { type: 'error' }
+    );
+    if(!confirm) return
     const res = await window.pywebview.api.delete_path(path)
     if (checkResult(res, "删除文件/文件夹")) {
       toast.success(`已删除: \n${path}`)
+      // 刷新Mod列表
+      const modStore = useModStore()
+      modStore.scanMods()
+      return true
+    }
+  }
+  // 批量删除文件/文件夹
+  const deletePaths = async (paths) => {
+    if(!window.pywebview) return
+    const confirmStore = useConfirmStore()
+    const confirm = await confirmStore.confirmAction(
+      '删除确认', `确定要删除这 ${paths.length} 个文件/文件夹吗？\n这些文件/文件夹将被移至回收站。`,
+      { type: 'error' }
+    );
+    if(!confirm) return
+    const res = await window.pywebview.api.delete_paths(paths)
+    if (checkResult(res, "批量删除文件/文件夹")) {
+      toast.success(`已删除 ${paths.length} 个文件/文件夹`)
+      // 刷新Mod列表
+      const modStore = useModStore()
+      modStore.scanMods()
       return true
     }
   }
@@ -527,6 +673,29 @@ export const useAppStore = defineStore('app', () => {
       // 注册回调
       downloadCallbacks.set(taskId, { resolve, reject, timer })
     })
+  }
+
+  // 后端弹窗
+  const _backendPopup = (event) => {
+    const confirmStore = useConfirmStore()
+    const { mode, title, message, type, duration } = event.detail
+    console.log('后端弹窗:', event.detail)
+    // 模式1: 轻提示 (Toast)
+    if (mode === 'toast') {
+      const toastType = type || 'info' // success, error, warning, info
+      toast[toastType](message, {
+        timeout: duration || 3000
+      })
+    } 
+    // 模式2: 模态框 (Modal/Confirm)
+    else {
+      confirmStore.open({
+        title: title || '系统提示',
+        message: message,
+        type: type || 'info', // info, success, warning, error
+        mode: 'alert', // 强制设为 alert 模式，因为后端无法直接await前端的选择结果(除非用更复杂的Promise桥接)
+      })
+    }
   }
 
   // === Steam客户端交互 ===
@@ -601,10 +770,10 @@ export const useAppStore = defineStore('app', () => {
     aiState.isLoading = false
   }
   // 与AI聊天
-  const chatWithAI = async (prompt) => {
+  const chatWithAI = async (prompt, temp_config) => {
     if (!window.pywebview) return
     aiState.isLoading = true
-    const res = await window.pywebview.api.ai_chat(prompt)
+    const res = await window.pywebview.api.ai_chat(prompt, temp_config)
     if (checkResult(res, "与AI聊天")) {
       aiState.isLoading = false
       return res.data
@@ -629,38 +798,82 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // === 更新相关函数 ===
-  // 检查更新方法
+  // 检查更新
   const checkUpdate = async (manual = true) => {
-    updateState.isChecking = true
-    try {
-      const res = await window.pywebview.api.check_update(manual)
-      if (checkResult(res, "检查更新")) {
-        const info = res.data
-        if (info.has_update) {
-          updateState.hasUpdate = true
-          updateState.info = info
-          
-          // 弹出全局确认框
-          const confirmStore = useConfirmStore()
-          const ok = await confirmStore.confirmAction(
-            `发现新版本 v${info.version}`,
-            `来源: ${info.source_name}\n文件大小: ${info.file_size || '未知'}\n\n更新内容:\n${info.changelog}`,
-            { confirmText: '立即更新', cancelText: manual ? '以后再说' : '忽略此版本', type: 'success' }
-          )
-
-          if (ok) {
-            startUpdateProcess()
-          } else if (!manual) {
-            // 如果是启动时的自动弹窗点取消，则询问是否不再提醒该版本
-            await window.pywebview.api.ignore_version(info.version)
+      updateState.isChecking = true
+      updateState.downloadStatus = 'idle' // 重置状态
+      updateState.progress = 0
+      
+      try {
+        const res = await window.pywebview.api.check_update(manual)
+        if (checkResult(res, "检查更新")) {
+          const info = res.data
+          if (info.has_update) {
+            updateState.hasUpdate = true
+            updateState.info = info
+            // 弹出全局确认框
+            const confirmStore = useConfirmStore()
+            const ok = await confirmStore.confirmAction(
+              `发现新版本 v${info.version}`,
+              `来源: ${info.source_name}<br/>文件大小: ${info.file_size || '未知'}<br/>更新内容:<br/>${info.changelog}`,
+              { confirmText: '立即更新', cancelText: manual ? '以后再说' : '忽略此版本', type: 'success', isHtml: true }
+            )
+            if (ok) {
+              // 触发下载
+              _performUpdateAction()
+            } else if (!manual) {
+              // 如果是启动时的自动弹窗点取消，则询问是否不再提醒该版本
+              await window.pywebview.api.ignore_version(info.version)
+            }
+          } else if (manual) {
+            toast.success("当前已是最新版本")
           }
-        } else if (manual) {
-          toast.success("当前已是最新版本")
         }
+      } finally {
+        updateState.isChecking = false
       }
-    } finally {
-      updateState.isChecking = false
-    }
+  }
+
+  const _showInstallPrompt = async (data) => {
+    const confirmStore = useConfirmStore()
+    const ok = await confirmStore.confirmAction(
+      `确认安装更新（）？`,
+      `压缩包已经下载到：${data.path}\n是否继续安装更新？安装后将重启应用程序。`,
+      { confirmText: '确认安装', cancelText: '取消', type: 'warning' }
+    )
+    if (!ok) return toast.info("用户取消安装")
+    await _performUpdateAction()
+  }
+
+  // 触发操作 (下载 OR 安装)
+  // 这个函数绑定到弹窗的 "立即更新/立即安装" 按钮上
+  const _performUpdateAction = async () => {
+      const info = updateState.info
+      if (!info) return
+
+      // 如果是 Ready 状态，弹出最后确认框 (因为会重启)
+      if (info.local_status === 'ready' || updateState.downloadStatus === 'ready') {
+            const confirmStore = useConfirmStore()
+            const ok = await confirmStore.confirmAction(
+              "准备重启",
+              "安装包已准备就绪。点击确认将关闭当前程序并自动安装更新。",
+              { confirmText: '立即重启安装', type: 'warning' }
+            )
+            if (!ok) return
+      }
+
+      // 调用统一接口
+      const res = await window.pywebview.api.trigger_update_action()
+      
+      if (checkResult(res,'开始下载更新包')) {
+          // 如果后端开始下载，这里不需要做什么，因为 EventListener 会接管进度条
+          if (res.data && res.data.status === 'downloading') {
+              updateState.downloadStatus = 'downloading'
+              toast.info("开始下载更新包...")
+          }
+      } else {
+          toast.error(res.message)
+      }
   }
 
   // 执行更新下载与安装
@@ -672,27 +885,39 @@ export const useAppStore = defineStore('app', () => {
     
     try {
       // 利用现有的文件管理器下载到 download 目录
-      const res = await window.pywebview.api.download_file(url)
-      if (checkResult(res, "下载更新包")) {
-        const task_id = res.data.task_id
-        // 等待下载完成，直接拿取 file_path
-        // 代码会在这里“暂停”，直到全局监听器触发 resolve
-        const filePath = await waitForDownload(task_id)
-        // 下载完成后，自动执行安装
-        toast.success("下载已就绪，正在准备安装...")
-        await window.pywebview.api.install_update(filePath)
-      }
+      const res = await window.pywebview.api.download_update(url)
+      if (!checkResult(res, "下载更新包")) return
+      const task_id = res.data.task_id
+      // 等待下载完成，直接拿取 file_path
+      // 代码会在这里“暂停”，直到全局监听器触发 resolve
+      const filePath = await waitForDownload(task_id)
+      console.log("更新包下载完成:", filePath)
+      console.log("保存更新数据:", updateState.info)
+      // 保存更新元数据
+      const infoRes = await window.pywebview.api.save_update_metadata(updateState.info, filePath)
+      if (checkResult(infoRes, "保存更新元数据")) {}
+      // 下载完成后，自动执行安装
+      toast.success("下载已就绪，正在准备安装...")
+      const confirmStore = useConfirmStore()
+      const ok = await confirmStore.confirmAction(
+        "确认安装更新？",
+        `压缩包已经下载到：${filePath}\n是否继续安装更新？安装后将重启应用程序。`,
+        { confirmText: '确认安装', cancelText: '取消', type: 'warning' }
+      )
+      if (!ok) return toast.info("用户取消安装")
+      await window.pywebview.api.install_update(filePath)
     } catch (e) {
-      toast.error(`更新失败: ${e.message}`)
+      toast.error(`更新失败: ${e}`)
       console.error('更新失败:', e)
     }
   }
 
   return {
     appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, updateState, aiState,
-    initialize, checkResult, refreshData, toggleUiState, scalePx,
-    launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, openUrl, startDownload, waitForDownload, 
-    saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, 
+    initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup,
+    // 游戏相关
+    getGameInfo, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, startDownload, waitForDownload, 
+    saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, 
     getAiConfig, saveAIConfig, useAI, fetchAiModels, chatWithAI
   }
