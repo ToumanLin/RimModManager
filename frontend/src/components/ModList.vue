@@ -47,11 +47,11 @@
     <div class="px-2 py-1 w-full flex flex-col gap-1 shadow-xl bg-bg-deep/20 z-50">
       <div class="flex items-center justify-center gap-1 relative">
         <!-- 搜索定位 (Find) -->
-        <TagsSearch :list-color="listColor" v-model="searchQuery" v-model:logic="searchLogic" 
+        <TagsSearch :list-color="listColor" v-model="searchQuery" v-model:logic="searchLogic" ref="searchTagsRef"
           @search="executeSearch(true)" placeholder="输入关键词定位Mod位置……" class="z-10">
           <template #right>
             <!-- 定位按钮 -->
-            <button @click="executeSearch(true)" v-tooltip="'搜索定位下一个符合条件的结果'"
+            <button @click="searchTagsRef?.addTag();executeSearch(true)" v-tooltip="'搜索定位下一个符合条件的结果'"
               :class="`px-3 py-1 relative rounded-lg bg-accent-${listColor}/50 hover:bg-accent-${listColor} 
               text-text-dim hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10 
               transition-all cursor-pointer hover:scale-105 active:scale-95`">定位
@@ -220,6 +220,8 @@ const searchStore = useSearchStore()
 const toast = useToast();
 const vListRef = ref(null)  // 虚拟列表引用, 用于滚动到选中项
 const listKey = ref(0)
+
+const searchTagsRef = ref(null)
 
 
 // --- 1. 搜索与筛选逻辑 ---
