@@ -21,7 +21,7 @@ class ModXMLParser:
         - load_before_mods: 必须在这些模组前加载
         - incompatible_mods: 与这些模组不兼容的列表
         - icon_path: 模组图标路径
-        - save_breaking: 是否破坏存档 (-1: 破坏, 0: 未知, 1: 不破坏)
+        - save_breaking: 是否破坏存档 (True: 破坏, None: 未知, False: 不破坏)
     """
 
     def parse(self, mod_path):
@@ -48,7 +48,7 @@ class ModXMLParser:
             
             # --- 附加信息 ---
             'icon_path': '',     # 1.5+ 自定义图标路径
-            'save_breaking': 0,  # 是否破坏存档 (ModSync)，-1: 破坏, 0：未知, 1: 不破坏
+            'save_breaking': None,  # 是否破坏存档 (ModSync)，True: 破坏, None：未知, False: 不破坏
         }
 
         about_path = os.path.join(mod_path, 'About', 'About.xml')
@@ -134,13 +134,13 @@ class ModXMLParser:
             data['load_after_mods'] = self._get_list(root, 'loadAfter')
             data['load_before_mods'] = self._get_list(root, 'loadBefore')
             
-            # 【新】不兼容列表
+            # 不兼容列表
             data['incompatible_mods'] = self._get_list(root, 'incompatibleWith')
-            # 【新】解析 SaveBreaking
+            # 解析 SaveBreaking
             # 通常是 <SaveBreaking>True</SaveBreaking>
             sb_text = self._get_text(root, 'SaveBreaking').lower()
-            temp_dict = {'true': -1, 'false': 1}    # 是否破坏存档，-1: 破坏, 0：未知, 1: 不破坏
-            data['save_breaking'] = temp_dict.get(sb_text, 0)
+            temp_dict = {'true': True, 'false': False}    # 是否破坏存档，True: 破坏, None：未知, False: 不破坏
+            data['save_breaking'] = temp_dict.get(sb_text, None)
 
             # 依赖解析 (结构较为复杂)
             # 格式：
@@ -206,9 +206,11 @@ class ModXMLParser:
             # 通常是 <SaveBreaking>True</SaveBreaking>
             sb_text = self._get_text(root, 'SaveBreaking')
             if sb_text.lower() == 'true':
-                data['save_breaking'] = -1
+                data['save_breaking'] = True
             elif sb_text.lower() == 'false':
-                data['save_breaking'] = 1
+                data['save_breaking'] = False
+            else:
+                data['save_breaking'] = None
                 
         except Exception:
             pass

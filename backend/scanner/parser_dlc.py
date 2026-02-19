@@ -303,7 +303,7 @@ class DLCParser:
                 def_name, prop = tag.split('.', 1)
                 if def_name not in trans_map: trans_map[def_name] = {}
                 trans_map[def_name][prop] = text.strip().replace('\\n', '\n')
-            logger.debug(f"[DLCParser] Parsed trans_map: {trans_map}")
+            # logger.debug(f"[DLCParser] Parsed trans_map: {trans_map}")
         except Exception as e:
             logger.error(f"[DLCParser] Error parsing XML: {e}")
             pass
