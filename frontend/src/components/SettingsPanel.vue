@@ -116,12 +116,6 @@
                           <CommonSwitch class="flex-1 cursor-move" :disabled="!formData.ui.show_mod_details_panel" :key="item.id" :label="appStore.DETAILS_LAYOUT_MAPS[item.id].label" v-model="item.visible" :description="appStore.DETAILS_LAYOUT_MAPS[item.id].desc" />
                         </div>
                       </VueDraggable>
-                      <!-- <CommonSwitch :disabled="!formData.ui.show_mod_details_panel" label="作者及来源" v-model="formData.ui.show_mod_details_author_info" description="控制详情页中 Mod 作者及来源板块的显示。" />
-                      <CommonSwitch :disabled="!formData.ui.show_mod_details_panel" label="文件统计" v-model="formData.ui.show_mod_details_files_info" description="控制详情页中 Mod 文件统计板块的显示。" />
-                      <CommonSwitch :disabled="!formData.ui.show_mod_details_panel" label="其它信息" v-model="formData.ui.show_mod_details_time_info" description="控制详情页中 Mod 其它信息板块的显示。" />
-                      <CommonSwitch :disabled="!formData.ui.show_mod_details_panel" label="依赖信息" v-model="formData.ui.show_mod_details_dependencies_info" description="控制详情页中 Mod 依赖板块的显示。" />
-                      <CommonSwitch :disabled="!formData.ui.show_mod_details_panel" label="自定义信息" v-model="formData.ui.show_mod_details_user_info" description="控制详情页中 Mod 自定义信息板块的显示。" />
-                      <CommonSwitch :disabled="!formData.ui.show_mod_details_panel" label="Mod描述" v-model="formData.ui.show_mod_details_description" description="控制详情页中 Mod 说明板块的显示。" /> -->
                       
                     </div>
                     <CommonSwitch label="依赖关系图" v-model="formData.ui.show_dependency_graph" description="控制启用列表中依赖关系图的显示。" />
@@ -145,8 +139,10 @@
                 <div class="space-y-6">
                   <div class="grid grid-cols-2 gap-6">
                     <CommonSwitch class="col-span-1" label="启动时自动扫描 Mod 目录" v-model="formData.enable_auto_scan" description="关闭后，需要手动点击扫描按钮才能更新 Mod 列表。" />
+                    <CommonSwitch class="col-span-1" label="扫描时检查文件大小" v-model="formData.enable_file_size_scan" description="开启后，扫描时会自动检查 Mod 的文件大小，以此识别新增或更新的内容。该功能会增加扫描耗时，但能显著提高文件变动的识别精度。" />
                     <CommonSwitch class="col-span-1" label="自动清理缺失的 Mod 数据" v-model="formData.delete_missing_mods_data" description="关闭后，缺失的 Mod 数据将保留在数据库中，列表内可以重新订阅。" />
                     <CommonSwitch class="col-span-1" label="自动激活依赖项" v-model="formData.auto_activate_dependencies" description="开启后，自动排序时将会自动激活停用的依赖项。" />
+                    <CommonSwitch class="col-span-1" label="检查语言支持" v-model="formData.check_language_support" description="开启后，将会在 Mod 问题提示增加“语言支持”警告，提示用户当前语言是否被Mod支持。" />
                     <CommonSelect class="col-span-1" label="排序顺序" v-model="formData.sort_mods_by" showBottom
                       description="影响自动排序时同档次的Mod顺序，处理优先级是 别名>原名>包名，所以即使Mod没有别名，也能按原名参与排序。" 
                       :options="[{label:'按别名', value:'alias_name'},{label:'按原名', value:'name'},{label:'按包名', value:'id'}]" />

@@ -54,7 +54,10 @@ export const ISSUE_TYPE = {
   WARN_VERSION_MISMATCH: 'version_mismatch',        // 版本不对
   WARN_LINK_MOD_MISSING: 'link_mod_missing',        // 联锁模组缺失
   WARN_LINK_WRONG_ORDER: 'link_wrong_order',        // 联锁排序错误
+  WARN_MISSING_LANGUAGE: 'warn_missing_language',   // 缺少语言支持
+  WARN_INACTIVE_LANGUAGE_PACK: 'warn_inactive_language_pack', // 语言包未启用
   INFO_ALTERNATIVE_USED: 'info_alternative_used',   // 依赖替代
+
 }
 
 // 定义类型到中文标题的映射
@@ -68,7 +71,10 @@ export const ISSUE_TITLE_MAP = {
   'link_mod_missing': '联锁模组缺失',
   'link_wrong_order': '联锁排序错误',
   'info_alternative_used': '依赖替代',
+  'warn_missing_language': '缺少语言支持',
+  'warn_inactive_language_pack': '语言包未启用',
   'default': '其他问题'
+
 }
 
 // 模组类型映射

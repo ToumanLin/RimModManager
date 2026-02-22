@@ -297,7 +297,7 @@ const issueTooltip = computed(() => {
   if (summary.count === 0) return null
   const errorInfo = summary.errorCount > 0 ? `!!${summary.errorCount} 个错误!!` : ''
   const warningInfo = summary.warnCount > 0 ? `^^${summary.warnCount} 个警告^^` : ''
-  let text = `**发现 ${summary.count} 个问题**（${errorInfo} ${warningInfo}）`
+  let text = `**发现 ${summary.count} 个问题Mod**（${errorInfo} ${warningInfo}）`
   // 遍历 stats 对象生成详情
   // 格式: 
   // !!缺失前置(10):!!

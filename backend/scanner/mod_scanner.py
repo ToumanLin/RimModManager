@@ -358,7 +358,7 @@ class ModScanner:
             # 记录 (路径, ID) 元组
             workshop_paths_list.append((mod_data['path'], pid))
         
-    def _process_single_mod(self, mod_path, is_dlc_dir, existing_snapshots, dlc_parser, thumbnail_mgr, forced_update=False):
+    def _process_single_mod(self, mod_path, is_dlc_dir, existing_snapshots, dlc_parser: DLCParser | None, thumbnail_mgr, forced_update=False):
         """
         处理单个 Mod 的纯函数逻辑。
         返回: Mod数据字典 或 None(无效) 或 {'_skipped': True, 'package_id': ...}
@@ -383,37 +383,44 @@ class ModScanner:
             ctime = int(stat.st_ctime * 1000)
         except OSError:
             mtime = 0; ctime = 0
-        
-        # 计算文件夹总大小 (IO操作，但比解析XML快)
-        current_size = get_folder_size(mod_path)
-        
+            
         # 物理路径作为哈希主键
         path_hash = generate_path_hash(mod_path)
+        # 增量比对 - 第一阶段：仅比对修改时间
+        snapshot = existing_snapshots.get('path_hash')
+        # 如果关闭了开关，或者强制更新，则不计算
+        need_size_check = settings.config.enable_file_size_scan or forced_update
 
         # 增量检测逻辑 (Time AND Size)
-        # 注意：这里只返回最简信息，如果后续发生冲突，会在上层逻辑触发重读
-        # 只有当 时间戳一致 且 文件大小一致 时，才跳过
-        should_skip = False
-        if path_hash in existing_snapshots and not forced_update:
-            snapshot = existing_snapshots[path_hash]
-            stored_mtime = snapshot['mtime']
-            stored_size = snapshot['size']
-            
-            # 判定条件：时间戳误差 < 1ms 且 大小完全相等
-            # 注意：数据库存的可能是 0 (旧数据)，这种情况下不跳过，强制更新一次以写入 size
-            if stored_size > 0 and abs(stored_mtime - mtime) < 1.0 and stored_size == current_size:
-                should_skip = True
-
-        if should_skip:
-            return {
-                '_skipped': True, 
-                'path_hash': path_hash,
-                'package_id': snapshot['package_id'], 
-                'path': mod_path, 
-                'mtime': mtime,
-                'file_size': current_size, # 依然返回 size 供上层逻辑使用
-                'disabled': False, # 如果它存在 About.xml，说明它是激活的。强制重置为 False
-            }
+        # 如果快照存在且修改时间一致
+        if snapshot and abs(snapshot['mtime'] - mtime) < 1.0 and not forced_update:
+            # 修改时间没变，此时我们通过开关决定是否开启“深层大小检测”
+            if need_size_check:
+                # 优化点：只有在修改时间没变时，才执行耗时的 get_folder_size
+                current_size = get_folder_size(mod_path)
+                if snapshot['size'] > 0 and snapshot['size'] == current_size:
+                    # 时间和大小都一致，判定为没变，跳过解析
+                    return {
+                        '_skipped': True, 
+                        'path_hash': path_hash,
+                        'package_id': snapshot['package_id'],
+                        'path': mod_path, 
+                        'mtime': mtime,
+                        'file_size': current_size,
+                        'disabled': False
+                    }
+                # 走到这里说明大小变了，需要继续向下解析
+            else:
+                # 如果没开大小检测，且修改时间没变，直接视为跳过
+                return {
+                    '_skipped': True, 
+                    'path_hash': path_hash,
+                    'package_id': snapshot['package_id'],
+                    'path': mod_path, 
+                    'mtime': mtime,
+                    'file_size': snapshot['size'], # 复用旧大小
+                    'disabled': False
+                }
         
         # 解析 XML (CPU 密集)
         # parser 内部如果处理异常会返回默认空结构，这里直接调
@@ -432,6 +439,8 @@ class ModScanner:
         # DLC 注入翻译
         if is_dlc_dir and dlc_parser:
             dlc_parser.enrich_data(mod_data, mod_path)
+            mod_data['supported_languages'] = list(dlc_parser.translations.keys())
+            
 
         # 路径与来源分析
         workshop_id = self._resolve_workshop_id(mod_path)
@@ -452,7 +461,6 @@ class ModScanner:
         
         # 补充 supported_versions
         if mod_data.get('source','').lower() == 'core':
-             
             mod_data['supported_versions'] = [settings.config.game_version[:3]] if settings.config.game_version else 'Unknown'  # Core 补充支持版本
 
         # 图片
@@ -462,19 +470,22 @@ class ModScanner:
 
         # 深度分析
         analysis_info = self.analyzer.analyze(mod_path)
+        
+        final_size = 0
         # 新增标记
         if (path_hash not in existing_snapshots):
             mod_data['is_new'] = True
+            final_size = get_folder_size(mod_path)
             
         mod_data.update({
             'path_hash': path_hash,
-            'supported_languages': analysis_info['supported_languages'],
+            'supported_languages': analysis_info['supported_languages'] if not is_dlc_dir else mod_data.get('supported_languages', []),
             'file_stats': analysis_info['file_stats'],
             'mod_type': analysis_info['mod_type'],
             'path': mod_path,
             'file_create_time': ctime,
             'file_modify_time': mtime,
-            'file_size': current_size,
+            'file_size': final_size,
             'source': mod_data.get('source', 'local'), # 来源
             'disabled': False, # 如果它存在 About.xml，说明它是激活的。强制重置为 False
         })
