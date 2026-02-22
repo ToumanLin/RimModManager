@@ -15,7 +15,7 @@
 │   │   ├──  mgr_game.py
 │   │   ├──  mgr_game_logs.py
 │   │   ├──  mgr_game_monitor.py
-│   │   ├──  mgr_mods_config.py
+│   │   ├──  mgr_load_order.py
 │   │   ├──  mgr_network.py
 │   │   ├──  mgr_profile.py
 │   │   ├──  mgr_rules.py
@@ -59,6 +59,7 @@
 │   │   │   │   ├── ·[input]
 │   │   │   │   ├── ·[TagsSearch]
 │   │   │   │   ├──  Confirm.vue
+│   │   │   │   ├──  FixedPopover.vue
 │   │   │   │   └──  HoverPanel.vue
 │   │   │   │   
 │   │   │   ├── ·[utils]
@@ -136,15 +137,8 @@
 ├── ·[test]
 ├── ·[tools]
 │   ├── ·[steam_agent]
-│   │   ├──  steam_api64.dll
-│   │   ├──  steam_appid.txt
-│   │   ├──  steam_worker.py
-│   │   └──  SteamworksPy64.dll
-│   │   
 │   └── ·[steamcmd]
 │   
-│       └──  steamcmd.exe
-│       
 ├──  .gitignore
 ├──  .python-version
 ├──  files_tree.txt

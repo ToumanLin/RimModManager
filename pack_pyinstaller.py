@@ -243,7 +243,7 @@ if __name__ == "__main__":
     APP_MAIN = 'main.py'
     APP_NAME = 'RimModManager'
     APP_VERSION = __version__  # 在这里修改版本号
-    APP_COMPANY = ''
+    APP_COMPANY = 'Inky Feather'
     ICON_PATH = 'icon.ico'
 
     # 1. 执行打包
