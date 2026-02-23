@@ -146,7 +146,7 @@ import { useRuleStore } from '../../stores/ruleStore'
 import { useContextMenuStore } from '../../stores/contextMenuStore'
 import { useConfirmStore } from '../../stores/confirmStore'
 import { hexToRgba, hexToRgb } from '../../utils/colorDeal'
-import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Trash2, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig } from 'lucide-vue-next';
+import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Trash2, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare } from 'lucide-vue-next';
 import GroupItem from './GroupItem.vue'
 
 const props = defineProps({
@@ -237,6 +237,7 @@ const handleDoubleClick = () => {
     modStore.changeModsActive([props.item_id], !isActive.value)
   }
 }
+// 点击处理
 const handleClick = (e) => {
   if (e.altKey) { //  alt 键点击触发
     ruleStore.currentId = props.item_id
@@ -261,7 +262,13 @@ const deleteModFiles = async () => {
   const paths = modStore.selectedMods.map(m => m.path)
   appStore.deletePaths(paths)
 }
-
+// 批量生成别名备注
+const generateAliasNotes = async () => {
+  const res = await appStore.startAiBatchTask('batch_alias_generation', modStore.selectedMods)
+  if (res) {
+    console.log('批量生成别名备注',res)
+  }
+}
 // 取消订阅模组
 const unsubscribeMod = async (delete_file = false) => {
   const res = await confirmStore.confirmAction('警告',`确定要取消订阅选中项${delete_file?'并删除文件':''}吗？${delete_file?'软件将主动删除Mod文件':'Steam 会自动删除已取消订阅的文件！'}`,{type:'error'})
@@ -340,6 +347,7 @@ const handleContextMenu = async (event) => {
   const selectedMenuItems = [
     { divider: true },
     { label: '联锁选中项', icon: Link2, action: () => modStore.linkMods(selectedIds) },
+    { label: '批量生成别名备注', icon: BotMessageSquare, action: () => generateAliasNotes() },
   ]
   if (modData.value.lock_previous_mod || modData.value.lock_next_mod) {
     selectedMenuItems.push({ label: '解除联锁', icon: Link2Off, action: () => modStore.unlinkMods(selectedIds) })

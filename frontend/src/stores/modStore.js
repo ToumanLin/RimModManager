@@ -652,6 +652,36 @@ export const useModStore = defineStore('mods', () => {
       return false
     }
   }
+  // 批量更新Mod用户数据
+  const batchUpdateModsUserData = async (updatesList) => {
+    if (!window.pywebview) return
+    appStore.isLoading = true
+    try {
+      // 1. 乐观更新：立即更新本地 Map 状态
+      updatesList.forEach(u => {
+        const mod = allModsMap.value.get(u.mod_id.toLowerCase())
+        if (mod) {
+          Object.assign(mod, u)
+        }
+      })
+      
+      // 2. 发送请求给后端
+      const res = await window.pywebview.api.batch_update_user_data(updatesList)
+      if (!checkResult(res, "批量更新Mod数据", true)) {
+        await appStore.refreshData()
+        return false
+      }
+      return true
+    } catch (e) {
+      console.error("批量更新Mod数据异常:", e)
+      toast.error(`批量更新失败: \n${e.message}`)
+      await appStore.refreshData()
+      return false
+    } finally {
+      appStore.isLoading = false
+      dataVersion.value++ // 触发响应式重新计算
+    }
+  }
 
 
   // --- 实时问题分析 ---
@@ -1087,7 +1117,7 @@ export const useModStore = defineStore('mods', () => {
     setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, 
     updateInactiveIds, takeInactiveIds, removeIdsOnAllList, selectMods, clearSelection, changeModsActive,
     scanMods, scanComplete, autoSortMods, localizeSelectedMods,
-    updateModUserData, updateModTime, linkMods, unlinkMods, 
+    updateModUserData, updateModTime, linkMods, unlinkMods, batchUpdateModsUserData,
     setModsColor, setModsType, addModsTags, removeModsTags, selectModsTag, selectModsGroup, 
     getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getMissingLocalDependencies,
   }

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -545,6 +546,21 @@ class API:
         try:
             ModDAO.remove_tags_from_mods(mod_ids, tags)
             return ApiResponse.success(message="标签已移除")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+        
+    @log_api_call
+    def batch_update_user_data(self, user_data_list: List[Dict[str, Any]]):
+        """
+        通用批量更新用户自定义数据 (别名、备注、标签等)
+        user_data_list 结构示例: [{'mod_id': 'xxx', 'alias_name': 'yyy', 'notes': 'zzz'}]
+        """
+        try:
+            # 过滤掉没有 mod_id 的非法数据
+            valid_list = [d for d in user_data_list if 'mod_id' in d]
+            if valid_list:
+                ModDAO.batch_upsert_user_data(valid_list)
+            return ApiResponse.success(message=f'已成功应用 {len(valid_list)} 项数据')
         except Exception as e:
             return ApiResponse.error(str(e))
     
@@ -1420,27 +1436,32 @@ class API:
             return ApiResponse.error(str(e))
 
     @log_api_call
-    def ai_fetch_models(self, temp_config: dict):
-        """
-        获取模型列表 (用于配置页面的下拉菜单)
-        :param temp_config: 前端表单中的临时配置 {provider, base_url, api_key}
-        """
+    def ai_get_providers(self, api_type: str = "official"):
+        """获取厂商或代理协议列表"""
         try:
-            models = self.ai_mgr.fetch_available_models(temp_config)
-            return ApiResponse.success(models)
+            providers = self.ai_mgr.get_providers(api_type)
+            return ApiResponse.success(providers)
         except Exception as e:
-            return ApiResponse.error(f"连接失败: {str(e)}")
+            return ApiResponse.error(f"获取厂商列表失败: {str(e)}")
 
     @log_api_call
-    def ai_chat(self, message: str, config_data: dict=None): # type: ignore
-        """简单的自由对话"""
+    def ai_get_models(self, temp_config: dict):
+        """
+        获取模型列表 (替代原来的 ai_fetch_models)
+        自带缓存机制，极速响应。
+        :param temp_config: 前端表单中的临时配置 {api_type, provider, base_url, api_key}
+        """
         try:
-            if config_data:
-                provider = self.ai_mgr.get_provider(override_config=config_data)
-                result = provider.chat('hello, I want to chat with you.', message)
-            else:
-                # 使用 'chat' 模板
-                result = self.ai_mgr.execute_task('chat', {'message': message})
+            models = self.ai_mgr.get_models(temp_config)
+            return ApiResponse.success(models)
+        except Exception as e:
+            return ApiResponse.error(f"获取模型列表失败: {str(e)}")
+
+    @log_api_call
+    def ai_chat(self, message: str, config_data: dict={}):
+        """测试对话"""
+        try:
+            result = self.ai_mgr.test_chat(message, config_data)
             return ApiResponse.success(result)
         except Exception as e:
             return ApiResponse.error(str(e))
@@ -1457,7 +1478,90 @@ class API:
         except Exception as e:
             return ApiResponse.error(str(e))
     
+    @log_api_call
+    def ai_execute_batch_task(self, task_key: str, items: list, variables: dict = {}):
+        """
+        发起异步批量 AI 任务。
+        前端调用此接口后会立即返回 task_id，随后通过 EventBus 监听进度。
+        """
+        if not settings.config.ai.enabled:
+            return ApiResponse.error("AI 功能未启用")
+            
+        if not variables:
+            variables = {}
+
+        # 1. 生成唯一的任务 ID，供前端监听特定频道
+        task_event_id = str(uuid.uuid4())
+
+        # 2. 定义后台运行的工作线程
+        def background_worker():
+            # 为这个新线程创建一个全新的事件循环
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                # 运行我们写好的批量调度引擎
+                results = loop.run_until_complete(
+                    self.ai_mgr.execute_batch_task_async(task_key, items, variables, task_event_id)
+                )
+                # 任务彻底完成后，发送 complete 事件
+                EventBus.emit(f'ai-batch-complete', {
+                    'task_event_id': task_event_id,
+                    'status': 'success', 
+                    'data': results
+                })
+                # 可选：你可以直接在这里调用 ModDAO 批量入库
+                # if results:
+                #     self._save_ai_results_to_db(results)
+            except Exception as e:
+                logger.error(f"Background AI task failed: {e}", exc_info=True)
+                EventBus.emit(f'ai-batch-complete', {
+                    'task_event_id': task_event_id,
+                    'status': 'error', 
+                    'message': str(e)
+                })
+            finally:
+                loop.close()
+
+        # 3. 启动守护线程（不阻塞当前 pywebview 的请求）
+        threading.Thread(target=background_worker, daemon=True).start()
+
+        # 4. 立即返回响应给前端，让前端开始监听
+        return ApiResponse.success({
+            "task_event_id": task_event_id,
+            "total_items": len(items)
+        }, message="批量任务已在后台启动")
     
+    @log_api_call
+    def ai_get_prompts(self):
+        """获取所有提示词"""
+        return ApiResponse.success(self.ai_mgr.prompts)
+
+    @log_api_call
+    def ai_save_prompt(self, prompt_id: str, prompt_data: dict):
+        """保存提示词"""
+        try:
+            res = self.ai_mgr.save_prompt(prompt_id, prompt_data)
+            return ApiResponse.success(res)
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def ai_delete_prompt(self, prompt_id: str):
+        """删除提示词"""
+        try:
+            res = self.ai_mgr.delete_prompt(prompt_id)
+            return ApiResponse.success(res)
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def ai_reset_prompts(self):
+        """恢复默认提示词"""
+        try:
+            res = self.ai_mgr.reset_system_prompts()
+            return ApiResponse.success(res)
+        except Exception as e:
+            return ApiResponse.error(str(e))
     
     # ==========================================
     #  用户配置环境管理 (Profiles)

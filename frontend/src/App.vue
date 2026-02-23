@@ -208,6 +208,11 @@
     <!-- 重复包名冲突弹窗 -->
     <ConflictResolver />
 
+    <!-- AI 生成数据弹窗 -->
+    <AiReviewModal />
+    <!-- 提示词管理器 -->
+    <PromptManager />
+
     <!-- 环境管理抽屉 -->
     <ProfileDrawer /> 
     
@@ -258,6 +263,8 @@ import Confirm from './components/common/Confirm.vue'
 import SegmentedTabs from './components/utils/SegmentedTabs.vue'
 import ProfileDrawer from './components/ProfileDrawer.vue'
 import Test from './components/temp/test.vue'
+import AiReviewModal from './components/AiReviewModal.vue'
+import PromptManager from './components/PromptManager.vue'
 
 
 

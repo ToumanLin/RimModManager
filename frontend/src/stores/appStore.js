@@ -9,6 +9,7 @@ import { useOrderStore } from './orderStore'
 import { useRuleStore } from './ruleStore'
 import { useConfirmStore } from './confirmStore'
 import { useProfileStore } from './profileStore'
+import { cleanRichText } from '../utils/unityTextParser'
 
 export const useAppStore = defineStore('app', () => {
   const toast = createToastInterface()
@@ -26,6 +27,8 @@ export const useAppStore = defineStore('app', () => {
     showTestDrawer: false,       // 是否显示测试抽屉
     showRuleDrawer: false,       // 是否显示规则抽屉
     showProfileDrawer: false,    // 是否显示环境抽屉
+    showAiReviewModal: false,    // 是否显示 AI 弹窗
+    showPromptManager: false,    // 是否显示提示词管理器
   })
   // 扫描进度
   const scanProgress = reactive({
@@ -49,9 +52,12 @@ export const useAppStore = defineStore('app', () => {
   // AI相关状态
   const aiState = reactive({
     isLoading: false,
-    chatHistory: []
-
+    chatHistory: [],
+    percent: 0,
+    message: ''
   })
+  const aiBatchResults = ref([]) // 存储实时返回的 AI 数据
+
   // 下载任务
   const downloadTasks = ref(new Map()) // 使用 Map 存储 {id: taskObject}
   // 存储任务回调的 Map
@@ -115,12 +121,6 @@ export const useAppStore = defineStore('app', () => {
       show_icons_cloud: true,  // 是否显示动态图标云
 
       mod_details_layout: JSON.parse(JSON.stringify(DEFAULT_DETAILS_LAYOUT)), 
-      // show_mod_details_author_info: true,  // 是否显示 Mod 详情面板作者信息
-      // show_mod_details_files_info: true,  // 是否显示 Mod 详情面板文件信息
-      // show_mod_details_time_info: true,  // 是否显示 Mod 详情面板时间信息
-      // show_mod_details_dependencies_info: true,  // 是否显示 Mod 详情面板依赖信息
-      // show_mod_details_user_info: true,  // 是否显示 Mod 详情面板自定义信息
-      // show_mod_details_description: true,  // 是否显示 Mod 详情面板描述
 
       show_dependency_graph: true,  // 是否显示依赖关系图
       show_list_index: true,  // 是否显示列表索引列
@@ -158,12 +158,14 @@ export const useAppStore = defineStore('app', () => {
     // --- AI ---
     ai: {
       enabled: false,
+      api_type: 'custom',  // 可选值: 'official' 或 'custom'
       provider: 'openai',
-      base_url: 'https://api.openai.com/v1',
+      base_url: '',
       api_key: '',
       model: 'gpt-3.5-turbo',
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 5000,
+      max_concurrency: 3,     // 最大并发请求数（避免被API封锁）
     },
     
     // --- 高级 (Advanced) ---
@@ -387,7 +389,6 @@ export const useAppStore = defineStore('app', () => {
         }
       }
     })
-
     // 监听后端 EventBus 发出的 'update-status' 事件
     window.addEventListener('update-status', (event) => {
         const data = event.detail // { status, percent, speed, msg, path ... }
@@ -417,6 +418,35 @@ export const useAppStore = defineStore('app', () => {
             updateState.errorMsg = data.msg
             toast.error(`更新出错: ${data.msg}`)
         }
+    })
+
+    // 监听：AI 批量处理进度
+    window.addEventListener('ai-batch-progress', (e) => {
+      Object.assign(aiState, e.detail)
+      aiState.isLoading = true 
+    })
+    // 每完成一个 Chunk，将数据推入数组，供弹窗实时渲染
+    window.addEventListener('ai-batch-chunk-ready', (e) => {
+      if (Array.isArray(e.detail)) {
+        aiBatchResults.value.push(...e.detail)
+      }
+    })
+    // 监听：AI 批量处理完成
+    window.addEventListener('ai-batch-complete', (e) => {
+      aiState.isLoading = false 
+      if (e.detail.status === 'success') {
+        const payload = e.detail.data // 获取后端的字典结果
+        const successCount = payload.success_count || 0
+        const failedCount = payload.failed_count || 0
+        if (failedCount > 0) {
+          toast.warning(`任务完成。成功: ${successCount}，失败/置空: ${failedCount} 项，请手动处理高亮条目。`, {timeout: 6000})
+        } else {
+          toast.success(`任务完美完成！成功生成 ${successCount} 项。`)
+        }
+        uiState.showAiReviewModal = true 
+      } else {
+        toast.error(`AI 任务异常: ${e.detail.message}`)
+      }
     })
 
     // 监听：本地化进度
@@ -791,11 +821,22 @@ export const useAppStore = defineStore('app', () => {
       return true
     }
   }
-  // 获取AI模型 temp_config: {provider, base_url, api_key}
-  const fetchAiModels = async (temp_config) => {
+  // 获取AI厂商或代理协议列表
+  const getAiProviders = async (api_type = 'official') => {
     if (!window.pywebview) return
     aiState.isLoading = true
-    const res = await window.pywebview.api.ai_fetch_models(temp_config)
+    const res = await window.pywebview.api.ai_get_providers(api_type)
+    if (checkResult(res, "获取AI厂商或代理协议列表")) {
+      aiState.isLoading = false
+      return res.data
+    }
+    aiState.isLoading = false
+  }
+  // 获取AI模型 temp_config: {provider, base_url, api_key}
+  const getAiModels = async (temp_config) => {
+    if (!window.pywebview) return
+    aiState.isLoading = true
+    const res = await window.pywebview.api.ai_get_models(temp_config)
     if (checkResult(res, "获取AI模型")) {
       aiState.isLoading = false
       return res.data
@@ -822,12 +863,76 @@ export const useAppStore = defineStore('app', () => {
       aiState.isLoading = false
       return
     }
-    const res = await window.pywebview.api.ai_execute_task(task_key, params)
-    if (checkResult(res, `使用AI ${task_key}`)) {
+    try {
+      const res = await window.pywebview.api.ai_execute_task(task_key, params)
+      if (checkResult(res, `使用AI ${task_key}`)) {
+        aiState.isLoading = false
+        // 【核心修复】：判断返回的数据类型
+        const data = res.data
+        if (typeof data === 'string') {
+          try {
+            // 如果是字符串且看起来像 JSON，尝试解析
+            if (data.trim().startsWith('{') || data.trim().startsWith('[')) {
+              return JSON.parse(data)
+            }
+            return data // 普通文本字符串
+          } catch (e) {
+            console.warn("AI 返回了无法解析的字符串内容", data)
+            return data
+          }
+        }
+        // 如果已经是对象（后端已经 parse 过了），直接返回
+        return data 
+      }
+    } catch (e) {
+      console.error("AI 任务执行异常:", e)
+    } finally {
       aiState.isLoading = false
-      return JSON.parse(res.data)
     }
-    aiState.isLoading = false
+  }
+  // 发起批量AI任务
+  const startAiBatchTask = async (task_key, modsList) => {
+    if (!window.pywebview) return
+    aiBatchResults.value = [] // 清空旧数据
+    
+    // 【修改点 1】：不立刻弹窗，而是明确开启 isLoading 状态唤醒底部状态栏
+    // uiState.showAiReviewModal = true 
+    aiState.isLoading = true
+    aiState.percent = 0
+    aiState.message = '正在分配神经元计算资源...'
+    
+    toast.info("AI 批量任务已在后台启动，请留意底部状态栏。")
+    
+    // 提取必要字段减小发给大模型的体积
+    const items = modsList.map(m => ({
+        package_id: m.package_id,
+        name: m.name,
+        description: cleanRichText(m.description,1000)
+    }))
+    
+    await window.pywebview.api.ai_execute_batch_task(task_key, items, {})
+  }
+  // --- 提示词管理 ---
+  const fetchPrompts = async () => {
+    if (!window.pywebview) return {}
+    const res = await window.pywebview.api.ai_get_prompts()
+    if (checkResult(res, "获取提示词库")) return res.data
+    return {}
+  }
+  const savePrompt = async (id, data) => {
+    if (!window.pywebview) return false
+    const res = await window.pywebview.api.ai_save_prompt(id, data)
+    return checkResult(res, "保存提示词", true) ? res.data : false
+  }
+  const deletePrompt = async (id) => {
+    if (!window.pywebview) return false
+    const res = await window.pywebview.api.ai_delete_prompt(id)
+    return checkResult(res, "删除提示词", true) ? res.data : false
+  }
+  const resetPrompts = async () => {
+    if (!window.pywebview) return false
+    const res = await window.pywebview.api.ai_reset_prompts()
+    return checkResult(res, "恢复默认提示词", true) ? res.data : false
   }
 
   // === 更新相关函数 ===
@@ -945,12 +1050,16 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, updateState, aiState, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS,
+    appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, updateState, 
+    aiState, aiBatchResults, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, 
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup,
     // 游戏相关
-    getGameInfo, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, startDownload, waitForDownload, 
+    getGameInfo, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
+    startDownload, waitForDownload, downloadWorkshopItems, 
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, 
-    getAiConfig, saveAIConfig, useAI, fetchAiModels, chatWithAI, downloadWorkshopItems, 
+    // AI处理
+    getAiConfig, saveAIConfig, getAiProviders, getAiModels, useAI, chatWithAI, startAiBatchTask, 
+    fetchPrompts, savePrompt, deletePrompt, resetPrompts,
   }
 })

@@ -56,12 +56,14 @@ class NetworkConfig:
 @dataclass
 class AIConfig:
     enabled: bool = False
+    api_type: str = "custom"  # 可选值: 'official' 或 'custom'
     provider: str = "openai"  # openai, anthropic, google
     base_url: str = "https://api.openai.com/v1"  # 允许自定义，如 DeepSeek, LocalAI
     api_key: str = ""
     model: str = "gpt-3.5-turbo"
-    temperature: float = 0.7
-    max_tokens: int = 2000
+    temperature: float = 0.7     # 温度参数（控制输出随机性）
+    max_tokens: int = 5000       # 最大令牌数（限制模型输出长度）
+    max_concurrency: int = 3     # 最大并发请求数（避免被API封锁）
 
 @dataclass
 class SteamConfig:
@@ -247,10 +249,6 @@ class SettingsManager:
             
             # 3. 递归更新 (核心逻辑)
             self._recursive_update(config, data)
-                
-# ================================临时变更修复 (记得以后删除)===========================================================
-            if (not config.user_data_path and data.get('game_data_path')):
-                config.user_data_path = data['game_data_path']
 
             # 检查旧版配置位置
             legacy_game_data = data.get('network', {}).get('game_data_path')
@@ -298,6 +296,14 @@ class SettingsManager:
                 # 尝试转换，或者打印警告
                 # value = target_type(value)
                 pass
+            # 如果设置的是 ai 字段，且传入的是字典，将其转换为 AIConfig 对象
+            if key == 'ai' and isinstance(value, dict):
+                from backend.settings import AIConfig
+                value = AIConfig(**value)
+            # 如果设置的是 network 字段，且传入的是字典
+            elif key == 'network' and isinstance(value, dict):
+                # 这里逻辑较深，可以根据需要递归转换，或者保持目前做法
+                pass 
             
             setattr(self.config, key, value)
             self.save()
