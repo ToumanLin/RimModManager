@@ -151,4 +151,5 @@
 ├──  pack_pyinstaller.py
 ├──  pyproject.toml
 ├──  README.md
-└──  uv.lock
+├──  uv.lock
+└──  validate_environment.py

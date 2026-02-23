@@ -95,8 +95,8 @@ def packApplication(main_file="main.py", icon_path="", name="", version="1.0.0",
         # 2. 构建命令
         cmd = [
             "uv", "run", "pyinstaller", # 使用uv运行pyinstaller
-            # "-F",  # 打包成单个文件
-            "-D",  # 打包成目录
+            "-F",  # 打包成单个文件
+            # "-D",  # 打包成目录
             "-w",  # 无控制台窗口
             "--noconfirm",  # 跳过确认提示
             "--contents-directory", "lib",
