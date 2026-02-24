@@ -19,18 +19,18 @@
 
             <!-- 2. 待选库 (Library) -->
             <div v-else-if="col.type === 'library'" class="h-full">
-               <ModList v-model="modStore.inactiveIds" title="未启用" listColor="primary" listId="inactive" />
+              <ModList v-model="modStore.inactiveIds" title="未启用" listColor="primary" listId="inactive" />
             </div>
 
             <!-- 3. 启用/排序 (Active) - 包含规则编辑器逻辑 -->
             <div v-else-if="col.type === 'active'" class="h-full">
-               <ModList v-model="modStore.activeIds" title="启用" :hasSidebar="true" listColor="success" listId="active" />
+              <ModList v-model="modStore.activeIds" title="启用" :hasSidebar="true" listColor="success" listId="active" />
             </div>
 
             <!-- 4. 辅助/分组 (Sidebar Tabs) -->
             <div v-else-if="col.type === 'sidebar'" class="h-full">
-               <!-- 这里保留原有的逻辑：如果有规则ID，显示编辑器，否则显示列表 -->
-               <ModRuleEditor v-if="ruleStore.currentId" title="规则" listColor="warn" />
+              <!-- 这里保留原有的逻辑：如果有规则ID，显示编辑器，否则显示列表 -->
+              <ModRuleEditor v-if="ruleStore.currentId" title="规则" listColor="warn" />
               <div v-else class="h-full flex flex-col relative">
                 <div class="flex-1 overflow-hidden grid grid-cols-1 grid-rows-1">
                   <Transition
@@ -294,7 +294,7 @@ const columnConfig = [
   { 
     id: 'library', 
     type: 'library',
-    show: () => true // 假设库常驻，也可以改为配置
+    show: () => true // 库常驻，也可以改为配置
   },
   { 
     id: 'active', 

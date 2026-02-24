@@ -19,7 +19,7 @@
       <span class="flex items-center gap-1">
         <!-- 错误指示器 (仅当有错误时显示) -->
         <button v-if="issuesSummary.count > 0" v-tooltip="issueTooltip"
-          @click="toggleIssueFilter"
+          @click="toggleIssueFilter" @contextmenu="issueContextMenu"
           class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold transition-all border cursor-pointer hover:scale-105 active:scale-95"
           :class="[issuesSummary.errorCount > 0 ? 'bg-accent-danger/20 text-accent-danger border-accent-danger/30' 
               : 'bg-accent-warn/20 text-accent-warn border-accent-warn/30',
@@ -119,9 +119,6 @@
     <div v-else ref="listContainerRef" class="flex-1 flex pb-0.5 overflow-y-auto after:pointer-events-none 
         after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10 
         after:bg-linear-to-t after:from-bg-deep/80 after:to-transparent focus:outline-none"
-        tabindex="0" @keydown.up.prevent="handleKeyNav(-1)"
-        @keydown.down.prevent="handleKeyNav(1)"
-        @click="focusContainer"
 	      @click.self="modStore.clearSelection()">
       
       <!-- 左侧辅助功能区( @wheel.passive 监听滚轮事件) -->
@@ -149,6 +146,9 @@
           :group="{ name: 'mods', pull:'clone', put: allowSort ? ['mods','groups']:false, revertDrag: true }" :animation="150" 
           :size="itemHeight"
           @drop="updateChildren" @drag="startDrag"
+          @keydown.up.prevent="handleKeyNav(-1)"
+          @keydown.down.prevent="handleKeyNav(1)"
+          @click="focusContainer"
           v-selectable-list="{ 
              data: displayList, 
              clickClass: 'select-trigger',
@@ -207,7 +207,8 @@ import { ISSUE_TITLE_MAP, ISSUE_TYPE } from '../utils/constants';
 import ModItem from './utils/ModItem.vue';
 import TagsSearch from './common/TagsSearch/TagsSearch.vue';
 import DependencyGraph from './utils/DependencyGraph.vue'
-import { GitPullRequestCreate, MessageSquarePlus, Trash2 } from 'lucide-vue-next';
+import { GitPullRequestCreate, Megaphone, MegaphoneOff, MessageSquarePlus, SearchAlert, Trash2 } from 'lucide-vue-next';
+import { useContextMenuStore } from '../stores/contextMenuStore';
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -222,6 +223,7 @@ const emit = defineEmits(['update:modelValue'])
 const appStore = useAppStore()
 const modStore = useModStore()
 const searchStore = useSearchStore()
+const menuStore = useContextMenuStore()
 const toast = useToast();
 const vListRef = ref(null)  // 虚拟列表引用, 用于滚动到选中项
 const listKey = ref(0)
@@ -246,6 +248,7 @@ const filterQuery = ref([]) // 存储标签数组
 const filterLogic = ref('AND') // 存储逻辑关系
 const filterByLine = ref([])  // 存储筛选线路数组
 const isFilterByIssue = ref(false)  // 是否筛选问题项
+const filterIssueType = ref('')   // 筛选问题项类型
 
 const isSortChange = ref(false) // 是否排序切换
 
@@ -266,18 +269,34 @@ const issuesSummary = computed(() => modStore.getListIssues(props.listId))
 
 // 切换问题项筛选
 const toggleIssueFilter = () => {
-    isFilterByIssue.value = !isFilterByIssue.value
-    // 如果开启筛选，清空搜索框以免冲突，或者叠加逻辑
-    if (isFilterByIssue.value) {
-        // 可以在这里设置 filterQuery = 'has:issue' 之类的特殊标记
-        // 或者直接修改 displayList 的计算逻辑
-    }
+  isFilterByIssue.value = !isFilterByIssue.value
+  filterIssueType.value = ''  // 整体筛选时，清空问题项类型筛选
+  // 如果开启筛选，清空搜索框以免冲突，或者叠加逻辑
+  if (isFilterByIssue.value) {
+    // 可以在这里设置 filterQuery = 'has:issue' 之类的特殊标记
+    // 或者直接修改 displayList 的计算逻辑
+  }
+}
+const toggleIssueTypeFilter = (type: string) => {
+  console.log('toggleIssueTypeFilter', type)
+  // 检查类型是否符合ISSUE_TYPE
+  if (!Object.values(ISSUE_TYPE).includes(type)) {
+    isFilterByIssue.value = false
+    filterIssueType.value = ''
+    return
+  }
+  if (!filterIssueType.value) {
+    isFilterByIssue.value = true
+  }
+  // 切换选中状态
+  filterIssueType.value = filterIssueType.value === type ? '' : type
 }
 // 清除筛选
 const clearFilter = () => {
   filterQuery.value = []
   isFilterByIssue.value = false
   filterByLine.value = []
+  filterIssueType.value = ''
 }
 
 // 动态计算帮助文本
@@ -330,7 +349,8 @@ const issueTooltip = computed(() => {
       text += `\n  __...及其他 ${ids.length - 3} 项__`
     }
   }
-  text += isFilterByIssue.value ? '\n\n__[[(再次点击取消筛选)]]__' : '\n\n__[[(点击筛选以查看详情)]]__'
+  text += isFilterByIssue.value ? '\n\n__[[(再次点击取消筛选)]]__' : '\n\n__[[(点击筛选查看全部问题项)]]__'
+  text += '\n__[[(可^^右键菜单^^支持筛选单项问题)]]__'
   return text
 })
 // 排序提示
@@ -373,10 +393,16 @@ const displayList = computed(() => {
   let list = props.modelValue.slice() // 复制一份 ID 列表
   // 1. 优先处理错误筛选
   if (isFilterByIssue.value) {
-      list = list.filter(id => {
-          const issues = modStore.modIssues.get(id.toLowerCase())
-          return issues && issues.length > 0
-      })
+    list = list.filter(id => {
+      // 从所有问题项中检测是否有该 Mod 的问题
+      const issues = modStore.modIssues.get(id.toLowerCase())
+      // 有问题项且符合筛选类型
+      if (filterIssueType.value) {
+        return issues && issues.some(issue => issue.type === filterIssueType.value)
+      }
+      // 有问题项但未指定类型，默认显示
+      return issues && issues.length > 0
+    })
   }
   // 2. 处理依赖图筛选
   if (filterByLine.value.length > 0) {
@@ -715,6 +741,77 @@ const handleKeyNav = (direction) => {
   }
 }
 
+
+const issueContextMenu = async (event) => {
+  // console.log(issueState,issueState.value)
+  // 通用菜单
+  const commnMenuItems = [
+    // { label: '修改类型', icon: ChessPawn,
+    //   children: [...Object.entries(MOD_TYPE_MAP).map(([key, value]) => ({ 
+    //     icon: MOD_TYPE_ICON_MAP[key],
+    //     label: value, action: () => modStore.setModsType(selectedIds, key)
+    //   })),{ label: '恢复默认', level: 'warn', action: () => modStore.setModsType(selectedIds, null) }]
+    // },
+  ]
+  // 1. 获取所有选中 Mod 的当前问题并集
+  const allSelectedIssues = props.modelValue.flatMap(id => modStore.modIssues.get(id.toLowerCase()) || []);
+  // 2. 提取唯一的错误类型 (Type Unique Set)
+  const uniqueIssueTypes = [...new Set(allSelectedIssues.map(i => i.type))];
+
+  // 3. 检查选中项中是否有人已经设置了忽略 (用于显示“恢复警告”)
+  const anyModHasIgnored = props.modelValue.some(id => {
+    const m = modStore.takeModById(id);
+    return m && m.ignored_issues && m.ignored_issues.length > 0;
+  });
+  // 统一的问题菜单组
+  const issueManagementItems = [];
+  // 如果并集不为空，显示“筛选...”子菜单
+  if (uniqueIssueTypes.length > 0) {
+    issueManagementItems.push({
+      label: props.modelValue.length > 1 ? `筛选单项问题 (${uniqueIssueTypes.length})...` : '筛选单项问题...',
+      icon: SearchAlert,
+      children: uniqueIssueTypes.map(type => ({
+        label: `单独筛选：${ISSUE_TITLE_MAP[type] || type}`,
+        // 这里的 level 可以取该类型在所有 Mod 中的最高级别
+        level: allSelectedIssues.find(i => i.type === type)?.level || 'warn',
+        action: () => toggleIssueTypeFilter(type)
+      }))
+    });
+  }
+  // A. 如果并集不为空，显示“忽略...”子菜单
+  if (uniqueIssueTypes.length > 0) {
+    issueManagementItems.push({ divider: true });
+    issueManagementItems.push({
+      label: props.modelValue.length > 1 ? `忽略所有问题 (${uniqueIssueTypes.length})...` : '忽略问题...',
+      icon: MegaphoneOff,
+      children: uniqueIssueTypes.map(type => ({
+        label: `忽略：${ISSUE_TITLE_MAP[type] || type}`,
+        // 这里的 level 可以取该类型在所有 Mod 中的最高级别
+        level: allSelectedIssues.find(i => i.type === type)?.level || 'warn',
+        action: () => modStore.batchIgnoreIssues(props.modelValue, type)
+      }))
+    });
+  }
+  // B. 如果有选项被忽略了，显示“恢复警告”
+  if (anyModHasIgnored) {
+    // 如果之前没加 divider，补一个
+    if (issueManagementItems.length === 0) issueManagementItems.push({ divider: true });
+    issueManagementItems.push({
+      label: props.modelValue.length > 1 ? '恢复所有警告' : '恢复警告',
+      icon: Megaphone,
+      level: 'warn',
+      action: () => modStore.batchIgnoreIssues(props.modelValue, null)
+    });
+  }
+
+  // 合并菜单
+  const menuItems = [
+  ...commnMenuItems,
+  ...issueManagementItems, // 插入批量忽略逻辑
+];
+
+  menuStore.open(event, menuItems)
+}
 </script>
 
 <style scoped>

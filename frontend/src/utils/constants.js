@@ -137,17 +137,17 @@ export const MOD_TYPE_ICON_MAP = {
   ]),
 }
 // 模组颜色列表
-export const MOD_COLOR_LIST = [
-  '#ef4444',
-  '#ec4899',
-  '#8b5cf6',
-  '#3b82f6',
-  '#06b6d4',
-  '#10b981',
-  '#84cc16',
-  '#eab308',
-  '#f97316'
-]
+export const MOD_SIGN_COLOR_MAP = {
+  '#ef4444': '红色',
+  '#ec4899': '粉色',
+  '#8b5cf6': '紫色',
+  '#3b82f6': '蓝色',
+  '#06b6d4': '青色',
+  '#10b981': '绿色',
+  '#84cc16': '草色',
+  '#eab308': '黄色',
+  '#f97316': '橙色',
+}
 // 模组来源映射
 export const SOURCE_TYPE_MAP = {
   'core': '游戏本体',

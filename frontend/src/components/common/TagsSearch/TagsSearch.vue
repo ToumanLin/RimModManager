@@ -104,7 +104,8 @@
                       ({{ item.meta.matchInfo }})
                   </span> -->
                 </span>
-                <span :class="highlightIndex === index ? 'text-text-main' : 'text-gray-300'">
+                <span :class="highlightIndex === index ? 'text-text-main' : 'text-gray-300'"
+                  :style="{'color': item.color || 'currentColor', 'font-weight': item.color ? 'bold' : 'normal'}">
                   {{ item.type === 'value' ? item.label : '' }}
                 </span>
               </span>

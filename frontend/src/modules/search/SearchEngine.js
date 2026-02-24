@@ -344,7 +344,6 @@ export class SearchEngine {
           .filter((v, i, a) => a.indexOf(v) === i)
           .join(', ');
 
-
         suggestions.push({
           type: 'key',
           label: shortKey,         // 显示：a
@@ -435,12 +434,14 @@ export class SearchEngine {
             let count = 0;
             for (const val of candidates) {
               if (val.toLowerCase().includes(valLower)) {
+                const label_string = config.label_getter ? config.label_getter(val) : val;
                 suggestions.push({
                   type: 'value',
-                  label: val,
+                  label: label_string,
                   // 关键：这里把用户输入的 keyRaw (可能是全称) 替换为了 shortKey
                   value: prefix + shortKey + ':' + val, 
-                  desc: config.label || realKey
+                  desc: config.label || realKey,
+                  color: config.color_getter ? config.color_getter(val) : null,
                 });
                 count++;
                 if (count > 50) break;

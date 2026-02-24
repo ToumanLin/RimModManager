@@ -138,7 +138,7 @@
 
 <script setup>
 import { computed, h, nextTick  } from 'vue'
-import { MOD_COLOR_LIST, ISSUE_TYPE, MOD_TYPE_MAP, ISSUE_TITLE_MAP, MOD_TYPE_ICON_MAP, SOURCE_TYPE_MAP } from '../../utils/constants'
+import { MOD_SIGN_COLOR_MAP, ISSUE_TYPE, MOD_TYPE_MAP, ISSUE_TITLE_MAP, MOD_TYPE_ICON_MAP, SOURCE_TYPE_MAP } from '../../utils/constants'
 import { useAppStore } from '../../stores/appStore'
 import { useModStore } from '../../stores/modStore'
 import { useGroupStore } from '../../stores/groupStore'
@@ -305,10 +305,10 @@ const handleContextMenu = async (event) => {
       }))}]
     },
     { label: '标记颜色', icon: Palette, children: [{ type: 'grid', columns: 5, label: '批量设置颜色',
-        children:[...MOD_COLOR_LIST.map(c => ({ tooltip: c, color: c, 
-          active: modData.value.sign_color === c, action: () => modStore.setModsColor(selectedIds, c)
-        })), 
-        { icon: X, color: 'transparent', tooltip: '清除', action: () => modStore.setModsColor(selectedIds, null) }]
+        children:[...Object.entries(MOD_SIGN_COLOR_MAP).map(([c, name]) => ({ tooltip: name, color: c, 
+            active: modData.value.sign_color === c, action: () => modStore.setModsColor(selectedIds, c)
+          })), { icon: X, color: 'transparent', tooltip: '清除', action: () => modStore.setModsColor(selectedIds, null) }
+        ]
       }]
     },
     { label: '修改类型', icon: ChessPawn,

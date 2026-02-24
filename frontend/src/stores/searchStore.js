@@ -4,6 +4,7 @@ import { ref, computed, watch } from 'vue'
 import { useModStore } from './modStore'
 import { SearchEngine } from '../modules/search/SearchEngine'
 import { FIELD_TYPES } from '../modules/search/SearchTypes'
+import { MOD_SIGN_COLOR_MAP } from '../utils/constants'
 
 export const useSearchStore = defineStore('search', () => {
   const modStore = useModStore()
@@ -41,6 +42,13 @@ export const useSearchStore = defineStore('search', () => {
       label: '类型',
       getter: (mod) => modStore.displayModType(mod)
     },
+    sign_color:{
+      type: FIELD_TYPES.STRING, 
+      suggest: true, 
+      label: '标记颜色',
+      label_getter: (color) => MOD_SIGN_COLOR_MAP[color] || '无',
+      color_getter: (color) => color || '#ffffff',
+    }
     
     // === 时间 (假设 mod 对象里有 updated_at) ===
     // last_updated: {
