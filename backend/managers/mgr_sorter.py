@@ -54,16 +54,21 @@ class OrderSorter:
 
         # 辅助函数：深度优先搜索构建链条
         def trace_chain(current_id: str, current_chain: List[str], auto_activated: List[str]):
-            if current_id in visited:
-                return
+            """
+            递归构建一个 Mod 链条
+            Args:
+                current_id: 当前 Mod 的 ID
+                current_chain: 当前链条的 Mod ID 列表
+                auto_activated: 自动激活的 Mod ID 列表
+            """
+            if current_id in visited: return
             visited.add(current_id)
             # 如果当前 ID 不在激活列表中，记录为自动激活
             if current_id not in active_set:
                 auto_activated.append(current_id)
             current_chain.append(current_id)
             mod_info = mod_map.get(current_id)
-            if not mod_info:
-                return
+            if not mod_info: return
             # 寻找下一个
             next_id = mod_info.get('lock_next_mod')
             if next_id:

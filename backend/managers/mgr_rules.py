@@ -451,16 +451,13 @@ class RuleManager:
                 if user_data_list:
                     # 准备批量数据
                     batch_data = []
+                    valid_field_names = set(UserModData._meta.fields.keys()) # type: ignore
                     for item in user_data_list:
                         # 清洗数据，只保留有效字段
-                        clean_item = {
-                            'mod_id': item.get('mod_id'),
-                            'alias_name': item.get('alias_name'),
-                            'notes': item.get('notes'),
-                            'tags': item.get('tags'),
-                            'sign_color': item.get('sign_color'),
-                            'user_mod_type': item.get('user_mod_type')
-                        }
+                        clean_item={}
+                        for k in list(item.keys()):
+                            if k in valid_field_names:
+                                clean_item[k] = item[k]
                         # 移除 None 值，防止覆盖本地已有数据（实现 Merge 逻辑）
                         # 但 batch_upsert 通常是全量覆盖或忽略，为了实现“仅更新非空值”比较复杂
                         # 这里采用策略：直接 Upsert。导入包通常代表“我想恢复成这样”。

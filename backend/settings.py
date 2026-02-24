@@ -91,12 +91,6 @@ class UIConfig:
         { 'id': 'user_info', 'visible': True }, # 标签、备注、分组
         { 'id': 'description', 'visible': True },
     ])
-    # show_mod_details_author_info: bool = True  # 是否显示 Mod 详情面板作者信息
-    # show_mod_details_files_info: bool = True  # 是否显示 Mod 详情面板文件信息
-    # show_mod_details_time_info: bool = True  # 是否显示 Mod 详情面板时间信息
-    # show_mod_details_dependencies_info: bool = True  # 是否显示 Mod 详情面板依赖信息
-    # show_mod_details_user_info: bool = True  # 是否显示 Mod 详情面板自定义信息
-    # show_mod_details_description: bool = True  # 是否显示 Mod 详情面板描述
 
     show_dependency_graph: bool = True  # 是否显示依赖关系图
     show_list_index: bool = True  # 是否显示列表索引列

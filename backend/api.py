@@ -17,12 +17,25 @@ from datetime import datetime
 from peewee import Model, JOIN
 from playhouse.shortcuts import model_to_dict
 
+# --- 模块测试准备 ---
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    # Path(__file__).resolve() 获取当前文件的绝对路径
+    # .parents[2] 表示向上跳 3 级 (文件->scanner->backend->项目根目录)
+    project_root = Path(__file__).resolve().parents[1]
+    # 调试打印，确保路径正确
+    print(f"Project Root: {project_root}")
+    # sys.path 需要字符串类型，所以要用 str() 转换一下
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
 # 1. 引入配置管理
 from backend.settings import settings, RULES_DIR
 from backend.utils.event_bus import EventBus
-from backend.utils.logger import logger
 from backend._version import __version__, __build__
 from backend.utils.tools import current_ms
+from backend.utils.logger import logger
 
 # 2. 引入数据库层
 from backend.database.models import ModAsset, UserModData, init_db, db
@@ -1636,4 +1649,6 @@ class API:
         
         
         
-        
+if __name__ == "__main__":
+    valid_field_names = set(UserModData._meta.fields.keys()) # type: ignore
+    print(valid_field_names)

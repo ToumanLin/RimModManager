@@ -12,7 +12,7 @@ if __name__ == "__main__":
     # .parents[2] 表示向上跳 3 级 (文件->scanner->backend->项目根目录)
     project_root = Path(__file__).resolve().parents[2]
     # 调试打印，确保路径正确
-    logger.debug(f"Project Root: {project_root}")
+    print(f"Project Root: {project_root}")
     # sys.path 需要字符串类型，所以要用 str() 转换一下
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
