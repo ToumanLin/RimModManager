@@ -9,7 +9,7 @@ from playhouse.shortcuts import model_to_dict
 from backend.database.dao import ModDAO
 from backend.database.models import GameProfile, db
 from backend.managers.mgr_game import GameManager
-from backend.settings import settings, CONFIG_DIR
+from backend.settings import settings, DATA_DIR
 from backend.utils.logger import logger 
 
 
@@ -50,7 +50,7 @@ class ProfileManager:
         
         # 规划数据隔离目录 (例如存放在 data/profiles/<id>)
         # 注意：这里使用绝对路径
-        data_dir = data.get('user_data_path') or str(CONFIG_DIR / "profiles" / profile_id)
+        data_dir = data.get('user_data_path') or str(DATA_DIR / "profiles" / profile_id)
         
         # 检测路径是否存在，然后初始化目录结构
         if not os.path.exists(data_dir):
@@ -276,7 +276,7 @@ class ProfileManager:
         扫描 profiles 目录，寻找数据库中不存在但磁盘上存在的配置
         返回: List[Dict] (可以直接用于展示给用户确认导入)
         """
-        profiles_root = CONFIG_DIR / "profiles"
+        profiles_root = DATA_DIR / "profiles"
         if not profiles_root.exists():
             return []
 

@@ -984,7 +984,6 @@ export const useAppStore = defineStore('app', () => {
         updateState.isChecking = false
       }
   }
-
   const _showInstallPrompt = async (data) => {
     const confirmStore = useConfirmStore()
     const ok = await confirmStore.confirmAction(
@@ -995,7 +994,6 @@ export const useAppStore = defineStore('app', () => {
     if (!ok) return toast.info("用户取消安装")
     await _performUpdateAction()
   }
-
   // 触发操作 (下载 OR 安装)
   const _performUpdateAction = async () => {
       const info = updateState.info
@@ -1025,40 +1023,19 @@ export const useAppStore = defineStore('app', () => {
           toast.error(res.message)
       }
   }
-
-  // 执行更新下载与安装
-  const startUpdateProcess = async () => {
-    const url = updateState.info.download_url
-    if (!url) return toast.error("无效的下载地址")
-
-    toast.info("正在下载更新包，请稍后...")
-    
+  // 更新外置数据库
+  const updateExternalDB = async (type) => {
     try {
-      // 利用现有的文件管理器下载到 download 目录
-      const res = await window.pywebview.api.download_update(url)
-      if (!checkResult(res, "下载更新包")) return
-      const task_id = res.data.task_id
-      // 等待下载完成，直接拿取 file_path
-      // 代码会在这里“暂停”，直到全局监听器触发 resolve
-      const filePath = await waitForDownload(task_id)
-      console.log("更新包下载完成:", filePath)
-      console.log("保存更新数据:", updateState.info)
-      // 保存更新元数据
-      const infoRes = await window.pywebview.api.save_update_metadata(updateState.info, filePath)
-      if (checkResult(infoRes, "保存更新元数据")) {}
-      // 下载完成后，自动执行安装
-      toast.success("下载已就绪，正在准备安装...")
-      const confirmStore = useConfirmStore()
-      const ok = await confirmStore.confirmAction(
-        "确认安装更新？",
-        `压缩包已经下载到：${filePath}\n是否继续安装更新？安装后将重启应用程序。`,
-        { confirmText: '确认安装', cancelText: '取消', type: 'warning' }
-      )
-      if (!ok) return toast.info("用户取消安装")
-      await window.pywebview.api.install_update(filePath)
-    } catch (e) {
-      toast.error(`更新失败: ${e}`)
-      console.error('更新失败:', e)
+        // 调用 API
+        const res = await window.pywebview.api.update_external_db(type)
+        if (checkResult(res, `更新外置数据库 ${type}`)) {
+          const task_id = res.data.task_id
+          const filePath = await waitForDownload(task_id)
+          // 重新获取数据
+          // await fetchRules() 
+        }
+    } catch (error) {
+        toast.error("更新社区库失败: " + error.message)
     }
   }
 
@@ -1070,7 +1047,7 @@ export const useAppStore = defineStore('app', () => {
     getGameInfo, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
     startDownload, waitForDownload, downloadWorkshopItems, 
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
-    checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, 
+    checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, updateExternalDB,
     // AI处理
     getAiConfig, saveAIConfig, getAiProviders, getAiModels, useAI, chatWithAI, startAiBatchTask, 
     fetchPrompts, savePrompt, deletePrompt, resetPrompts,

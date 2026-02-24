@@ -1659,7 +1659,7 @@ class API:
     #  14. 外置数据管理 (External Data)
     # ==========================================
     @log_api_call
-    def update_external_data(self, data_type: str):
+    def update_external_db(self, data_type: str):
         """
         更新外置数据（例如工坊数据库和替代数据库）
         """
@@ -1713,7 +1713,8 @@ class API:
 if __name__ == "__main__":
     # valid_field_names = set(UserModData._meta.fields.keys()) # type: ignore
     # print(valid_field_names)
-    steam_mgr=SteamManager()
-    installed_workshop_ids = steam_mgr.get_installed_workshop_ids()
-    print(len(installed_workshop_ids))
+    # steam_mgr=SteamManager()
+    # installed_workshop_ids = steam_mgr.get_installed_workshop_ids()
+    # print(len(installed_workshop_ids))
+    print(settings.config.community_instead_db_path)
     pass

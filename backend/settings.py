@@ -18,20 +18,21 @@ else:
     # 开发模式
     HOME_DIR = Path(__file__).resolve().parent.parent
 
-CONFIG_DIR = HOME_DIR / "data"
-CONFIG_FILE = CONFIG_DIR / "config.json"
-UPDATE_CACHE_DIR = HOME_DIR / "updates"
+DATA_DIR = HOME_DIR / "data"                # 数据目录
+CONFIG_PATH = DATA_DIR / "config.json"      # 配置文件路径
+UPDATE_CACHE_DIR = HOME_DIR / "updates"     # 更新目录
+TOOLS_DIR = HOME_DIR / "tools"                # 工具目录
 
 # 定义缩略图缓存目录
 CACHE_DIR = HOME_DIR / "cache" / "thumbnails"
-# 规则文件存放路径
-RULES_DIR = HOME_DIR / "data" / "rules"
-USER_RULES_PATH = RULES_DIR / "user_rules.json"
-COMMUNITY_RULES_PATH = RULES_DIR / "communityRules.json"
-COMMUNITY_WORKSHOP_DB_PATH = RULES_DIR / "data" / "steamDB.json"
-COMMUNITY_INSTEAD_DB_PATH = RULES_DIR / "data" / "replacements.json"
-# 工具目录
-TOOLS_DIR = HOME_DIR / "tools"
+# 规则存放路径
+RULES_DIR = DATA_DIR / "rules"
+USER_RULES_PATH = RULES_DIR / "user_rules.json"             # 用户规则路径
+COMMUNITY_RULES_PATH = RULES_DIR / "communityRules.json"    # 社区库规则路径
+# 外置数据库路径
+COMMUNITY_WORKSHOP_DB_PATH = DATA_DIR / "steamDB.json"         # 社区库数据库路径
+COMMUNITY_INSTEAD_DB_PATH = DATA_DIR / "replacements.json.gz"  # 替代Mod数据库路径
+
 
 @dataclass
 class ProxyConfig:
@@ -134,11 +135,6 @@ class AppConfig:
     run_commands: List[str] = field(default_factory=list)
     prefer_steam_launch: bool = True         # 是否通过 Steam 启动游戏
     
-    # --- 界面设置 ---
-    language: str = "ZH-cn"     # 默认语言
-    window_width: int = 1400
-    window_height: int = 900
-    ui: UIConfig = field(default_factory=UIConfig)
     
     # --- 高级设置 ---
     backup_retention_days: int = 30           # 备份保留天数
@@ -151,13 +147,6 @@ class AppConfig:
     coexist_mod_folder_name_type: str = "workshop_id" # 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: bool = True      # 是否显示共存Mod提示
     check_language_support: bool = True        # 是否检查语言支持
-    
-    
-    # --- 功能设置 ---
-    network: NetworkConfig = field(default_factory=NetworkConfig)
-    steam: SteamConfig = field(default_factory=SteamConfig)
-    ai: AIConfig = field(default_factory=AIConfig)
-    
     # --- 社区设置 ---
     community_workshop_db_url: str = "https://github.com/RimSort/Steam-Workshop-Database/blob/main/steamDB.json"
     community_workshop_db_path: str = str(COMMUNITY_WORKSHOP_DB_PATH)
@@ -174,6 +163,17 @@ class AppConfig:
     enable_auto_update_check: bool = True  # 自动检查更新开关
     ignored_update_version: str = ""       # 跳过的版本号
     last_update_check_time: float = 0      # 上次检查时间（用于限流）
+    
+    # --- 界面设置 ---
+    language: str = "ZH-cn"     # 默认语言
+    window_width: int = 1400
+    window_height: int = 900
+    ui: UIConfig = field(default_factory=UIConfig)
+    
+    # --- 功能设置 ---
+    network: NetworkConfig = field(default_factory=NetworkConfig)
+    steam: SteamConfig = field(default_factory=SteamConfig)
+    ai: AIConfig = field(default_factory=AIConfig)
     
 
 class SettingsManager:
@@ -196,8 +196,8 @@ class SettingsManager:
 
     def _ensure_config_dir(self):
         """ 确保配置目录存在 """
-        if not CONFIG_DIR.exists():
-            CONFIG_DIR.mkdir(parents=True)
+        if not DATA_DIR.exists():
+            DATA_DIR.mkdir(parents=True)
         # 确保日志目录存在
         log_dir = Path(os.getcwd()) / "data" / "logs"
         if not log_dir.exists():
@@ -239,11 +239,11 @@ class SettingsManager:
         3. 递归将 JSON 的值覆盖到 AppConfig 对象上
         """
         # 1. 如果文件不存在，直接返回全默认配置
-        if not CONFIG_FILE.exists():
+        if not CONFIG_PATH.exists():
             return AppConfig()
 
         try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             # 2. 实例化默认配置 (这里已经包含了所有定义的默认值)
@@ -268,7 +268,7 @@ class SettingsManager:
     def save(self):
         """保存当前配置到磁盘"""
         try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
                 # asdict 将 dataclass 转换为字典
                 json.dump(asdict(self.config), f, indent=4, ensure_ascii=False)
             # print("Settings saved.")

@@ -197,7 +197,7 @@
                 </div>
 
                 <div v-for="item in filteredStaticRules" :key="item.id" 
-                  class="flex gap-4 p-2 rounded-xl bg-text-main/2 border border-text-main/5 hover:bg-text-main/5 transition-colors">
+                  class="flex gap-2 p-2 rounded-xl bg-text-main/2 border border-text-main/5 hover:bg-text-main/5 transition-colors">
                   
                   <!-- Mod 信息 -->
                   <div class="w-64 shrink-0 flex gap-3 items-start" v-preview="modStore.takeModById(item.id)">
@@ -212,36 +212,36 @@
                   </div>
 
                   <!-- 规则详情 -->
-                  <div class="flex-1 space-y-2 border-l border-text-main/5 pl-4">
+                  <div class="flex-1 min-w-0 space-y-2 border-l border-text-main/5 pl-4">
                     <!-- Load After -->
-                    <div v-if="item.rules.loadAfter && Object.keys(item.rules.loadAfter).length" class="flex flex-wrap gap-2 items-start">
+                    <div v-if="item.rules.loadAfter && Object.keys(item.rules.loadAfter).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
                       <span class="text-xs font-bold text-accent-warn uppercase mt-0.5">前置:</span>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 w-full min-w-0">
                         <span v-for="(info, targetId) in item.rules.loadAfter" :key="targetId" 
                           v-tooltip="formatTooltip(targetId, info)"
-                          class="px-1.5 py-0.5 rounded bg-accent-warn/10 text-text-main text-[0.8rem] border border-accent-warn/20 truncate max-w-65 cursor-help">
+                          class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 bg-accent-warn/10 text-text-main text-[0.8rem] border border-accent-warn/20 truncate cursor-help">
                           {{ getDisplayName(targetId, info.name) }}
                         </span>
                       </div>
                     </div>
                     <!-- Load Before -->
-                    <div v-if="item.rules.loadBefore && Object.keys(item.rules.loadBefore).length" class="flex flex-wrap gap-2 items-start">
+                    <div v-if="item.rules.loadBefore && Object.keys(item.rules.loadBefore).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
                       <span class="text-xs font-bold text-accent-primary uppercase mt-0.5">后置:</span>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 w-full min-w-0 ">
                         <span v-for="(info, targetId) in item.rules.loadBefore" :key="targetId"
                           v-tooltip="formatTooltip(targetId, info)" 
-                          class="px-1.5 py-0.5 rounded bg-accent-primary/10 text-text-main text-[0.8rem] border border-accent-primary/20 truncate max-w-65 cursor-help">
+                          class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 bg-accent-primary/10 text-text-main text-[0.8rem] border border-accent-primary/20 truncate cursor-help">
                           {{ getDisplayName(targetId, info.name) }}
                         </span>
                       </div>
                     </div>
                     <!-- Incompatible -->
-                    <div v-if="item.rules.incompatibleWith && Object.keys(item.rules.incompatibleWith).length" class="flex flex-wrap gap-2 items-start">
+                    <div v-if="item.rules.incompatibleWith && Object.keys(item.rules.incompatibleWith).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
                       <span class="text-xs font-bold text-accent-danger uppercase mt-0.5">冲突:</span>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 w-full min-w-0 ">
                         <span v-for="(info, targetId) in item.rules.incompatibleWith" :key="targetId"
                           v-tooltip="formatTooltip(targetId, info)"
-                          class="px-1.5 py-0.5 rounded bg-accent-danger/10 text-text-main text-[0.8rem] border border-accent-danger/20 truncate max-w-65 cursor-help">
+                          class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 bg-accent-danger/10 text-text-main text-[0.8rem] border border-accent-danger/20 truncate cursor-help">
                           {{ getDisplayName(targetId, info.name) }}
                         </span>
                       </div>
@@ -249,7 +249,7 @@
                   </div>
 
                   <!-- 操作 (仅用户规则有删除) -->
-                  <div class="shrink-0 flex items-center">
+                  <div class="shrink-0 flex items-center flex-col">
                     <button @click="toggleModRule(item.id)" v-tooltip="isModExcluded(item.id) ? '启用规则' : '禁用规则'"
                       class="p-2 rounded-lg hover:bg-text-main/10" :class="!isModExcluded(item.id) ? 'text-accent-success' : 'text-accent-danger'">
                       <CircleCheckBig v-if="!isModExcluded(item.id)" class="w-4 h-4" />

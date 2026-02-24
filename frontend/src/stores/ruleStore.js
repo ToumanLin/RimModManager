@@ -292,7 +292,7 @@ export const useRuleStore = defineStore('rules', () => {
   const updateCommunity = async () => {
     try {
         // 调用 API
-        const res = await window.pywebview.api.rule_update_community()
+        const res = await window.pywebview.api.update_community_rule()
         if (appStore.checkResult(res, '更新社区库')) {
           const task_id = res.data.task_id
           const filePath = await appStore.waitForDownload(task_id)
