@@ -137,8 +137,13 @@
         <div class="p-6 space-y-5">
           <CommonInput label="显示名称" v-model="form.name" placeholder="例如: 1.5 中世纪" />
           <CommonInput label="环境描述" v-model="form.description" placeholder="这里可以写一些关于这个环境的说明..." />
-          <CommonPathInput label="游戏执行目录" v-model="form.game_install_path" @browse="browsePath('game_install_path')" @blur="checkGamePath" :description="gameInfo" />
-          <CommonPathInput label="用户数据目录" v-model="form.user_data_path" @browse="browsePath('user_data_path')" :placeholder= '(!isEditing?"可空，默认在软件 data/profiles 目录下自动生成":"编辑模式下不可留空！")' />
+          <CommonPathInput label="游戏执行目录" v-model="form.game_install_path" @browse="browsePath('game_install_path')" 
+            :check="form.check_info?.game_install_path" @blur="checkPath('game_install_path', form.game_install_path)"
+            description="游戏安装目录，即游戏主程序所在的目录" />
+          <CommonPathInput v-if="form.id!='default'" label="用户数据目录" v-model="form.user_data_path" @browse="browsePath('user_data_path')" 
+            :check="form.check_info?.user_data_path" @blur="checkPath('user_data_path', form.user_data_path)"
+            description="游戏数据目录，可随意指定位置，或者留空自动生成，包含游戏配置及排序存档等用户信息。"
+            :placeholder= '(!isEditing?"可空，默认在软件 data/profiles 目录下自动生成":"编辑模式下不可留空！")' />
           <CommonSwitch v-if="form.id!='default' && appStore.settings.workshop_mods_path" label="使用创意工坊 Mod" v-model="form.use_workshop_mods" description="启用后将通过链接方式自动为游戏添加创意工坊 Mod，仅在非Steam启动时生效，Steam 运行时会自动加载创意工坊 Mod。" />
           <CommonSwitch v-if="!isEditing" label="继承当前配置" v-model="form.copy_current_data" description="自动复制当前的游戏配置到新环境" />
           <CommonTagInput label="游戏启动参数" v-model="form.run_commands" :allTags="RUN_COMMAND_TAGS" placeholder="请输入一个完整指令后回车确认……" description="注意不要使用 [[-savedatafolder]] 指令，多环境管理已经默认使用此指令，无需手动配置。" />
@@ -227,7 +232,7 @@ const browsePath = async (type) => {
   const path = await appStore.getFolderPath(form[type])
   if (path) form[type] = path
   if (type === 'game_install_path') {
-    checkGamePath()
+    checkPath('game_install_path', form.game_install_path)
   }
 }
 
@@ -256,14 +261,13 @@ const submitForm = async () => {
   showModal.value = false
 }
 
-const checkGamePath = async () => {
-  const game_info = await appStore.getGameInfo(form.game_install_path)
-  if (!game_info || !game_info.exe) {
-    // 游戏版本为空时
-    gameInfo.value = `^^未找到游戏可执行文件，请检查路径是否正确！^^`
-    return
+// 检查游戏路径是否有效
+const checkPath = async (type, path) => {
+  const res = await appStore.checkPath(type, path)
+  if (!form['check_info']) {
+    form['check_info'] = {};
   }
-  gameInfo.value = `游戏版本: ${game_info.version}\n游戏路径: ${game_info.exe}`
+  form['check_info'][type] = res
 }
 
 const handleDelete = async (p) => {

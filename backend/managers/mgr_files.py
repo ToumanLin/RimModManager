@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 import os
+from pathlib import Path
 import re
 import shutil
 import tempfile
@@ -7,12 +8,13 @@ import threading
 import subprocess
 import platform
 import time
-from typing import List
+from typing import Any, Dict, List
 from urllib.parse import unquote, quote
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from PIL import Image
 import webview # 引入 webview 库
 from send2trash import send2trash
+from backend.managers.mgr_game import GameManager
 from backend.settings import CACHE_DIR
 from backend.utils.event_bus import EventBus
 from backend.utils.logger import logger
@@ -581,4 +583,103 @@ class FileManager:
             if os.path.exists(temp_path): os.remove(temp_path)
     
     
+class PathChecker:
+
+    @staticmethod
+    def _format_res(is_pass: bool, data: Any = None, msg: str = "", msg_type: str = "success"):
+        """统一返回格式"""
+        return {
+            'pass': is_pass,
+            'data': data,
+            'type': msg_type if is_pass else ("error" if msg_type == "success" else msg_type),
+            'msg': msg
+        }
     
+    @staticmethod
+    def check_normal_path(path_str: str) -> Dict:
+        if not path_str: return PathChecker._format_res(False, msg="路径不能为空")
+        path = Path(path_str)
+        if not path.exists(): return PathChecker._format_res(False, msg="路径不存在！")
+        return PathChecker._format_res(True, data=str(path), msg=f"路径有效：{path}")
+    
+    @staticmethod
+    def check_install_path(path_str: str) -> Dict:
+        if not path_str: return PathChecker._format_res(False, msg="安装路径不能为空")
+        path = Path(path_str)
+        if not path.exists(): return PathChecker._format_res(False, msg="游戏安装路径不存在！")
+
+        res = {}
+        # 1. 检查执行文件
+        exe = GameManager.detect_executable(str(path))
+        if exe:
+            res = PathChecker._format_res(True, data={}, msg=f"游戏安装路径: {path}")
+            res['data']["game_exe"] = str(exe)
+        else:
+            res = PathChecker._format_res(False, msg="无法检测到游戏程序")
+            return res
+
+        # 2. 检查版本
+        version = GameManager.get_game_version(str(path))
+        res['data']["game_version"] = version if version else "未知"
+
+        # 3. Steam 判定 (优化判定逻辑)
+        is_steam = "steamapps" in path.parts and "common" in path.parts
+        res['data']["is_steam"] = is_steam
+        
+        res['msg'] = f"游戏本体：{exe}\n游戏版本：{version}\n{'是' if is_steam else '非'}Steam版"
+        
+        return res
+
+    @staticmethod
+    def check_mods_config(path_str: str) -> Dict:
+        path = Path(path_str) / "ModsConfig.xml"
+        if path.exists():
+            return PathChecker._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
+        return PathChecker._format_res(False, msg="未找到 ModsConfig.xml", msg_type="warn")
+
+    @staticmethod
+    def check_workshop_path(path_str: str) -> Dict:
+        if not path_str or not Path(path_str).exists():
+            return PathChecker._format_res(False, msg="Workshop 路径不存在")
+        
+        is_valid = "steamapps" in Path(path_str).parts and "workshop" in Path(path_str).parts
+        return PathChecker._format_res(is_valid, data=path_str, 
+                               msg=f"Workshop 路径：{path_str}" if is_valid else "路径不在 Steam 库中",
+                               msg_type="success" if is_valid else "warn")
+        
+    @staticmethod
+    def check_steam_path(path_str: str) -> Dict:
+        if not path_str: return PathChecker._format_res(False, msg="未指定 Steam 路径")
+        exe_path = Path(path_str) / "steam.exe"
+        if exe_path.exists():
+            return PathChecker._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
+        return PathChecker._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
+        
+    @staticmethod
+    def paths_check(paths_data: Dict[str, str]) -> Dict:
+        """
+        主入口：支持全量检测
+        """
+        if not paths_data: return {}
+        results = {}
+        try:
+            # 1. 安装路径相关 (包含 exe, version, steam 判定)
+            if "game_install_path" in paths_data:
+                results["game_install_path"] = PathChecker.check_install_path(paths_data["game_install_path"])
+            
+            # 2. 配置文件 
+            if "game_config_path" in paths_data:
+                results["game_config_path"] = PathChecker.check_mods_config(paths_data["game_config_path"])
+
+            # 3. Workshop
+            if "workshop_mods_path" in paths_data:
+                results["workshop_mods_path"] = PathChecker.check_workshop_path(paths_data["workshop_mods_path"])
+
+            # 4. Steam 主程序
+            if "steam_path" in paths_data:
+                results["steam_path"] = PathChecker.check_steam_path(paths_data["steam_path"])
+
+            return results
+        except Exception as e:
+            logger.error(f"Check Paths Error: {e}", exc_info=True)
+            return {}

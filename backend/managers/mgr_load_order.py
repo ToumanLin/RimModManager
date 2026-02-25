@@ -130,8 +130,7 @@ class LoadOrderManager:
                     raise Exception(f"无法创建目录: {parent_dir}")
             write_path = target_path
 
-        if not write_path:
-            raise Exception("未指定有效保存路径")
+        if not write_path: raise Exception("未指定有效保存路径")
 
         # 2. 只有在覆盖默认配置时，才需要自动备份旧文件
         # 如果是另存为，没必要备份目标文件（通常目标文件不存在）

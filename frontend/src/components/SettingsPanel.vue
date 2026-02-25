@@ -40,7 +40,7 @@
 
           <!-- 底部版本号 -->
           <div class="mt-auto px-4 py-2 border-t border-text-main/5 opacity-30">
-             <p class="text-xs font-mono text-text-dim">V{{ appStore.appVersion }}</p>
+            <p class="text-xs font-mono text-text-dim">V{{ appStore.appVersion }}</p>
           </div>
         </aside>
 
@@ -65,20 +65,36 @@
                 <div class="flex items-center justify-between mb-6">
                   <h3 class="text-lg font-bold text-text-main">路径配置
                     <label v-tooltip="'此处会直接修改当前环境的路径配置'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
+                    <label class="ml-5 text-xs py-0.5 px-2 text-accent-cool bg-accent-cool/20 rounded-md" v-tooltip="`当前环境：${profileStore?.currentProfile?.name}\n说明：${profileStore?.currentProfile?.description}`">
+                      {{ profileStore?.currentProfile?.name }}
+                    </label>
                   </h3>
                   <button @click="autoDetect" v-tooltip="'尝试通过注册表自动搜索路径'" class="px-3 py-1 bg-accent-success/10 hover:bg-accent-success/20 border border-accent-success/30 rounded text-xs font-bold text-accent-success transition-all">
                     自动搜索路径
                   </button>
                 </div>
                 <div class="grid gap-6">
-                  <CommonPathInput label="游戏安装目录" v-model="formData.game_install_path" @browse="handleGameBrowse('game_install_path')" :description="formData.game_info" @blur="checkGamePath"/>
-                  <CommonPathInput label="游戏配置目录" v-model="formData.game_config_path" @browse="handleBrowse('game_config_path')" />
-                  <CommonPathInput label="创意工坊目录" v-model="formData.workshop_mods_path" @browse="handleBrowse('workshop_mods_path')" description="该设置所有环境通用" />
+                  <CommonPathInput label="游戏安装目录" v-model="formData.game_install_path" @browse="handleGameBrowse('game_install_path')" 
+                    :check="formData.check_info?.game_install_path"
+                    :description="'游戏安装目录即游戏主程序所在的目录，默认安装目录一般位于：\nC:/Program Files (x86)/Steam/steamapps/common/RimWorld'" 
+                    @blur="checkPath('game_install_path', formData.game_install_path)"/>
+                  <CommonPathInput label="游戏配置目录" v-model="formData.game_config_path" @browse="handleBrowse('game_config_path')" 
+                    :check="formData.check_info?.game_config_path"
+                    :description="'游戏配置目录即排序文件（ModsConfig.xml）所在的目录，默认配置目录一般位于：\nC:/Users/{用户名}/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config'" 
+                    @blur="checkPath('game_config_path', formData.game_config_path)"/>
+                  <CommonPathInput label="创意工坊目录" v-model="formData.workshop_mods_path" @browse="handleBrowse('workshop_mods_path')" 
+                    :check="formData.check_info?.workshop_mods_path"
+                    :description="'创意工坊目录即创意工坊下载的模组所在的目录，该设置所有环境通用'" 
+                    @blur="checkPath('workshop_mods_path', formData.workshop_mods_path)"/>
                   <CommonPathInput label="本地模组目录" v-model="formData.local_mods_path" readOnly @browse="handleBrowse('local_mods_path')" description="根据游戏安装目录自动生成" />
                   <CommonTagInput label="游戏启动参数" v-model="formData.run_commands" :allTags="RUN_COMMAND_TAGS" placeholder="请输入一个完整指令后回车确认……" description="注意不要使用 [[-savedatafolder]] 指令，多环境管理已经默认使用此指令，无需手动配置。" />
                   <div class="p-2 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-1 gap-2">
                     <CommonSwitch label="优先使用Steam启动游戏" v-model="formData.prefer_steam_launch" mini description="开启后将优先使用Steam启动Steam版游戏。该设置所有环境通用" />
-                    <CommonPathInput :class="{' pointer-events-none opacity-50':!formData.prefer_steam_launch}" label="Steam程序路径" v-model="formData.steam_exe_path" @browse="handleBrowse('steam_exe_path')" />
+                    <CommonPathInput :class="{' pointer-events-none opacity-50':!formData.prefer_steam_launch}" label="Steam程序路径" 
+                      :check="formData.check_info?.steam_path"
+                      :description="'Steam程序路径即Steam.exe所在的目录，默认路径一般位于：\nC:/Program Files (x86)/Steam'" 
+                      v-model="formData.steam_path" @browse="handleBrowse('steam_path')" @blur="checkPath('steam_path', formData.steam_path)"
+                    />
                   </div>
                   <!-- <CommonPathInput label="主目录" v-model="formData.home_path" @browse="handleBrowse('home_path')" /> -->
                 </div>
@@ -355,11 +371,11 @@
 
           <!-- D. 底部操作栏 -->
           <footer class="h-20 flex items-center justify-end px-10 gap-4 border-t border-text-main/5 bg-text-main/2">
-             <button id="btn-cancel" @click="appStore.closeSettingsPanel()" class="text-sm font-bold text-text-dim hover:text-text-main transition-colors">放弃修改</button>
-             <button @click="save" class="relative overflow-hidden px-8 py-2.5 bg-accent-primary rounded-xl text-black font-black text-sm shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:scale-105 active:scale-95 transition-all group">
-                <div class="absolute inset-0 bg-text-main/20 -translate-x-full group-hover:translate-x-full transition-transform duration-500 skew-x-12"></div>
-                应用并保存配置
-             </button>
+            <button id="btn-cancel" @click="appStore.closeSettingsPanel()" class="text-sm font-bold text-text-dim hover:text-text-main transition-colors">放弃修改</button>
+            <button @click="save" class="relative overflow-hidden px-8 py-2.5 bg-accent-primary rounded-xl text-black font-black text-sm shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:scale-105 active:scale-95 transition-all group">
+              <div class="absolute inset-0 bg-text-main/20 -translate-x-full group-hover:translate-x-full transition-transform duration-500 skew-x-12"></div>
+              应用并保存配置
+            </button>
           </footer>
         </main>
 
@@ -388,11 +404,13 @@ import { RUN_COMMAND_TAGS } from '../utils/constants'
 import { useRuleStore } from '../stores/ruleStore'
 import { useAppStore } from '../stores/appStore'
 import { useConfirmStore } from '../stores/confirmStore'
+import { useProfileStore } from '../stores/profileStore'
 
 const toast = createToastInterface()
 const appStore = useAppStore()
 const ruleStore = useRuleStore()
 const confirmStore = useConfirmStore()
+const profileStore = useProfileStore()
 
 const currentTab = ref('paths')
 const formData = ref({})
@@ -455,19 +473,14 @@ const getDataById = (id, datas) => {
 const autoDetect = async () => {
   const paths = await appStore.autoDetectPaths(false)
   if (paths) Object.assign(formData.value, paths)
-  // 自动获取游戏信息
-  checkGamePath()
 }
 // 检查游戏路径是否有效
-const checkGamePath = async () => {
-  const gameInfo = await appStore.getGameInfo(formData.value.game_install_path)
-  if (!gameInfo || !gameInfo.exe) {
-    // 游戏版本为空时
-    formData.value['game_info'] = `^^未找到游戏可执行文件，请检查路径是否正确！^^`
-    return
+const checkPath = async (type, path) => {
+  const res = await appStore.checkPath(type, path)
+  if (!formData.value['check_info']) {
+    formData.value['check_info'] = {};
   }
-  formData.value['local_mods_path'] = formData.value.game_install_path + '\\Mods'
-  formData.value['game_info'] = `游戏版本: ${gameInfo.version}\n游戏路径: ${gameInfo.exe}`
+  formData.value['check_info'][type] = res
 }
 // 手动选择游戏路径
 const handleGameBrowse = async () => {
@@ -476,7 +489,7 @@ const handleGameBrowse = async () => {
   if (res) {
     current['game_install_path'] = res
     // 自动获取游戏信息
-    checkGamePath()
+    checkPath('game_install_path', current['game_install_path'])
   }
 }
 // 手动选择其他路径
@@ -491,6 +504,8 @@ const handleBrowse = async (pathKey) => {
   const res = await appStore.getFolderPath(current[lastKey])
   if (res) {
     current[lastKey] = res
+    // 自动检查路径是否有效
+    checkPath(lastKey, res)
   }
 }
 

@@ -126,7 +126,7 @@ class AppConfig:
     local_mods_path: str = ""
     workshop_mods_path: str = ""
     use_workshop_mods: bool = True
-    steam_exe_path: str = ""
+    steam_path: str = ""
     home_path: str = str(Path(os.getcwd())) # 本程序路径
     
     # --- 游戏设置 ---

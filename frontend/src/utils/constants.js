@@ -78,8 +78,8 @@ export const ISSUE_TITLE_MAP = {
 
   'warn_missing_language': '缺少语言支持',
   'warn_inactive_language_pack': '语言包未启用',
-  'warn_unknown_target': '指向对象未知',
-  'warn_inactive_target': '指向对象未启用',
+  'warn_unknown_target': '语言包指向未知',
+  'warn_inactive_target': '语言包指向未启用',
 
   'default': '其他问题'
 

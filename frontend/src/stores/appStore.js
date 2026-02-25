@@ -112,7 +112,7 @@ export const useAppStore = defineStore('app', () => {
     use_workshop_mods: true,
 
     run_commands: [],
-    steam_exe_path: '',
+    steam_path: '',
     prefer_steam_launch: true,           // 是否优先通过 Steam 启动游戏
 
     home_path: '',
@@ -647,12 +647,12 @@ export const useAppStore = defineStore('app', () => {
       return res.data.paths
     }
   }
-  // 获取游戏信息
-  const getGameInfo = async (path) => {
-    if(!path) return
+  // 检测路径信息
+  const checkPath = async (path_type, path) => {
+    if(!path_type || !path) return
     if(!window.pywebview) return
-    const res = await window.pywebview.api.game_info_get(path)
-    if (checkResult(res, "获取游戏信息")) {
+    const res = await window.pywebview.api.path_check(path_type, path)
+    if (checkResult(res, "检测路径信息")) {
       return res.data
     }
   }
@@ -1062,7 +1062,7 @@ export const useAppStore = defineStore('app', () => {
     aiState, aiBatchResults, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS,
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll,
     // 游戏相关
-    getGameInfo, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
+    checkPath, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
     startDownload, waitForDownload, downloadWorkshopItems, 
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, updateExternalDB,

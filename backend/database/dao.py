@@ -584,20 +584,15 @@ class GroupDAO:
         """
         # 1. 获取所有分组
         groups = list(GroupData.select().order_by(GroupData.sort_index).dicts())
-        
         # 2. 获取所有分组关联
         group_mods = list(GroupMod.select().order_by(GroupMod.sort_index).dicts())
-
         # 3. 过滤逻辑
         # 建立当前环境的 Set 提高查询速度
         available_set = set(allowed_ids)
-        
         group_map = {g['group_id']: [] for g in groups}
-        
         for gm in group_mods:
             g_id = gm['group_id']
             p_id = gm['mod_id'] # 这里存的是 package_id
-            
             # 【关键点】只有当该 Mod 在当前环境下“物理存在”时，才分发给前端展示
             if p_id in available_set:
                 group_map[g_id].append(p_id)
@@ -649,10 +644,8 @@ class GroupDAO:
             # 先确保 UserModData 存在，否则外键约束会报错
             stubs = [{'mod_id': mid} for mid in mod_ids]
             UserModData.insert_many(stubs).on_conflict_ignore().execute()   # 批量插入忽略重复
-
         # 获取该组当前最大的 sort_index
         max_idx = GroupMod.select(fn.MAX(GroupMod.sort_index)).where(GroupMod.group_id == group_id).scalar() or 0
-        
         data_source = []
         for i, pid in enumerate(mod_ids):
             data_source.append({
@@ -660,7 +653,6 @@ class GroupDAO:
                 'mod_id': pid,
                 'sort_index': max_idx + 1 + i
             })
-        
         with db.atomic():
             # 使用 insert_many().on_conflict_ignore() 防止重复添加报错
             GroupMod.insert_many(data_source).on_conflict_ignore().execute()

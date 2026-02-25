@@ -377,6 +377,11 @@ const parseMarkup = (text) => {
       regex: /\[\[(.*?)\]\]/g, 
       repl: '<span class="text-accent-primary font-bold">$1</span>' 
     },
+    // [Success/Green] ##text## -> text-green-400
+    { 
+      regex: /##(.*?)##/g, 
+      repl: '<span class="text-green-400 font-bold">$1</span>' 
+    },
     // [Code/Mono] `text` -> bg-black/30 font-mono
     { 
       regex: /··(.*?)··/g, 

@@ -44,7 +44,7 @@ from backend.database.dao import ModDAO, GroupDAO
 # 3. 引入业务逻辑管理器
 from backend.managers.mgr_game import GameManager
 from backend.managers.mgr_load_order import LoadOrderManager
-from backend.managers.mgr_files import FileManager
+from backend.managers.mgr_files import FileManager, PathChecker
 from backend.scanner.parser_dlc import DLCParser
 from backend.scanner.mod_scanner import ModScanner
 from backend.managers.mgr_game_logs import GameLogManager
@@ -69,25 +69,19 @@ def log_api_call(func):
     def wrapper(self, *args, **kwargs):
         start_time = time.time()
         func_name = func.__name__
-        
         # 截断过长的参数显示（如巨大的文件内容）
         safe_args = [str(a)[:50] + '...' if len(str(a)) > 50 else a for a in args]
-        
         try:
             EventBus.resume() # 在执行操作前恢复事件总线
             # 执行原函数
             result = func(self, *args, **kwargs)
-            
             duration = (time.time() - start_time) * 1000
-            
             # 只有慢请求或显式 Debug 才记录 INFO，否则记录 DEBUG 避免刷屏
             if duration > 500: 
                 logger.warning(f"API [SLOW] {func_name} took {duration:.2f}ms")
             else:
                 logger.debug(f"API {func_name}({safe_args}) took {duration:.2f}ms")
-                
             return result
-            
         except Exception as e:
             duration = (time.time() - start_time) * 1000
             logger.error(f"API {func_name} failed after {duration:.2f}ms: {str(e)}", exc_info=True)
@@ -378,6 +372,7 @@ class API:
         except Exception as e:
             return ApiResponse.error(str(e))
     
+    
     # =========================================================================
     #  2. 设置与路径 (Settings & Paths)
     # =========================================================================
@@ -385,9 +380,9 @@ class API:
     def auto_detect_paths(self, update_config: bool = True):
         """自动检测游戏路径"""
         result = self.game_mgr.auto_detect_paths()
-        steam_exe_path = self.steam_mgr.get_steam_path()
+        steam_path = self.steam_mgr.get_steam_path()
         if not result: return ApiResponse.error("无法自动检测到游戏路径，请手动设置！")
-        result['steam_exe_path'] = steam_exe_path if steam_exe_path else ''
+        result['steam_path'] = steam_path or ''
         if update_config:   # 仅当请求时更新配置
             settings.update_paths(result)
         # 如果检测到了安装路径，自动更新设置
@@ -792,6 +787,8 @@ class API:
         保存当前激活列表到 ModsConfig.xml
         :param active_ids: 激活的 Mod 列表
         """
+        if not settings.config.game_config_path or not os.path.exists(settings.config.game_config_path): 
+            return ApiResponse.error("未指定游戏配置路径")
         try:
             success = self.load_order_mgr.save_active_mods(active_ids)
             if success: return ApiResponse.success()
@@ -830,9 +827,9 @@ class API:
             if not profile_id: profile_id = self.profile_mgr.current_profile.id
             if not profile_id: return ApiResponse.error("未指定 Profile ID")
             profile = self.profile_mgr.get_profile(profile_id)
-            logger.debug(f"launch_game: profile_id={profile_id}, prefer_steam={settings.config.prefer_steam_launch}, steam_exe={settings.config.steam_exe_path}, is_steam={profile.is_steam}")
+            logger.debug(f"launch_game: profile_id={profile_id}, prefer_steam={settings.config.prefer_steam_launch}, steam_path={settings.config.steam_path}, is_steam={profile.is_steam}")
             # 检查 Steam 配置是否完整
-            if(settings.config.prefer_steam_launch and settings.config.steam_exe_path and profile.is_steam):
+            if(settings.config.prefer_steam_launch and profile.is_steam):
                 # 1. 获取当前 Profile 的启动参数（仅包含游戏相关参数）
                 extra_args = self.profile_mgr.get_launch_args_only(profile_id)
                 logger.debug(f"launch_game_steam: extra_args={extra_args}")
@@ -854,34 +851,53 @@ class API:
             logger.error(f"Launch Game Error: {e}")
             return ApiResponse.error(f"启动游戏时出错: {e}")
     
-    @log_api_call
-    def game_info_get(self, install_path: str):
-        """
-        获取游戏信息
-        :param install_path: 游戏安装路径
-        :return: {"exe": str, "version": str, "is_steam": bool}
-        """
-        if not install_path:
-            return ApiResponse.error("未指定游戏安装路径")
-        try:
-            exe = self.game_mgr.detect_executable(install_path)
-            version = self.game_mgr.get_game_version(install_path)
-            is_steam = os.path.normpath(install_path).lower().rfind(os.path.join('steamlibrary', 'steamapps', 'common')) != -1
-            if not exe :
-                return ApiResponse.warning("无法获取游戏信息，请检查游戏安装路径是否正确！")
-            return ApiResponse.success({
-                "exe": exe,
-                "version": version,
-                "is_steam": is_steam,
-            })
-        except Exception as e:
-            return ApiResponse.error(f"获取游戏信息时出错: {e}")
-
 
     # =========================================================================
     #  6. 文件与资源操作 (Files & Assets)
     # =========================================================================
 
+    @log_api_call
+    def path_check(self, path_type, path):
+        """
+        检查指定路径类型是否正确
+        :param path_type: 路径类型（game_install_path, game_config_path, workshop_mods_path, steam_path）
+        :param path: 路径字符串
+        """
+        if not path_type or not path:
+            return ApiResponse.error("未指定路径类型或路径")
+        try:
+            if path_type == "game_install_path":
+                res = PathChecker.check_install_path(path)
+            elif path_type == "game_config_path":
+                res = PathChecker.check_mods_config(path)
+            elif path_type == "workshop_mods_path":
+                res = PathChecker.check_workshop_path(path)
+            elif path_type == "steam_path":
+                res = PathChecker.check_steam_path(path)
+            else:
+                res = PathChecker.check_normal_path(path)
+                
+        except Exception as e:
+            return ApiResponse.error(f"检查路径时出错: {e}")
+        
+        return ApiResponse.success(res)
+        
+    @log_api_call
+    def paths_check(self, paths_data: dict):
+        """
+        检查多个路径是否正确
+        :param paths_data: 包含路径类型和路径字符串的字典
+        """
+        if not paths_data:
+            return ApiResponse.error("未指定任何路径信息")
+        info = {}
+        try:
+            info = PathChecker.paths_check(paths_data)
+            return ApiResponse.success(info)
+        except Exception as e:
+            logger.error(f"Check Paths Error: {e}")
+            return ApiResponse.error(f"检查路径时出错: {e}")
+    
     @log_api_call
     def path_open(self, path: str):
         try:
@@ -1466,7 +1482,7 @@ class API:
     @log_api_call
     def ai_get_models(self, temp_config: dict):
         """
-        获取模型列表 (替代原来的 ai_fetch_models)
+        获取模型列表
         自带缓存机制，极速响应。
         :param temp_config: 前端表单中的临时配置 {api_type, provider, base_url, api_key}
         """

@@ -349,7 +349,8 @@ const issueTooltip = computed(() => {
     }
   }
   text += isFilterByIssue.value ? '\n\n__[[(再次点击取消筛选)]]__' : '\n\n__[[(点击筛选查看全部问题项)]]__'
-  text += '\n__[[(可^^右键菜单^^支持筛选单项问题)]]__'
+  text += '\n__[[(可从^^右键菜单^^筛选单项问题)]]__'
+  text += appStore.settings.check_language_support ? '\n__(可在设置中关闭语言支持检查)__' : ''
   return text
 })
 // 排序提示

@@ -62,7 +62,7 @@ class ProfileManager:
         if not os.path.exists(game_saves_path):
             os.makedirs(game_saves_path)
         
-        isSteam = os.path.normpath(data.get('game_install_path','')).lower().rfind(os.path.join('steamlibrary', 'steamapps', 'common')) != -1
+        isSteam = os.path.normpath(data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
         
         # 如果需要继承数据
         if copy_current_data:
@@ -86,13 +86,19 @@ class ProfileManager:
     
     def update_profile(self, profile_id: str, data: Dict[str, Any]):
         """更新环境配置"""
+        # 验证 Profile ID 是否存在
         if not profile_id:  raise ValueError("Profile ID is required")
+        # 验证 Profile 是否在数据库中
         if profile_id not in [p.id for p in GameProfile.select()]: 
             raise ValueError(f"Profile not found: {profile_id}")
-        if 'id' in data: del data['id']
-        data['game_version'] = GameManager.get_game_version(data.get('game_install_path', settings.config.game_install_path))
-        data['is_steam'] = os.path.normpath(data.get('game_install_path','')).lower().rfind(os.path.join('steamlibrary', 'steamapps', 'common')) != -1
-        query = GameProfile.update(**data).where(GameProfile.id == profile_id)
+        # 验证字段有效性
+        valid_field_names = set(GameProfile._meta.fields.keys()) # type: ignore
+        clear_data = {k: v for k, v in data.items() if k in valid_field_names}
+        
+        if 'id' in clear_data: del clear_data['id']
+        clear_data['game_version'] = GameManager.get_game_version(clear_data.get('game_install_path', settings.config.game_install_path))
+        clear_data['is_steam'] = os.path.normpath(clear_data.get('game_install_path', settings.config.game_install_path)).lower().rfind(os.path.join('steamapps', 'common')) != -1
+        query = GameProfile.update(**clear_data).where(GameProfile.id == profile_id)
         query.execute()
         # 获取更新后的对象并同步到磁盘
         profile = GameProfile.get_or_none(GameProfile.id == profile_id)
