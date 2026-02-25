@@ -57,6 +57,7 @@ export const useRuleStore = defineStore('rules', () => {
   })
 
   const currentId = ref(null)
+  const isLoading = ref(false)
   
   // 当前正在检视的目标 Mod ID
   const targetId = computed(() => modStore.lastSelectedMod?.package_id || null)
@@ -290,6 +291,7 @@ export const useRuleStore = defineStore('rules', () => {
   // --- 导入导出 ---
   // 更新社区库
   const updateCommunity = async () => {
+    isLoading.value = true
     try {
         // 调用 API
         const res = await window.pywebview.api.update_community_rule()
@@ -301,6 +303,8 @@ export const useRuleStore = defineStore('rules', () => {
         }
     } catch (error) {
         toast.error("更新社区库失败: " + error.message)
+    } finally {
+      isLoading.value = false
     }
   }
   // 导出规则
@@ -321,7 +325,7 @@ export const useRuleStore = defineStore('rules', () => {
   }
   
   return {
-    communityModRules, communityRulesUpdateTime, userModRules, userDynamicRules, currentId,
+    communityModRules, communityRulesUpdateTime, userModRules, userDynamicRules, currentId, isLoading,
     targetId, currentConstraints, settings, DYNAMIC_RULE_PROPS, DYNAMIC_RULE_ACTIONS, DYNAMIC_RULE_OPERATORS,
     fetchRules, addUserModRule, removeUserModRuleItem, deleteUserModRule, updateComment,
     toggleDynamicRule, deleteDynamicRule, updateCommunity, handleExport, handleImport,

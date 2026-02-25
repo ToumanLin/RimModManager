@@ -317,7 +317,7 @@ const handleContextMenu = async (event) => {
         label: value, action: () => modStore.setModsType(selectedIds, key)
       })),{ label: '恢复默认', level: 'warn', action: () => modStore.setModsType(selectedIds, null) }]
     },
-    { label: isActive.value?'停用':'启用', icon: isActive.value? CircleSlash2:CircleCheckBig, 
+    { label: (isActive.value?'停用选中项':'启用选中项') , icon: isActive.value? CircleSlash2:CircleCheckBig, 
       action: () => modStore.changeModsActive(selectedIds, !isActive.value) 
     },
   ]
