@@ -1,4 +1,5 @@
 # backend/managers/mgr_steam.py
+from datetime import datetime
 import os
 import re
 import sys
@@ -9,14 +10,25 @@ import threading
 import time
 import shutil
 import importlib.util
+from dateutil import parser
 from typing import Optional, cast
-
 from json_repair import repair_json
-from backend.utils.logger import logger
+
+# --- 模块测试准备 ---
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    # Path(__file__).resolve() 获取当前文件的绝对路径
+    # .parents[2] 表示向上跳 3 级 (文件->scanner->backend->项目根目录)
+    project_root = Path(__file__).resolve().parents[2]
+    # 调试打印，确保路径正确
+    print(f"Project Root: {project_root}")
+    # sys.path 需要字符串类型，所以要用 str() 转换一下
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
 
 # 注意：不要在文件顶层 import steamworks，防止主进程意外加载
 # 只在 run_steam_worker 函数内部 import
-
 from backend.utils.logger import logger
 from backend.settings import settings
 from backend.utils.event_bus import EventBus
@@ -90,21 +102,19 @@ class SteamManager:
     def __init__(self):
         if self._initialized: return
         self._initialized = True
-
         self.project_root = os.getcwd()
         self.tools_dir = os.path.join(self.project_root, "tools")
-        
+        # Steam 安装目录
+        self.steam_dir = os.path.dirname(settings.config.steam_exe_path) or self.get_steam_path()
+        self.steam_exe = settings.config.steam_exe_path or self.get_steam_path(True)
         # SteamCMD 路径
         self.steamcmd_dir = os.path.join(self.tools_dir, "steamcmd")
         self.steamcmd_exe = self._get_steamcmd_exe_path()
-        
         # Steam Agent 路径 (隔离环境)
         self.agent_dir = os.path.join(self.tools_dir, "steam_agent")
-        
         # 确保目录存在
         os.makedirs(self.steamcmd_dir, exist_ok=True)
         os.makedirs(self.agent_dir, exist_ok=True)
-        
         # 状态
         self.steamcmd_ready = os.path.exists(self.steamcmd_exe)
         
@@ -377,24 +387,24 @@ class SteamManager:
     #  4. Steam本体操作
     # =========================================================
     
-    def get_steam_path(self):
+    def get_steam_path(self, with_exe=False):
         """从注册表获取 Steam 安装路径"""
         try:
             # 尝试读取 64位 注册表
             key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam")
             path, _ = winreg.QueryValueEx(key, "InstallPath")
-            return os.path.join(path, "steam.exe")
+            return os.path.join(path, "steam.exe") if with_exe else path
         except:
             try:
                 # 尝试读取 32位 注册表
                 key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam")
                 path, _ = winreg.QueryValueEx(key, "InstallPath")
-                return os.path.join(path, "steam.exe")
+                return os.path.join(path, "steam.exe") if with_exe else path
             except:
                 return None
 
     def launch_via_steam_cmd(self, app_id=RIMWORLD_APP_ID, extra_args=None):
-        steam_exe = settings.config.steam_exe_path or self.get_steam_path()
+        steam_exe = self.steam_exe
         # 如果找不到 Steam.exe，回退到原来的 URL 方式
         if not steam_exe or not os.path.exists(steam_exe):
             steam_exe = self.get_steam_path()
@@ -419,7 +429,7 @@ class SteamManager:
     
     
     # =========================================================
-    #  5. ACF 文件解析
+    #  5. ACF & workshop_log 文件解析
     # =========================================================
 
     def _get_acf_path(self):
@@ -440,7 +450,7 @@ class SteamManager:
             pass
         return None
     
-    def get_acf_json(self) -> dict:
+    def get_acf_json(self, acf_path: str|None=None) -> dict:
         """
         解析 ACF 文件，返回 JSON 格式数据
         返回: dict
@@ -473,7 +483,7 @@ class SteamManager:
             }
         }
         """
-        acf_path = self._get_acf_path()
+        acf_path = acf_path or self._get_acf_path()
         if not acf_path: return {}
         try:
             with open(acf_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -493,6 +503,51 @@ class SteamManager:
             logger.error(f"[get_acf_json] Failed to parse ACF for validation: {e}")
             
         return {}
+
+    def parse_acf_data(self, acf_json_data: dict) -> dict:
+        """
+        解析acf转成的json数据，提取模组当前的安装详情并标准化字段名。
+        """
+        installed = acf_json_data.get("WorkshopItemsInstalled", {})
+        details = acf_json_data.get("WorkshopItemDetails", {})
+        # 汇总所有的 item_id (可能有的已下载但在details里，有的在installed里)
+        all_item_ids = set(installed.keys()).union(details.keys())
+        
+        parsed_acf = {}
+        
+        def format_timestamp(ts_str):
+            """将Steam的Unix时间戳字符串转为毫秒级时间戳"""
+            if not ts_str or ts_str == "0": return None
+            return int(ts_str)*1000
+
+        for item_id in all_item_ids:
+            inst = installed.get(item_id, {})
+            det = details.get(item_id, {})
+            
+            parsed_acf[item_id] = {
+                "item_id": item_id,
+                "size_bytes": int(inst.get("size", 0)),
+                # 本地实际落地文件的清单ID
+                "local_manifest": inst.get("manifest") or det.get("manifest"),
+                # 线上(或缓存的最新)目标清单ID
+                "remote_manifest": det.get("latest_manifest", det.get("manifest")),
+                
+                # 模组作者发布版本的真实时间
+                "upload_time_installed": format_timestamp(inst.get("timeupdated") or det.get("timeupdated")),
+                "upload_time_latest": format_timestamp(det.get("latest_timeupdated") or det.get("timeupdated")),
+                
+                # Steam客户端最后一次检查该Mod状态的时间
+                "last_checked_time": format_timestamp(det.get("timetouched")),
+                
+                # 是否确实安装在硬盘上
+                "is_installed": item_id in installed
+            }
+            # 衍生判断：是否需要更新 (本地与线上清单不一致，且都存在)
+            loc_man = parsed_acf[item_id]["local_manifest"]
+            rem_man = parsed_acf[item_id]["remote_manifest"]
+            parsed_acf[item_id]["needs_update"] = bool(loc_man and rem_man and loc_man != rem_man)
+        
+        return parsed_acf
 
     def get_installed_workshop_ids(self) -> set:
         """
@@ -519,106 +574,153 @@ class SteamManager:
         # 这其实更符合用户的期望：只有下载完了才能用。
         ids = self.get_installed_workshop_ids()
         return int(published_file_id) in ids
-    
-    
-    def get_steam_log_path(self):
+
+    def _get_steam_log_path(self):
         """
         推断 Steam 客户端日志路径
         通常在 Steam 安装目录/logs/workshop_log.txt
         """
-        # 尝试从游戏安装目录反推 Steam 目录
-        # 典型路径: .../Steam/steamapps/common/RimWorld -> .../Steam/logs
-        if not settings.config.game_install_path:
-            return None
+        # 确保有 Steam 安装目录
+        if not self.steam_dir: return None
             
         try:
-            # 向上找 3 层: RimWorld -> common -> steamapps -> Steam
-            steam_root = os.path.abspath(os.path.join(settings.config.game_install_path, "../../.."))
-            log_dir = os.path.join(steam_root, "logs")
+            log_dir = os.path.join(self.steam_dir, "logs")
             log_file = os.path.join(log_dir, "workshop_log.txt")
-            
-            if os.path.exists(log_file):
-                return log_file
-            
+            if os.path.exists(log_file): return log_file
             # 如果反推失败，尝试默认路径 (Windows)
             if platform.system() == "Windows":
                 default_path = r"C:\Program Files (x86)\Steam\logs\workshop_log.txt"
                 if os.path.exists(default_path):
                     return default_path
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to parse Steam log path: {e}")
+            
         return None
 
-    def parse_local_download_history(self, mod_id: str = '') :
+    def parse_workshop_log(self, target_appid: str=RIMWORLD_APP_ID) -> dict:
         """
-        解析 workshop_log.txt 获取下载历史
-        :param mod_id: 如果提供，只返回该 Mod 的记录
+        解析 Steam workshop_log.txt，提取指定 AppID 的模组操作历史。
+        按时间先后顺序遍历，因此最终字典中保留的始终是该模组的“最新”状态。
         """
-        log_path = self.get_steam_log_path()
-        if not log_path:
-            logger.warning("Steam workshop_log.txt not found.")
-            return []
-
-        history = []
-        # 正则匹配示例: 
-        # [2023-10-27 10:00:00] [AppID 294100] Download complete: 123456789
-        # 注意：日志格式可能随 Steam 版本微调，以下通过匹配关键字段提取
+        log_path = self._get_steam_log_path()
+        if not log_path: return {}
+        with open(log_path, 'r', encoding='utf-8') as f:
+            log_content = f.read()
         
-        # 匹配时间戳和操作
-        # 格式通常是: [YYYY-MM-DD HH:MM:SS] ...
-        line_pattern = re.compile(r'^\[(.*?)\] (.*)')
+        target_appid = str(target_appid)
+        # 正则匹配日志基础结构: [时间] [AppID] 消息内容
+        log_pattern = re.compile(r'\[(.*?)\] \[AppID (\d+)\] (.*)')
         
-        try:
-            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                # 倒序读取，获取最新的记录
-                lines = f.readlines()
-                for line in reversed(lines):
-                    match = line_pattern.match(line)
-                    if not match: continue
-                    
-                    timestamp_str = match.group(1)
-                    content = match.group(2)
-                    
-                    # 过滤只看 RimWorld (294100)
-                    if RIMWORLD_APP_ID not in content:
-                        continue
-                        
-                    # 提取 Mod ID
-                    # 常见日志: "Download complete: 818773962" 或 "Update complete"
-                    # 我们寻找包含 Mod ID 的行
-                    id_match = re.search(r'\b(\d{9,10})\b', content)
-                    if not id_match: continue
-                    
-                    found_id = id_match.group(1)
-                    
-                    if mod_id and found_id != str(mod_id):
-                        continue
-
-                    # 判定操作类型
-                    action = "Unknown"
-                    if "Download complete" in content:
-                        action = "Downloaded"
-                    elif "Update complete" in content or "downloading" in content.lower():
-                        action = "Updated"
-                    elif "Download started" in content:
-                        action = "Started"
-                    else:
-                        continue # 忽略不重要的行
-
-                    history.append({
-                        "mod_id": found_id,
-                        "time": timestamp_str,
-                        "action": action,
-                        "raw": content
-                    })
-                    
-                    # 限制返回数量，防止过多
-                    if len(history) > 100 and not mod_id:
-                        break
-                        
-        except Exception as e:
-            logger.error(f"Failed to parse steam log: {e}")
+        items_history = {}
+        for line in log_content.strip().split('\n'):
+            match = log_pattern.match(line)
+            if not match: continue
+            time_str, appid, msg = match.groups()
+            # 将 2024-09-04 07:26:36 格式转为毫秒戳
+            time_stamp = int(parser.parse(time_str).timestamp() * 1000)
+            if appid != target_appid: continue
+            # 使用正则提取消息中的 item_id (几乎所有针对具体Mod的日志都会带有 item <id> 格式)
+            item_match = re.search(r'item (\d+)', msg)
+            if not item_match: continue
+            item_id = item_match.group(1)
             
-        return history
+            # 初始化记录
+            if item_id not in items_history:
+                items_history[item_id] = {
+                    "item_id": item_id,
+                    "log_last_download_time": None,      # 最后一次成功下载的时间
+                    "log_last_subscribed_time": None,    # 最后一次订阅的时间
+                    "log_last_unsubscribed_time": None,  # 最后一次取消订阅的时间
+                    "log_last_manifest": None,           # 日志中最后一次看到的清单ID
+                    "log_last_error": None,              # 最后一次报错信息
+                    "is_subscribed": None                # 当前订阅状态（True/False）
+                }
+                
+            item = items_history[item_id]
+
+            # 匹配具体行为并更新最新状态
+            if "result : OK" in msg:
+                item["log_last_download_time"] = time_stamp
+                item["log_last_error"] = None  # 下载成功，清除之前的报错
+                
+            elif "Subscribed to item" in msg:
+                item["log_last_subscribed_time"] = time_stamp
+                item["is_subscribed"] = True
+                
+            elif "Unsubscribed from item" in msg or "removing unsubscribed item" in msg:
+                item["log_last_unsubscribed_time"] = time_stamp
+                item["is_subscribed"] = False
+                
+            elif "failed :" in msg or "skipping item" in msg:
+                # 提取错误原因，例如 "Access Denied"
+                error_match = re.search(r'(?:failed :|result =)\s*(.*)', msg)
+                if error_match:
+                    item["log_last_error"] = error_match.group(1).strip()
+                    
+            # 提取清单变化 (manifest/handle)
+            manifest_match = re.search(r'new (?:manifest|handle) (\d+)', msg)
+            if manifest_match:
+                item["log_last_manifest"] = manifest_match.group(1)
+
+        return items_history
     
+    def merge_workshop_data(self) -> list:
+        """
+        合并日志和ACF数据，并生成一份极其详尽的 JSON 列表供管理器直接使用。
+        """
+        # 获取分别解析后的字典结构
+        log_data = self.parse_workshop_log()
+        acf_json = self.get_acf_json()
+        acf_data = self.parse_acf_data(acf_json)
+        # 取并集：有的模组可能被删了只在历史日志里有，有的只在ACF里有
+        all_item_ids = set(log_data.keys()).union(acf_data.keys())
+        
+        merged_list =[]
+        
+        for item_id in sorted(all_item_ids, key=lambda x: int(x)): # 按ID排序方便查看
+            item_log = log_data.get(item_id, {})
+            item_acf = acf_data.get(item_id, {})
+            
+            # 构建合理的最终字典
+            merged_item = {
+                "workshop_id": item_id,
+                "status": {
+                    "is_subscribed": item_log.get("is_subscribed"),    # 从日志推断的订阅状态
+                    "is_installed": item_acf.get("is_installed", False), # 文件是否真实存在
+                    "needs_update": item_acf.get("needs_update", False), # 是否有更新等待下载
+                    "has_error": bool(item_log.get("log_last_error")),   # 下载/校验是否报错
+                    "error_detail": item_log.get("log_last_error")
+                },
+                # --- 物理信息 (以 ACF 为准) ---
+                "size_bytes": item_acf.get("size_bytes", 0),
+
+                "local_manifest": item_acf.get("local_manifest") or item_log.get("log_last_manifest"),
+                "remote_manifest": item_acf.get("remote_manifest"),
+
+                # Steam本地实际下载完毕的时间 (提取自日志)
+                "time_downloaded": item_log.get("log_last_download_time"),
+                # 玩家行为时间
+                "time_subscribed": item_log.get("log_last_subscribed_time"),
+                "time_unsubscribed": item_log.get("log_last_unsubscribed_time"),
+                
+                # 模组作者最后一次在创意工坊上传更新的时间 (当前安装版 与 线上最新版)
+                "time_upload_installed": item_acf.get("upload_time_installed"),
+                "time_upload_latest": item_acf.get("upload_time_latest"),
+                
+                # Steam客户端最后一次验证该Mod状态的时间
+                "time_last_checked": item_acf.get("last_checked_time"),
+            }
+            # 容错：如果日志里记录没有订阅，但ACF显示安装，则有可能处于“孤儿”状态(退订未删)
+            # 容错：有些刚发起的下载，在ACF里还没生成，但在日志里存在
+            merged_list.append(merged_item)
+            
+        return merged_list
+    
+    
+
+if __name__ == "__main__":
+    steam_mgr = SteamManager()
+    data = steam_mgr.merge_workshop_data()
+    if data:
+        print(f"Total items: {len(data)} First item:\n", data[0])
     

@@ -99,31 +99,34 @@ class WorkshopDBManager:
             content = None
             # 智能判断是否需要解压
             if str(path).endswith(".gz"):
-                with gzip.open(path, 'rt', encoding='utf-8') as f:
+                # 关键：使用 utf-8-sig 编码处理BOM
+                with gzip.open(path, 'rt', encoding='utf-8-sig') as f:
                     content = json.load(f)
             else:
-                with open(path, 'r', encoding='utf-8') as f:
+                # 关键：使用 utf-8-sig 编码处理BOM
+                with open(path, 'r', encoding='utf-8-sig') as f:
                     content = json.load(f)
-
+                    
             if not content:
+                logger.warning("Replacements DB content is empty")
                 return
-
             self.db_versions["replacements"] = content.get("version")
             self.replacements_rules = content.get("rules", [])
-
             # 清空索引
             self.replacement_index.clear()
-
             # 构建快速查找索引
             for rule in self.replacements_rules:
                 # 索引1: 通过 WorkshopID 查找
                 if "oldWorkshopId" in rule and rule["oldWorkshopId"]:
-                    self.replacement_index[f"wid:{rule['oldWorkshopId']}"].append(rule)
-                
+                    key = f"wid:{rule['oldWorkshopId']}"
+                    # 使用setdefault初始化空列表，避免KeyError
+                    self.replacement_index.setdefault(key, []).append(rule)
                 # 索引2: 通过 PackageID 查找 (转小写)
                 if "oldPackageId" in rule and rule["oldPackageId"]:
                     pid_lower = rule["oldPackageId"].lower()
-                    self.replacement_index[f"pid:{pid_lower}"].append(rule)
+                    key = f"pid:{pid_lower}"
+                    # 使用setdefault初始化空列表，避免KeyError
+                    self.replacement_index.setdefault(key, []).append(rule)
 
         except Exception as e:
             logger.error(f"Failed to load replacements DB: {e}")
