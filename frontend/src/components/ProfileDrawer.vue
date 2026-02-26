@@ -37,13 +37,18 @@
             <!-- 当前激活标识 -->
             <div class="px-2 text-[0.65rem] font-bold text-text-dim uppercase tracking-tighter opacity-60">已记录环境</div>
             
-            <div v-for="p in profileStore.profiles" :key="p.id" 
-              @click="profileStore.switchProfile(p.id)"
-              class="group relative p-2 rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden"
-              :class="p.id === profileStore.currentProfileId 
-                ? 'bg-accent-primary/15 border-accent-primary/40 shadow-[0_0_15px_rgba(6,182,212,0.15)]' 
-                : 'bg-text-dim/15 border-text-main/5 hover:border-text-main/20 hover:bg-text-main/5'"
+            <div v-for="p in profileStore.profiles" :key="p.id"
+              @click="p.check ? profileStore.switchProfile(p.id) : null" 
+              class="group relative p-2 rounded-xl border transition-all duration-300 overflow-hidden"
+              :class="[p.check ? (p.id === profileStore.currentProfileId 
+                ? 'bg-accent-primary/15 border-accent-primary/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] cursor-pointer' 
+                : 'bg-text-dim/15 border-text-main/5 hover:border-text-main/20 hover:bg-text-main/5 cursor-pointer')
+                : 'bg-accent-danger/15 border-accent-danger/40 shadow-[0_0_15px_rgba(255,69,0,0.15)] cursor-not-allowed' ]"
             >
+              <div v-if="!p.check" class="absolute bottom-2 right-2 z-100 text-accent-warn scale-100 cursor-help hover:scale-110 transition-transform">
+                <AlertTriangle class="size-8 " v-tooltip="`^^${p.msg}^^`"></AlertTriangle>
+              </div>
+              
               <!-- 激活时的动态流光 -->
               <div v-if="p.id === profileStore.currentProfileId" class="absolute inset-0 bg-linear-to-r from-accent-primary/10 to-transparent animate-pulse-slow"></div>
 
@@ -54,14 +59,18 @@
                     <!-- 环境名称 -->
                     <div class="flex items-center gap-2 min-w-0">
                       <div class="size-2 rounded-full ml-1" 
-                        :class="p.id === profileStore.currentProfileId ? 'bg-accent-primary animate-pulse shadow-[0_0_8px_#06b6d4]' : 'bg-text-dim/30'"></div>
+                        :class="p.check ? (p.id === profileStore.currentProfileId ? 'bg-accent-primary animate-pulse shadow-[0_0_8px_#06b6d4]' 
+                          : 'bg-text-dim/30'):'bg-accent-danger animate-pulse shadow-[0_0_8px_#ff4500]'">
+                      </div>
                       <h4 class="shrink font-bold text-sm truncate min-w-0" v-tooltip="`[[${p.name}]]\n__${p.description}__`" :class="p.id === profileStore.currentProfileId ? 'text-text-main' : 'text-text-main'">{{ p.name }}</h4>
                     </div>
                     <!-- 操作组 -->
                     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button v-if="p.id !== 'default'" @click.stop="handleDelete(p)" v-tooltip="'删除环境'" class="p-1.5 rounded-lg hover:bg-accent-danger/20 text-text-dim hover:text-accent-danger transition-all"><Trash2 class="size-3.5" /></button>
                       <button @click.stop="handleEdit(p)" v-tooltip="'编辑环境'" class="p-1.5 rounded-lg hover:bg-text-main/10 text-text-dim hover:text-text-main transition-all"><Settings2 class="size-3.5" /></button>
-                      <button @click.stop="handlePlay(p)" v-tooltip="'运行环境'" class="p-1.5 rounded-lg text-text-dim  transition-all hover:text-accent-success hover:bg-accent-success/20"><Play class="size-3.5" /></button>
+                      <button @click.stop="handlePlay(p)" v-tooltip="'运行环境'" class="p-1.5 rounded-lg text-text-dim  transition-all hover:text-accent-success hover:bg-accent-success/20"
+                        :class="p.check ? 'cursor-pointer' : 'cursor-not-allowed pointer-events-none'"><Play class="size-3.5" />
+                      </button>
                     </div>
                   </div>
 
@@ -168,7 +177,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
-import { Database, Plus, Trash2, Settings2, ZapOff, X, Play } from 'lucide-vue-next'
+import { Database, Plus, Trash2, Settings2, ZapOff, X, Play, AlertTriangle } from 'lucide-vue-next'
 import { createToastInterface } from 'vue-toastification'
 import { useProfileStore } from '../stores/profileStore'
 import { useAppStore } from '../stores/appStore'
@@ -216,7 +225,7 @@ const openCreate = () => {
   showModal.value = true
 }
 
-const handleEdit = (p) => {
+const handleEdit = async (p) => {
   form.id = p.id
   form.name = p.name
   form.description = p.description
@@ -226,6 +235,9 @@ const handleEdit = (p) => {
   form.run_commands = p.run_commands
   isEditing.value = true
   showModal.value = true
+  
+  await checkPath('user_data_path', form.user_data_path)
+  await checkPath('game_install_path', form.game_install_path)
 }
 
 const browsePath = async (type) => {
@@ -247,6 +259,16 @@ const submitForm = async () => {
   }
   if (!form.user_data_path && isEditing.value) {
     toast.warning('请输入用户数据目录')
+    return
+  }
+  await checkPath('user_data_path', form.user_data_path)
+  await checkPath('game_install_path', form.game_install_path)
+  if (form['check_info']['game_install_path'] && !form['check_info']['game_install_path']['pass']) {
+    toast.warning('请选择一个有效的游戏执行目录')
+    return
+  }
+  if (form['check_info']['user_data_path'] && !form['check_info']['user_data_path']['pass'] && isEditing.value) {
+    toast.warning('请输入一个有效的用户数据目录')
     return
   }
   if (isEditing.value) {

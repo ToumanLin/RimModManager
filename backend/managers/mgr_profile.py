@@ -1,13 +1,17 @@
 from datetime import datetime
+from email.policy import default
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict
 import uuid
 import shutil
 import subprocess
 from playhouse.shortcuts import model_to_dict
+from send2trash import send2trash
 from backend.database.dao import ModDAO
 from backend.database.models import GameProfile, db
+from backend.managers.mgr_files import PathChecker
 from backend.managers.mgr_game import GameManager
 from backend.settings import settings, DATA_DIR
 from backend.utils.logger import logger 
@@ -94,10 +98,18 @@ class ProfileManager:
         # 验证字段有效性
         valid_field_names = set(GameProfile._meta.fields.keys()) # type: ignore
         clear_data = {k: v for k, v in data.items() if k in valid_field_names}
-        
         if 'id' in clear_data: del clear_data['id']
         clear_data['game_version'] = GameManager.get_game_version(clear_data.get('game_install_path', settings.config.game_install_path))
         clear_data['is_steam'] = os.path.normpath(clear_data.get('game_install_path', settings.config.game_install_path)).lower().rfind(os.path.join('steamapps', 'common')) != -1
+        
+        path_fields = ['user_data_path', 'game_install_path']
+        # 验证路径有效性
+        for field in path_fields:
+            if field in clear_data:
+                if not os.path.exists(clear_data[field]):
+                    raise ValueError(f"Path not found: {clear_data[field]}")
+                clear_data[field] = os.path.normpath(clear_data[field])
+                
         query = GameProfile.update(**clear_data).where(GameProfile.id == profile_id)
         query.execute()
         # 获取更新后的对象并同步到磁盘
@@ -120,12 +132,13 @@ class ProfileManager:
         profile = GameProfile.get_or_none(GameProfile.id == profile_id)
         if not profile: return False
         # 1. 删除隔离文件
-        if profile.user_data_path and os.path.exists(profile.user_data_path):
+        default_profile = self.get_profile('default')
+        if profile.user_data_path and os.path.exists(profile.user_data_path) and (Path(profile.user_data_path) != Path(default_profile.user_data_path)):
             try:
-                shutil.rmtree(profile.user_data_path)
+                # shutil.rmtree(profile.user_data_path)
+                send2trash(profile.user_data_path)
             except Exception as e:
                 logger.warning(f"Failed to clean up profile data: {e}")
-
         # 2. 删库
         profile.delete_instance()
         # 3. 如果删的是当前激活的，回退到 default
@@ -154,7 +167,24 @@ class ProfileManager:
     
     def get_all_profiles(self):
         """获取所有 Profile 对象"""
-        return list(GameProfile.select().dicts())
+        res = list(GameProfile.select().dicts())
+        # 遍历环境对象检测路径是否存在
+        for profile in res:
+            # 验证游戏安装路径是否有效
+            check_install = PathChecker.check_install_path(profile.get('game_install_path',''))
+            # 验证用户数据路径是否有效
+            check_data = PathChecker.check_normal_path(profile.get('user_data_path',''))
+            if not check_install['pass'] or not check_data['pass']: 
+                self.activate_profile('default')
+                msg = (check_install['msg'] if not check_install['pass'] else "") + (check_data['msg'] if not check_data['pass'] else '') + " 环境路径可能被删除，请重新配置或删除环境。"
+                profile['msg'] = msg.strip()
+                profile['check'] = False
+                
+            else:
+                profile['check'] = True
+                profile['msg'] = None
+                
+        return res
     
     def activate_profile(self, profile_id):
         """
@@ -166,7 +196,16 @@ class ProfileManager:
         """
         if not profile_id: profile_id = 'default'
         profile = GameProfile.get_or_none(GameProfile.id == profile_id)
-        if not profile: return False
+        if not profile: return False    # 检测环境数据是否存在
+        # 验证游戏安装路径是否有效
+        check_install = PathChecker.check_install_path(profile.game_install_path)
+        # 验证用户数据路径是否有效
+        check_data = PathChecker.check_normal_path(profile.user_data_path)
+        if not check_install['pass'] or not check_data['pass']: 
+            self.activate_profile('default')
+            msg = f"""{check_install['msg'] if not check_install['pass'] else ""}\n{check_data['msg'] if not check_data['pass'] else ''}"""
+            raise ValueError(msg.strip())
+        
         self.current_profile = profile
         self.update_version()
         self._update_paths(profile)
@@ -192,17 +231,13 @@ class ProfileManager:
             settings.config.game_saves_path = os.path.join(profile.user_data_path, "Saves")
             if not os.path.exists(settings.config.game_saves_path):
                 os.makedirs(settings.config.game_saves_path)
-        
         # 控制是否扫描工坊
         settings.config.use_workshop_mods = profile.use_workshop_mods if profile.id != 'default' else True
-        
         # 合并自定义参数
         settings.config.run_commands = profile.run_commands if profile.run_commands else []
-        
         # 强制持久化到 config.json
         settings.save()
         
-
     def get_launch_args(self, profile_id: str = ''):
         """
         获取启动参数
@@ -224,6 +259,7 @@ class ProfileManager:
             args.extend(profile.run_commands)
             
         return args
+    
     def get_launch_args_only(self, profile_id: str = ''):
         """
         获取当前 Profile 的命令行参数（不含 EXE 路径）
@@ -235,9 +271,8 @@ class ProfileManager:
     def _clone_user_data(self, src_config_dir, target_root):
         """复制存档和配置到新隔离区"""
         # src_config_dir 通常是 .../LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config
-        # 我们需要复制 Config 和 Saves
+        # 需要复制 Config 和 Saves
         src_root = os.path.dirname(src_config_dir) # 回退一级
-        
         try:
             # 复制 Config
             shutil.copytree(os.path.join(src_root, "Config"), os.path.join(target_root, "Config"), dirs_exist_ok=True)
@@ -245,7 +280,6 @@ class ProfileManager:
             # shutil.copytree(os.path.join(src_root, "Saves"), os.path.join(target_root, "Saves"), dirs_exist_ok=True)
         except Exception as e:
             logger.error(f"Clone data failed: {e}")
-            
             
     def _sync_profile_to_disk(self, profile: GameProfile):
         """
@@ -275,7 +309,6 @@ class ProfileManager:
             # logger.info(f"Profile synced to disk: {json_path}")
         except Exception as e:
             logger.error(f"Failed to sync profile to disk: {e}")
-            
             
     def scan_orphaned_profiles(self):
         """

@@ -56,6 +56,7 @@ import { useAppStore } from '../../../stores/appStore'
 
 const props = defineProps({
   label: String,
+  fileType: String,
   modelValue: String,
   readOnly: Boolean,
   placeholder: String,

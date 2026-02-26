@@ -20,7 +20,7 @@
           <!-- 动态 Glider 导航 -->
           <nav class="flex flex-col relative space-y-1" :style="{ '--total-tabs': tabs.length }">
             <button v-for="(tab, index) in tabs" :key="tab.id"
-              @click="currentTab = tab.id"
+              @click="changeTab(tab.id)"
               class="relative z-10 flex items-center gap-3 px-4 py-3 text-md font-bold transition-all duration-300 group"
               :class="currentTab === tab.id ? 'text-accent-primary' : 'text-text-dim hover:text-text-main/70'"
             >
@@ -30,7 +30,7 @@
 
             <!-- 物理 Glider 滑块 -->
             <div class="glider-container absolute left-0 top-0 w-full h-full pointer-events-none">
-              <div class="glider absolute -left-6 w-1 h-11 bg-accent-primary shadow-[0_0_15px_#06b6d4] transition-transform duration-500 cubic-bezier"
+              <div class="glider absolute -left-6 w-1 h-11 bg-accent-primary brightness-120 shadow-[0_0_15px_#06b6d4] transition-transform duration-500 cubic-bezier"
                 :style="{ transform: `translateY(${tabs.findIndex(t => t.id === currentTab) * 2.85}rem)` }">
                 <!-- 侧边发光层 -->
                 <div class="absolute left-0 top-0 w-40 h-full bg-linear-to-r from-accent-primary/10 to-transparent"></div>
@@ -189,7 +189,7 @@
               <section v-if="currentTab === 'community'" class="animate-in fade-in slide-in-from-right-4">
                 <h3 class="text-lg font-bold text-text-main mb-6">社区配置管理</h3>
                 <div class="space-y-6">
-                  <CommonPathInput label="SteamCMD 路径" v-model="formData.steam.steamcmd_path" @browse="handleBrowse('steamcmd_path')" />
+                  <CommonPathInput label="SteamCMD 路径" v-model="formData.steam.steamcmd_path" @browse="handleBrowse('steam.steamcmd_path', ['EXE Files (*.exe)'])" :check="formData.check_info?.steamcmd_path" />
                   <div class="flex items-end gap-1.5">
                     <CommonInput label="社区规则 URL" v-model="formData.community_rules_url" />
                     <button @click="ruleStore.updateCommunity()" v-tooltip="'下载更新 社区规则'" :class="{'opacity-50 cursor-not-allowed pointer-events-none' :ruleStore.isLoading }"
@@ -197,8 +197,8 @@
                       <Download class="size-5" :class="{'animate-bounce': ruleStore.isLoading}" />
                     </button>
                   </div>
-                  <CommonPathInput label="社区规则路径" v-model="formData.community_rules_path" @browse="handleBrowse('community_rules_path')" />
-                  <CommonPathInput label="用户规则路径" v-model="formData.user_rules_path" @browse="handleBrowse('user_rules_path')" />
+                  <CommonPathInput label="社区规则路径" v-model="formData.community_rules_path" @browse="handleBrowse('community_rules_path', ['JSON Files (*.json)'])" :check="formData.check_info?.community_rules_path" />
+                  <CommonPathInput label="用户规则路径" v-model="formData.user_rules_path" @browse="handleBrowse('user_rules_path', ['JSON Files (*.json)'])" :check="formData.check_info?.user_rules_path" />
                   <div class="py-2 pt-5 place-self-center w-[95%] border-b border-text-dim/20"></div>
                   <div class="flex items-end gap-1.5">
                     <CommonInput label="社区工坊数据库 URL" v-model="formData.community_workshop_db_url" />
@@ -207,7 +207,7 @@
                       <Download class="size-5" :class="{'animate-bounce': downloadState['workshop_db']}" />
                     </button>
                   </div>
-                  <CommonPathInput label="社区工坊数据库路径" v-model="formData.community_workshop_db_path" @browse="handleBrowse('community_workshop_db_path')" />
+                  <CommonPathInput label="社区工坊数据库路径" v-model="formData.community_workshop_db_path" @browse="handleBrowse('community_workshop_db_path', ['JSON Files (*.json)'])" :check="formData.check_info?.community_workshop_db_path" />
                   <div class="flex items-end gap-1.5">
                     <CommonInput label="社区替代Mod数据库" v-model="formData.community_instead_db_url" />
                     <button @click="updateExternalDB('instead_db')" v-tooltip="'下载更新 社区替代Mod数据库'" :class="{'opacity-50 cursor-not-allowed pointer-events-none' : downloadState['instead_db'] }"
@@ -215,7 +215,7 @@
                       <Download class="size-5" :class="{'animate-bounce': downloadState['instead_db']}" />
                     </button>
                   </div>
-                  <CommonPathInput label="社区替代Mod数据库路径" v-model="formData.community_instead_db_path" @browse="handleBrowse('community_instead_db_path')" />
+                  <CommonPathInput label="社区替代Mod数据库路径" v-model="formData.community_instead_db_path" @browse="handleBrowse('community_instead_db_path', ['JSON Files (*.json;*.gz)'])" :check="formData.check_info?.community_instead_db_path" />
                 </div>
               </section>
 
@@ -459,10 +459,20 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
           await fetchAiModels()
         }
       }
-
+      // 检测所有路径是否有效
+      checkPaths()
     })
   }
 })
+
+// 监听当前页面切换
+const changeTab = (tab) => {
+  currentTab.value = tab
+  // 检测所有路径是否有效
+  if (['paths','community'].includes(tab)) {
+    checkPaths()
+  }
+}
 
 // 通过ID获取数据项
 const getDataById = (id, datas) => {
@@ -482,6 +492,20 @@ const checkPath = async (type, path) => {
   }
   formData.value['check_info'][type] = res
 }
+// 检查全部路径
+const checkPaths = async () => {
+  const paths_data = {}
+  for (const key in formData.value) {
+    if (key.endsWith('_path')) {
+      paths_data[key] = formData.value[key]
+    }
+  }
+  const res = await appStore.checkPaths(paths_data)
+  if (res) {
+    formData.value['check_info'] = res
+  }
+}
+
 // 手动选择游戏路径
 const handleGameBrowse = async () => {
   let current = formData.value
@@ -493,7 +517,7 @@ const handleGameBrowse = async () => {
   }
 }
 // 手动选择其他路径
-const handleBrowse = async (pathKey) => {
+const handleBrowse = async (pathKey, fileTypes) => {
   // 处理嵌套路径 (如 'steam.steamcmd_path')
   const keys = pathKey.split('.')
   let current = formData.value
@@ -501,7 +525,13 @@ const handleBrowse = async (pathKey) => {
     current = current[keys[i]]
   }
   const lastKey = keys[keys.length - 1]
-  const res = await appStore.getFolderPath(current[lastKey])
+  console.log('路径选择',pathKey, fileTypes)
+  let res
+  if (fileTypes) {
+    res = await appStore.getFilePath(current[lastKey], fileTypes)
+  } else {
+    res = await appStore.getFolderPath(current[lastKey])
+  }
   if (res) {
     current[lastKey] = res
     // 自动检查路径是否有效

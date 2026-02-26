@@ -656,6 +656,15 @@ export const useAppStore = defineStore('app', () => {
       return res.data
     }
   }
+  // 检测路径信息
+  const checkPaths = async (path_data) => {
+    if(!path_data) return
+    if(!window.pywebview) return
+    const res = await window.pywebview.api.paths_check(path_data)
+    if (checkResult(res, "批量检测路径信息")) {
+      return res.data
+    }
+  }
   // 打开路径
   const openPath = async (path) => {
     if(!window.pywebview) return
@@ -671,9 +680,7 @@ export const useAppStore = defineStore('app', () => {
     const res = await window.pywebview.api.file_select_dialog(home_path, file_types)
     if (checkResult(res, "获取文件路径")) {
       return res.data
-    } else {
-        console.error("获取文件路径异常:", res.message)
-    }
+    } else return
   }
   // 获取文件夹路径
   const getFolderPath = async (home_path) => {
@@ -1062,7 +1069,7 @@ export const useAppStore = defineStore('app', () => {
     aiState, aiBatchResults, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS,
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll,
     // 游戏相关
-    checkPath, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
+    checkPath, checkPaths, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
     startDownload, waitForDownload, downloadWorkshopItems, 
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, updateExternalDB,

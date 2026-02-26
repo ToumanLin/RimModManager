@@ -5,6 +5,7 @@ import { useAppStore } from './appStore'
 import { useGroupStore } from './groupStore'
 import { ISSUE_LEVEL, ISSUE_TYPE, ISSUE_TITLE_MAP } from '../utils/constants'
 import { useConfirmStore } from './confirmStore'
+import { useProfileStore } from './profileStore'
 
 export const useModStore = defineStore('mods', () => {
   const toast = createToastInterface()
@@ -369,6 +370,8 @@ export const useModStore = defineStore('mods', () => {
     // 扫描结束后，主动拉取一次最新数据刷新界面
     console.log("扫描统计:", detail)
     await appStore.refreshData()
+    const profileStore = useProfileStore()
+    await profileStore.fetchProfiles()
     // 状态注入
     if (coexistenceList.value.length > 0){
       // 处理可共存Mod，标记为 is_coexistence = true

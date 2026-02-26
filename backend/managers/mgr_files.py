@@ -264,6 +264,11 @@ class FileManager:
         """
         打开系统原生的文件夹选择框
         """
+        # 如果是文件路径则取目录，不是则设为空字符串
+        path = os.path.dirname(initial_dir) if os.path.isfile(initial_dir) else initial_dir
+        # 检查路径是否有效
+        if not os.path.exists(path): path = ''
+        
         # 获取当前活动窗口
         if len(webview.windows) > 0:
             window = webview.windows[0]
@@ -271,7 +276,7 @@ class FileManager:
             # allow_multiple=False: 单选
             result = window.create_file_dialog(
                 webview.FileDialog.FOLDER, 
-                directory=initial_dir if initial_dir else '', 
+                directory=path, 
                 allow_multiple=False
             )
             # result 返回的是一个列表 (因为可能多选)，或者 None (取消)
@@ -285,11 +290,16 @@ class FileManager:
         打开系统原生的文件选择框
         file_types 示例: ('XML Files (*.xml;*.rws)', 'All Files (*.*)')
         """
+        # 如果是文件路径则取目录，不是则设为空字符串
+        path = os.path.dirname(initial_dir) if os.path.isfile(initial_dir) else initial_dir
+        # 检查路径是否有效
+        if not os.path.exists(path): path = ''
+        
         if len(webview.windows) > 0:
             window = webview.windows[0]
             result = window.create_file_dialog(
                 webview.FileDialog.OPEN, 
-                directory=initial_dir if initial_dir else '', 
+                directory=path, 
                 allow_multiple=False,
                 file_types=file_types
             )
@@ -302,13 +312,18 @@ class FileManager:
         """
         打开系统原生的文件保存框
         """
+        # 如果是文件路径则取目录，不是则设为空字符串
+        path = os.path.dirname(initial_dir) if os.path.isfile(initial_dir) else initial_dir
+        # 检查路径是否有效
+        if not os.path.exists(path): path = ''
+        
         if len(webview.windows) > 0:
             window = webview.windows[0]
             # pywebview 的 create_file_dialog 参数：
             # dialog_type, directory, allow_multiple, save_filename, file_types
             result = window.create_file_dialog(
                 webview.FileDialog.SAVE, 
-                directory=initial_dir, 
+                directory=path, 
                 save_filename=default_filename, # 设置默认文件名
                 allow_multiple=False,
                 file_types=file_types
@@ -597,13 +612,31 @@ class PathChecker:
     
     @staticmethod
     def check_normal_path(path_str: str) -> Dict:
+        """
+        检查普通路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
         if not path_str: return PathChecker._format_res(False, msg="路径不能为空")
         path = Path(path_str)
-        if not path.exists(): return PathChecker._format_res(False, msg="路径不存在！")
+        if not path.exists(): return PathChecker._format_res(False, msg=f"{path_str}\n路径不存在！")
         return PathChecker._format_res(True, data=str(path), msg=f"路径有效：{path}")
     
     @staticmethod
     def check_install_path(path_str: str) -> Dict:
+        """
+        检查游戏安装路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
         if not path_str: return PathChecker._format_res(False, msg="安装路径不能为空")
         path = Path(path_str)
         if not path.exists(): return PathChecker._format_res(False, msg="游戏安装路径不存在！")
@@ -632,6 +665,15 @@ class PathChecker:
 
     @staticmethod
     def check_mods_config(path_str: str) -> Dict:
+        """
+        检查 Mods 配置文件是否存在
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
         path = Path(path_str) / "ModsConfig.xml"
         if path.exists():
             return PathChecker._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
@@ -639,6 +681,15 @@ class PathChecker:
 
     @staticmethod
     def check_workshop_path(path_str: str) -> Dict:
+        """
+        检查 Workshop 路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
         if not path_str or not Path(path_str).exists():
             return PathChecker._format_res(False, msg="Workshop 路径不存在")
         
@@ -649,6 +700,15 @@ class PathChecker:
         
     @staticmethod
     def check_steam_path(path_str: str) -> Dict:
+        """
+        检查 Steam 客户端路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
         if not path_str: return PathChecker._format_res(False, msg="未指定 Steam 路径")
         exe_path = Path(path_str) / "steam.exe"
         if exe_path.exists():
@@ -678,8 +738,15 @@ class PathChecker:
             # 4. Steam 主程序
             if "steam_path" in paths_data:
                 results["steam_path"] = PathChecker.check_steam_path(paths_data["steam_path"])
+            
+            # 5. 其他路径
+            for key, path in paths_data.items():
+                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path"]: continue
+                results[key] = PathChecker.check_normal_path(path)
 
             return results
         except Exception as e:
             logger.error(f"Check Paths Error: {e}", exc_info=True)
             return {}
+        
+    

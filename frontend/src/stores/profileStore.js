@@ -30,7 +30,6 @@ export const useProfileStore = defineStore('profile', () => {
     const res = await window.pywebview.api.profiles_get()
     if (appStore.checkResult(res, '获取环境列表')) {
       profiles.value = res.data
-      console.log('获取环境列表:', profiles.value)
     }
   }
 
