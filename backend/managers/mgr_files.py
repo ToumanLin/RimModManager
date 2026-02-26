@@ -597,6 +597,142 @@ class FileManager:
         finally:
             if os.path.exists(temp_path): os.remove(temp_path)
     
+    # =========================================================
+    #  5. SteamCMD 根目录重定向 (Root Redirect)
+    # =========================================================
+
+    @staticmethod
+    def sync_steamcmd_root_link(old_mods_path: str|None = None, move_old_data: bool = False):
+        """
+        同步 SteamCMD 下载根目录到自定义存储目录的软链接。
+        
+        :param old_mods_path: 变更前的 mods_path，用于数据迁移
+        :param move_old_data: 如果 mods_path 变了，是否把旧路径的数据搬过来
+        """
+        from backend.settings import settings
+        
+        # 1. 获取最新配置
+        # 实际物理存储路径 (Target)
+        real_storage_path = os.path.normpath(os.path.abspath(settings.config.self_mods_path))
+        # SteamCMD 期望的下载路径 (Link Location, 通常是 .../294100)
+        steamcmd_link_path = os.path.normpath(os.path.abspath(settings.config.steamcmd_mods_path))
+
+        logger.info(f"Redirecting SteamCMD: {steamcmd_link_path} -> {real_storage_path}")
+
+        # ---------------------------------------------------------
+        # 步骤 A: 处理 mods_path 变更导致的数据迁移
+        # ---------------------------------------------------------
+        if move_old_data and old_mods_path:
+            old_mods_path = os.path.normpath(os.path.abspath(old_mods_path))
+            if old_mods_path != real_storage_path and os.path.exists(old_mods_path):
+                logger.info(f"Moving data from OLD mods_path: {old_mods_path} -> {real_storage_path}")
+                FileManager._merge_and_delete_folder(old_mods_path, real_storage_path)
+
+        # 确保实际物理目录存在
+        os.makedirs(real_storage_path, exist_ok=True)
+
+        # ---------------------------------------------------------
+        # 步骤 B: 处理 SteamCMD 链接位置 (Link Location)
+        # ---------------------------------------------------------
+        
+        # 如果该位置已经存在
+        if os.path.lexists(steamcmd_link_path):
+            # 情况 1: 它已经是一个链接了
+            if os.path.islink(steamcmd_link_path) or FileManager._is_junction_windows(steamcmd_link_path):
+                # 检查它指向的是不是我们现在的物理路径
+                if FileManager._is_link_correct(steamcmd_link_path, real_storage_path):
+                    logger.info("SteamCMD link is already correct. Skipping.")
+                    return True
+                else:
+                    # 指向了错误的路径，或者是旧的路径，删掉这个链接（不会删掉源文件）
+                    logger.info("Removing stale or incorrect SteamCMD link.")
+                    FileManager._remove_link_safe(steamcmd_link_path)
+            
+            # 情况 2: 它是一个真实的文件夹 (里面可能有 SteamCMD 之前下的 Mod)
+            elif os.path.isdir(steamcmd_link_path):
+                logger.info(f"Found real folder at SteamCMD path. Merging to {real_storage_path}...")
+                # 把里面的 Mod 搬到物理路径
+                FileManager._merge_and_delete_folder(steamcmd_link_path, real_storage_path)
+                # 搬完后删掉这个空壳文件夹，为创建链接腾位置
+                shutil.rmtree(steamcmd_link_path, ignore_errors=True)
+
+        # ---------------------------------------------------------
+        # 步骤 C: 创建新的链接
+        # ---------------------------------------------------------
+        # 再次确保父目录存在 (steamapps/workshop/content/)
+        os.makedirs(os.path.dirname(steamcmd_link_path), exist_ok=True)
+        
+        try:
+            if platform.system() == 'Windows':
+                # 使用 Junction (mklink /j)，不需要管理员权限，且对磁盘 IO 最友好
+                subprocess.run(f'mklink /j "{steamcmd_link_path}" "{real_storage_path}"', 
+                               shell=True, check=True, capture_output=True)
+            else:
+                os.symlink(real_storage_path, steamcmd_link_path)
+            
+            logger.info("Successfully created SteamCMD redirection link.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create SteamCMD link: {e}")
+            return False
+
+    # =========================================================
+    #  辅助私有方法
+    # =========================================================
+
+    @staticmethod
+    def _is_junction_windows(path):
+        """判断 Windows 下是否为联接点"""
+        if platform.system() != 'Windows': return False
+        try:
+            # Junction 在 Windows 下通过特定属性识别
+            output = subprocess.check_output(['dir', '/ad', os.path.dirname(path)], shell=True).decode('gbk', errors='ignore')
+            return f"<JUNCTION>     {os.path.basename(path)}" in output
+        except:
+            return False
+
+    @staticmethod
+    def _remove_link_safe(path):
+        """安全移除链接而不伤及目标"""
+        try:
+            if platform.system() == 'Windows':
+                # 对于 Junction，使用 rmdir 是安全的，它只删链接不删内容
+                subprocess.run(f'rd "{os.path.normpath(path)}"', shell=True, check=True)
+            else:
+                os.unlink(path)
+        except Exception as e:
+            logger.error(f"Failed to remove link {path}: {e}")
+
+    @staticmethod
+    def _merge_and_delete_folder(src, dst):
+        """
+        合并两个文件夹的内容并删除源文件夹。
+        如果目标位置已存在同名 Mod，则覆盖。
+        """
+        if not os.path.exists(src): return
+        os.makedirs(dst, exist_ok=True)
+        
+        try:
+            for item in os.listdir(src):
+                s_path = os.path.join(src, item)
+                d_path = os.path.join(dst, item)
+                
+                if os.path.isdir(s_path):
+                    if os.path.exists(d_path):
+                        shutil.rmtree(d_path, ignore_errors=True)
+                    shutil.move(s_path, d_path)
+                else:
+                    if os.path.exists(d_path):
+                        os.remove(d_path)
+                    shutil.move(s_path, d_path)
+            
+            # 清理残留空目录
+            if os.path.exists(src):
+                shutil.rmtree(src, ignore_errors=True)
+        except Exception as e:
+            logger.error(f"Merge folder failed: {e}")
+    
+    
     
 class PathChecker:
 

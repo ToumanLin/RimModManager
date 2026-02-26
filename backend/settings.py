@@ -133,7 +133,8 @@ class AppConfig:
     use_workshop_mods: bool = True
     steam_path: str = ""
     home_path: str = str(Path(os.getcwd())) # 本程序路径
-    mods_path: str = str(MODS_DIR)  # 本程序默认模组路径
+    self_mods_path: str = str(MODS_DIR)  # 本程序默认模组路径
+    move_old_self_mods: bool = False
     
     # --- 游戏设置 ---
     game_version: str = ""
@@ -193,11 +194,15 @@ class SettingsManager:
         return cls._instance
 
     def __init__(self):
-        if self._initialized:
-            return
-        
+        if self._initialized: return
         self._ensure_config_dir()
-        self.config: AppConfig = self._load() # 加载配置
+        # self.config: AppConfig = self._load() # 加载配置
+        
+        # 1. 先初始化一个空的配置对象，防止加载过程中访问 self.config 崩溃
+        self.config = AppConfig()
+        # 2. 执行加载（此时 _recursive_update 访问 self.config 就安全了）
+        self._load_to_config()
+        
         self._initialized = True
 
     def _ensure_config_dir(self):
@@ -220,69 +225,47 @@ class SettingsManager:
         
         for key, value in source_dict.items():
             # 1. 忽略未知字段 (配置文件里有，但代码里没有定义的)
-            if key not in target_fields:
-                continue
-            
+            if key not in target_fields: continue
             # 获取当前对象上的属性值
             current_attr = getattr(target_obj, key)
-            
             # 2. 判断是否需要递归
             # 如果当前属性是 dataclass 实例，且来源值是字典，则递归更新
             if is_dataclass(current_attr) and isinstance(value, dict):
                 self._recursive_update(current_attr, value)
-            
             # 3. 普通赋值
             else:
-                # 这里可以加一些简单的类型保护，比如防止把 str 赋给 int
-                # 但 Python 鸭子类型通常允许直接赋值，除非为了极高的健壮性
+                # 这里可以加一些简单的类型保护，比如防止把 str 赋给 int，但 Python 鸭子类型通常允许直接赋值，除非为了极高的健壮性
                 setattr(target_obj, key, value)
-                # 4. 特殊处理：如果是 steamcmd_path，更新 steamcmd_mods_path
-                if key == 'steamcmd_path':
-                    settings.set('steamcmd_mods_path', str(Path(value) / "steamapps" / "workshop" / "content" / "294100"))
                 
 
-    def _load(self) -> AppConfig:
+    def _load_to_config(self):
         """
-        加载配置逻辑：
-        1. 创建全默认值的 AppConfig 对象
-        2. 读取 JSON
-        3. 递归将 JSON 的值覆盖到 AppConfig 对象上
+        将磁盘配置加载到现有的 self.config 中
         """
-        # 1. 如果文件不存在，直接返回全默认配置
-        if not CONFIG_PATH.exists():
-            return AppConfig()
-
+        if not CONFIG_PATH.exists(): return
         try:
             with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            # 2. 实例化默认配置 (这里已经包含了所有定义的默认值)
-            config = AppConfig()
-            # 3. 递归更新 (核心逻辑)
-            self._recursive_update(config, data)
-            # 检查旧版配置位置
+            # 使用递归更新现有的 self.config
+            self._recursive_update(self.config, data)
+            # 加载完成后，手动同步一次衍生路径
+            self._sync_derived_paths()
+            # 检查旧版配置兼容性
             legacy_game_data = data.get('network', {}).get('game_data_path')
-            if not config.user_data_path and legacy_game_data:
-                config.user_data_path = legacy_game_data
-            return config
-
+            if not self.config.user_data_path and legacy_game_data:
+                self.config.user_data_path = legacy_game_data
         except Exception as e:
-            # 使用 logging.getLogger 避免循环导入
             print(f"Config load error: {e}")
-            # 出错时返回默认配置，保证程序能跑
-            return AppConfig()
-
-    def save(self):
-        """保存当前配置到磁盘"""
-        try:
-            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-                # asdict 将 dataclass 转换为字典
-                json.dump(asdict(self.config), f, indent=4, ensure_ascii=False)
-            # print("Settings saved.")
-        except Exception as e:
-            print(f"Error saving settings: {e}")
-
-    # --- 便捷存取方法 ---
-
+    
+    def _sync_derived_paths(self):
+        """
+        统一管理所有依赖路径的计算逻辑。
+        """
+        # 根据 steamcmd_path 计算 steamcmd_mods_path
+        if self.config.steam.steamcmd_path:
+            new_path = str(Path(self.config.steam.steamcmd_path).parent / "steamapps" / "workshop" / "content" / "294100")
+            self.config.steamcmd_mods_path = new_path
+    
     def get(self, key: str) -> Any:
         """
         获取配置项。
@@ -294,33 +277,63 @@ class SettingsManager:
 
     def set(self, key: str, value: Any):
         """
-        设置配置项并自动保存。
-        自动处理嵌套字典到 Dataclass 的转换，一劳永逸。
+        设置配置项并自动处理路径同步逻辑
         """
         if not hasattr(self.config, key):
-            print(f"Warning: Attempted to set unknown setting key: {key}")
+            # 处理嵌套情况，例如 set('steam', {'steamcmd_path': '...'})
+            print(f"Warning: Unknown key {key}")
             return
-
+        # 记录关键路径的旧值用于比对
+        old_self_mods_path = self.config.self_mods_path
+        old_steamcmd_path = self.config.steam.steamcmd_path
         current_attr = getattr(self.config, key)
-        # 如果当前属性是一个 dataclass，且传入的值是个字典
-        # 走递归更新，把字典里的值一个个填进对象里，而不是粗暴地覆盖对象
         if is_dataclass(current_attr) and isinstance(value, dict):
             self._recursive_update(current_attr, value)
         else:
-            # 基础类型（str, int, bool, list）直接覆盖
             setattr(self.config, key, value)
-            
+        # --- 逻辑触发区 ---
+        # 1. 重新计算衍生路径
+        self._sync_derived_paths()
+        # 2. 如果 self_mods_path 变了，触发同步
+        if key == 'self_mods_path' and old_self_mods_path != value:
+            from backend.managers.mgr_files import FileManager
+            FileManager.sync_steamcmd_root_link(
+                old_mods_path=old_self_mods_path,
+                move_old_data=self.config.move_old_self_mods
+            )
+        # 3. 如果 steamcmd_path 变了，也触发同步
+        if old_steamcmd_path != self.config.steam.steamcmd_path:
+            from backend.managers.mgr_files import FileManager
+            FileManager.sync_steamcmd_root_link()
         self.save()
+
+    def save(self):
+        """保存当前配置到磁盘"""
+        try:
+            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                # asdict 将 dataclass 转换为字典
+                json.dump(asdict(self.config), f, indent=4, ensure_ascii=False)
+            # print("Settings saved.")
+        except Exception as e:
+            print(f"Error saving settings: {e}")
 
     # 强烈建议新增这个方法供 api.save_all_settings 使用
     def update_from_dict(self, data_dict: Dict[str, Any]):
         """
-        全量/批量更新配置项。
-        前端传来的整坨 JSON dict，直接丢进这里，自动完成所有对象的嵌套解析。
+        全量更新，同样需要处理逻辑触发
         """
-        if not isinstance(data_dict, dict):
-            return
+        old_self_mods_path = self.config.self_mods_path
+        old_steamcmd_path = self.config.steam.steamcmd_path
         self._recursive_update(self.config, data_dict)
+        self._sync_derived_paths()
+        # 检查并同步
+        if old_self_mods_path != self.config.self_mods_path or \
+           old_steamcmd_path != self.config.steam.steamcmd_path:
+            from backend.managers.mgr_files import FileManager
+            FileManager.sync_steamcmd_root_link(
+                old_mods_path=old_self_mods_path,
+                move_old_data=self.config.move_old_self_mods
+            )
         self.save()
 
     def update_paths(self, paths_dict: Dict[str, str]):
@@ -338,7 +351,12 @@ class SettingsManager:
         from backend.managers.mgr_game import GameManager
         p1 = GameManager.detect_executable(self.config.game_install_path)
         p2 = self.config.game_config_path
-        
+        # 检测路径是否有效，无效则创建
+        if not os.path.exists(self.config.self_mods_path):
+            os.makedirs(os.path.dirname(self.config.self_mods_path), exist_ok=True)
+            from backend.managers.mgr_files import FileManager
+            FileManager.sync_steamcmd_root_link()
+            
         if p1 and os.path.exists(p1) and p2 and os.path.exists(p2):
             return True
         return False

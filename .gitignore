@@ -19,6 +19,7 @@ test/
 *.log
 steamcmd/
 steam_agent/
+mods/
 
 # IDE & System
 .vscode/
