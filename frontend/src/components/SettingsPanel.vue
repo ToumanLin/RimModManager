@@ -87,9 +87,18 @@
                     :description="'创意工坊目录即创意工坊下载的模组所在的目录，该设置所有环境通用'" 
                     @blur="checkPath('workshop_mods_path', formData.workshop_mods_path)"/>
                   <CommonPathInput label="本地模组目录" v-model="formData.local_mods_path" readOnly @browse="handleBrowse('local_mods_path')" description="根据游戏安装目录自动生成" />
+                  <div class="p-3 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-2 gap-2">
+                    <h3 class="col-span-2 text-sm font-bold ml-1 text-text-main">管理器模组</h3>
+                    <CommonPathInput class=" col-span-2" label="管理器下载模组路径" :check="formData.check_info?.self_mods_path"
+                      :description="'由管理器下载的模组所在的目录，可自定义位置，如果将其设为游戏本地模组路径，请关闭该使用开关。'" 
+                      v-model="formData.self_mods_path" @browse="handleBrowse('self_mods_path')" @blur="checkPath('self_mods_path', formData.self_mods_path)"
+                    />
+                    <CommonSwitch label="使用管理器模组" v-model="formData.use_self_mods" description="开启后将通过链接方式自动为游戏加载管理器Mod。" />
+                    <CommonSwitch label="改变路径时移动模组" v-model="formData.move_old_self_mods" description="开启后，修改路径时会将原有模组移动到新路径；不开启则保留原有的文件结构。" />
+                  </div>
                   <CommonTagInput label="游戏启动参数" v-model="formData.run_commands" :allTags="RUN_COMMAND_TAGS" placeholder="请输入一个完整指令后回车确认……" description="注意不要使用 [[-savedatafolder]] 指令，多环境管理已经默认使用此指令，无需手动配置。" />
-                  <div class="p-2 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-1 gap-2">
-                    <CommonSwitch label="优先使用Steam启动游戏" v-model="formData.prefer_steam_launch" mini description="开启后将优先使用Steam启动Steam版游戏。该设置所有环境通用" />
+                  <div class="p-3 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-1 gap-2">
+                    <CommonSwitch class="-mx-1.5" label="优先使用Steam启动游戏" v-model="formData.prefer_steam_launch" mini description="开启后将优先使用Steam启动Steam版游戏。该设置所有环境通用" />
                     <CommonPathInput :class="{' pointer-events-none opacity-50':!formData.prefer_steam_launch}" label="Steam程序路径" 
                       :check="formData.check_info?.steam_path"
                       :description="'Steam程序路径即Steam.exe所在的目录，默认路径一般位于：\nC:/Program Files (x86)/Steam'" 
@@ -189,7 +198,7 @@
               <section v-if="currentTab === 'community'" class="animate-in fade-in slide-in-from-right-4">
                 <h3 class="text-lg font-bold text-text-main mb-6">社区配置管理</h3>
                 <div class="space-y-6">
-                  <CommonPathInput label="SteamCMD 路径" v-model="formData.steam.steamcmd_path" @browse="handleBrowse('steam.steamcmd_path', ['EXE Files (*.exe)'])" :check="formData.check_info?.steamcmd_path" />
+                  <CommonPathInput label="SteamCMD 路径" v-model="formData.steam.steamcmd_path" @browse="handleBrowse('steam.steamcmd_path')" :check="formData.check_info?.steamcmd_path" />
                   <div class="flex items-end gap-1.5">
                     <CommonInput label="社区规则 URL" v-model="formData.community_rules_url" />
                     <button @click="ruleStore.updateCommunity()" v-tooltip="'下载更新 社区规则'" :class="{'opacity-50 cursor-not-allowed pointer-events-none' :ruleStore.isLoading }"

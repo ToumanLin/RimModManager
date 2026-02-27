@@ -39,16 +39,20 @@ class ModDAO:
         if profile:
             local_root = profile.game_install_path
             use_workshop_mods = profile.use_workshop_mods
+            use_self_mods = profile.use_self_mods
         else:
             # Default 环境兜底
             local_root = settings.config.game_install_path
             use_workshop_mods = settings.config.use_workshop_mods
+            use_self_mods = settings.config.use_self_mods
             
         workshop_root = settings.config.workshop_mods_path
+        self_mods_root = settings.config.self_mods_path
 
         # 路径标准化 (用于 Python 端比对，统一转小写)
         if local_root: local_root = os.path.normpath(local_root).lower()
         if workshop_root: workshop_root = os.path.normpath(workshop_root).lower()
+        if self_mods_root: self_mods_root = os.path.normpath(self_mods_root).lower()
 
         # 2. 数据库查询 (SQL Filtering)
         # 目的：只拉取属于当前 Local 目录的，或者属于公共 Workshop 的模组。
@@ -66,6 +70,10 @@ class ModDAO:
         # 条件 B: 路径包含 Workshop Root (仅当启用工坊时)
         if use_workshop_mods and workshop_root:
             conditions.append(path_field.contains(workshop_root))
+            
+        # 条件 C: 路径包含 Self Mods Path (仅当启用管理器Mod时)
+        if use_self_mods and self_mods_root:
+            conditions.append(path_field.contains(self_mods_root))
             
         if not conditions: return [] # 没有任何有效路径配置
 
@@ -89,7 +97,6 @@ class ModDAO:
             g_query = (GroupMod.select(GroupMod.mod_id, GroupData.name)
                     .join(GroupData, on=(GroupMod.group_id == GroupData.group_id))
                     .dicts())
-            
             for row in g_query:
                 mid = row['mod_id'].lower()
                 gname = row['name']
@@ -101,18 +108,14 @@ class ModDAO:
         
         # 3. 内存处理 (Python Logic)
         # 实现 "Local Trumps Workshop" (本地优先于工坊)
-        
         merged_map = {} # { package_id: mod_data }
-
         for mod in query:
             # 路径清洗
             if not mod['path']: continue
             mod_path = os.path.normpath(mod['path']).lower()
             pkg_id = mod['package_id'] # 注意：数据库里已经是小写了
-            
             # 注入分组名称列表
             mod['groups'] = group_map.get(pkg_id, [])
-            
             # 判定来源类型
             is_local_mod = False
             if local_root and local_root in mod_path:
@@ -121,13 +124,20 @@ class ModDAO:
             # 判定是否是 DLC (Data 目录下的)
             # 也可以简单判断：source == 'dlc' 或 'core'
             is_dlc = mod.get('source') in ['core', 'dlc']
-
             # 冲突仲裁逻辑：
             # 1. 如果是 Local Mod 或 DLC -> 强制覆盖 (优先级最高)
             # 2. 如果是 Workshop Mod -> 只有当 Dictionary 里还没这个 ID 时才加入
-            
             if is_local_mod or is_dlc:
                 merged_map[pkg_id] = mod
+            elif self_mods_root in mod_path:
+                # 是 Self Mod
+                # 只有当不存在 同名 Local Mod 时才加入
+                if pkg_id not in merged_map:
+                    mod['is_local'] = True # 标记供前端展示 管理器Mod 图标
+                    merged_map[pkg_id] = mod
+                else:
+                    # 记录 "被遮蔽" 的信息
+                    merged_map[pkg_id]['_shadowed_self'] = True
             else:
                 # 是 Workshop Mod
                 # 只有当不存在 同名 Local Mod 时才加入
@@ -135,9 +145,8 @@ class ModDAO:
                     mod['is_local'] = False # 标记供前端展示 Steam 图标
                     merged_map[pkg_id] = mod
                 else:
-                    # 可以在这里记录一下 "被遮蔽" 的信息
+                    # 记录 "被遮蔽" 的信息
                     merged_map[pkg_id]['_shadowed_workshop'] = True
-                    pass
 
         return list(merged_map.values())
 

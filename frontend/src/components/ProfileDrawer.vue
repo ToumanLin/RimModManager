@@ -78,6 +78,7 @@
                   <div class="flex items-center gap-1 min-w-0">
                     <span v-tooltip="'游戏版本'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-secondary/20 text-accent-secondary border border-text-dim/10 ">{{ p.game_version || 'Unknown' }}</span>
                     <span v-if="p.use_workshop_mods" v-tooltip="'使用Workshop模组'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-success/10 text-accent-success border border-text-dim/10 ">Workshop</span>
+                    <span v-if="p.use_self_mods" v-tooltip="'使用管理器 Mod'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-success/10 text-accent-success border border-text-dim/10 ">Mannager</span>
                     <span v-if="p.id === 'default'" v-tooltip="'默认环境'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-highlight/20 text-accent-highlight border border-text-dim/10 ">Default</span>
                   </div>
                   
@@ -154,6 +155,7 @@
             description="游戏数据目录，可随意指定位置，或者留空自动生成，包含游戏配置及排序存档等用户信息。"
             :placeholder= '(!isEditing?"可空，默认在软件 data/profiles 目录下自动生成":"编辑模式下不可留空！")' />
           <CommonSwitch v-if="form.id!='default' && appStore.settings.workshop_mods_path" label="使用创意工坊 Mod" v-model="form.use_workshop_mods" description="启用后将通过链接方式自动为游戏添加创意工坊 Mod，仅在非Steam启动时生效，Steam 运行时会自动加载创意工坊 Mod。" />
+          <CommonSwitch v-if="appStore.settings.self_mods_path" label="使用管理器 Mod" v-model="form.use_self_mods" description="启用后将通过链接方式自动为游戏添加管理器 Mod。" />
           <CommonSwitch v-if="!isEditing" label="继承当前配置" v-model="form.copy_current_data" description="自动复制当前的游戏配置到新环境" />
           <CommonTagInput label="游戏启动参数" v-model="form.run_commands" :allTags="RUN_COMMAND_TAGS" placeholder="请输入一个完整指令后回车确认……" description="注意不要使用 [[-savedatafolder]] 指令，多环境管理已经默认使用此指令，无需手动配置。" />
 
@@ -204,6 +206,7 @@ const form = reactive({
   game_install_path: '',
   user_data_path: '',
   use_workshop_mods: false,
+  use_self_mods: false,
   copy_current_data: false
 })
 
@@ -219,6 +222,7 @@ const openCreate = () => {
   form.game_install_path = appStore.settings.game_install_path
   form.user_data_path = ''
   form.use_workshop_mods = false
+  form.use_self_mods = false
   form.copy_current_data = false
   form.run_commands = []
   isEditing.value = false
@@ -232,6 +236,7 @@ const handleEdit = async (p) => {
   form.game_install_path = p.game_install_path
   form.user_data_path = p.user_data_path
   form.use_workshop_mods = p.use_workshop_mods
+  form.use_self_mods = p.use_self_mods
   form.run_commands = p.run_commands
   isEditing.value = true
   showModal.value = true

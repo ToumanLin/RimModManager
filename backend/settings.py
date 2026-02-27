@@ -7,6 +7,8 @@ from pathlib import Path
 import sys
 from typing import Dict, Any, List
 
+from regex import T
+
 
 # 配置文件路径
 HOME_DIR = Path(os.getcwd())
@@ -72,7 +74,7 @@ class AIConfig:
 
 @dataclass
 class SteamConfig:
-    steamcmd_path: str = str(TOOLS_DIR / "steamcmd" / "steamcmd.exe")
+    steamcmd_path: str = str(TOOLS_DIR / "steamcmd")
     use_steam_client: bool = True  # 是否优先尝试使用 Steam 客户端
     steam_appid: int = 294100      # RimWorld AppID
 
@@ -122,24 +124,26 @@ class AppConfig:
     在这里定义字段和默认值，类型安全且清晰。
     """
     # --- 路径设置 ---
-    game_install_path: str = ""
-    user_data_path: str = ""    # 用户数据文件夹
-    game_config_path: str = ""  # RimWorld 配置文件夹
-    game_saves_path: str = ""   # RimWorld 存档文件夹
-    game_dlc_path: str = ""     # RimWorld DLC 文件夹
-    local_mods_path: str = ""
-    workshop_mods_path: str = ""
-    steamcmd_mods_path: str = str(TOOLS_DIR / "steamcmd" / "steamapps" / "workshop" / "content" / "294100")
-    use_workshop_mods: bool = True
-    steam_path: str = ""
+    game_install_path: str = ""    # RimWorld 安装路径
+    user_data_path: str = ""       # 用户数据文件夹
+    game_config_path: str = ""     # RimWorld 配置文件夹
+    game_saves_path: str = ""      # RimWorld 存档文件夹
+    game_dlc_path: str = ""        # RimWorld DLC 文件夹
+    local_mods_path: str = ""      # RimWorld 本地模组文件夹
+    workshop_mods_path: str = ""   # RimWorld 公共工坊模组文件夹
+    use_workshop_mods: bool = True  # 是否使用公共工坊模组
+    steam_path: str = ""          # Steam 安装路径
     home_path: str = str(Path(os.getcwd())) # 本程序路径
+    # steamcmd 下载路径
+    steamcmd_mods_path: str = str(TOOLS_DIR / "steamcmd" / "steamapps" / "workshop" / "content" / "294100")
     self_mods_path: str = str(MODS_DIR)  # 本程序默认模组路径
-    move_old_self_mods: bool = False
+    use_self_mods: bool = True          # 是否使用本程序模组
+    move_old_self_mods: bool = False    # 修改路径后是否移动原有模组
     
     # --- 游戏设置 ---
-    game_version: str = ""
+    game_version: str = ""               # RimWorld 版本
     current_profile_id: str = "default"   # 当前激活的环境ID
-    run_commands: List[str] = field(default_factory=list)
+    run_commands: List[str] = field(default_factory=list)   # 启动时运行的命令
     prefer_steam_launch: bool = True         # 是否通过 Steam 启动游戏
     
     
@@ -263,7 +267,7 @@ class SettingsManager:
         """
         # 根据 steamcmd_path 计算 steamcmd_mods_path
         if self.config.steam.steamcmd_path:
-            new_path = str(Path(self.config.steam.steamcmd_path).parent / "steamapps" / "workshop" / "content" / "294100")
+            new_path = str(Path(self.config.steam.steamcmd_path) / "steamapps" / "workshop" / "content" / "294100")
             self.config.steamcmd_mods_path = new_path
     
     def get(self, key: str) -> Any:

@@ -167,13 +167,18 @@ class ModScanner:
             
             # 部署准备：Local Mod 集合 (用于部署时排除)
             local_mod_ids_for_deploy = set()
-            # 部署准备：Workshop Mod 候选列表 (路径)
+            # 部署准备：Workshop Mod 和 Self Mod 候选列表 (路径)
+            self_mods_paths_for_deploy = []
             workshop_paths_for_deploy = []
 
             # 获取本地 Mods 根目录 (用于判定是否同级冲突)
             local_mods_root = settings.config.local_mods_path
             if local_mods_root: 
                 local_mods_root = os.path.normpath(local_mods_root).lower()
+            
+            self_mods_root = settings.config.self_mods_path
+            if self_mods_root:
+                self_mods_root = os.path.normpath(self_mods_root).lower()
             
             workshop_mods_root = settings.config.workshop_mods_path
             if workshop_mods_root:
@@ -193,8 +198,8 @@ class ModScanner:
                         mods_to_upsert.append(mod)
                     
                     # 收集部署信息
-                    self._classify_for_deploy(mod, local_mods_root, workshop_mods_root, 
-                                              local_mod_ids_for_deploy, workshop_paths_for_deploy)
+                    self._classify_for_deploy(mod, local_mods_root,self_mods_root, workshop_mods_root, 
+                        local_mod_ids_for_deploy, self_mods_paths_for_deploy, workshop_paths_for_deploy)
                     continue
 
                 # 情况 B: 多个实例 -> 判定冲突类型
@@ -213,7 +218,6 @@ class ModScanner:
                         if full_mod:
                             mod.update(full_mod) # 更新为完整数据
                             del mod['_skipped']
-                
                     parent_dir = os.path.dirname(mod['path']).lower()
                     by_parent[parent_dir].append(mod)
 
@@ -248,8 +252,8 @@ class ModScanner:
                 # 查询时由 DAO 根据 Profile 过滤，部署时由下方逻辑过滤
                 for mod in entries:
                     mods_to_upsert.append(mod)
-                    self._classify_for_deploy(mod, local_mods_root, workshop_mods_root, 
-                                              local_mod_ids_for_deploy, workshop_paths_for_deploy)
+                    self._classify_for_deploy(mod, local_mods_root,self_mods_root, workshop_mods_root, 
+                        local_mod_ids_for_deploy, self_mods_paths_for_deploy, workshop_paths_for_deploy)
 
             # --- 4. 批量入库 ---
             # 这是数据安全最关键的一步
@@ -268,14 +272,33 @@ class ModScanner:
                     raise e
             
             deploy_msg = "Skipped deployment"
-            logger.debug(f"Skip deployment: {settings.config.use_workshop_mods}, current_profile {settings.config.current_profile_id != 'default'}")
-            if settings.config.use_workshop_mods and settings.config.current_profile_id != 'default':
+            
+            if settings.config.use_self_mods :
                 # --- 6. 自动部署链接 (Deployment) ---
                 if local_mods_root and os.path.exists(local_mods_root):
                     # 遮蔽策略：过滤掉 ID 已经在 Local 存在的 Workshop Mod
                     final_links_to_create = []
-                    for w_path, w_id in workshop_paths_for_deploy:
+                    for w_path, w_id in self_mods_paths_for_deploy:
                         if w_id not in local_mod_ids_for_deploy:
+                            final_links_to_create.append(w_path)
+                        else:
+                            # 被本地遮蔽，忽略
+                            pass
+                    # 调用 FileManager 执行部署
+                    # 注意：这里需要传入 local_mods_path 的原始大小写路径（用于创建目录）
+                    success = FileManager.sync_links(local_mods_root, final_links_to_create)
+                    deploy_msg = f"Deployed {len(final_links_to_create)} links" if success else "Deployment failed"
+            else: FileManager.sync_links(local_mods_root, [])
+            
+            logger.debug(f"Skip deployment: {settings.config.use_workshop_mods}, current_profile {settings.config.current_profile_id != 'default'}")
+            if settings.config.use_workshop_mods and settings.config.current_profile_id != 'default':
+                # --- 6. 自动部署链接 (Deployment) ---
+                if local_mods_root and os.path.exists(local_mods_root):
+                    # 遮蔽策略：过滤掉 ID 已经在 Local 和 self 存在的 Workshop Mod
+                    self_mods_ids_for_deploy = [w_id for w_path, w_id in self_mods_paths_for_deploy]
+                    final_links_to_create = []
+                    for w_path, w_id in workshop_paths_for_deploy:
+                        if w_id not in local_mod_ids_for_deploy and w_id not in self_mods_ids_for_deploy:
                             final_links_to_create.append(w_path)
                         else:
                             # 被本地遮蔽，忽略
@@ -286,6 +309,7 @@ class ModScanner:
                     success = FileManager.sync_links(local_mods_root, final_links_to_create)
                     deploy_msg = f"Deployed {len(final_links_to_create)} links" if success else "Deployment failed"
             else: FileManager.sync_links(local_mods_root, [])
+            
 
             # --- 7. 完成 ---
             stats['duration'] = time.time() - start_time
@@ -339,7 +363,7 @@ class ModScanner:
         
         EventBus.emit('scan-complete', result)
 
-    def _classify_for_deploy(self, mod_data, local_root, workshop_root, local_ids_set, workshop_paths_list):
+    def _classify_for_deploy(self, mod_data, local_root, self_mods_root, workshop_root, local_ids_set, self_mods_paths_list, workshop_paths_list):
         """
         辅助函数：将 Mod 分类以便后续部署。
         """
@@ -352,7 +376,10 @@ class ModScanner:
         if local_root and local_root in mod_path:
             local_ids_set.add(pid)
             return
-
+        # 判断 Self Mod
+        if self_mods_root and self_mods_root in mod_path:
+            self_mods_paths_list.append((mod_data['path'], pid))
+            return
         # 判断 Workshop (如果是 DLC 也不需要部署)
         if workshop_root and workshop_root in mod_path:
             # 记录 (路径, ID) 元组
@@ -462,12 +489,24 @@ class ModScanner:
         workshop_id = self._resolve_workshop_id(mod_path)
         mod_data['workshop_id'] = workshop_id
         keywords = os.path.join('workshop', 'content', '294100').lower()
+        
+        
+        # 统一转为绝对路径 + 处理末尾分隔符
+        abs_path = os.path.normpath(mod_path).lower()
+        abs_base = os.path.normpath(settings.config.self_mods_path).lower()
+        abs_local = os.path.normpath(settings.config.local_mods_path).lower()
+        # 最终检测（同时判断空值）
+        is_contained = bool(abs_path and abs_base and (abs_path !=abs_local) and abs_path.startswith(abs_base))
+        # print(f"is_contained: {is_contained}, abs_path: {abs_path}, abs_base: {abs_base}")
+            
         # Source 补全逻辑
         if workshop_id and keywords in mod_path.lower():
             mod_data['url'] = f"https://steamcommunity.com/sharedfiles/filedetails/?id={workshop_id}"
             mod_data['source'] = 'workshop'
         elif is_dlc_dir:
             mod_data['source'] = 'dlc' if pkg_id != 'ludeon.rimworld' else 'core'
+        elif is_contained:
+            mod_data['source'] = 'self'
         elif 'github.com' in mod_data.get('url', '').lower():
             mod_data['source'] = 'github'
         elif mod_data.get('url', ''):

@@ -130,7 +130,7 @@ class SteamManager:
         self.steam_dir = settings.config.steam_path or self.get_steam_path()
         self.steam_exe = str(Path(self.steam_dir) / "steam.exe") if self.steam_dir else self.get_steam_path(True) 
         # SteamCMD 路径
-        self.steamcmd_dir = os.path.join(self.tools_dir, "steamcmd")
+        self.steamcmd_dir = settings.config.steam.steamcmd_path or os.path.join(self.tools_dir, "steamcmd")
         self.steamcmd_exe = self._get_steamcmd_exe_path()
         # Steam Agent 路径 (隔离环境)
         self.agent_dir = os.path.join(self.tools_dir, "steam_agent")
@@ -1012,14 +1012,18 @@ class SteamManager:
         return self._merge_acf_and_log(acf_data, log_data)
         
     
-    def get_collection_items(self, collection_id: str) -> list:
+    def get_collection_items(self, collection_id: str) -> dict:
+        """
+        根据合集ID获取合集下的所有子模组ID
+        
+        """
         # 不论传入的是链接字符串还是整数，都提取数字
         collection_id_match = re.search(r'\d+', collection_id)
         if collection_id_match:
             collection_id = collection_id_match.group()
         else:
             logger.error(f"无法从传入参数获取合集ID: {collection_id}")
-            return []
+            return {}
         url = "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/"
         data = {
             "collectioncount": "1",
@@ -1028,6 +1032,7 @@ class SteamManager:
         response = requests.post(url, data=data)
         # print(response.text)
         json_data = response.json()
+        # print(json_data)
         # 解析返回的 JSON 数据，提取所有子模组的 ID
         items =[]
         try:
@@ -1036,9 +1041,9 @@ class SteamManager:
                 if child['filetype'] == 0: # 0 代表普通模组
                     items.append(child['publishedfileid'])
         except KeyError as e:
-            logger.error(f"合集解析失败或合集为空: {e}")
+            logger.error(f"Get collection {collection_id} items failed: {e}")
             
-        return items
+        return {"collection_id": collection_id, "workshop_ids": items}
 
 if __name__ == "__main__":
     steam_mgr = SteamManager()

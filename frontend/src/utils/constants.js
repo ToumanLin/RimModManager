@@ -163,6 +163,7 @@ export const SOURCE_TYPE_MAP = {
   'github': 'GitHub',
   'workshop': 'Steam 创意工坊',
   'local': '本地文件',
+  'self': '管理器下载',
   'other': '其它来源'
 }
 

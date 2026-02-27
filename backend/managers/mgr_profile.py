@@ -35,7 +35,8 @@ class ProfileManager:
                     user_data_path=settings.config.user_data_path,
                     game_install_path=settings.config.game_install_path,
                     game_version=GameManager.get_game_version(settings.config.game_install_path),
-                    use_workshop_mods="steamlibrary" in settings.config.game_install_path.lower() # 默认非Steam版不加载工坊
+                    use_workshop_mods="steamlibrary" in settings.config.game_install_path.lower(), # 默认非Steam版不加载工坊
+                    use_self_mods=True, # 默认加载 Self Mod
                 )
             self.activate_profile('default')  # 切换到默认环境
         else:
@@ -81,6 +82,7 @@ class ProfileManager:
                 game_install_path=data.get('game_install_path', settings.config.game_install_path),
                 game_version=GameManager.get_game_version(data.get('game_install_path', settings.config.game_install_path)),
                 use_workshop_mods=data.get('use_workshop_mods', False),
+                use_self_mods=data.get('use_self_mods', False), # 默认不加载 Self Mod
                 is_steam=isSteam,
                 run_commands=data.get('run_commands', [])
             )
@@ -233,6 +235,7 @@ class ProfileManager:
                 os.makedirs(settings.config.game_saves_path)
         # 控制是否扫描工坊
         settings.config.use_workshop_mods = profile.use_workshop_mods if profile.id != 'default' else True
+        settings.config.use_self_mods = profile.use_self_mods   # 控制是否扫描 Self Mod
         # 合并自定义参数
         settings.config.run_commands = profile.run_commands if profile.run_commands else []
         # 强制持久化到 config.json

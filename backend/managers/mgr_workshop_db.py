@@ -10,8 +10,6 @@ from dateutil import parser
 from backend.utils.logger import logger
 from backend.settings import settings
 
-# todo 外置数据转为数据库降低占用
-
 class WorkshopDBManager:
     """
     社区数据库管理器

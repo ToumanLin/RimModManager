@@ -48,7 +48,8 @@ class GameProfile(BaseModel):
     user_data_path = cast(str, CharField())                         # 【核心】自定义的数据存储路径 (-savedatafolder)
     # 策略配置
     run_commands = cast(list[str], UTF8JSONField(default=list))     # 运行命令，如 ["-batchmode", "-logFile", "log.txt"]
-    use_workshop_mods = cast(bool, BooleanField(default=True))      # 是否加载公共工坊 Mod
+    use_workshop_mods = cast(bool, BooleanField(default=False))      # 是否加载公共工坊 Mod
+    use_self_mods = cast(bool, BooleanField(default=True))          # 是否加载管理器 Mod
     is_steam = cast(bool, BooleanField(default=False))              # 是否为 Steam 版本
     # 状态
     last_played_time = cast(int, BigIntegerField(default=0))        # 最后一次活动时间
@@ -72,7 +73,7 @@ class ModAsset(BaseModel):
     # 路径与来源
     path = cast(str, CharField())                                    # 本地储存路径，绝对路径
     url = cast(str, CharField(null=True))                            # 网络地址，如 github 仓库地址、steam 创意工坊地址
-    source = cast(str, CharField(default='local'))                   # 来源，如 steam, local, git, dlc, other
+    source = cast(str, CharField(default='local'))                   # 来源，如 steam, local, git, dlc, other, self
     icon_path = cast(str, CharField(null=True))                      # 图标路径
     preview_path = cast(str, CharField(null=True))                   # 预览图片路径
     gallery_paths = cast(list[str], UTF8JSONField(default=list))           # 画廊图片路径列表，包括本地或网络路径 ['img1.jpg', 'img2.jpg']

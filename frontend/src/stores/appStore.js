@@ -116,10 +116,12 @@ export const useAppStore = defineStore('app', () => {
     prefer_steam_launch: true,           // 是否优先通过 Steam 启动游戏
 
     home_path: '',
-    steam_mods_path: '',
-    mods_path: '',
-    user_rules_path: '',
+    steamcmd_mods_path: '',
+    self_mods_path: '',
+    use_self_mods: true,
+    move_old_self_mods: false,
 
+    user_rules_path: '',
     community_rules_url: '',
     community_rules_path: '',
     community_workshop_db_url: '',
@@ -144,7 +146,6 @@ export const useAppStore = defineStore('app', () => {
       tooltip_hover_time: 1000,  // 鼠标悬停显示提示时间 (毫秒)
       show_mod_hover_panel: true,  // 是否显示 Mod 悬停面板
       double_click_active_mod: true,  // 是否双击启用/停用 Mod
-
       main_layout: JSON.parse(JSON.stringify(DEFAULT_MAIN_LAYOUT)),  // 主界面布局配置
 
       show_icons_cloud: true,  // 是否显示动态图标云
@@ -844,6 +845,7 @@ export const useAppStore = defineStore('app', () => {
     }
     return false
   }
+  // 获取订阅合集列表
   const getCollectionItems = async (collection_id) => {
     if (!window.pywebview) return
     const res = await window.pywebview.api.steam_collection_items_get(collection_id)
@@ -1032,7 +1034,6 @@ export const useAppStore = defineStore('app', () => {
   const _performUpdateAction = async () => {
       const info = updateState.info
       if (!info) return
-
       // 如果是 Ready 状态，弹出最后确认框 (因为会重启)
       if (info.local_status === 'ready' || updateState.downloadStatus === 'ready') {
             const confirmStore = useConfirmStore()
@@ -1046,7 +1047,6 @@ export const useAppStore = defineStore('app', () => {
 
       // 调用统一接口
       const res = await window.pywebview.api.update_trigger_action()
-      
       if (checkResult(res,'开始下载更新包')) {
           // 如果后端开始下载，这里不需要做什么，因为 EventListener 会接管进度条
           if (res.data && res.data.status === 'downloading') {

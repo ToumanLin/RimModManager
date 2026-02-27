@@ -244,6 +244,7 @@ class API:
                 'game_install_path': settings.config.game_install_path,
                 'user_data_path': settings.config.user_data_path,
                 'use_workshop_mods': "steamlibrary" in settings.config.game_install_path.lower(),
+                'use_self_mods': True,
             })
         
         # 2. 获取当前环境的 Mod 数据 (包含用户自定义数据), 并排除缺失的 Mod
@@ -396,11 +397,10 @@ class API:
         """保存单个设置项"""
         try:
             # 如果修改的是核心路径，同步到当前环境
-            if key in ['game_install_path', 'user_data_path', 'use_workshop_mods', 'run_commands']:
+            if key in ['game_install_path', 'user_data_path', 'use_workshop_mods', 'use_self_mods', 'run_commands']:
                 pid = settings.config.current_profile_id
                 # 更新数据库中的 Profile
                 updates = {key: value}
-                if key == 'use_workshop_mods': updates = {'use_workshop_mods': value}
                 self.profile_mgr.update_profile(pid, updates)
                 # 应用并触发同步逻辑
                 self.profile_mgr.activate_profile(pid)
@@ -426,11 +426,10 @@ class API:
             # 批量更新
             for k, v in settings_obj.items():
                 # 如果修改的是核心路径，同步到当前环境
-                if k in ['game_install_path', 'user_data_path', 'use_workshop_mods', 'run_commands']:
+                if k in ['game_install_path', 'user_data_path', 'use_workshop_mods', 'use_self_mods', 'run_commands']:
                     pid = settings.config.current_profile_id
                     # 更新数据库中的 Profile
                     updates = {k: v}
-                    if k == 'use_workshop_mods': updates = {'use_workshop_mods': v}
                     self.profile_mgr.update_profile(pid, updates)
                 settings.set(k, v) # settings.set 内部会自动 save，这里可能稍微有点IO冗余，但安全
             
@@ -473,7 +472,10 @@ class API:
                 # 2. Local Mods (当前环境的 Mods 目录)
                 if cfg.local_mods_path and os.path.exists(cfg.local_mods_path):
                     paths_to_scan.append(cfg.local_mods_path)
-                # 3. Workshop Mods (公共工坊目录)
+                # 3. Self Mods (管理器的 Mods 目录)
+                if cfg.self_mods_path and os.path.exists(cfg.self_mods_path) and cfg.use_self_mods:
+                    paths_to_scan.append(cfg.self_mods_path)
+                # 4. Workshop Mods (公共工坊目录)
                 # Profile 禁用了 Workshop (use_workshop_mods=False)，则不再扫描
                 if cfg.workshop_mods_path and os.path.exists(cfg.workshop_mods_path) and cfg.use_workshop_mods:
                     paths_to_scan.append(cfg.workshop_mods_path)
