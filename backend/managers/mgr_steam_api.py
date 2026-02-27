@@ -18,6 +18,7 @@ if __name__ == "__main__":
         sys.path.insert(0, str(project_root))
 
 from backend.utils.logger import logger
+from backend.settings import settings
 # from backend.managers.mgr_network import network_mgr
 from backend.database.models import SteamItemCache, db
 
@@ -68,13 +69,10 @@ class SteamWebAPI:
                 }
                 for idx, wid in enumerate(batch_ids):
                     data[f"publishedfileids[{idx}]"] = str(wid) # type: ignore
-                
                 try:
                     res = requests.post(url, data=data, timeout=10)
                     res_data = res.json().get("response", {}).get("publishedfiledetails", [])
-                    
-                    print(f"Steam API 返回 {len(res_data)} 条数据",res_data)
-                    
+                    # print(f"Steam API 返回 {len(res_data)} 条数据",res_data)
                     cache_batch = []
                     for item in res_data:
                         wid = str(item.get("publishedfileid"))
@@ -82,8 +80,8 @@ class SteamWebAPI:
                         previews = item.get("previews", [])
                         screenshots = [p.get("url") for p in previews if p.get("preview_type") == 0]
                         # 【兜底】如果 API 未返回截图，尝试从 HTML 中提取
-                        if not screenshots: 
-                            screenshots = cls._fetch_screenshots_via_scraper(wid)
+                        # if not screenshots: 
+                        #     screenshots = cls._fetch_screenshots_via_scraper(wid)
                         detail = {
                             "title": item.get("title"),
                             "description": item.get("description", ""),
@@ -98,7 +96,6 @@ class SteamWebAPI:
                             **detail,
                             "last_sync_time": current_time
                         })
-                    
                     # 批量更新缓存
                     with db.atomic():
                         SteamItemCache.insert_many(cache_batch).on_conflict_replace().execute()
@@ -132,10 +129,13 @@ class SteamWebAPI:
         try:
             # 使用 network_mgr 提供的代理环境
             # proxies = network_mgr.get_proxy_env()
+            lang = settings.config.language.lower()
+            prefix, suffix = lang.split("-", 1)
+            steam_lang = f"{prefix}-{suffix.upper()}"
             # 伪装浏览器 User-Agent 避免被拦截
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+                'Accept-Language': f'{steam_lang};q=0.9,en;q=0.8'
             }
             
             logger.debug(f"Triggering Scraper Fallback for Mod: {workshop_id}")

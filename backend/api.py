@@ -44,11 +44,11 @@ from backend.database.models import ModAsset, UserModData, init_db, db
 from backend.database.dao import ModDAO, GroupDAO
 
 # 3. 引入业务逻辑管理器
+from backend.scanner.parser_dlc import DLCParser
+from backend.scanner.mod_scanner import ModScanner
 from backend.managers.mgr_game import GameManager
 from backend.managers.mgr_load_order import LoadOrderManager
 from backend.managers.mgr_files import FileManager, PathChecker
-from backend.scanner.parser_dlc import DLCParser
-from backend.scanner.mod_scanner import ModScanner
 from backend.managers.mgr_game_logs import GameLogManager
 from backend.managers.mgr_sorter import OrderSorter
 from backend.managers.mgr_download import DownloadManager, TaskStatus
@@ -1852,9 +1852,9 @@ class API:
         # 3. 获取子项详情
         children_details = SteamWebAPI.fetch_item_details(child_wids)
         
-        print("合集信息:",coll_info)
-        print("子项 ID:",child_wids)
-        print("子项详情:",list(children_details.values())[:2])
+        # print("合集信息:",coll_info)
+        # print("子项 ID:",child_wids)
+        # print("子项详情:",list(children_details.values())[:2])
         
         # 4. 对比本地 ACF 安装记录
         installed_wids = self.steam_mgr.get_installed_workshop_ids()
@@ -1885,7 +1885,6 @@ class API:
         details = SteamWebAPI.fetch_item_details([workshop_id], force_refresh=force_refresh)
         info = details.get(str(workshop_id))
         if not info: return ApiResponse.error("无法从 Steam 获取该模组详情")
-        print(info)
         
         # 将原始截图 URL 转换为代理缓存 URL
         cache_screenshots = []

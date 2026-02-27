@@ -39,7 +39,6 @@ class GameProfile(BaseModel):
     """
     游戏环境配置方案
     """
-    
     id = cast(str, CharField(primary_key=True))                     # uuid
     name = cast(str, CharField())                                   # 显示名称，如 "Steam 1.5", "Local 1.4"
     description = cast(str, TextField(null=True))                   # 描述

@@ -70,9 +70,7 @@ class WorkshopDBManager:
         # 支持自动寻找 .gz 文件后缀
         if not path.exists() and path.with_suffix(path.suffix + '.gz').exists():
             path = path.with_suffix(path.suffix + '.gz')
-            
         if not path.exists(): return False
-
         try:
             if str(path).endswith(".gz"):
                 with gzip.open(path, 'rt', encoding='utf-8-sig') as f:
