@@ -213,6 +213,9 @@
     <!-- 提示词管理器 -->
     <PromptManager />
 
+    <!-- 工坊更新管理中心 -->
+    <WorkspaceOverlay />
+
     <!-- 环境管理抽屉 -->
     <ProfileDrawer /> 
     
@@ -265,6 +268,7 @@ import ProfileDrawer from './components/ProfileDrawer.vue'
 import Test from './components/temp/test.vue'
 import AiReviewModal from './components/AiReviewModal.vue'
 import PromptManager from './components/PromptManager.vue'
+import WorkspaceOverlay from './components/workspace/WorkspaceOverlay.vue'
 
 
 

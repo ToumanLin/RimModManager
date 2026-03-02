@@ -10,6 +10,7 @@ import { useRuleStore } from './ruleStore'
 import { useConfirmStore } from './confirmStore'
 import { useProfileStore } from './profileStore'
 import { cleanRichText } from '../utils/unityTextParser'
+import { useWorkspaceStore } from './workspaceStore'
 
 export const useAppStore = defineStore('app', () => {
   const toast = createToastInterface()
@@ -326,9 +327,6 @@ export const useAppStore = defineStore('app', () => {
     if (!window.pywebview) return
     isLoading.value = true
     try {
-      // 刷新动态规则
-      const ruleStore = useRuleStore()
-      ruleStore.fetchRules()
       // 调用后端获取全量数据
       const res = await window.pywebview.api.get_initial_data()
       if (checkResult(res, '刷新数据')) {
@@ -357,6 +355,11 @@ export const useAppStore = defineStore('app', () => {
           uiState.showSettingsPanel = true
         }
       }
+      // 刷新动态规则
+      const ruleStore = useRuleStore()
+      ruleStore.fetchRules()
+      const workspaceStore = useWorkspaceStore()
+      await workspaceStore.initData()
     } catch (e) {
       toast.error(`刷新数据失败: \n${e.message}`)
     } finally {
@@ -813,6 +816,7 @@ export const useAppStore = defineStore('app', () => {
       
     }
   }
+  // 下载创意工坊项目
   const downloadWorkshopItems = async (workshop_ids) => {
     if (!window.pywebview) return
     const res = await window.pywebview.api.steamcmd_download(workshop_ids)

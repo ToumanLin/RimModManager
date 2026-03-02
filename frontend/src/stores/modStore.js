@@ -443,6 +443,24 @@ export const useModStore = defineStore('mods', () => {
       appStore.isLoading = false;
     }
   }
+  const disableMods = async (path_hashs, disabled = true) => {
+    if (!path_hashs || path_hashs.length === 0) return;
+    if(disabled) {
+      const confirm = await confirmStore.confirmAction(
+        '禁用确认',
+        `确定要禁用该模组吗？\n禁用后将无法在游戏中使用，直到重新启用。`,
+        { type: 'warning' }
+      );
+      if(!confirm) return
+    }
+    appStore.isLoading = true;
+    const res = await window.pywebview.api.mods_disable(path_hashs, disabled);
+    if (appStore.checkResult(res, '禁用选中的模组')) {
+      // 成功后会在完成时刷新数据
+      scanMods()
+    }
+    appStore.isLoading = false;
+  }
 
   // --- Mod数据操作 ---
   // 更新Mod用户数据
@@ -1149,7 +1167,7 @@ export const useModStore = defineStore('mods', () => {
     // Actions
     setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, 
     updateInactiveIds, takeInactiveIds, removeIdsOnAllList, selectMods, clearSelection, changeModsActive,
-    scanMods, scanComplete, autoSortMods, localizeSelectedMods,
+    scanMods, scanComplete, autoSortMods, localizeSelectedMods, disableMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, batchUpdateModsUserData,
     setModsColor, setModsType, addModsTags, removeModsTags, selectModsTag, selectModsGroup, 
     getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getMissingLocalDependencies, getMissingLanguagePacks,
