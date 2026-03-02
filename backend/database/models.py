@@ -161,9 +161,27 @@ class GithubTimeline(BaseModel):
     action = CharField()  # subscribe, download, update, extract_ok, error
     message = TextField()
 
+class SubscribedCollection(BaseModel):
+    """
+    用户收藏/订阅的合集名录
+    """
+    id = cast(str, CharField(primary_key=True)) # 合集的 Workshop ID
+    title = cast(str, CharField(null=True))
+    description = cast(str, TextField(null=True))
+    preview_url = cast(str, CharField(null=True))
+    # 统计快照
+    total = cast(int, IntegerField(default=0))
+    need_download = cast(int, IntegerField(default=0))
+    # 时间戳
+    time_updated = cast(int, BigIntegerField(default=0)) # 合集在 Steam 上的最后更新时间
+    created_time = cast(int, BigIntegerField(default=current_ms))
+
 class SystemInfo(BaseModel):
     key = cast(str, CharField(primary_key=True))
     value = cast(str, CharField())
+
+# 定义所有模型列表
+all_models = [SystemInfo, GroupMod, GroupData, UserModData, ModAsset, GameProfile, GithubTimeline, GithubModRecord, SubscribedCollection]
 
 def init_db(db_path):
     """初始化数据库"""
@@ -176,8 +194,6 @@ def init_db(db_path):
         }, timeout=30) # 增加 30 秒超时等待
         db.connect()    # 连接数据库
         
-        # 定义所有模型列表
-        all_models = [ModAsset, GameProfile, UserModData, GroupData, GroupMod, SystemInfo, GithubModRecord, GithubTimeline]
         # 1. 确保基础表存在
         db.create_tables(all_models, safe=True)
         # 2. 【核心】自动同步字段变动 (解决 no such column 报错)
@@ -211,7 +227,7 @@ def init_db(db_path):
             from backend.database.migrator import run_migrations
             run_migrations(old_v)
             # 确保其他新加的表（如果迁移里没写的话）也能创建
-            db.create_tables([ModAsset, GameProfile, UserModData, GroupData, GroupMod, SystemInfo, GithubModRecord, GithubTimeline], safe=True)
+            db.create_tables(all_models, safe=True)
             
         return True
     except Exception as e:
@@ -249,7 +265,7 @@ def clear_db():
             # 删除所有表 (cascade=True 会处理外键依赖，但 SQLite 对 cascade 支持有限，
             # 所以手动按依赖顺序删，或者直接 drop_tables)
             # 注意顺序：先删依赖别人的(GroupMod, UserModData)，再删被依赖的(Mod, GroupData)
-            db.drop_tables([GroupMod, UserModData, GameProfile, ModAsset, GroupData])
+            db.drop_tables(all_models[1:])
         # 4. 【关键】执行 VACUUM
         # 这会物理清除数据库文件中的所有数据页，重置所有自增 ID，
         # 并强制同步 WAL 文件。这相当于把 .db 文件变成了一个全新的空文件。
@@ -257,7 +273,7 @@ def clear_db():
         db.execute_sql('VACUUM;')
         # 5. 重新创建表
         with db.atomic():
-            db.create_tables([ModAsset, GameProfile, UserModData, GroupData, GroupMod])
+            db.create_tables(all_models[1:], safe=True)
             from backend.settings import settings
             GameProfile.create(
                 id='default',

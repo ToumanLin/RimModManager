@@ -40,7 +40,7 @@ from backend.managers.mgr_network import network_mgr
 
 # 2. 引入数据库层
 from backend.database.models import ModAsset, UserModData, GithubModRecord, GithubTimeline, init_db, db
-from backend.database.dao import ModDAO, GroupDAO
+from backend.database.dao import CollectionDAO, ModDAO, GroupDAO
 from backend.database.models_ext import WorkshopMeta, ext_db
 from backend.database.dao_ext import ExtDAO
 
@@ -1823,7 +1823,7 @@ class API:
         return ApiResponse.success({"missing": result})
 
     @log_api_call
-    def lifecycle_fetch_collection(self, collection_id: str):
+    def lifecycle_fetch_collection_old(self, collection_id: str):
         """
         合集解析与下载预检：一键解析合集，对比本地，返回哪些需下载、哪些已存在
         """
@@ -1981,6 +1981,95 @@ class API:
         # 如果缓存中没有，或者太旧，这里可以先返回缓存，然后异步触发一次拉取
         return ApiResponse.success(ExtDAO.get_nexus_detail(workshop_id))
     
+    # 收藏合集相关接口
+    
+    @log_api_call
+    def collection_get_all(self):
+        """从数据库获取已保存的合集列表"""
+        return ApiResponse.success(CollectionDAO.get_all())
+
+    @log_api_call
+    def collection_remove(self, collection_id: str):
+        """从数据库移除合集"""
+        CollectionDAO.delete(collection_id)
+        return ApiResponse.success(message="合集已移出名录")
+
+    @log_api_call
+    def collection_add_and_fetch(self, collection_id: str):
+        """解析、保存并返回合集完整数据 (初次接入调用)"""
+        return self.lifecycle_fetch_collection(collection_id, is_adding=True)
+
+    @log_api_call
+    def lifecycle_fetch_collection(self, collection_id: str, is_adding: bool = False):
+        """
+        核心合集解析器：
+        1. 获取合集详情
+        2. 获取子模组列表
+        3. 对比本地已安装状态
+        4. 【关键】反查外置库获取 package_id
+        5. 同步数据到数据库快照
+        """
+        coll_id = str(collection_id)
+        
+        # 1. 抓取合集本身信息
+        coll_meta, ids_to_fetch = SteamWebAPI.fetch_item_details([coll_id])
+        if not coll_meta or coll_id not in coll_meta:
+            return ApiResponse.error("无法从 Steam 获取合集元数据，请检查网络或 ID 是否正确")
+        
+        main_info = coll_meta[coll_id]
+
+        # 2. 抓取子项 ID 列表
+        child_wids = SteamWebAPI.fetch_collection_children(coll_id)
+        if not child_wids:
+            # 有些合集可能真的为空
+            return ApiResponse.success({
+                "collection": main_info,
+                "children": [],
+                "total": 0, "need_download": 0
+            })
+
+        # 3. 批量获取子项详情 (封面、标题)
+        children_details, ids_to_fetch = SteamWebAPI.fetch_item_details(child_wids)
+
+        # 4. 获取本地所有已安装的 Workshop ID 集合 (统合两个来源)
+        # 包括 Steam 客户端目录 和 管理器下载目录
+        workshop_installed = self.steam_mgr.get_installed_workshop_ids() # 原生
+        manager_installed_data = self.steam_mgr.steamcmd_merged_data()   # 管理器
+        manager_installed_ids = [int(m['workshop_id']) for m in manager_installed_data.values() if m.get('is_installed')]
+        
+        all_installed_ids = set([str(wid) for wid in (list(workshop_installed) + manager_installed_ids)])
+
+        # 5. 【增强】去外置数据库批量反查 package_id，以便前端覆写加载顺序
+        from backend.database.models_ext import WorkshopMeta
+        # 批量查，一次 SQL 搞定
+        meta_records = WorkshopMeta.select(WorkshopMeta.workshop_id, WorkshopMeta.package_id).where(WorkshopMeta.workshop_id.in_(child_wids))
+        pid_map = {str(m.workshop_id): m.package_id for m in meta_records}
+
+        # 6. 组装 Children 数据
+        result_children = []
+        for wid in child_wids:
+            info = children_details.get(wid, {})
+            result_children.append({
+                "workshop_id": wid,
+                "package_id": pid_map.get(wid), # 后端在这里把 package_id 补上
+                "title": info.get("title", f"Mod {wid}"),
+                "preview_url": info.get("preview_url", ""),
+                "is_installed": wid in all_installed_ids
+            })
+
+        # 7. 计算统计
+        total_count = len(result_children)
+        missing_count = len([c for c in result_children if not c['is_installed']])
+
+        # 8. 【持久化】将最新快照同步到数据库
+        CollectionDAO.upsert_collection(coll_id, main_info, total_count, missing_count)
+
+        return ApiResponse.success({
+            "collection": main_info,
+            "children": result_children,
+            "total": total_count,
+            "need_download": missing_count
+        })
     
     # GitHub 相关接口
     
@@ -2016,6 +2105,8 @@ class API:
     def github_get_subscribed(self):
         """获取所有已订阅的 Github 仓库"""
         records = list(GithubModRecord.select().dicts())
+        for record in records:
+            record["online_info"] = self.github_mgr.fetch_repo_info(record["repo_url"])
         return ApiResponse.success(records)
 
     @log_api_call
@@ -2039,7 +2130,7 @@ class API:
                 "title": title_map[log["action"]],
                 "color": color_map[log["action"]],
             })
-        return ApiResponse.success(logs)
+        return ApiResponse.success(result)
         
     @log_api_call
     def github_remove_subscription(self, url: str):

@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict, List, cast
 import uuid
 from peewee import chunked, fn, JOIN
-from backend.database.models import GameProfile, db, ModAsset, UserModData, GroupData, GroupMod
+from backend.database.models import GameProfile, SubscribedCollection, db, ModAsset, UserModData, GroupData, GroupMod
 from backend.managers.mgr_files import file_mgr
 from backend.settings import settings
 from backend.utils.logger import logger
@@ -848,7 +848,29 @@ class GroupDAO:
                 GroupMod.insert_many(batch).execute()
     
     
-    
+class CollectionDAO:
+    @staticmethod
+    def get_all():
+        """获取所有收录的合集，按创建时间降序"""
+        return list(SubscribedCollection.select().order_by(SubscribedCollection.created_time.desc()).dicts()) # type: ignore
+
+    @staticmethod
+    def upsert_collection(coll_id: str, data: dict, total: int, need_download: int):
+        """保存或更新合集快照"""
+        return SubscribedCollection.insert(
+            id=str(coll_id),
+            title=data.get('title'),
+            description=data.get('description'),
+            preview_url=data.get('preview_url'),
+            total=total,
+            need_download=need_download,
+            time_updated=data.get('time_updated', 0)
+        ).on_conflict_replace().execute()
+
+    @staticmethod
+    def delete(coll_id: str):
+        """删除合集记录"""
+        return SubscribedCollection.delete().where(SubscribedCollection.id == str(coll_id)).execute()
     
     
     
