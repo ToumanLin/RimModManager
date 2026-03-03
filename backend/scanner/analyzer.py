@@ -4,7 +4,7 @@ import re
 # 引入通用常量
 from backend.utils.constants import LANGUAGE_MAP
 
-ignored_paths = [
+BASE_IGNORED_PATHS = [
     'Backups',
     'Cache',
     'Logs',
@@ -54,14 +54,15 @@ class ModAnalyzer:
             return self._finalize(info)
 
         # 1. 计算要忽略的路径 (黑名单)
-        ignored_paths.extend(self._get_ignored_version_paths(mod_path))
+        local_ignored_paths = list(BASE_IGNORED_PATHS)
+        local_ignored_paths.extend(self._get_ignored_version_paths(mod_path))
 
         # 2. 递归遍历
         for root, dirs, files in os.walk(mod_path):
             # --- 剪枝逻辑 (Pruning) ---
             # 如果当前路径在忽略列表中，清空 dirs 以停止向下递归，并跳过当前层的文件
             # 注意：os.walk 中修改 dirs 列表会影响后续遍历
-            if any(self._is_subpath(root, ignore) for ignore in ignored_paths):
+            if any(self._is_subpath(root, ignore) for ignore in local_ignored_paths):
                 dirs[:] = [] # 停止递归
                 continue
             

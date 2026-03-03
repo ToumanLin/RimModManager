@@ -41,7 +41,7 @@
       <!-- 包ID -->
       <div class="px-2 text-xs flex items-center gap-1 text-text-dim tracking-wider border-b border-text-main/5 pb-1" v-tooltip="selectedMod.package_id">
         <svg class="size-4" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M44 14L24 4L4 14V34L24 44L44 34V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M4 14L24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 44V24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 14L24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M34 9L14 19" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="truncate flex-1 min-w-0">{{ selectedMod.package_id }}</span>
+        <span class="truncate flex-1 min-w-0">{{ selectedMod.package_id_raw }}</span>
       </div>
       <!-- 遍历布局配置 -->
       <template v-for="block in layoutConfig" :key="block.id">

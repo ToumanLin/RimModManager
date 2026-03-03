@@ -205,18 +205,6 @@ class ModScanner:
                 # 按父目录分组
                 by_parent = defaultdict(list)
                 for mod in entries:
-                    # 如果是 skipped 的，为了入库数据的完整性，这里其实应该强制重读一次完整数据
-                    # 但为了性能，如果只是位置冲突判断，路径就够了。如果决定入库，则必须保证数据完整。
-                    if mod.get('_skipped'):
-                        # 触发重读 (这里为了代码简洁，简略处理，实际建议封装 recover 方法)
-                        # 实际上，如果发生冲突（多个实例），其中一个是 skipped，只要涉及多实例判定，强制全部重读，确保 source/path 准确。
-                        full_mod = self._process_single_mod(
-                            mod['path'], (os.path.basename(os.path.dirname(mod['path'])).lower() == 'data'),
-                            existing_snapshots, dlc_parser, forced_update=True
-                        )
-                        if full_mod:
-                            mod.update(full_mod) # 更新为完整数据
-                            del mod['_skipped']
                     parent_dir = os.path.dirname(mod['path']).lower()
                     by_parent[parent_dir].append(mod)
 
@@ -330,6 +318,8 @@ class ModScanner:
         finally:
             self._is_scanning = False
             self._stop_requested = False # 清理状态
+            # 释放线程绑定的数据库连接
+            if not db.is_closed(): db.close()
 
     def _handle_interruption(self):
         """处理中断后的清理和通知"""

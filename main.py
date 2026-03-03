@@ -1,11 +1,29 @@
+
 try:
     import pip_system_certs
     # 该模块一旦被导入，就会自动为 ssl, requests, httpx, urllib3 打补丁
 except ImportError:
     pass
 
-import multiprocessing
 import sys
+import ctypes
+
+def enable_dpi_awareness():
+    """强制开启 Windows DPI 感知，防止多屏缩放导致的窗口拉伸"""
+    if sys.platform == 'win32':
+        try:
+            # 适用于 Windows 10/11
+            ctypes.windll.shcore.SetProcessDpiAwareness(1) # PROCESS_SYSTEM_DPI_AWARE
+        except Exception:
+            try:
+                # 适用于老版本 Windows
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+# 必须在创建任何窗口前调用
+enable_dpi_awareness()
+
+import multiprocessing
 import os
 from decimal import __version__
 from backend.utils.logger import logger 
