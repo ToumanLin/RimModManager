@@ -137,7 +137,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       collections.activeChildren = updated.data.children
       collections.isChildrenLoading = false
     }
-    // 同时更新右侧名录列表中的统计数字
+    // 同时更新右侧合集列表中的统计数字
     const target = collections.savedList.find(c => c.id === updated.id)
     if (target) {
       Object.assign(target, {

@@ -329,12 +329,11 @@ export const useModStore = defineStore('mods', () => {
 
   // --- 扫描处理 ---
   // 扫描 Mod 文件
-  const scanMods = async (path, forced_update=false) => {
+  const scanMods = async (path_list=null, forced_update=false) => {
     if (appStore.scanProgress.scanning || !window.pywebview) return
     try {
-      const paths = path ? [path] : null
       // 调用 API，会立即返回 { status: 'started' }
-      const res = await window.pywebview.api.scan_mods(paths, forced_update)
+      const res = await window.pywebview.api.scan_mods(path_list, forced_update)
       if (res.status !== 'success' && res.status !== 'started') {
         console.error("启动扫描失败:", res)
         toast.error(`扫描启动失败: \n${res.message}`)

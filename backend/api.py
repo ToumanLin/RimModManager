@@ -33,7 +33,7 @@ if __name__ == "__main__":
 # 1. 引入配置管理
 from backend.settings import DATA_DIR, HOME_DIR, settings, RULES_DIR
 from backend.utils.event_bus import EventBus
-from backend._version import __version__, __build__
+from backend._version import __version__, __build__, get_changelog_since
 from backend.utils.tools import current_ms
 from backend.utils.logger import logger
 from backend.managers.mgr_network import network_mgr
@@ -169,8 +169,17 @@ class API:
         # 当 pywebview 试图序列化 API 给 JS 用时，会试图深入序列化，
         # 公开属性会导致陷入无限递归（Window -> API -> Window -> ...），最终导致堆栈溢出崩溃
         self._window = None  # 私有属性
+        self._upgrade_context = {
+            "version_changed": False,
+            "old_version": "0.0.0",
+            "new_version": __version__,
+            "actions_taken": [],      # 记录后端已经静默完成的操作
+            "pending_actions": [],    # 记录需要前端配合的操作 (如 'show_news', 'force_scan')
+            "messages": []            # 具体的提示文本
+        }
         # 2. 实例化各个管理器
         self.dlc_parser = None # 延迟初始化
+        self.workshop_db_mgr = WorkshopDBManager()
         self.game_mgr = GameManager()
         self.game_monitor = GameMonitor(self)
         self.profile_mgr = ProfileManager()
@@ -179,14 +188,48 @@ class API:
         self.scanner = ModScanner()
         self.sorter = OrderSorter()
         self.download_mgr = DownloadManager()
+        self.github_mgr = GithubManager(self.download_mgr)
         self.steam_mgr = SteamManager()
         self.ai_mgr = AIManager()
         self.browser_window = SubBrowserManager(self)
-        self.workshop_db_mgr = WorkshopDBManager()
         self.update_mgr = UpdateManager()
-        self.github_mgr = GithubManager(self.download_mgr)
+        
+        # 执行升级检查
+        self._handle_app_version_upgrade()
         logger.info("API Layer Ready.")
 
+    def _handle_app_version_upgrade(self):
+        """实例初始化时运行的升级逻辑"""
+        from backend.database.models import SystemInfo
+        last_ver_record = SystemInfo.get_or_none(SystemInfo.key == 'app_version')
+        last_version = last_ver_record.value if last_ver_record else "0.17.9"
+        current_version = __version__
+        if last_version == current_version: return
+
+        # 标记版本已变动
+        self._upgrade_context["version_changed"] = True
+        self._upgrade_context["old_version"] = last_version
+        self._upgrade_context["changelog"] = get_changelog_since(last_version)
+
+        # --- 执行具体的升级任务 ---
+        try:
+            
+            from distutils.version import LooseVersion
+            # 这里我们不强制扫，而是给前端发一个信号
+            if LooseVersion(last_version) < LooseVersion("0.17.9"): 
+                self._upgrade_context["pending_actions"].append("recommend_scan")
+                self._upgrade_context["messages"].append("检测到核心解析引擎升级，建议执行全量扫描以获得更好的兼容性。")
+                self.ai_mgr.reset_system_prompts()  # 强制重置/同步 AI 提示词
+            
+            # 弹窗展示更新日志
+            self._upgrade_context["pending_actions"].append("show_update_news")
+            # --- 升级任务执行完毕，持久化新版本号 ---
+            SystemInfo.insert(key='app_version', value=current_version).on_conflict_replace().execute()
+            logger.info(f"应用升级处理完成: {last_version} -> {current_version}")
+
+        except Exception as e:
+            logger.error(f"Upgrade tasks failed: {e}")
+    
     def _ensure_dlc_parser(self):
         """懒加载 DLC Parser"""
         if not self.dlc_parser and settings.config.game_dlc_path:
@@ -303,11 +346,24 @@ class API:
             "groups": all_groups,
             "active_load_order": active_load_order.get('active_mods', []),
             "active_load_modify_time": active_load_order.get('modify_time', 0),
-            "is_first_db_init": self.is_first_db_init
+            "is_first_db_init": self.is_first_db_init,
+            "upgrade_context": self._upgrade_context.copy() 
         }
+        self._reset_upgrade_context()
         if paths_valid and context_mods: 
             self.is_first_db_init = False   # 标记数据库已初始化
         return ApiResponse.success(result)
+    
+    def _reset_upgrade_context(self):
+        """重置升级上下文，确保信息只在启动后下发一次"""
+        self._upgrade_context = {
+            "version_changed": False,
+            "old_version": __version__,
+            "new_version": __version__,
+            "actions_taken": [],
+            "pending_actions": [],
+            "messages": []
+        }
     
     @log_api_call
     def reset_database(self):
@@ -1048,6 +1104,7 @@ class API:
         return ApiResponse.success({
             "community_rules": self.sorter.rule_mgr.community_rules, # 返回完整字典
             "community_rules_update_time": self.sorter.rule_mgr.community_rules_update_time,
+            "workshop_rules": self.sorter.rule_mgr.get_workshop_rules(),
             "user_mod_rules": self.sorter.rule_mgr.user_mod_rules,
             "user_dynamic_rules": self.sorter.rule_mgr.user_dynamic_rules,
             "settings": self.sorter.rule_mgr.settings,
@@ -1109,25 +1166,22 @@ class API:
             return ApiResponse.error(str(e))
 
     @log_api_call
-    def rule_toggle_community_mod(self, package_id: str, exclude: bool):
-        """
-        针对单个 Mod 禁用/启用社区规则提示 (黑名单操作)
-        """
-        try:
-            success = self.sorter.rule_mgr.toggle_community_mod_exclusion(package_id, exclude)
-            return ApiResponse.success() if success else ApiResponse.error("操作失败")
-        except Exception as e:
-            return ApiResponse.error(str(e))
-
-    @log_api_call
-    def rule_toggle_user_mod(self, package_id: str, exclude: bool):
+    def rule_toggle_mod(self, rule_type: str, package_id: str, exclude: bool):
         """
         针对单个 Mod 禁用/启用用户自定义单项规则 (黑名单操作)
         """
         try:
-            success = self.sorter.rule_mgr.toggle_user_mod_rule_exclusion(package_id, exclude)
+            if (rule_type == 'user'):
+                success = self.sorter.rule_mgr.toggle_user_mod_rule_exclusion(package_id, exclude)
+            elif (rule_type == 'community'):
+                success = self.sorter.rule_mgr.toggle_community_mod_exclusion(package_id, exclude)
+            elif (rule_type == 'workshop'):
+                success = self.sorter.rule_mgr.toggle_workshop_mod_exclusion(package_id, exclude)
+            else:
+                return ApiResponse.error("操作失败：无效的 Rule Type")
             return ApiResponse.success() if success else ApiResponse.error("操作失败")
         except Exception as e:
+            logger.error(f"Toggle mod rule failed: {e}", exc_info=True)
             return ApiResponse.error(str(e))
     
     @log_api_call
@@ -1735,6 +1789,9 @@ class API:
             def on_db_ready(task):
                 logger.info(f"{data_type} ready, reloading...")
                 self.workshop_db_mgr.load_all_cache()
+                # 当 workshop_db 更新完毕时，通知规则系统重建关联缓存
+                if data_type == "workshop_db":
+                    self.sorter.rule_mgr.build_workshop_rules()
                 # self.sorter.rule_mgr.load_all()
                 EventBus.send_toast(f"社区 {data_type} 数据库更新完毕！", type="success")
             def on_db_error(task):
@@ -1796,6 +1853,17 @@ class API:
             if m.get('is_installed'):
                 compare_and_add(m, 'self')
         return ApiResponse.success({"updates": updates_available})
+
+    def get_replacement_suggestion(self, package_id: str):
+        """
+        获取 Mod 替换建议：根据当前启用的 Mod，查询是否有更好的替代版本
+        """
+        # 1. 从数据库查询当前启用的 Mod 信息
+        game_version = self.profile_mgr.current_profile.game_version
+        ext_mod = ExtDAO.get_replacement_suggestion(package_id, game_version)
+        if not ext_mod: return ApiResponse.warning(f"Mod {package_id} 没有替换建议")
+        return ApiResponse.success({"replacement": ext_mod})
+        
 
     @log_api_call
     def lifecycle_resolve_dependencies(self, active_package_ids: list):

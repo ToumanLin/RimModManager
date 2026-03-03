@@ -65,6 +65,8 @@ export const useAppStore = defineStore('app', () => {
   })
   const aiBatchResults = ref([]) // 存储实时返回的 AI 数据
 
+  const upgradeContext = ref({}); // 升级上下文
+
   const taskPool = reactive(new Map());
   // 下载任务
   const downloadTasks = ref(new Map()) // 使用 Map 存储 {id: taskObject}
@@ -290,6 +292,25 @@ export const useAppStore = defineStore('app', () => {
 
       // 获取初始数据 (这里包含 settings, version 等)
       await refreshData(true)
+      let scanForce = false
+      // 只有当版本真的发生过变动，且有待处理任务时才触发
+      if (upgradeContext.value.version_changed) {
+          console.log("检测到版本升级:", upgradeContext.value.old_version, "->", upgradeContext.value.new_version);
+          
+          // 1. 处理展示更新日志弹窗
+          if (upgradeContext.value.pending_actions.includes('show_update_news')) {
+            // handleUpdate(upgradeContext.value.changelog);
+          }
+          // 2. 强制刷新数据
+          if (upgradeContext.value.pending_actions.includes('recommend_scan')) {
+            scanForce = true
+          }
+          // 3. 处理静默通知 (Toast 告知用户后端干了什么)
+          if (upgradeContext.value.actions_taken.length > 0) {
+            toast.info(`升级完成: ${upgradeContext.value.actions_taken.join(', ')}`);
+          }
+      }
+
       // 同步当前 Profile ID 到 profileStore
       if (settings.value.current_profile_id) {
         profileStore.currentProfileId = settings.value.current_profile_id
@@ -311,7 +332,7 @@ export const useAppStore = defineStore('app', () => {
         console.log("自动扫描开始...")
         toast.info("自动扫描开始...", {timeout: 1000})
         const modStore = useModStore()
-        modStore.scanMods()
+        modStore.scanMods(null, scanForce)
       }
       // 检查 Steam 工具
       checkSteamTools()
@@ -334,6 +355,7 @@ export const useAppStore = defineStore('app', () => {
         // 覆盖更新 Settings，以后端属性为主 (仅初始化时，避免覆盖用户未保存的修改)
         if (isInit && res.data.settings) {
           settings.value = res.data.settings
+          upgradeContext.value = res.data.upgrade_context;
         }else{
           Object.assign(settings.value, res.data.settings)
         }
@@ -1094,7 +1116,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, updateState, 
-    aiState, aiBatchResults, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, isGameRunning, 
+    aiState, aiBatchResults, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, isGameRunning, upgradeContext,
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode,
     // 游戏相关
     checkPath, checkPaths, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 

@@ -20,6 +20,7 @@ def enable_dpi_awareness():
                 ctypes.windll.user32.SetProcessDPIAware()
             except Exception:
                 pass
+            
 # 必须在创建任何窗口前调用
 enable_dpi_awareness()
 
@@ -63,16 +64,13 @@ def get_webview_proxy_args():
     cfg = settings.config.network.proxy
     if not cfg.enabled:
         return {}
-    
     # 构造代理服务器字符串
     # WebView2 (Chromium) 格式: --proxy-server="http://user:pass@1.2.3.4:8080"
     # 注意：Chromium 对带密码的代理支持有限，通常建议本地无密码代理
     proxy_str = f"{cfg.type}://{cfg.host}:{cfg.port}"
-    
     # 构造 bypass 规则
     # Chromium 格式: --proxy-bypass-list="foobar.com;*baz.com"
     bypass_str = ";".join(cfg.bypass_list)
-    
     return {
         "proxy_server": proxy_str,
         "proxy_bypass_list": bypass_str

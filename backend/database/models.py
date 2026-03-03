@@ -166,7 +166,7 @@ class GithubTimeline(BaseModel):
 
 class SubscribedCollection(BaseModel):
     """
-    用户收藏/订阅的合集名录
+    用户收藏/订阅的合集
     """
     id = cast(str, CharField(primary_key=True)) # 合集的 Workshop ID
     title = cast(str, CharField(null=True))

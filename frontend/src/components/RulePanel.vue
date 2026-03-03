@@ -60,7 +60,7 @@
                     class="drag-item flex items-center gap-2 px-3 py-2 bg-text-dim/10 border border-text-main/5 rounded-lg cursor-grab active:cursor-grabbing group transition-colors hover:border-accent-primary/30"
                     :class="{ 'opacity-20 bg-accent-primary/5 border-accent-primary/50': dragIndex === idx }">
                     <!-- 内部元素增加 pointer-events-none 防止干扰 dragenter -->
-                    <GripVertical class="pointer-events-none w-3.5 h-3.5 text-text-dim group-hover:text-accent-primary transition-colors" />
+                    <GripVertical class="pointer-events-none w-3.5 h-3.5  group-hover:text-accent-primary transition-colors" :class="[(globalRulesEnableMap[source]||source=='native')?'text-accent-success':'text-text-dim']" />
                     <span class="pointer-events-none text-xs font-medium text-text-main/80 select-none">{{ sourceNames[source] }}</span>
                     <span class="pointer-events-none ml-auto text-[10px] font-mono text-text-dim bg-black/40 w-4 h-4 flex items-center justify-center rounded">
                       {{ idx + 1 }}
@@ -97,6 +97,15 @@
 
               <!-- 全局开关与操作 -->
               <div class="flex items-center gap-4">
+                
+                <label v-if="currentTab == 'workshop'" class="flex items-center gap-2 cursor-pointer select-none">
+                  <div class="relative">
+                    <input type="checkbox" v-model="workshopRulesAsDependency" class="sr-only peer" >
+                    <div class="w-9 h-5 bg-text-main/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-text-main after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-text-main after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-highlight"></div>
+                  </div>
+                  <span class="text-sm text-text-dim font-bold">作为强依赖</span>
+                </label>
+
                 <label v-if="currentTab !== 'dynamic'" class="flex items-center gap-2 cursor-pointer select-none">
                   <div class="relative">
                     <input type="checkbox" v-model="filterInstalled" class="sr-only peer">
@@ -109,7 +118,6 @@
                   class="flex items-center gap-2 px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-black text-sm font-bold rounded-lg shadow-lg shadow-accent-primary/20 transition-all active:scale-95">
                   <Plus class="w-4 h-4" /> 新建规则
                 </button>
-
                 <label class="flex items-center gap-2 cursor-pointer select-none" :key="currentTab + 'Enable'">
                   <div class="relative">
                     <input type="checkbox" v-model="globalRulesEnable" class="sr-only peer" >
@@ -226,6 +234,17 @@
 
                   <!-- 规则详情 -->
                   <div class="flex-1 min-w-0 space-y-2 border-l border-text-main/5 pl-4">
+                    <!-- Dependencies -->
+                    <div v-if="item.rules.dependencies && Object.keys(item.rules.dependencies).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
+                      <span class="text-xs font-bold text-accent-highlight uppercase mt-0.5">依赖:</span>
+                      <div class="flex flex-wrap gap-1 w-full min-w-0">
+                        <span v-for="(info, targetId) in item.rules.dependencies" :key="targetId" 
+                          v-tooltip="formatTooltip(targetId, info)"
+                          class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 bg-accent-highlight/10 text-text-main text-[0.8rem] border border-accent-highlight/20 truncate cursor-help">
+                          {{ getDisplayName(targetId, info.name) }}
+                        </span>
+                      </div>
+                    </div>
                     <!-- Load After -->
                     <div v-if="item.rules.loadAfter && Object.keys(item.rules.loadAfter).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
                       <span class="text-xs font-bold text-accent-warn uppercase mt-0.5">前置:</span>
@@ -389,6 +408,7 @@ import { useConfirmStore } from '../stores/confirmStore'
 import CommonInput from './common/input/CommonInput.vue'
 import CommonNumber from './common/input/CommonNumber.vue'
 import CommonSelect from './common/input/CommonSelect.vue'
+import { IconSteam } from '../utils/constants'
 
 
 
@@ -412,14 +432,17 @@ const tabs = computed(() => [
   { id: 'dynamic', label: '动态群组规则', icon: Zap, count: allRules.value.user_dynamic_rules.length },
   { id: 'user', label: '用户Mod规则', icon: User, count: Object.keys(allRules.value.user_mod_rules).length },
   { id: 'community', label: '社区Mod规则', icon: Waypoints, count: Object.keys(allRules.value.community_mod_rules).length },
+  { id: 'workshop', label: '创意工坊依赖规则', icon: IconSteam, count: Object.keys(allRules.value.workshop_mod_rules).length },
 ])
 
 const allRules = computed(() => ({
   user_mod_rules: ruleStore.userModRules,
   community_mod_rules: ruleStore.communityModRules,
+  workshop_mod_rules: ruleStore.workshopRules,
   user_dynamic_rules: ruleStore.userDynamicRules,
   excluded_user_mods_set: new Set(ruleStore.settings?.excluded_user_mods || []),
   excluded_community_mods_set: new Set(ruleStore.settings?.excluded_community_mods || []),
+  excluded_workshop_mods_set: new Set(ruleStore.settings?.excluded_workshop_mods || []),
 }))
 
 const modIdList = computed(() => Array.from(modStore.allModsMap.values(), mod => ({label: modStore.displayModName(mod)+' ('+mod.package_id+')', value: mod.package_id})))
@@ -427,22 +450,38 @@ const modIdList = computed(() => Array.from(modStore.allModsMap.values(), mod =>
 const isModExcluded = (modId) => {
   if (currentTab.value === 'user') return allRules.value.excluded_user_mods_set.has(modId)
   if (currentTab.value === 'community') return allRules.value.excluded_community_mods_set.has(modId)
+  if (currentTab.value === 'workshop') return allRules.value.excluded_workshop_mods_set.has(modId)
 }
 
 // 规则是否启用
 const globalRulesEnable = computed({
-    get() {
-      if (currentTab.value === 'dynamic') return !!ruleStore.settings?.dynamic_rules_enabled
-      if (currentTab.value === 'user') return !!ruleStore.settings?.user_mod_rules_enabled
-      if (currentTab.value === 'community') return !!ruleStore.settings?.community_mod_rules_enabled
-    },
-    set(val) {
-      if (currentTab.value === 'dynamic') ruleStore.setGlobalEnable('dynamic', val)
-      if (currentTab.value === 'user') ruleStore.setGlobalEnable('user', val)
-      if (currentTab.value === 'community') ruleStore.setGlobalEnable('community', val)
-    }
+  get() {
+    if (currentTab.value === 'dynamic') return !!ruleStore.settings?.dynamic_rules_enabled
+    if (currentTab.value === 'user') return !!ruleStore.settings?.user_mod_rules_enabled
+    if (currentTab.value === 'community') return !!ruleStore.settings?.community_mod_rules_enabled
+    if (currentTab.value === 'workshop') return !!ruleStore.settings?.workshop_mod_rules_enabled
+  },
+  set(val) {
+    if (currentTab.value === 'dynamic') ruleStore.setGlobalEnable('dynamic', val)
+    if (currentTab.value === 'user') ruleStore.setGlobalEnable('user', val)
+    if (currentTab.value === 'community') ruleStore.setGlobalEnable('community', val)
+    if (currentTab.value === 'workshop') ruleStore.setGlobalEnable('workshop', val)
+  }
 })
-
+const workshopRulesAsDependency = computed({
+  get() {
+    return !!ruleStore.settings?.workshop_rules_as_dependency
+  },
+  set(val) {
+    ruleStore.setGlobalEnable('workshop_dependencies', val)
+  }
+})
+const globalRulesEnableMap = computed(() => ({
+  dynamic: ruleStore.settings?.dynamic_rules_enabled,
+  user: ruleStore.settings?.user_mod_rules_enabled,
+  community: ruleStore.settings?.community_mod_rules_enabled,
+  workshop: ruleStore.settings?.workshop_mod_rules_enabled,
+}))
 
 // --- 核心过滤逻辑 ---
 
@@ -463,8 +502,10 @@ const filteredDynamicRules = computed(() => {
 // 2. 静态规则过滤 (用户单项 & 社区)
 const filteredStaticRules = computed(() => {
   const q = searchQuery.value.toLowerCase().trim()
-  const source = currentTab.value === 'user' ? allRules.value.user_mod_rules : allRules.value.community_mod_rules
-  
+  let source = {}
+  if (currentTab.value === 'user') source = allRules.value.user_mod_rules
+  if (currentTab.value === 'workshop') source = allRules.value.workshop_mod_rules
+  if (currentTab.value === 'community') source = allRules.value.community_mod_rules
   // 转换为数组方便渲染: [{ id: 'package_id', rules: {...}, name: 'Mod Name', icon: '...' }]
   let list = Object.entries(source).map(([id, rules]) => {
     const mod = modStore.takeModById(id) // 从 store 获取 Mod 信息
@@ -476,12 +517,10 @@ const filteredStaticRules = computed(() => {
       isInstalled: mod && !!mod.path // 判断是否安装
     }
   })
-
   // 过滤器 1: 仅显示已安装
   if (filterInstalled.value) {
     list = list.filter(item => item.isInstalled)
   }
-
   // 过滤器 2: 搜索文本
   if (q) {
     list = list.filter(item => 
@@ -489,7 +528,6 @@ const filteredStaticRules = computed(() => {
       item.name.toLowerCase().includes(q)
     )
   }
-
   // 排序：已安装的排前面，然后按名字
   return list.sort((a, b) => {
     if (a.isInstalled !== b.isInstalled) return b.isInstalled - a.isInstalled
@@ -599,9 +637,11 @@ const deleteUserModRule = async (ruleId, event) => {
 // 切换 Mod 规则状态
 const toggleModRule = (modId) => {
   if (currentTab.value === 'community') {
-    ruleStore.toggleCommunityModRule(modId)
+    ruleStore.toggleModRule('community', modId)
   } else if (currentTab.value === 'user') {
-    ruleStore.toggleUserModRule(modId)
+    ruleStore.toggleModRule('user', modId)
+  } else if (currentTab.value === 'workshop') {
+    ruleStore.toggleModRule('workshop', modId)
   }
 }
 
@@ -610,7 +650,8 @@ const sourceNames = {
   user: '用户规则',
   native: '原版规则',
   community: '社区规则',
-  dynamic: '动态规则'
+  dynamic: '动态规则',
+  workshop: '创意工坊规则',
 }
 
 // 本地优先级列表，用于拖拽展示

@@ -84,12 +84,12 @@
       <!-- 未选中时的默认骨架屏 -->
       <div v-else class="flex-1 flex flex-col items-center justify-center opacity-20 pointer-events-none select-none">
         <BoxSelect class="size-32 mb-4" />
-        <span class="text-sm font-black uppercase tracking-widest">选择右侧指挥名录以查看阵列详情</span>
+        <span class="text-sm font-black uppercase tracking-widest">选择右侧合集以查看详情</span>
       </div>
     </div>
 
 
-    <!-- ==================== 右侧：合集名录 (55%) ==================== -->
+    <!-- ==================== 右侧：合集 (55%) ==================== -->
     <div class="w-[55%] flex flex-col gap-4">
       
       <!-- 搜索/添加栏 -->
