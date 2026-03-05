@@ -21,7 +21,7 @@
         <div v-if="simple" class="flex items-center gap-1">
 
           <div v-if="showModIcon">
-            <img v-if="!!modData.path && modData.thumb_url" :src="modData.thumb_url"
+            <img v-if="!!modData.path && modData.preview_path" :src="appStore.getThumbUrl(modData.package_id, modData.preview_path)" loading="lazy" 
               :class="`size-6 rounded object-cover border border-accent-${listColor}/30 pointer-events-none`">
             <div v-else-if="!modData.path" :class="`size-6 rounded flex items-center justify-center text-red-500 font-bold text-lg bg-red-900/50 border border-red-500/30`">!</div>
             <div v-else :class="`size-6 rounded border-2 border-dashed border-text-main/10 flex items-center justify-center`">
@@ -49,7 +49,7 @@
         </div>
         <!-- 缩略图 -->
         <div v-else class="relative">
-          <img v-if="!!modData.path && modData.thumb_url" :src="modData.thumb_url"
+          <img v-if="!!modData.path && modData.preview_path" :src="appStore.getThumbUrl(modData.package_id, modData.preview_path)" loading="lazy" 
             :class="`w-10 h-8 rounded object-cover border border-accent-${listColor}/30 pointer-events-none`">
           <div v-else-if="!modData.path" class="w-8 h-8 rounded flex items-center justify-center text-red-500 font-bold text-lg bg-red-900/50 border border-red-500/30">!</div>
           <div v-else class="w-10 h-10 rounded border-2 border-dashed border-text-main/10 flex items-center justify-center">

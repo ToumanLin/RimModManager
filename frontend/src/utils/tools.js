@@ -15,4 +15,3 @@ export function checkResult(res, workname, showSuccess = false) {
   else toast.error(`${workname}失败: \n${res.message}`)
   return false
 }
-

@@ -12,7 +12,7 @@
     <!-- 当前选中的MOD -->
     <div class="px-2 py-2 w-full flex items-center gap-2 shadow-xl/10">
       <div class="w-13 h-13 shrink-0 rounded-lg bg-black/40 border border-text-main/30 flex items-center justify-center overflow-hidden shadow-lg">
-        <img v-if="targetMod?.thumb_url" :src="targetMod.thumb_url" class="w-full h-full object-cover">
+        <img v-if="targetMod?.preview_path" :src="appStore.getThumbUrl(targetMod.package_id, targetMod.preview_path)" class="w-full h-full object-cover">
         <span v-else class="text-xs text-text-dim font-bold font-mono">MOD</span>
       </div>
       <div class="flex-1 truncate">

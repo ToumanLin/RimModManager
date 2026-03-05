@@ -124,6 +124,7 @@ export const useAppStore = defineStore('app', () => {
     community_instead_db_path: '',
     
     current_profile_id: 'default',
+    asset_port: 0,
 
     // --- 系统 ---
     language: 'ZH-cn',
@@ -339,6 +340,7 @@ export const useAppStore = defineStore('app', () => {
         // 覆盖更新 Settings，以后端属性为主 (仅初始化时，避免覆盖用户未保存的修改)
         if (isInit && res.data.settings) {
           settings.value = res.data.settings
+          settings.value.asset_port = res.data.asset_port || 0
           upgradeContext.value = res.data.upgrade_context;
         }else{
           Object.assign(settings.value, res.data.settings)
@@ -827,6 +829,32 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  
+  // 比如在 get_initial_data 中返回：asset_server_port: 54321
+  const getAssetBaseUrl = () => `http://127.0.0.1:${settings.value.asset_port}`
+
+  // 生成列表缩略图 URL
+  const getThumbUrl = (packageId, rawPath) => {
+    if (!rawPath) return ''
+    const safePath = encodeURIComponent(rawPath)
+    return `${getAssetBaseUrl()}/thumb?id=${packageId}&path=${safePath}`
+  }
+
+  // 生成详情页本地大图 URL
+  const getLocalUrl = (rawPath) => {
+    if (!rawPath) return ''
+    const safePath = encodeURIComponent(rawPath)
+    
+    return `${getAssetBaseUrl()}/local?path=${safePath}`
+  }
+  
+  // 生成网络代理图 URL (如 Steam 截图)
+  const getRemoteUrl = (remoteUrl) => {
+    if (!remoteUrl) return ''
+    const safeUrl = encodeURIComponent(remoteUrl)
+    return `${getAssetBaseUrl()}/remote?url=${safeUrl}`
+  }
+
   // === Steam客户端交互 ===
   // 检查Steam工具
   const checkSteamTools = async () => {
@@ -1104,6 +1132,7 @@ export const useAppStore = defineStore('app', () => {
     appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, updateState, 
     aiState, aiBatchResults, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, isGameRunning, upgradeContext,
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode,
+    getThumbUrl, getLocalUrl, getRemoteUrl,
     // 游戏相关
     checkPath, checkPaths, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
     startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems,

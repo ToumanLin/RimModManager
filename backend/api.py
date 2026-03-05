@@ -50,7 +50,7 @@ from backend.scanner.parser_dlc import DLCParser
 from backend.scanner.mod_scanner import ModScanner
 from backend.managers.mgr_game import GameManager
 from backend.managers.mgr_load_order import LoadOrderManager
-from backend.managers.mgr_files import file_mgr, PathChecker
+from backend.managers.mgr_files import FileManager, file_mgr, PathChecker
 from backend.managers.mgr_game_logs import GameLogManager
 from backend.managers.mgr_sorter import OrderSorter
 from backend.managers.mgr_download import DownloadManager, TaskStatus
@@ -197,6 +197,7 @@ class API:
         self._bootstrap_context(settings.config.current_profile_id)
         self.download_mgr = DownloadManager()
         self.github_mgr = GithubManager(self.download_mgr)
+        self.file_mgr = FileManager()
         self.steam_mgr = SteamManager()
         self.ai_mgr = AIManager()
         self.browser_window = SubBrowserManager(self)
@@ -371,25 +372,27 @@ class API:
                 mod['rules'] = rule_mgr.get_effective_mod_rules(mod['package_id'], mod)
             else:
                 mod['rules'] = {}
-            # 图片 URL 注入
-            pkg_id = mod['package_id']
-            # 优先使用物理路径（Source Path），即使它是被链接的 Workshop Mod
-            # 前端展示的是源文件的缩略图
-            preview_path = mod.get('preview_path')
-            icon_path = mod.get('icon_path')
-            # 1. 尝试获取已生成的缩略图路径 (物理路径)
-            thumb_path = file_mgr.get_thumbnail_path(pkg_id)
-            # 2. 决定列表图标 (优先用缩略图，没有则用原图)
-            list_thumb_path = thumb_path if thumb_path else preview_path
-            # 3. 转换为 HTTP URL
-            mod['thumb_url'] = file_mgr.get_asset_url(list_thumb_path) if list_thumb_path else None
-            # 4. 详情页大图 URL
-            mod['preview_url'] = file_mgr.get_asset_url(preview_path) if preview_path else None
-            # 5. 图标 URL
-            mod['icon_url'] = file_mgr.get_asset_url(icon_path) if icon_path else None
+                
+            # # 图片 URL 注入
+            # pkg_id = mod['package_id']
+            # # 优先使用物理路径（Source Path），即使它是被链接的 Workshop Mod
+            # # 前端展示的是源文件的缩略图
+            # preview_path = mod.get('preview_path')
+            # icon_path = mod.get('icon_path')
+            # # 1. 尝试获取已生成的缩略图路径 (物理路径)
+            # thumb_path = file_mgr.get_thumbnail_path(pkg_id)
+            # # 2. 决定列表图标 (优先用缩略图，没有则用原图)
+            # list_thumb_path = thumb_path if thumb_path else preview_path
+            # # 3. 转换为 HTTP URL
+            # mod['thumb_url'] = file_mgr.get_asset_url(list_thumb_path) if list_thumb_path else None
+            # # 4. 详情页大图 URL
+            # mod['preview_url'] = file_mgr.get_asset_url(preview_path) if preview_path else None
+            # # 5. 图标 URL
+            # mod['icon_url'] = file_mgr.get_asset_url(icon_path) if icon_path else None
             
         result.update({
             "all_mods": context_mods,  # 返回过滤后的列表
+            "asset_port": self.file_mgr.get_port(),
             "groups": all_groups,
             "active_load_order": active_load_order.get('active_mods', []),
             "active_load_modify_time": active_load_order.get('modify_time', 0),
@@ -1816,7 +1819,7 @@ class API:
             return ApiResponse.success(message=msg)
         else:
             return ApiResponse.error(msg)
-        
+    
     
     # ==========================================
     #  14. 外置数据管理 (External Data)
@@ -2149,6 +2152,8 @@ class API:
         """获取缓存详情"""
         # 如果缓存中没有，或者太旧，这里可以先返回缓存，然后异步触发一次拉取
         return ApiResponse.success(ExtDAO.get_nexus_detail(workshop_id))
+    
+    
     
     # 收藏合集相关接口
     

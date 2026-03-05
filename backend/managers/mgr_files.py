@@ -11,9 +11,10 @@ import platform
 import time
 from typing import Any, Dict, List
 from urllib.parse import unquote, quote
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image
 import requests
+import urllib.parse
 import webview # 引入 webview 库
 from send2trash import send2trash
 from backend.managers.mgr_game import GameManager
@@ -24,111 +25,115 @@ from backend.utils.logger import logger
 
 class LocalAssetHandler(SimpleHTTPRequestHandler):
     """
-    内部类：HTTP 请求处理器
-    拦截 /image?path=... 请求并返回文件流
+    统一动态资源处理器：
+    1. /local?path=...  -> 读取本地原图
+    2. /thumb?id=...&path=... -> 动态生成并返回缩略图
+    3. /remote?url=... -> 代理下载缓存网络图片
     """
+    
     def do_GET(self):
-        # 只处理 /image 路径
-        if not self.path.startswith('/image?path='): return
         try:
-            # 1. 解析参数
-            query_part = self.path.split('path=', 1)[1]
-            local_path = unquote(query_part) # 解码 URL
-            # 2. 安全与存在性检查
-            if os.path.exists(local_path) and os.path.isfile(local_path):
-                self.send_response(200)
-                # 3. 设置 MIME 类型
-                ext = os.path.splitext(local_path)[1].lower()
-                ctype = 'application/octet-stream'
-                if ext == '.png': ctype = 'image/png'
-                elif ext in ['.jpg', '.jpeg']: ctype = 'image/jpeg'
-                elif ext == '.webp': ctype = 'image/webp'
-                elif ext == '.gif': ctype = 'image/gif'
-                self.send_header('Content-type', ctype)
-                self.send_header('Access-Control-Allow-Origin', '*') # 允许跨域
-                self.send_header('Cache-Control', 'max-age=604800') # 强缓存7天(本地文件很少变)
-                self.end_headers()
-                # 4. 写入文件流 (零拷贝传输)
-                with open(local_path, 'rb') as f:
-                    # shutil.copyfileobj(f, self.wfile) # 这种方式更高效
-                    self.wfile.write(f.read())
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            # --- 路由 1：获取本地原图 ---
+            if parsed.path == '/local':
+                local_path = urllib.parse.unquote(qs.get('path', [''])[0])
+                if os.path.isfile(local_path):
+                    self._serve_local_file(local_path)
+                else:
+                    self.send_error(404, "File not found")
                 return
-            else:
-                self.send_error(404, "File not found")
+            # --- 路由 2：动态生成缩略图 (核心重构) ---
+            elif parsed.path == '/thumb':
+                pkg_id = qs.get('id', [''])[0]
+                src_path = urllib.parse.unquote(qs.get('path', [''])[0])
+                if not pkg_id or not os.path.isfile(src_path):
+                    self.send_error(404, "Source not found")
+                    return
+                target_path = os.path.join(THUMBNAIL_CACHE_DIR, f"{pkg_id}.webp")
+                # 检查缓存是否有效
+                need_generate = True
+                if os.path.exists(target_path):
+                    if os.path.getmtime(src_path) <= os.path.getmtime(target_path):
+                        need_generate = False
+                # 即时生成
+                if need_generate:
+                    try:
+                        with Image.open(src_path) as img:
+                            if img.mode not in ('RGB', 'RGBA'):
+                                img = img.convert('RGBA')
+                            img.thumbnail((64, 64), Image.Resampling.LANCZOS)
+                            img.save(target_path, 'WEBP', quality=80)
+                    except Exception as e:
+                        logger.warning(f"Thumbnail gen failed for {pkg_id}, serving original. Error: {e}")
+                        self._serve_local_file(src_path) # 生成失败，直接降级返回原图
+                        return
+                self._serve_local_file(target_path)
                 return
-        # 忽略连接中断错误 ---
-        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
-            # 客户端断开了连接（通常是列表快速滚动导致的），无需处理，直接返回
-            return
-        except Exception as e:
-            # 在控制台打印详细中文错误方便调试
-            logger.error(f"Asset Server Error ({local_path if 'local_path' in locals() else 'unknown'}): {e}")
-            # 发送给客户端的必须是 ASCII 字符，不要发送 str(e) 因为可能包含中文
-            try:
-                self.send_error(500, "Internal Server Error")
-            except:
-                pass # 如果发送错误信息时连接也断了，就彻底忽略
-            return
-        
-        # 处理 /gallery 请求
-        # 格式: /gallery?wid=123&url=https://...
-        if self.path.startswith('/gallery?'):
-            try:
-                # 1. 解析参数
-                from urllib.parse import urlparse, parse_qs
-                query = parse_qs(urlparse(self.path).query)
-                wid = query.get('wid', ['unknown'])[0]
-                remote_url = query.get('url', [None])[0]
+            # --- 路由 3：代理缓存网络图片 (完美降级) ---
+            elif parsed.path == '/remote':
+                remote_url = urllib.parse.unquote(qs.get('url', [''])[0])
                 if not remote_url:
                     self.send_error(400, "Missing URL")
                     return
-                # 2. 生成本地缓存路径
-                # 按照 workshop_id 分文件夹，文件名使用 URL 的 MD5 以防冲突
+                # MD5 生成缓存文件名
                 url_hash = hashlib.md5(remote_url.encode('utf-8')).hexdigest()
-                save_dir = GALLERY_CACHE_DIR / wid
-                save_dir.mkdir(parents=True, exist_ok=True)
-                # 简单判断后缀，默认为 jpg
-                ext = ".jpg"
-                if ".png" in remote_url.lower(): ext = ".png"
-                local_path = save_dir / f"{url_hash}{ext}"
-                # 3. 检查缓存：如果没有则下载
-                if not local_path.exists():
-                    logger.debug(f"Downloading gallery image to cache: {local_path}")
-                    resp = requests.get(remote_url, timeout=15)
-                    if resp.status_code == 200:
-                        with open(local_path, 'wb') as f:
-                            f.write(resp.content)
-                    else:
-                        self.send_error(404, "Remote image not found")
+                ext = ".png" if ".png" in remote_url.lower() else ".jpg"
+                cache_path = os.path.join(GALLERY_CACHE_DIR, f"{url_hash}{ext}")
+                # 如果没有缓存，则尝试下载
+                if not os.path.exists(cache_path):
+                    try:
+                        # 加上超时限制，避免阻塞线程
+                        resp = requests.get(remote_url, timeout=5)
+                        if resp.status_code == 200:
+                            # 写入缓存
+                            with open(cache_path, 'wb') as f:
+                                f.write(resp.content)
+                        else:
+                            self._fallback_to_browser(remote_url)
+                            return
+                    except Exception as e:
+                        logger.debug(f"Proxy download failed, fallback to original URL: {e}")
+                        self._fallback_to_browser(remote_url)
                         return
-                # 4. 复用已有的文件发送逻辑
-                self._serve_file(str(local_path))
+                self._serve_local_file(cache_path)
+                return
+            else:
+                self.send_error(404, "Invalid route")
                 
-            except Exception as e:
-                logger.error(f"Gallery Proxy Error: {e}")
-                self.send_error(500)
-            return
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            pass # 忽略前端快速滚动取消请求的错误
+        except Exception as e:
+            logger.error(f"Asset Handler Error: {e}")
+            try: self.send_error(500)
+            except: pass
 
-        self.send_error(404)
+    def _fallback_to_browser(self, original_url):
+        """【神级降级】：告诉浏览器我下载失败了，你自己去直接请求原网址吧"""
+        self.send_response(302) # Found / Redirect
+        self.send_header('Location', original_url)
+        self.end_headers()
 
-    def log_message(self, format, *args):
-        # 重写此方法以屏蔽控制台日志输出，保持清爽
-        pass
-    
-    def _serve_file(self, local_path):
-        """通用文件发送逻辑（抽取自原 do_GET）"""
-        ext = os.path.splitext(local_path)[1].lower()
-        ctype = 'image/jpeg'
+    def _serve_local_file(self, file_path):
+        """发送本地文件流并设置强缓存"""
+        ext = os.path.splitext(file_path)[1].lower()
+        ctype = 'application/octet-stream'
         if ext == '.png': ctype = 'image/png'
+        elif ext in ['.jpg', '.jpeg']: ctype = 'image/jpeg'
         elif ext == '.webp': ctype = 'image/webp'
+        elif ext == '.gif': ctype = 'image/gif'
         
         self.send_response(200)
         self.send_header('Content-type', ctype)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Cache-Control', 'max-age=2592000') # 缓存 30 天
+        self.send_header('Cache-Control', 'max-age=2592000') # 让浏览器缓存 30 天
         self.end_headers()
-        with open(local_path, 'rb') as f:
+        
+        with open(file_path, 'rb') as f:
             self.wfile.write(f.read())
+
+    def log_message(self, format, *args):
+        pass # 屏蔽控制台刷屏
 
 
 
@@ -164,7 +169,8 @@ class FileManager:
         """在后台线程启动极简 HTTP 服务器"""
         try:
             # 端口设为 0，让 OS 自动分配空闲端口
-            server = HTTPServer(('127.0.0.1', 0), LocalAssetHandler)
+            # server = HTTPServer(('127.0.0.1', 0), LocalAssetHandler)
+            server = ThreadingHTTPServer(('127.0.0.1', 0), LocalAssetHandler)   # 使用多线程服务器，避免阻塞主线程
             self._port = server.server_address[1]
             
             self._server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -173,6 +179,10 @@ class FileManager:
         except Exception as e:
             logger.error(f"File Manager: Failed to start asset server: {e}")
 
+    def get_port(self):
+        """返回当前 HTTP 服务器端口"""
+        return self._port
+    
     def get_asset_url(self, local_path):
         """
         将本地绝对路径转换为前端可访问的 HTTP URL

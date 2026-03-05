@@ -10,7 +10,7 @@
           <!-- 信息区 -->
           <div class="flex items-center gap-3">
             <div class="size-12 shrink-0 rounded-lg bg-accent-warn/20 flex items-center justify-center overflow-hidden border border-accent-warn/30">
-              <img v-if="wsStore.collections.activeDetails.preview_url" :src="wsStore.collections.activeDetails.preview_url" class="w-full h-full object-cover" />
+              <img v-if="wsStore.collections.activeDetails.preview_url" :src="appStore.getRemoteUrl(wsStore.collections.activeDetails.preview_url)" class="w-full h-full object-cover" />
               <Layers v-else class="size-6 text-accent-warn" />
             </div>
             <div class="flex-1 min-w-0">
@@ -51,7 +51,7 @@
             class="flex items-center gap-3 p-2 rounded-xl border transition-all group hover:bg-text-main/5"
             :class="(mod.is_workshop || mod.is_self || mod.is_local) ? 'border-text-main/10 bg-text-main/2' : 'border-accent-danger/30 bg-accent-danger/5 opacity-80'">
             
-            <img v-if="mod.preview_url" :src="mod.preview_url" class="size-10 rounded-lg object-cover border border-text-main/10 shadow-sm" />
+            <img v-if="mod.preview_url" :src="appStore.getRemoteUrl(mod.preview_url)" class="size-10 rounded-lg object-cover border border-text-main/10 shadow-sm" />
             <div v-else class="size-10 rounded-lg bg-black/50 border border-text-main/10 flex items-center justify-center"><Package class="size-4 text-text-dim"/></div>
             
             <div class="flex-1 min-w-0">
@@ -117,7 +117,7 @@
             :class="wsStore.collections.activeId === coll.id ? 'border-accent-warn ring-1 ring-accent-warn shadow-[0_0_25px_rgba(234,179,8,0.2)]' : 'border-text-main/10 hover:border-accent-warn/50 hover:shadow-[0_8px_20px_rgba(0,0,0,0.5)]'">
             
             <!-- 背景图 -->
-            <img v-if="coll.preview_url" :src="coll.preview_url" class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-50 group-hover:opacity-70" />
+            <img v-if="coll.preview_url" :src="appStore.getRemoteUrl(coll.preview_url)" class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-50 group-hover:opacity-70" />
             <div class="absolute inset-0 bg-linear-to-t from-bg-deep/95 via-bg-deep/60 to-transparent"></div>
             <h4 class="absolute inset-2 text-sm font-black text-text-main truncate text-shadow-lg drop-shadow-md leading-tight mb-1" v-tooltip="tooltipFormat(coll)">{{ coll.title || '未知合集' }}</h4>
             <!-- 右上角悬浮动作：删除 -->

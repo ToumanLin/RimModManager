@@ -6,10 +6,10 @@
       <!-- 图片 (优先显示大图，没有大图时回退显示 store 中的缩略图，防止留白) -->
       <Transition :name="appStore.settings.ui.detail_delay ?'fade': ''">
         <!-- 这里的 key Mod ID，变动时触发动画 -->
-        <img v-if="selectedMod.preview_url" :key="selectedMod.package_id" :src="selectedMod.preview_url" 
-          class="absolute inset-0 w-full h-full object-cover"/>
+        <img v-if="selectedMod.preview_path" :key="selectedMod.package_id" :src="appStore.getLocalUrl(selectedMod.preview_path)" 
+          class="absolute inset-0 w-full h-full object-cover" loading="lazy"/>
         <!-- 文字提示兜底 -->
-        <div v-else-if="!selectedMod.preview_url" class="absolute inset-0 flex items-center justify-center text-gray-600 bg-bg-surface">
+        <div v-else class="absolute inset-0 flex items-center justify-center text-gray-600 bg-bg-surface">
           <div class="text-center">
             <div class="text-4xl mb-2 opacity-20">IMG</div>
             <div class="text-xs">图片不存在</div>

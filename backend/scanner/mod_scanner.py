@@ -528,9 +528,9 @@ class ModScanner:
         })
 
         # 缩略图生成 (耗时操作，线程池内执行)
-        if mod_data.get('preview_path'):
-            from backend.managers.mgr_files import file_mgr
-            file_mgr.ensure_thumbnail(pkg_id, mod_data['preview_path'])
+        # if mod_data.get('preview_path'):
+        #     from backend.managers.mgr_files import file_mgr
+        #     file_mgr.ensure_thumbnail(pkg_id, mod_data['preview_path'])
             
         return mod_data
 

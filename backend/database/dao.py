@@ -167,11 +167,11 @@ class ModDAO:
             # # 3. 转换为 HTTP URL
             # asset['thumb_url'] = file_mgr.get_asset_url(list_thumb_path) if list_thumb_path else None
             
-            asset['thumb_url'] = file_mgr.get_asset_url(asset['preview_path']) # 直接把原图发过去，提高效率
-            # 4. 详情页大图 URL
-            asset['preview_url'] = file_mgr.get_asset_url(asset['preview_path']) if asset['preview_path'] else None
-            # 5. 图标 URL
-            asset['icon_url'] = file_mgr.get_asset_url(asset['icon_path']) if asset['icon_path'] else None
+            # asset['thumb_url'] = file_mgr.get_asset_url(asset['preview_path']) # 直接把原图发过去，提高效率
+            # # 4. 详情页大图 URL
+            # asset['preview_url'] = file_mgr.get_asset_url(asset['preview_path']) if asset['preview_path'] else None
+            # # 5. 图标 URL
+            # asset['icon_url'] = file_mgr.get_asset_url(asset['icon_path']) if asset['icon_path'] else None
             
             # # 分流逻辑
             # if workshop_root and workshop_root in path:

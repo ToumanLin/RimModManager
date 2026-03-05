@@ -513,7 +513,7 @@ const filteredStaticRules = computed(() => {
       id: id,
       rules: rules,
       name: mod?.name || id,
-      icon: mod?.thumb_url || null,
+      icon: mod?.preview_path ? appStore.getThumbUrl(id, mod.preview_path) : null,
       isInstalled: mod && !!mod.path // 判断是否安装
     }
   })

@@ -14,7 +14,7 @@
       ]">
       
       <!-- 头像 -->
-      <img v-if="mod.thumb_url" :src="mod.thumb_url" class="size-10 rounded object-cover border border-text-main/10 shadow-sm opacity-80 group-hover:opacity-100" />
+      <img v-if="mod.preview_path" :src="appStore.getThumbUrl(mod.package_id, mod.preview_path)" class="size-10 rounded object-cover border border-text-main/10 shadow-sm opacity-80 group-hover:opacity-100" />
       <div v-else class="size-10 rounded bg-black/40 border border-text-main/10 flex items-center justify-center">
         <span class="text-[0.6rem] text-text-dim/50 font-bold uppercase">NO IMG</span>
       </div>
@@ -116,6 +116,9 @@ import { ref, computed } from 'vue'
 import { Folder, CloudDownload, Disc } from 'lucide-vue-next'
 import { formatFileSize } from '../../../utils/uiHelper'
 import FixedPopover from '../../common/FixedPopover.vue'
+import { useAppStore } from '../../../stores/appStore'
+
+const appStore = useAppStore()
 
 const props = defineProps({
   mod: Object,

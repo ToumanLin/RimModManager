@@ -56,12 +56,12 @@
       <template v-if="workspaceStore.nexusSearch.detailData && !workspaceStore.nexusSearch.isDetailLoading">
         <!-- 头部 Banner -->
         <div class="h-64 shrink-0 relative overflow-hidden group">
-          <img v-if="workspaceStore.nexusSearch.detailData.preview_url" :src="workspaceStore.nexusSearch.detailData.preview_url" 
+          <img v-if="workspaceStore.nexusSearch.detailData.preview_url" :src="appStore.getRemoteUrl(workspaceStore.nexusSearch.detailData.preview_url)" 
             class="absolute inset-0 w-full h-full object-cover blur-md opacity-40 scale-110 transition-transform duration-1000 group-hover:scale-100 group-hover:opacity-60" />
           <div class="absolute inset-0 bg-linear-to-t from-bg-deep via-bg-deep/60 to-transparent"></div>
           
           <div class="absolute inset-0 p-8 flex gap-6 items-end">
-            <img v-if="workspaceStore.nexusSearch.detailData.preview_url" :src="workspaceStore.nexusSearch.detailData.preview_url" 
+            <img v-if="workspaceStore.nexusSearch.detailData.preview_url" :src="appStore.getRemoteUrl(workspaceStore.nexusSearch.detailData.preview_url)" 
               class="size-40 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] border-2 border-text-main/10 object-cover z-10" />
             <div class="size-40 rounded-xl bg-black/50 border-2 border-dashed border-text-main/20 flex items-center justify-center z-10" v-else>
               <span class="text-xs text-text-dim">NO IMAGE</span>

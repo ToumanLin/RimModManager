@@ -62,7 +62,7 @@
                 <div class="w-4/12 flex gap-3 pr-4 border-r border-text-main/10">
                   <!-- 图标 -->
                   <div class="shrink-0 mt-1">
-                    <img v-if="getMod(item.package_id)?.thumb_url" :src="getMod(item.package_id).thumb_url" class="size-10 rounded-lg object-cover border border-text-main/10 shadow-md">
+                    <img v-if="getMod(item.package_id)?.preview_path" :src="appStore.getThumbUrl(item.package_id, getMod(item.package_id).preview_path)" class="size-10 rounded-lg object-cover border border-text-main/10 shadow-md">
                     <div v-else class="size-10 rounded-lg border border-dashed border-text-main/20 flex items-center justify-center bg-black/20 text-text-dim/50">
                       <FolderInput class="size-5" />
                     </div>
