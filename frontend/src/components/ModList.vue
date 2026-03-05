@@ -145,13 +145,17 @@
           :group="{ name: 'mods', pull:'clone', put: allowSort ? ['mods','groups']:false, revertDrag: true }" :animation="150" 
           :size="itemHeight"
           @drop="updateChildren" @drag="startDrag"
-          @keydown.up.prevent="handleKeyNav(-1)"
-          @keydown.down.prevent="handleKeyNav(1)"
           @click="focusContainer"
           v-selectable-list="{ 
             data: displayList, 
+            selectedIds: modStore.selectedIds, 
+            onSelect: (ids, anchor) => modStore.selectMods(ids, anchor),
+            onClear: () => modStore.clearSelection(),
+            enableKeyboardNav: true,
+            onNavigate: handleDirectiveNavigate,
             clickClass: 'select-trigger',
-            swipeClass: 'swipe-trigger'
+            swipeClass: 'swipe-trigger',
+            idAttribute: 'data-id'
           }">
           <template v-slot:item="{ record, index, dataKey }">
             <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
@@ -812,6 +816,26 @@ const handleKeyNav = (direction) => {
   }
 }
 
+const handleDirectiveNavigate = (nextId, nextIndex, direction) => {
+  const vList = vListRef.value
+  if (vList) {
+    const currentOffset = vList.getOffset()
+    // 策略 A: 保持相对位置不变的无缝滚动（推荐，因为 itemHeight 计算精确）
+    vList.scrollToOffset(currentOffset + (direction * itemHeight.value))
+    // 如果你喜欢系统原生那种“到底部才滚动页面”的感觉，可以使用策略 B：
+    /*
+    const viewHeight = vList.$el.clientHeight
+    const itemTop = nextIndex * itemHeight.value
+    const itemBottom = itemTop + itemHeight.value
+    
+    if (itemTop < currentOffset) {
+      vList.scrollToOffset(itemTop)
+    } else if (itemBottom > currentOffset + viewHeight) {
+      vList.scrollToOffset(itemBottom - viewHeight)
+    }
+    */
+  }
+}
 
 // --- 记录滚动位置 ---
 // v-if 切换到 loading 时，该组件内部的 v-else 块会触发卸载

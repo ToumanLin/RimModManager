@@ -1,4 +1,3 @@
-import { useModStore } from '../stores/modStore'
 
 /**
  * 核心逻辑类，用于管理单个列表的交互状态
@@ -10,11 +9,16 @@ class SelectionManager {
     if (getComputedStyle(this.el).position === 'static') {
       this.el.style.position = 'relative'
     }
-    this.modStore = useModStore()
     
     // 配置
     this.config = {
       data: [],         // 必须传入有序的 ID 列表，用于计算范围
+      selectedIds: [],       // 当前选中的 ID 列表
+      onSelect: null,        // 选中触发的回调 (ids, anchorId) => {}
+      onClear: null,         // 清空触发的回调 () => {}
+
+      enableKeyboardNav: false, 	// 键盘导航配置
+      onNavigate: null, // 回调：(nextId, nextIndex, direction) => {}
       clickClass: 'select-trigger',  // 触发点击选择的类
       swipeClass: 'swipe-trigger',  // 触发滑动选择的类
       idAttribute: 'data-id',  // 存储ID的属性名
@@ -41,6 +45,7 @@ class SelectionManager {
     this.rafId = null         // 【优化2】rAF 句柄
     // 点击/连选状态
     this.anchorId = null // Shift 连选的锚点 ID (上一次点击的 ID)
+    this.currentFocusId = null // 记录当前的光标位置，混合键鼠操作时非常重要
 
     // 绑定上下文
     this.onMouseDown = this.onMouseDown.bind(this)
@@ -73,19 +78,19 @@ class SelectionManager {
     return this.config.data.indexOf(id)
   }
 
-  // --- 视觉选框逻辑 (新增) ---
+  // --- 视觉选框逻辑 ---
   createSelectionBox() {
     if (this.selectionBoxEl) return
     this.selectionBoxEl = document.createElement('div')
     this.selectionBoxEl.className = this.config.boxClass
     this.selectionBoxEl.style.display = 'none'
-    // 修改点：挂载到列表容器内部
+    // 挂载到列表容器内部
     this.el.appendChild(this.selectionBoxEl)
   }
 
   updateSelectionBox(currentX, currentY) {
     if (!this.selectionBoxEl) return
-    // 【优化2】使用 rAF 避免在一帧内多次重排
+    // 使用 rAF 避免在一帧内多次重排
     if (this.rafId) cancelAnimationFrame(this.rafId)
 
     this.rafId = requestAnimationFrame(() => {
@@ -93,7 +98,7 @@ class SelectionManager {
         const rect = this.el.getBoundingClientRect()
         const scrollTop = this.el.scrollTop
         const scrollLeft = this.el.scrollLeft
-
+        
         const startX = (this.startPos.x - rect.left) + this.startScrollLeft
         const startY = (this.startPos.y - rect.top) + this.startScrollTop
         
@@ -109,12 +114,12 @@ class SelectionManager {
 
         // 更新样式 (使用 transform 可能会更流畅，但 top/left 在选框场景下足够且不易出错)
         if (this.selectionBoxEl) {
-            this.selectionBoxEl.style.display = 'block'
-            // 使用 transform 可能会比 top/left 性能更好一点，但在 fixed 场景下 top/left 兼容性更好且直观
-            this.selectionBoxEl.style.left = `${left}px`
-            this.selectionBoxEl.style.top = `${top}px`
-            this.selectionBoxEl.style.width = `${width}px`
-            this.selectionBoxEl.style.height = `${height}px`
+          this.selectionBoxEl.style.display = 'block'
+          // 使用 transform 可能会比 top/left 性能更好一点，但在 fixed 场景下 top/left 兼容性更好且直观
+          this.selectionBoxEl.style.left = `${left}px`
+          this.selectionBoxEl.style.top = `${top}px`
+          this.selectionBoxEl.style.width = `${width}px`
+          this.selectionBoxEl.style.height = `${height}px`
         }
     })
   }
@@ -132,15 +137,52 @@ class SelectionManager {
   // --- 全选逻辑 ---
   onKeyDown(e) {
     if (this.config.disabled) return
+    // 1. 全选逻辑 (Ctrl+A)
     // Ctrl + A 或 Meta + A
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
       e.preventDefault() // 阻止默认的全选文本行为
       // 如果列表为空，直接返回
       if (!this.config.data || this.config.data.length === 0) return
       // 执行全选，传入的是当前列表的所有 ID
-      // 这里的 data 必须是最新的 filtered/sorted 列表 ID 数组
-      this.modStore.selectMods([...this.config.data], this.modStore.lastSelectedMod?.package_id)
+      // 调用回调函数，而不是操作 Store
+      if (this.config.onSelect) this.config.onSelect([...this.config.data], this.anchorId)
       console.log(`[vSelection] Selected all ${this.config.data.length} items.`)
+      return
+    }
+    // 2. 键盘上下导航逻辑
+    if (this.config.enableKeyboardNav && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault() // 阻止默认的页面滚动
+      if (!this.config.data || this.config.data.length === 0) return
+
+      const direction = e.key === 'ArrowDown' ? 1 : -1
+      // 确定当前光标从哪里开始找：优先 currentFocusId -> 然后 anchorId -> 最后取选中的最后一个
+      let startId = this.currentFocusId || this.anchorId || this.config.selectedIds[this.config.selectedIds.length - 1]
+      let currentIndex = this.getIndexById(startId)
+      // 如果列表什么都没选中，根据方向决定是从头还是从尾开始
+      if (currentIndex === -1) {
+          currentIndex = direction === 1 ? -1 : this.config.data.length
+      }
+      let nextIndex = currentIndex + direction
+      // 边界保护
+      if (nextIndex < 0) nextIndex = 0
+      if (nextIndex >= this.config.data.length) nextIndex = this.config.data.length - 1
+      // 没发生位移（到底/到顶了）
+      if (nextIndex === currentIndex && startId) return 
+      const nextId = this.config.data[nextIndex]
+      if (e.shiftKey) {
+          // 【高级特性】：Shift + 方向键，实现原生系统的键盘连续拉黑框选
+          this.handleRangeSelect(nextId, false)
+      } else {
+          // 普通方向键：变成单选
+          if (this.config.onSelect) this.config.onSelect([nextId], nextId)
+          this.anchorId = nextId // 不按 Shift 时，更新锚点
+      }
+      // 更新光标状态
+      this.currentFocusId = nextId
+      // 触发外部的回调，让外部组件（如 VirtualList）去处理滚动对齐
+      if (this.config.onNavigate) {
+          this.config.onNavigate(nextId, nextIndex, direction)
+      }
     }
   }
   // --- 核心逻辑 ---
@@ -158,14 +200,14 @@ class SelectionManager {
     const itemId = this.getItemId(target)
     // 点空白处清空选择。
     if (!itemId && target === this.el) {
-        this.modStore.clearSelection() 
+        if (this.config.onClear) this.config.onClear()
     }
     if (!itemId) return
 
     this.isMouseDown = true
     this.isDragging = false
     this.startPos = { x: e.clientX, y: e.clientY }
-    // 修改点：记录按下瞬间的滚动位置
+    // 记录按下瞬间的滚动位置
     this.startScrollTop = this.el.scrollTop
     this.startScrollLeft = this.el.scrollLeft
 
@@ -187,7 +229,7 @@ class SelectionManager {
       this.createSelectionBox()
       // 记录快照：如果按住 Ctrl，保留原有选中；否则清空
       if (e.ctrlKey || e.metaKey) {
-        this.selectionSnapshot = new Set(this.modStore.selectedIds)
+        this.selectionSnapshot = new Set(this.config.selectedIds)
       } else {
         this.selectionSnapshot = new Set()
       }
@@ -199,13 +241,13 @@ class SelectionManager {
       // === 模式 B: 准备点击选择 ===
       // 这里不立即执行反选逻辑，而是根据情况决定是否立即选中
       
-      const isSelected = this.modStore.selectedIds.includes(itemId)
+      const isSelected = this.config.selectedIds.includes(itemId)
       const isMulti = e.ctrlKey || e.metaKey
       const isRange = e.shiftKey
 
       if (!isMulti && !isRange && !isSelected) {
         // 场景：单选未选中的项 -> 立即选中（为了让用户能立刻拖拽它）
-        this.modStore.selectMods([itemId], itemId)
+        if (this.config.onSelect) this.config.onSelect([itemId], itemId)
         this.anchorId = itemId 
       }
       
@@ -249,19 +291,18 @@ class SelectionManager {
     this.removeSelectionBox()
     this.lastHoveredId = null // 重置
     // 如果是滑动模式，松开即结束
-    if (this.isSwiping) {
+    if (this.isSwiping || this.isDragging) {
       this.isSwiping = false
       this.isMouseDown = false
       return
     }
     // 如果发生了拖拽，则不处理点击选择逻辑 (交给 SortableJS 或其他拖拽库处理)
-    if (this.isDragging) {
-      this.isMouseDown = false
-      return
-    }
+    //if (this.isDragging) {
+    //  this.isMouseDown = false
+    //  return
+    //}
     // === 处理纯点击逻辑 (Click End) ===
     // 只有在没有发生拖拽且没在滑动时才触发
-    
     // 获取目标 ID (因为绑定在 document 上，需要重新判断 target 是否在容器内)
     // 注意：e.target 可能在松开时已经不在 el 内了，但在正常的点击操作中，Down和Up通常在同一元素上
     const itemId = this.getItemId(e.target)
@@ -272,7 +313,8 @@ class SelectionManager {
 
     const isMulti = e.ctrlKey || e.metaKey
     const isRange = e.shiftKey
-    const isSelected = this.modStore.selectedIds.includes(itemId)
+    // 读取传入的 selectedIds
+    const isSelected = this.config.selectedIds.includes(itemId)
 
     if (isRange) {
       // --- Shift 连选 (Windows 风格) ---
@@ -281,11 +323,11 @@ class SelectionManager {
       
     } else if (isMulti) {
       // --- Ctrl 多选 (反转状态) ---
-      const newSet = new Set(this.modStore.selectedIds)
+      const newSet = new Set(this.config.selectedIds)
       if (isSelected) newSet.delete(itemId)
       else newSet.add(itemId)
       
-      this.modStore.selectMods(Array.from(newSet), itemId)
+      if (this.config.onSelect) this.config.onSelect(Array.from(newSet), itemId)
       this.anchorId = itemId // 更新锚点
 
     } else {
@@ -293,10 +335,12 @@ class SelectionManager {
       // 场景：点击已选中的项。
       // 在 MouseDown 时为了允许拖拽，没有取消其他项。
       // 现在确认是点击（非拖拽），所以清除其他项，只留这一个。
-      this.modStore.selectMods([itemId], itemId)
+      if (this.config.onSelect) this.config.onSelect([itemId], itemId)
       this.anchorId = itemId
     }
 
+    // 同步鼠标点击的最后一项为 Focus，这样键鼠混用时方向键才不会跳跃
+    this.currentFocusId = itemId 
     this.isMouseDown = false
   }
 
@@ -322,12 +366,12 @@ class SelectionManager {
       if (id) newSelection.add(id)
     }
     // 数据防抖：只有结果真的变了才提交 Store
-    // 避免因为不必要的 Store 更新导致整个列表重绘
-    const currentStoreSet = new Set(this.modStore.selectedIds)
+    // 数据防抖：用传入的 selectedIds 做比较
+    const currentStoreSet = new Set(this.config.selectedIds)
     if (this.setsAreEqual(newSelection, currentStoreSet)) {
         return
     }
-    this.modStore.selectMods(Array.from(newSelection), currentId)
+    if (this.config.onSelect) this.config.onSelect(Array.from(newSelection), currentId)
   }
 
   // 辅助：Set 比较
@@ -336,13 +380,12 @@ class SelectionManager {
     for (const item of a) if (!b.has(item)) return false;
     return true;
   }
-  /**
-   * Shift 连选处理
-   */
+  
+  // Shift 连选处理
   handleRangeSelect(targetId, keepOthers = false) {
     if (!this.anchorId || !this.config.data.includes(this.anchorId)) {
         // 如果没有锚点，退化为单选并建立锚点
-        this.modStore.selectMods([targetId], targetId)
+        if (this.config.onSelect) this.config.onSelect([targetId], targetId)
         this.anchorId = targetId
         return
     }
@@ -357,14 +400,14 @@ class SelectionManager {
     const max = Math.max(start, end)
     let newSet
     if (keepOthers) {
-        newSet = new Set(this.modStore.selectedIds) // Ctrl+Shift: 保留之前的
+        newSet = new Set(this.config.selectedIds)  // Ctrl+Shift
     } else {
         newSet = new Set() // 纯 Shift: 清空其他的
     }
     for (let i = min; i <= max; i++) {
         newSet.add(this.config.data[i])
     }
-    this.modStore.selectMods(Array.from(newSet), targetId)
+    if (this.config.onSelect) this.config.onSelect(Array.from(newSet), targetId)
     // 注意：Shift 连选通常不更新 Anchor，Anchor 依然停留在最初点击的那个位置
     // 这样可以连续调整范围 (例如: 点击1, Shift点10 -> 选中1-10; 保持Shift点5 -> 选中1-5)
   }

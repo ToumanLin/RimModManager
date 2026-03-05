@@ -26,6 +26,10 @@
           </div>
           <!-- 全局动作区 (一键操作) -->
           <div class="flex gap-2 w-full">
+            <button @click="handleUnsubscribeAll" v-tooltip="'将整个合集从 Steam 订阅队列中移除'"
+              class="flex-1 py-1.5 min-w-0 bg-accent-danger/20 hover:bg-accent-danger text-accent-danger hover:text-black text-xs font-black rounded-lg border border-accent-danger/30 transition-all flex items-center justify-center gap-1">
+              <Flag class="size-3.5" /> 取订全部
+            </button>
             <button @click="handleSubscribeAll" v-tooltip="'将整个合集添加到 Steam 订阅队列'"
               class="flex-1 py-1.5 min-w-0 bg-accent-primary/20 hover:bg-accent-primary text-accent-primary hover:text-black text-xs font-black rounded-lg border border-accent-primary/30 transition-all flex items-center justify-center gap-1">
               <Flag class="size-3.5" /> 订阅全部
@@ -209,6 +213,13 @@ const handleSubscribeAll = () => {
   if (!wids.length) return
   appStore.subscribeMod(wids) // 调用 appStore 的统一方法
 }
+// 2. 取订全部
+const handleUnsubscribeAll = () => {
+  const wids = wsStore.collections.activeChildren.map(m => String(m.workshop_id))
+  if (!wids.length) return
+  appStore.unsubscribeMod(wids) // 调用 appStore 的统一方法
+}
+
 
 // 2. 仅下载缺失项 (SteamCMD)
 const handleDownloadMissing = () => {

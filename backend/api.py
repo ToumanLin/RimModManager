@@ -2059,22 +2059,42 @@ class API:
         # 2. 获取 Steam 状态数据 (ACF/Log)
         ws_map = self.steam_mgr.workshop_merged_data()
         mg_map = self.steam_mgr.steamcmd_merged_data()
+        
+        install_workshop_ids = []
         # 3. 融合数据
         # 为 workshop 域注入数据
         for mod in matrix['workshop']:
             wid = str(mod.get('workshop_id'))
+            if mod.get('path'): install_workshop_ids.append(wid)
             # 将 Steam 状态（订阅时间、真实下载时间等）直接合并进 mod 字典
             # 为了前端方便，把这些信息放在 'steam_info' 字段下，或者直接扁平化合并
             if wid in ws_map: mod['steam_status'] = ws_map[wid]
-            
+        
+        isntall_self_ids = []
         # 为 self (管理器) 域注入数据
         for mod in matrix['self']:
             wid = str(mod.get('workshop_id'))
+            if mod.get('path'): isntall_self_ids.append(wid)
             if wid in mg_map: mod['steam_status'] = mg_map[wid]
+        
+        res = {}
+        res['download_status'] = { id: data for id, data in mg_map.items() if data.get('is_installed') }
+        res['subscribed_status'] = { id: data for id, data in ws_map.items() if data.get('is_subscribed') }
+        res['missing_status'] = { id: data for id, data in mg_map.items() if data.get('is_subscribed') and not data.get('is_installed') }
+        
+        
+        afc_subscribed = set(res['subscribed_status'].keys())
+        acf_missing = set(res['missing_status'].keys())
+        path_missing = afc_subscribed - set(install_workshop_ids)
+        res['missing_workshop_ids'] = path_missing | acf_missing
+        res['subscribed_workshop_ids'] = afc_subscribed
+        res['installed_all_ids'] = set(install_workshop_ids) | set(isntall_self_ids)
+        
+        res.update(matrix)
         
         # 立即返回基础数据！(让 UI 秒现)
         # 前端拿到数据后，立刻显示出三个列表。
-        response = ApiResponse.success(matrix)
+        response = ApiResponse.success(res)
         
         # 4. 后台触发在线比对，标记可更新状态
         # 获取所有涉及的 WID

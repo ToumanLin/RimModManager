@@ -466,10 +466,8 @@ class SteamManager:
 
         # 1. 发送 Steam 指令 (过滤掉已经完美的项)
         data_dict = self.workshop_merged_data()
-        
         to_action =[]
         ws_base_path = settings.config.workshop_mods_path
-        
         for mid in target_ids:
             item = data_dict.get(mid)
             folder_exists = bool(ws_base_path and os.path.exists(os.path.join(ws_base_path, mid)))
@@ -538,12 +536,9 @@ class SteamManager:
                     self._monitor_running = False
                     break
                 current_tasks = dict(self._active_tasks)
-
             try:
                 data_dict = self.workshop_merged_data()
-                
                 tasks_to_remove =[]
-
                 for tid, task in current_tasks.items():
                     targets = task["targets"]
                     total = task["total"]
@@ -1041,7 +1036,7 @@ class SteamManager:
         获取 steamcmd 下载的创意工坊模组的ACF数据
         返回格式与 workshop_merged_data 相同
         """
-        steamcmd_acf_path = Path(self.steamcmd_dir) / "steamapps" / "workshop" / f"appworkshop_{RIMWORLD_APP_ID}.vdf"
+        steamcmd_acf_path = Path(self.steamcmd_dir) / "steamapps" / "workshop" / f"appworkshop_{RIMWORLD_APP_ID}.acf"
         steamcmd_log_path = Path(self.steamcmd_dir) / "logs" / "workshop_log.txt"
         
         # 获取文件的最新修改时间 (os.path.getmtime 非常快)
@@ -1052,7 +1047,6 @@ class SteamManager:
            log_mtime == self._last_cmd_log_mtime and \
            acf_mtime == self._last_cmd_acf_mtime:
             return self._cached_cmd_map
-        
         if steamcmd_acf_path.exists():
             acf_json = self.get_acf_json(steamcmd_acf_path)
             acf_data = self.parse_acf_data(acf_json)
@@ -1183,9 +1177,13 @@ class SteamManager:
     
 if __name__ == "__main__":
     steam_mgr = SteamManager()
-    # data = steam_mgr.workshop_merged_data()
-    # if data:
-    #     print(f"Total items: {len(data)} First item:\n", data)
+    data = steam_mgr.workshop_merged_data()
+    installed_mods = { id: da for id, da in data.items() if da.get('is_installed') }
+    not_installed_mods = { id: da for id, da in data.items() if not da.get('is_installed') }
+    if data:
+        # print(f"Total items: {len(data)} First item:\n", data)
+        print(f"Total items: {len(data)} Installed items: {len(installed_mods)} Uninstall items: {len(not_installed_mods)}")
+        print(not_installed_mods)
     # data2 = steam_mgr.steamcmd_merged_data()
     # if data2:
     #     print(f"Total items: {len(data2)} First item:\n", data2)

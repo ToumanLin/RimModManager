@@ -65,13 +65,21 @@
     </div>
 
     <!-- 2. 列表区 -->
-    <div class="flex-1 overflow-hidden relative p-1">
+    <div class="flex-1 overflow-hidden relative p-1" >
       <VirtualList 
         v-if="displayMods.length > 0"
         v-model="displayMods" dataKey="path_hash" 
         class="h-full custom-scrollbar pb-10"
         :keeps="40" :sortable="false" group="none" :disabled="true"
-      >
+        v-selectable-list="{
+          data: displayMods.map(m => m.path_hash), // 提取当前排序好的 ID 列表 (注意确认你的唯一标识是 path_hash 还是 package_id)
+          selectedIds: localSelectedIds,
+          onSelect: handleSelect,
+          onClear: () => { localSelectedIds = [] },
+          clickClass: 'matrix-select-trigger', // 确保 MatrixItem 内部有对应的 class
+          swipeClass: 'matrix-select-trigger',
+          idAttribute: 'data-id'
+        }">
         <template v-slot:item="{ record, index, dataKey }">
           <div class="relative group">
             
@@ -79,6 +87,7 @@
               :mod="record"
               :storeType="storeType"
               :lastPlayedTime="lastPlayedTime"
+              :isSelected="localSelectedIds.includes(dataKey)" 
               @contextmenu="handleContextMenu"
               @click="$emit('open-timeline', record)"
             />
@@ -132,8 +141,19 @@ const sortBy = ref('change')
 const isSortDsc = ref(true)
 const filterState = ref('default')
 
+const localSelectedIds = ref([])
 
 const lastPlayedTime = computed(() => profileStore.currentProfile?.last_played_time || 0)
+
+// 生成快速查找 根据路径哈希查找mod
+const getModsData = (path_hashs, type=null) => {
+  const pathHashSet = new Set(path_hashs)
+  if (!type) return props.mods.filter(m => pathHashSet.has(m.path_hash)) || []
+  // 满足条件时，直接将 workshop_id 推入结果数组
+  else if (type === 'workshop_id') return props.mods.reduce((acc, m) => { if (pathHashSet.has(m.path_hash)) { acc.push(m.workshop_id); } return acc; }, []);
+  else if (type === 'path') return props.mods.reduce((acc, m) => { if (pathHashSet.has(m.path_hash)) { acc.push(m.path); } return acc; }, []);
+}
+
 
 // 过滤和排序逻辑
 const displayMods = computed(() => {
@@ -165,7 +185,7 @@ const displayMods = computed(() => {
     if (sortBy.value === 'ctime') return (b.file_create_time || 0) - (a.file_create_time || 0)
     if (sortBy.value === 'change') {
       if (props.storeType === 'workshop') return (b.steam_status?.time_last_sync || 0) - (a.steam_status?.time_last_sync || 0)
-      else if(props.storeType === 'self') return (b.steam_status?.time_download || 0) - (a.steam_status?.time_download || 0)
+      else if(props.storeType === 'self') return (b.steam_status?.time_downloaded || 0) - (a.steam_status?.time_downloaded || 0)
       else return (b.file_modify_time || 0) - (a.file_modify_time || 0)
     }
     
@@ -195,19 +215,22 @@ const getModData = (id) => {
   return props.mods.find(m => m.package_id.toLowerCase() === id.toLowerCase()) || {}
 }
 
+const handleSelect = (path_hash, anchorId) => {
+  localSelectedIds.value = path_hash
+}
+
 // 取消订阅模组
-const unsubscribeMod = async (targetMod,delete_file = false) => {
+const unsubscribeMod = async (path_hashs, delete_file = false) => {
   // 只选择包含workshop_id的项目
-  const paths = [targetMod.path];
-  const workshop_ids = [targetMod.workshop_id];
-  // 遍历数组，同时收集两个字段
-  // modStore.selectedMods.forEach(m => {
-  //   // 只选择包含 workshop_id 的项目
-  //   if (m.workshop_id) {
-  //     paths.push(m.path);
-  //     workshop_ids.push(m.workshop_id);
-  //   }
-  // });
+  const pathHashSet = new Set(path_hashs);
+  const paths = [];
+  const workshop_ids = [];
+  props.mods.forEach(m => {
+    if (pathHashSet.has(m.path_hash)) {
+      paths.push(m.path);
+      workshop_ids.push(m.workshop_id);
+    }
+  })
 
   const check = await confirmStore.confirmAction('警告',`确定要取消订阅选中项${delete_file?'并删除文件':''}（${workshop_ids.length} 项）吗？${delete_file?'软件将主动删除Mod文件':'Steam 会自动删除已取消订阅的文件！'}`,{type:'error'})
   if(check) {
@@ -218,36 +241,41 @@ const unsubscribeMod = async (targetMod,delete_file = false) => {
   }
 }
 
-const downloadMod = async (targetMod) => {
-  const res = await appStore.downloadWorkshopItems([targetMod.workshop_id])
+const downloadMods = async (path_hashs) => {
+  const workshop_ids = getModsData(path_hashs, 'workshop_id')
+  const res = await appStore.downloadWorkshopItems(workshop_ids)
 }
 
-
 // === 右键菜单 ===
-const handleContextMenu = (event, targetMod) => {
+const handleContextMenu = async (event, targetMod) => {
   event.preventDefault()
   if (!targetMod) return
-
+  
+  if (!localSelectedIds.value.includes(targetMod.path_hash)) {
+    handleSelect([targetMod.path_hash], targetMod.path_hash)
+    // await nextTick()
+  }
+  const selectedNumStr = localSelectedIds.value.length > 1 ? ` (${localSelectedIds.value.length} 项)` : ''
   // 菜单
   const menuItems = [
     // { divider: true },
     { label: '查看变动', icon: Activity, action: () => emit('open-timeline', targetMod) },
     { label: '访问网页', disabled: !targetMod.url, icon: ExternalLink, action: () => appStore.openUrl(targetMod.url) },
     { label: '打开文件夹', disabled: !targetMod.path, icon: FolderInput, action: () => appStore.openPath(targetMod.path) },
-    { label: '下载/更新到管理器', disabled: !targetMod.workshop_id, icon: DownloadCloud, action: () => downloadMod(targetMod) },
+    { label: '下载到管理器' + selectedNumStr, disabled: !targetMod.workshop_id, icon: DownloadCloud, action: () => downloadMods(localSelectedIds.value) },
     { label: 'Steam操作', icon: IconSteam, disabled: targetMod.source!=='workshop', children: [
       { label: '访问创意工坊', disabled: targetMod.source!=='workshop', icon: IconSteam, action: () => appStore.openSteamWorkshopUrl(targetMod.url) },
-      { label: '订阅模组', disabled: (!targetMod.workshop_id || targetMod.steam_status?.is_subscribed), icon: Flag, action: () => appStore.subscribeMod(targetMod.package_id) },
-      { label: '取消订阅', disabled: targetMod.store!=='workshop', icon: FlagOff, level: 'danger', action: () => unsubscribeMod(targetMod) },
-      { label: '取订并删除', disabled: targetMod.store!=='workshop', icon: Trash2, level: 'danger', action: () => unsubscribeMod(targetMod,true) },
+      { label: '订阅模组' + selectedNumStr, disabled: (!targetMod.workshop_id || targetMod.steam_status?.is_subscribed), icon: Flag, action: () => appStore.subscribeMod(getModsData(localSelectedIds.value, 'workshop_id')) },
+      { label: '取消订阅' + selectedNumStr, disabled: targetMod.store!=='workshop', icon: FlagOff, level: 'danger', action: () => unsubscribeMod(localSelectedIds.value) },
+      { label: '取订并删除' + selectedNumStr, disabled: targetMod.store!=='workshop', icon: Trash2, level: 'danger', action: () => unsubscribeMod(localSelectedIds.value, true) },
     ]},
     // { label: '复制到', icon: Copy, children: [
     //   { label: '本地', disabled: targetMod.store=='local', icon: FolderDot, action: () => appStore.openSteamWorkshopUrl(targetMod.url) },
     //   { label: '创意工坊', disabled: targetMod.store=='workshop', icon: IconSteam, action: () => appStore.subscribeMod(props.item_id) },
     //   { label: '管理器', disabled: targetMod.store=='self', icon: IconSelf, action: () => unsubscribeMod() },
     // ]},
-    { label: targetMod.disabled?'解禁':'禁用', disabled: !targetMod.path, icon: targetMod.disabled? LockOpen: Lock, level: targetMod.disabled?'warn':'danger', action: () => modStore.disableMods([targetMod.path_hash],!targetMod.disabled) },
-    { label: '删除', disabled: !targetMod.path, icon: Trash2, level: 'danger', action: () => appStore.deletePaths([targetMod.path]) },
+    { label: targetMod.disabled?'解禁':'禁用' + selectedNumStr, disabled: !targetMod.path, icon: targetMod.disabled? LockOpen: Lock, level: targetMod.disabled?'warn':'danger', action: () => modStore.disableMods(localSelectedIds.value, !targetMod.disabled) },
+    { label: '删除' + selectedNumStr, disabled: !targetMod.path, icon: Trash2, level: 'danger', action: () => appStore.deletePaths(getModsData(localSelectedIds.value, 'path')) },
   ]
   menuStore.open(event, menuItems)
 }

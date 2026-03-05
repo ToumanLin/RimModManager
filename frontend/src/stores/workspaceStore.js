@@ -13,7 +13,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const librariesMods = reactive({
     local: [],
     workshop: [],
-    self: []
+    self: [],
+    missing_workshop_ids:[],
+    subscribed_workshop_ids:[],
+    installed_all_ids:[]
   })
   const librariesSize = computed(() => {
     const results ={
@@ -171,6 +174,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         librariesMods.local = res.data.local || []
         librariesMods.workshop = res.data.workshop || []
         librariesMods.self = res.data.self || []
+        librariesMods.missing_workshop_ids = res.data.missing_workshop_ids || []
+        librariesMods.subscribed_workshop_ids = res.data.subscribed_workshop_ids || []
+        librariesMods.installed_all_ids = res.data.installed_all_ids || []
+
         // 渲染完毕！如果后端在此接口中发现了需要触发的在线查询，
         // 后端会自己开启线程并发 `workspace-online-update` 事件。
       }
@@ -360,12 +367,20 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  
+  // 打开Steam创意工坊
+  const openSteamWorkshopUrl = (workshop_id, on_steam=true) => {
+    if(!workshop_id) return
+    const steamUrl = on_steam ? `https://steamcommunity.com/sharedfiles/filedetails/?id=${workshop_id}` : `steam://url/CommunityFilePage/${workshop_id}`
+    window.open(steamUrl, '_blank')
+  }
+
 
   return {
     librariesMods, isFetching, librariesSize,
     nexusSearch, timeline,
     fetchLibrariesMods, doNexusSearch, fetchNexusDetails, openTimeline, openTimelineGithub, setupListeners,
-    github, fetchGithubRepos, fetchGithubTimeline, initData,
+    github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl,
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection
   }
 })

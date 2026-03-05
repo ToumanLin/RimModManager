@@ -1,15 +1,16 @@
 <!-- src/components/workspace/components/MatrixItem.vue -->
 <template>
-  <div class="relative py-1">
+  <div class="relative py-1" :data-id="mod.path_hash">
     <!-- 主卡片 -->
     <div ref="itemRef" 
       @contextmenu.prevent="openContextMenu"
       @mouseenter="handleMouseEnter"
       @mouseleave="handleMouseLeave"
-      class="flex items-center gap-2 p-1.5 rounded-lg border transition-all cursor-pointer group bg-black/20"
+      class="matrix-select-trigger flex items-center gap-2 p-1.5 rounded-lg border transition-all cursor-pointer group bg-text-dim/10"
       :class="[
-        sourceType === 'workshop' ? 'border-accent-primary/10 hover:bg-accent-primary/10 hover:border-accent-primary/30' :
-        sourceType === 'self' ? 'border-accent-success/10 hover:bg-accent-success/10 hover:border-accent-success/30' :
+        isSelected ? 'border-accent-tip/60 ring-1 ring-accent-tip/90 hover:bg-accent-tip/20 hover:border-accent-tip/90' :
+        storeType === 'workshop' ? 'border-accent-primary/10 hover:bg-accent-primary/10 hover:border-accent-primary/30' :
+        storeType === 'self' ? 'border-accent-success/10 hover:bg-accent-success/10 hover:border-accent-success/30' :
         'border-accent-warn/10 hover:bg-accent-warn/10 hover:border-accent-warn/30'
       ]">
       
@@ -122,8 +123,9 @@ const appStore = useAppStore()
 
 const props = defineProps({
   mod: Object,
-  sourceType: String,
-  lastPlayedTime: Number
+  storeType: String,
+  lastPlayedTime: Number,
+  isSelected: Boolean,
 })
 
 const emit = defineEmits(['contextmenu'])
@@ -146,14 +148,14 @@ const isChange = computed(() => {
 })
 
 const sourceIcon = computed(() => {
-  if (props.sourceType === 'workshop') return CloudDownload
-  if (props.sourceType === 'self') return Disc
+  if (props.storeType === 'workshop') return CloudDownload
+  if (props.storeType === 'self') return Disc
   return Folder
 })
 
 const sourceColor = computed(() => {
-  if (props.sourceType === 'workshop') return 'text-accent-primary'
-  if (props.sourceType === 'self') return 'text-accent-success'
+  if (props.storeType === 'workshop') return 'text-accent-primary'
+  if (props.storeType === 'self') return 'text-accent-success'
   return 'text-accent-warn'
 })
 

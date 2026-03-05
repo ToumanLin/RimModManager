@@ -586,7 +586,8 @@ export const useAppStore = defineStore('app', () => {
         closeSettingsPanel()
 
         if (settings.value.enable_auto_scan && profileStore.activeContext.is_healthy) {
-          scanMods(null, false)
+          const modStore = useModStore()
+          await modStore.scanMods(null, false)
         } else{
           await refreshData()
         }
@@ -844,7 +845,7 @@ export const useAppStore = defineStore('app', () => {
   const getLocalUrl = (rawPath) => {
     if (!rawPath) return ''
     const safePath = encodeURIComponent(rawPath)
-    
+
     return `${getAssetBaseUrl()}/local?path=${safePath}`
   }
   
