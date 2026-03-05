@@ -369,8 +369,6 @@ export const useModStore = defineStore('mods', () => {
     // 扫描结束后，主动拉取一次最新数据刷新界面
     console.log("扫描统计:", detail)
     await appStore.refreshData()
-    const profileStore = useProfileStore()
-    await profileStore.fetchProfiles()
     // 状态注入
     if (coexistenceList.value.length > 0){
       // 处理可共存Mod，标记为 is_coexistence = true
@@ -418,11 +416,11 @@ export const useModStore = defineStore('mods', () => {
     return false
   }
   // 创建本地共存
-  const localizeSelectedMods = async () => {
+  const localizeSelectedMods = async (store='workshop') => {
     if (selectedIds.value.length === 0) return;
     // 过滤出选中的工坊模组（如果是本地模组则没必要转换）
     const workshopIds = selectedMods.value
-      .filter(m => m.source === 'workshop')
+      .filter(m => m.store === store)
       .map(m => m.package_id);
     if (workshopIds.length === 0) {
       toast.info("选中的模组中没有来自工坊的项");
@@ -430,12 +428,12 @@ export const useModStore = defineStore('mods', () => {
     }
     const confirm = await confirmStore.confirmAction(
       '本地化确认',
-      `确定要将选中的 ${workshopIds.length} 个工坊模组复制到本地目录吗？\n复制后将独立占用磁盘空间，Steam 的更新将不再影响这些本地副本。`,
+      `确定要将选中的 ${workshopIds.length} 个${store}模组复制到本地目录吗？\n复制后将独立占用磁盘空间，Steam / 管理器 的更新将不再影响这些本地副本。`,
       { type: 'info' }
     );
     if (confirm) {
       appStore.isLoading = true;
-      const res = await window.pywebview.api.localize_workshop_mods(workshopIds);
+      const res = await window.pywebview.api.localize_workshop_mods(workshopIds, store);
       if (appStore.checkResult(res, '模组本地化')) {
         // 成功后会在完成时刷新数据
       }
@@ -709,6 +707,7 @@ export const useModStore = defineStore('mods', () => {
   const modIssues = computed(() => {
     const issuesMap = new Map() // Key: modId, Value: Array<Issue>
     dataVersion.value // 依赖触发器
+    const profileStore = useProfileStore()
 
     // 辅助函数：添加问题
     const _add = (id, type, level, message, targetId = null) => {
@@ -734,8 +733,8 @@ export const useModStore = defineStore('mods', () => {
       }
 
       // B. 版本支持检查
-      if (appStore.settings.game_version) {
-        const gameVerMajor = appStore.settings.game_version.substring(0, 3)
+      if (profileStore.activeContext.game_version) {
+        const gameVerMajor = profileStore.activeContext.game_version.substring(0, 3)
         if (mod.supported_versions && mod.supported_versions.length > 0 && !mod.supported_versions.includes(gameVerMajor)) {
           _add(id, ISSUE_TYPE.WARN_VERSION_MISMATCH, ISSUE_LEVEL.WARN, 
             `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_VERSION_MISMATCH]}^^：不支持当前游戏版本··[[${gameVerMajor}]]·· \n __(支持: ··${(mod.supported_versions || []).join('··, ··')}··)__`)

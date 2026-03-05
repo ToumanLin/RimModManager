@@ -107,24 +107,12 @@ export const useAppStore = defineStore('app', () => {
   // 全局设置
   const settings = ref({
     // --- 路径 (Paths) ---
-    game_install_path: '',
-    user_data_path: '',
-    game_saves_path: '',
-    game_config_path: '',
-    game_dlc_path: '',
-    local_mods_path: '',
-
-    workshop_mods_path: '',
-    use_workshop_mods: true,
-
-    run_commands: [],
+    home_path: '',
     steam_path: '',
     prefer_steam_launch: true,           // 是否优先通过 Steam 启动游戏
-
-    home_path: '',
     steamcmd_mods_path: '',
+    workshop_mods_path: '',
     self_mods_path: '',
-    use_self_mods: true,
     move_old_self_mods: false,
 
     user_rules_path: '',
@@ -135,7 +123,6 @@ export const useAppStore = defineStore('app', () => {
     community_instead_db_url: '',
     community_instead_db_path: '',
     
-    game_version: '',
     current_profile_id: 'default',
 
     // --- 系统 ---
@@ -149,6 +136,7 @@ export const useAppStore = defineStore('app', () => {
       theme: 'system',
       font_size: 14,
       drag_delay: 30,            // 拖动判定延迟 (毫秒)
+      detail_delay: 300,          // 详情页加载延迟 (毫秒)
       tooltip_hover_time: 1000,  // 鼠标悬停显示提示时间 (毫秒)
       show_mod_hover_panel: true,  // 是否显示 Mod 悬停面板
       double_click_active_mod: true,  // 是否双击启用/停用 Mod
@@ -286,10 +274,6 @@ export const useAppStore = defineStore('app', () => {
       // 注册事件监听
       setupEventListeners()
 
-      // 先获取 Profile 列表和当前 ID
-      const profileStore = useProfileStore()
-      await profileStore.fetchProfiles()
-
       // 获取初始数据 (这里包含 settings, version 等)
       await refreshData(true)
       let scanForce = false
@@ -310,7 +294,7 @@ export const useAppStore = defineStore('app', () => {
             toast.info(`升级完成: ${upgradeContext.value.actions_taken.join(', ')}`);
           }
       }
-
+      const profileStore = useProfileStore()
       // 同步当前 Profile ID 到 profileStore
       if (settings.value.current_profile_id) {
         profileStore.currentProfileId = settings.value.current_profile_id
@@ -328,7 +312,7 @@ export const useAppStore = defineStore('app', () => {
         }
       }
       // 界面渲染完毕后，根据设置决定是否启动后台扫描
-      if (settings.value.enable_auto_scan !== false && settings.value.game_install_path) {
+      if (settings.value.enable_auto_scan !== false) {
         console.log("自动扫描开始...")
         toast.info("自动扫描开始...", {timeout: 1000})
         const modStore = useModStore()
@@ -359,9 +343,25 @@ export const useAppStore = defineStore('app', () => {
         }else{
           Object.assign(settings.value, res.data.settings)
         }
-        // console.log('allmods', res.data.is_first_db_init , res.data.paths_configured , !res.data.all_mods||res.data.all_mods?.length==0)
-        if (res.data.is_first_db_init && res.data.paths_configured && (!res.data.all_mods||res.data.all_mods?.length==0)) {
+        // console.log('allmods', res.data.is_first_db_init , res.data.context_healthy , !res.data.all_mods||res.data.all_mods?.length==0)
+        if (res.data.is_first_db_init && res.data.context_healthy && (!res.data.all_mods||res.data.all_mods?.length==0)) {
           toast.warning("数据库正在进行首次初始化，此过程可能需要您等待一段时间，请您耐心等候。",{position: "top-center",timeout: 10000})
+        }
+        // 更新软件信息
+        appVersion.value = res.data.app_version || 'Unknown'  // 版本
+        buildMode.value = res.data.build_mode || ''           // 构建模式
+        const profileStore = useProfileStore()
+        profileStore.fetchProfiles()
+        if (res.data.active_context) {
+          profileStore.activeContext = res.data.active_context
+          // 触发健康哨兵拦截 (阻止初始化继续)
+          // 检查路径 (主要路径无效则打开设置)
+          if (!profileStore.activeContext.is_healthy) {
+            toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
+            uiState.showSettingsPanel = true
+            // profileStore.checkHealthSentinel()
+            return // 提早退出，不加载 Mod 列表
+          }
         }
         // 更新 Groups (防止分组内的 Mod 被删了但分组里还有 ID)
         const groupStore = useGroupStore()
@@ -369,20 +369,14 @@ export const useAppStore = defineStore('app', () => {
         // 更新 Active列表 (防止外部修改 Active列表 导致的状态不一致)
         const modStore = useModStore()
         modStore.setMods(res.data)
-        // 更新软件信息
-        appVersion.value = res.data.app_version || 'Unknown'  // 版本
-        buildMode.value = res.data.build_mode || ''           // 构建模式
-        // 检查路径 (主要路径无效则打开设置)
-        if (!res.data.paths_configured) {
-          toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
-          uiState.showSettingsPanel = true
-        }
+        // 刷新动态规则
+        const ruleStore = useRuleStore()
+        ruleStore.fetchRules()
+        const workspaceStore = useWorkspaceStore()
+        workspaceStore.initData()
+        const orderStore = useOrderStore()
+        orderStore.getBackups()
       }
-      // 刷新动态规则
-      const ruleStore = useRuleStore()
-      ruleStore.fetchRules()
-      const workspaceStore = useWorkspaceStore()
-      await workspaceStore.initData()
     } catch (e) {
       toast.error(`刷新数据失败: \n${e.message}`)
     } finally {
@@ -581,18 +575,20 @@ export const useAppStore = defineStore('app', () => {
     try {
       const res = await window.pywebview.api.save_all_settings(newSettings)
       if (checkResult(res, "应用设置")) {
+        const profileStore = useProfileStore()
         // 更新本地 store
-        Object.assign(settings.value, newSettings)
+        Object.assign(settings.value, res.data.settings)
+        profileStore.activeContext = res.data.active_context
+
         // 如果路径变了，可能需要重新扫描
         closeSettingsPanel()
-        // 如果启用了自动扫描且路径有变化，触发扫描
-        if (newSettings.game_install_path && settings.value.enable_auto_scan) {
-          // const modStore = useModStore()
-          // modStore.scanMods()
-          await initialize()
-        }else{
+
+        if (settings.value.enable_auto_scan && profileStore.activeContext.is_healthy) {
+          scanMods(null, false)
+        } else{
           await refreshData()
         }
+        // await initialize()
       }
     } catch (e) {
       console.error("应用设置异常:", e)
@@ -652,22 +648,12 @@ export const useAppStore = defineStore('app', () => {
     const orderStore = useOrderStore()
     const res = await orderStore.saveLoadOrder()
     if (!res) return
-    // if(settings.value.prefer_steam_launch && (!profile_id || profile_id === 'default') && settings.value.game_install_path?.includes("SteamLibrary\\steamapps\\common")){
-    //   // 通过 steam 启动游戏
-    //   window.open("steam://run/294100", '_blank')
-    //   // window.open("steam://rungameid/294100", '_blank')
-    //   toast.success("正在通过 steam 启动游戏……")
-    //   console.log("通过 steam 启动游戏")
-    // }else 
-    if(profile_id || settings.value.game_install_path){
+    if(profile_id){
       if (!window.pywebview) return
       // 直接启动游戏
       const res = await window.pywebview.api.game_launch(profile_id)
       if (checkResult(res, "直接启动游戏程序")) {
         toast.success("直接启动游戏程序成功！")
-      } else {
-        console.error("直接启动游戏程序异常:", res.message)
-        toast.error(`直接启动游戏程序异常: \n${res.message}`)
       }
     }
     else{

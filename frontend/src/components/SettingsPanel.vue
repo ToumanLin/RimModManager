@@ -78,10 +78,14 @@
                     :check="formData.check_info?.game_install_path"
                     :description="'游戏安装目录即游戏主程序所在的目录，默认安装目录一般位于：\nC:/Program Files (x86)/Steam/steamapps/common/RimWorld'" 
                     @blur="checkPath('game_install_path', formData.game_install_path)"/>
-                  <CommonPathInput label="游戏配置目录" v-model="formData.game_config_path" @browse="handleBrowse('game_config_path')" 
+                  <CommonPathInput label="用户数据目录" v-model="formData.user_data_path" @browse="handleBrowse('user_data_path')" 
+                    :check="formData.check_info?.user_data_path"
+                    :description="'用户数据目录即游戏数据及存档所在的目录，默认配置目录一般位于：\nC:/Users/{用户名}/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios'" 
+                    @blur="checkPath('user_data_path', formData.user_data_path)"/>
+                  <!-- <CommonPathInput label="游戏配置目录" v-model="formData.game_config_path" @browse="handleBrowse('game_config_path')" 
                     :check="formData.check_info?.game_config_path"
                     :description="'游戏配置目录即排序文件（ModsConfig.xml）所在的目录，默认配置目录一般位于：\nC:/Users/{用户名}/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config'" 
-                    @blur="checkPath('game_config_path', formData.game_config_path)"/>
+                    @blur="checkPath('game_config_path', formData.game_config_path)"/> -->
                   <CommonPathInput label="创意工坊目录" v-model="formData.workshop_mods_path" @browse="handleBrowse('workshop_mods_path')" 
                     :check="formData.check_info?.workshop_mods_path"
                     :description="'创意工坊目录即创意工坊下载的模组所在的目录，该设置所有环境通用'" 
@@ -143,8 +147,8 @@
 
                     <div class="col-span-2 p-2 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-2 gap-2">
                       <CommonSwitch class="col-span-2" mini label="Mod 详情面板" v-model="getDataById('details', formData.ui.main_layout).visible" description="可关闭Mod详情栏。" />
-                      <CommonSwitch class="col-span-2" :disabled="!getDataById('details', formData.ui.main_layout).visible" label="动态图标云" v-model="formData.ui.show_icons_cloud" description="控制详情页闲置时的动态图标云显示。" />
-                      
+                      <CommonSwitch :disabled="!getDataById('details', formData.ui.main_layout).visible" label="动态图标云" v-model="formData.ui.show_icons_cloud" description="控制详情页闲置时的动态图标云显示。" />
+                      <CommonNumber label="详情页加载延迟" description="控制 Mod 详情页加载的延迟时间，单位是毫秒，默认值为 200 毫秒。" v-model="formData.ui.detail_delay" :step="10" :min="0" :max="5000" />
                       <span class="col-span-2 text-xs ml-2 mt-2">Mod 详情布局
                         <label v-tooltip="'可拖动切换布局顺序'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                       </span>
@@ -458,15 +462,21 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
     // 利用 requestAnimationFrame 或 setTimeout
     // 让浏览器先渲染出弹窗的“背景”和“动画第一帧”，然后再去塞数据
     requestAnimationFrame(async () => {
-      // 使用 structuredClone (Node 17+ / 现代浏览器均支持，速度更快)
+      // 使用 structuredClone (Node 17+ / 现代浏览器均支持，速度更快)，将全局 Settings 和 当前 Context 捏合成一个对象给表单用
       // 如果环境不支持，保留原来的 JSON 方式，但放在 requestAnimationFrame 里依然能解决卡顿
       try {
-        formData.value = structuredClone(appStore.settings)
+        formData.value = {
+          ...structuredClone(appStore.settings),
+          ...structuredClone(profileStore.activeContext) // 覆盖/合并上下文路径
+        }
       } catch (e) {
-        // 降级兼容
-        formData.value = JSON.parse(JSON.stringify(appStore.settings))
+        formData.value = { 
+          ...JSON.parse(JSON.stringify(appStore.settings)),
+          ...JSON.parse(JSON.stringify(profileStore.activeContext))
+        }
       }
-
+      // 检测所有路径是否有效
+      await checkPaths()
       // 如果 AI 已启用，且面板刚打开，加载初始的厂商和模型列表
       if (formData.value.ai) {
         await loadAiProviders(formData.value.ai.api_type)
@@ -474,8 +484,6 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
           await fetchAiModels()
         }
       }
-      // 检测所有路径是否有效
-      checkPaths()
     })
   }
 })
@@ -484,9 +492,9 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
 const changeTab = (tab) => {
   currentTab.value = tab
   // 检测所有路径是否有效
-  if (['paths','community'].includes(tab)) {
-    checkPaths()
-  }
+  // if (['paths','community'].includes(tab)) {
+  //   checkPaths()
+  // }
 }
 
 // 通过ID获取数据项
@@ -515,6 +523,7 @@ const checkPaths = async () => {
       paths_data[key] = formData.value[key]
     }
   }
+  console.log('检查路径', paths_data)
   const res = await appStore.checkPaths(paths_data)
   if (res) {
     formData.value['check_info'] = res
@@ -614,8 +623,14 @@ const handleReset = async () => {
   if (ok) appStore.resetDatabase()
 }
 
-const save = () => {
-  appStore.applySettings(formData.value)
+const save = async () => {
+  // 校验拦截
+  // const hasError = Object.values(formData.value.check_info || {}).some(info => info && !info.pass)
+  // if (hasError) {
+  //   toast.error("存在无效路径，请修正后再保存！")
+  //   return
+  // }
+  await appStore.applySettings(formData.value)
 }
 </script>
 

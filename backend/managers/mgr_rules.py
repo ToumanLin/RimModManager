@@ -4,6 +4,7 @@ import re
 import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from backend.managers.mgr_profile import ProfileContext
 from backend.utils.logger import logger
 from backend.database.dao import ModDAO, GroupDAO
 from backend.database.models_ext import WorkshopMeta 
@@ -22,13 +23,14 @@ class RuleActionType:
     BOTTOM = "bottom"               # 置底 (权重设为1000)
     
 class RuleManager:
-    def __init__(self):
+    def __init__(self, context: ProfileContext):
         # 内存中的规则缓存
         self.community_rules: Dict[str, Any] = {}
         self.community_rules_update_time: int = 0
         self.user_mod_rules: Dict[str, Any] = {}
         self.user_dynamic_rules: List[Dict[str, Any]] = []
         self.workshop_rules_cache: Dict[str, List[str]] = {} 
+        self.context = context
         self.settings = {
             "community_mod_rules_enabled": True,    # 全局社区规则总开关
             "user_mod_rules_enabled": True,         # 全局用户单项规则总开关
@@ -217,7 +219,7 @@ class RuleManager:
         
         # 获取当前游戏版本 (例如 "1.5.4100" -> "1.5")
         # 注意：settings.config.game_version 可能为空，需兜底
-        current_ver = settings.config.game_version
+        current_ver = self.context.game_version
         if not current_ver:
             return True # 无法确定版本时，默认放行，或者可以选择严格模式 return False
             

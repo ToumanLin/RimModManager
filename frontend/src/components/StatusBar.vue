@@ -73,7 +73,7 @@
     
     <!-- 右侧：版本 -->
     <div class="flex items-center gap-2 hover:text-text-main" >
-       <span>RimWorld {{ appStore.settings.game_version || '未知版本' }}</span>
+       <span>RimWorld {{profileStore.activeContext.game_version || '未知版本' }}</span>
     </div>
 
   </div>
@@ -85,10 +85,12 @@ import { useModStore } from '../stores/modStore'
 import { useAppStore } from '../stores/appStore'
 import { useToast } from "vue-toastification";
 import { Bot, Download, Radar } from 'lucide-vue-next';
+import { useProfileStore } from '../stores/profileStore';
 
 const toast = useToast();
 const modStore = useModStore()
 const appStore = useAppStore()
+const profileStore = useProfileStore()
 
 // 统一任务计算属性
 // 优先级: 扫描 > 下载

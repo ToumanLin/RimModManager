@@ -29,46 +29,46 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
     """
     def do_GET(self):
         # 只处理 /image 路径
-        if self.path.startswith('/image?path='):
+        if not self.path.startswith('/image?path='): return
+        try:
+            # 1. 解析参数
+            query_part = self.path.split('path=', 1)[1]
+            local_path = unquote(query_part) # 解码 URL
+            # 2. 安全与存在性检查
+            if os.path.exists(local_path) and os.path.isfile(local_path):
+                self.send_response(200)
+                # 3. 设置 MIME 类型
+                ext = os.path.splitext(local_path)[1].lower()
+                ctype = 'application/octet-stream'
+                if ext == '.png': ctype = 'image/png'
+                elif ext in ['.jpg', '.jpeg']: ctype = 'image/jpeg'
+                elif ext == '.webp': ctype = 'image/webp'
+                elif ext == '.gif': ctype = 'image/gif'
+                self.send_header('Content-type', ctype)
+                self.send_header('Access-Control-Allow-Origin', '*') # 允许跨域
+                self.send_header('Cache-Control', 'max-age=604800') # 强缓存7天(本地文件很少变)
+                self.end_headers()
+                # 4. 写入文件流 (零拷贝传输)
+                with open(local_path, 'rb') as f:
+                    # shutil.copyfileobj(f, self.wfile) # 这种方式更高效
+                    self.wfile.write(f.read())
+                return
+            else:
+                self.send_error(404, "File not found")
+                return
+        # 忽略连接中断错误 ---
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            # 客户端断开了连接（通常是列表快速滚动导致的），无需处理，直接返回
+            return
+        except Exception as e:
+            # 在控制台打印详细中文错误方便调试
+            logger.error(f"Asset Server Error ({local_path if 'local_path' in locals() else 'unknown'}): {e}")
+            # 发送给客户端的必须是 ASCII 字符，不要发送 str(e) 因为可能包含中文
             try:
-                # 1. 解析参数
-                query_part = self.path.split('path=', 1)[1]
-                local_path = unquote(query_part) # 解码 URL
-                # 2. 安全与存在性检查
-                if os.path.exists(local_path) and os.path.isfile(local_path):
-                    self.send_response(200)
-                    # 3. 设置 MIME 类型
-                    ext = os.path.splitext(local_path)[1].lower()
-                    ctype = 'application/octet-stream'
-                    if ext == '.png': ctype = 'image/png'
-                    elif ext in ['.jpg', '.jpeg']: ctype = 'image/jpeg'
-                    elif ext == '.webp': ctype = 'image/webp'
-                    elif ext == '.gif': ctype = 'image/gif'
-                    self.send_header('Content-type', ctype)
-                    self.send_header('Access-Control-Allow-Origin', '*') # 允许跨域
-                    self.send_header('Cache-Control', 'max-age=604800') # 强缓存7天(本地文件很少变)
-                    self.end_headers()
-                    # 4. 写入文件流 (零拷贝传输)
-                    with open(local_path, 'rb') as f:
-                        # shutil.copyfileobj(f, self.wfile) # 这种方式更高效
-                        self.wfile.write(f.read())
-                    return
-                else:
-                    self.send_error(404, "File not found")
-                    return
-            # 忽略连接中断错误 ---
-            except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
-                # 客户端断开了连接（通常是列表快速滚动导致的），无需处理，直接返回
-                return
-            except Exception as e:
-                # 在控制台打印详细中文错误方便调试
-                logger.error(f"Asset Server Error ({local_path if 'local_path' in locals() else 'unknown'}): {e}")
-                # 发送给客户端的必须是 ASCII 字符，不要发送 str(e) 因为可能包含中文
-                try:
-                    self.send_error(500, "Internal Server Error")
-                except:
-                    pass # 如果发送错误信息时连接也断了，就彻底忽略
-                return
+                self.send_error(500, "Internal Server Error")
+            except:
+                pass # 如果发送错误信息时连接也断了，就彻底忽略
+            return
         
         # 处理 /gallery 请求
         # 格式: /gallery?wid=123&url=https://...
@@ -884,8 +884,8 @@ class FileManager:
     
 class PathChecker:
 
-    @staticmethod
-    def _format_res(is_pass: bool, data: Any = None, msg: str = "", msg_type: str = "success"):
+    @classmethod
+    def _format_res(cls, is_pass: bool, data: Any = None, msg: str = "", msg_type: str = "success"):
         """统一返回格式"""
         return {
             'pass': is_pass,
@@ -894,8 +894,8 @@ class PathChecker:
             'msg': msg
         }
     
-    @staticmethod
-    def check_normal_path(path_str: str) -> Dict:
+    @classmethod
+    def check_normal_path(cls, path_str: str) -> Dict:
         """
         检查普通路径是否有效
         返回：{
@@ -905,13 +905,13 @@ class PathChecker:
             'msg': ''
         }
         """
-        if not path_str: return PathChecker._format_res(False, msg="路径不能为空")
+        if not path_str: return cls._format_res(False, msg="路径不能为空")
         path = Path(path_str)
-        if not path.exists(): return PathChecker._format_res(False, msg=f"{path_str}\n路径不存在！")
-        return PathChecker._format_res(True, data=str(path), msg=f"路径有效：{path}")
+        if not path.exists(): return cls._format_res(False, msg=f"{path_str}\n路径不存在！")
+        return cls._format_res(True, data=str(path), msg=f"路径有效：{path}")
     
-    @staticmethod
-    def check_install_path(path_str: str) -> Dict:
+    @classmethod
+    def check_install_path(cls, path_str: str) -> Dict:
         """
         检查游戏安装路径是否有效
         返回：{
@@ -921,34 +921,41 @@ class PathChecker:
             'msg': ''
         }
         """
-        if not path_str: return PathChecker._format_res(False, msg="安装路径不能为空")
+        if not path_str: return cls._format_res(False, msg="安装路径不能为空")
         path = Path(path_str)
-        if not path.exists(): return PathChecker._format_res(False, msg="游戏安装路径不存在！")
-
+        if not path.exists(): return cls._format_res(False, msg="游戏安装路径不存在！")
         res = {}
         # 1. 检查执行文件
         exe = GameManager.detect_executable(str(path))
         if exe:
-            res = PathChecker._format_res(True, data={}, msg=f"游戏安装路径: {path}")
+            res = cls._format_res(True, data={}, msg=f"游戏安装路径: {path}")
             res['data']["game_exe"] = str(exe)
         else:
-            res = PathChecker._format_res(False, msg="无法检测到游戏程序")
+            res = cls._format_res(False, msg="无法检测到游戏程序")
             return res
-
         # 2. 检查版本
         version = GameManager.get_game_version(str(path))
         res['data']["game_version"] = version if version else "未知"
-
         # 3. Steam 判定 (优化判定逻辑)
         is_steam = "steamapps" in path.parts and "common" in path.parts
         res['data']["is_steam"] = is_steam
-        
         res['msg'] = f"游戏本体：{exe}\n游戏版本：{version}\n{'是' if is_steam else '非'}Steam版"
         
         return res
-
-    @staticmethod
-    def check_mods_config(path_str: str) -> Dict:
+    
+    @classmethod
+    def check_user_data_path(cls, path_str:str) -> Dict:
+        if not path_str: return cls._format_res(False, msg="用户数据路径不能为空")
+        # 哪怕目录不存在，只要父目录存在且有写入权限，我们就认为合法（因为我们可以创建它）
+        parent_dir = os.path.dirname(path_str)
+        if parent_dir and not os.path.exists(parent_dir):
+            return cls._format_res(False, msg=f"父目录不存在: {parent_dir}")
+        if parent_dir and not os.access(parent_dir, os.W_OK):
+            return cls._format_res(False, msg="目录无写入权限，请以管理员身份运行或更换路径")
+        return cls._format_res(True, msg="校验通过")
+    
+    @classmethod
+    def check_mods_config(cls, path_str: str) -> Dict:
         """
         检查 Mods 配置文件是否存在
         返回：{
@@ -960,11 +967,11 @@ class PathChecker:
         """
         path = Path(path_str) / "ModsConfig.xml"
         if path.exists():
-            return PathChecker._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
-        return PathChecker._format_res(False, msg="未找到 ModsConfig.xml", msg_type="warn")
+            return cls._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
+        return cls._format_res(False, msg="未找到 ModsConfig.xml", msg_type="warn")
 
-    @staticmethod
-    def check_workshop_path(path_str: str) -> Dict:
+    @classmethod
+    def check_workshop_path(cls, path_str: str) -> Dict:
         """
         检查 Workshop 路径是否有效
         返回：{
@@ -975,15 +982,15 @@ class PathChecker:
         }
         """
         if not path_str or not Path(path_str).exists():
-            return PathChecker._format_res(False, msg="Workshop 路径不存在")
+            return cls._format_res(False, msg="Workshop 路径不存在")
         
         is_valid = "steamapps" in Path(path_str).parts and "workshop" in Path(path_str).parts
-        return PathChecker._format_res(is_valid, data=path_str, 
+        return cls._format_res(is_valid, data=path_str, 
                                msg=f"Workshop 路径：{path_str}" if is_valid else "路径不在 Steam 库中",
                                msg_type="success" if is_valid else "warn")
         
-    @staticmethod
-    def check_steam_path(path_str: str) -> Dict:
+    @classmethod
+    def check_steam_path(cls, path_str: str) -> Dict:
         """
         检查 Steam 客户端路径是否有效
         返回：{
@@ -993,14 +1000,14 @@ class PathChecker:
             'msg': ''
         }
         """
-        if not path_str: return PathChecker._format_res(False, msg="未指定 Steam 路径")
+        if not path_str: return cls._format_res(False, msg="未指定 Steam 路径")
         exe_path = Path(path_str) / "steam.exe"
         if exe_path.exists():
-            return PathChecker._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
-        return PathChecker._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
+            return cls._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
+        return cls._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
         
-    @staticmethod
-    def paths_check(paths_data: Dict[str, str]) -> Dict:
+    @classmethod
+    def paths_check(cls, paths_data: Dict[str, str]) -> Dict:
         """
         主入口：支持全量检测
         """
@@ -1009,24 +1016,22 @@ class PathChecker:
         try:
             # 1. 安装路径相关 (包含 exe, version, steam 判定)
             if "game_install_path" in paths_data:
-                results["game_install_path"] = PathChecker.check_install_path(paths_data["game_install_path"])
-            
+                results["game_install_path"] = cls.check_install_path(paths_data["game_install_path"])
             # 2. 配置文件 
             if "game_config_path" in paths_data:
-                results["game_config_path"] = PathChecker.check_mods_config(paths_data["game_config_path"])
-
+                results["game_config_path"] = cls.check_mods_config(paths_data["game_config_path"])
             # 3. Workshop
             if "workshop_mods_path" in paths_data:
-                results["workshop_mods_path"] = PathChecker.check_workshop_path(paths_data["workshop_mods_path"])
-
+                results["workshop_mods_path"] = cls.check_workshop_path(paths_data["workshop_mods_path"])
             # 4. Steam 主程序
             if "steam_path" in paths_data:
-                results["steam_path"] = PathChecker.check_steam_path(paths_data["steam_path"])
-            
+                results["steam_path"] = cls.check_steam_path(paths_data["steam_path"])
+            if "user_data_path" in paths_data:
+                results["user_data_path"] = cls.check_user_data_path(paths_data["user_data_path"])
             # 5. 其他路径
             for key, path in paths_data.items():
-                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path"]: continue
-                results[key] = PathChecker.check_normal_path(path)
+                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path", "user_data_path"]: continue
+                results[key] = cls.check_normal_path(path)
 
             return results
         except Exception as e:

@@ -5,6 +5,7 @@ import re
 import time
 import concurrent.futures
 from backend.managers.mgr_game_logs import GameLogManager
+from backend.managers.mgr_profile import ProfileContext
 from backend.utils.tools import generate_path_hash, get_folder_size
 from backend.database.models import db
 
@@ -32,7 +33,8 @@ from backend.utils.logger import logger # 引入日志
 from backend.utils.event_bus import EventBus # 引入事件总线
 
 class ModScanner:
-    def __init__(self):
+    def __init__(self, context: ProfileContext):
+        self.context = context
         # DLCParser 不在 init 初始化，因为要看扫描路径里有没有 DLC 目录
         self.dlc_parser = None
         self.xml_parser = ModXMLParser()
@@ -90,8 +92,7 @@ class ModScanner:
                 self._finish_scan({'error': '没有有效路径'})
                 return
             # 初始化 DLC Parser
-            dlc_dir = next((p for p in valid_paths if os.path.basename(p).lower() == 'data'), None)
-            dlc_parser = DLCParser(dlc_dir) if dlc_dir else None
+            dlc_parser = DLCParser(self.context.game_dlc_path)
             existing_snapshots = ModDAO.get_mod_snapshots()   # 从数据库获取已存在的 Mod 时间戳及大小
             # --- 1. 快速搜集所有待扫描文件夹 (用于计算进度总数) ---
             EventBus.emit('scan-progress', {'stage': 'indexing', 'message': '正在索引文件...'})
@@ -171,7 +172,7 @@ class ModScanner:
             workshop_paths_for_deploy = []
 
             # 获取本地 Mods 根目录 (用于判定是否同级冲突)
-            local_mods_root = settings.config.local_mods_path
+            local_mods_root = self.context.local_mods_path
             if local_mods_root: 
                 local_mods_root = os.path.normpath(local_mods_root).lower()
             
@@ -254,9 +255,9 @@ class ModScanner:
             
             # --- 6. 自动部署链接 (Deployment) ---
             deploy_msg = "跳过链接部署"
-            logger.debug(f"Skip deployment: use_workshop_mods={settings.config.use_workshop_mods}, use_self_mods={settings.config.use_self_mods}, current_profile_not_default={settings.config.current_profile_id != 'default'}")
+            logger.debug(f"Skip deployment: use_workshop_mods={self.context.use_workshop_mods}, use_self_mods={self.context.use_self_mods}, current_profile_not_default={self.context.profile_id != 'default'}")
             final_links_to_create = []
-            if settings.config.use_self_mods and local_mods_root and os.path.exists(local_mods_root):
+            if self.context.use_self_mods and local_mods_root and os.path.exists(local_mods_root):
                 # 遮蔽策略：过滤掉 ID 已经在 Local 存在的 Workshop Mod
                 for w_path, w_id in self_mods_paths_for_deploy:
                     if w_id not in local_mod_ids_for_deploy:
@@ -265,7 +266,7 @@ class ModScanner:
                         # 被本地遮蔽，忽略
                         pass
             
-            if settings.config.use_workshop_mods and settings.config.current_profile_id != 'default' \
+            if self.context.use_workshop_mods and self.context.profile_id != 'default' \
                 and local_mods_root and os.path.exists(local_mods_root):
                 # 遮蔽策略：过滤掉 ID 已经在 Local 和 self 存在的 Workshop Mod
                 self_mods_ids_for_deploy = [w_id for w_path, w_id in self_mods_paths_for_deploy]
@@ -481,7 +482,7 @@ class ModScanner:
         # 路径标准化 (用于 Python 端比对，统一转小写)
         # 标准化路径用于严格匹配 (增加结尾分隔符确保匹配精确)
         def norm(p): return os.path.normpath(p).lower() + os.sep if p else ""
-        L_PATH = norm(os.path.normpath(settings.config.local_mods_path).lower())
+        L_PATH = norm(self.context.local_mods_path)
         W_PATH = norm(settings.config.workshop_mods_path)
         S_PATH = norm(settings.config.self_mods_path)
         # 补充 store
@@ -495,7 +496,7 @@ class ModScanner:
         
         # 补充 supported_versions
         if mod_data.get('source','').lower() == 'core':
-            mod_data['supported_versions'] = [settings.config.game_version[:3]] if settings.config.game_version else 'Unknown'  # Core 补充支持版本
+            mod_data['supported_versions'] = [self.context.game_version[:3]] if self.context.game_version else 'Unknown'  # Core 补充支持版本
 
         # 图片
         preview_path, icon_path = self._resolve_images(mod_path, mod_data.get('icon_path', ''))

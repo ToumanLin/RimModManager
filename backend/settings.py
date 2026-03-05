@@ -85,6 +85,7 @@ class UIConfig:
     theme: str = "system"       # light, dark, system
     font_size: int = 16
     drag_delay: int = 30            # 拖动判定延迟 (毫秒)
+    detail_delay: int = 200         # Mod 详情页加载延迟 (毫秒)
     tooltip_hover_time: int = 1000  # 鼠标悬停显示提示时间 (毫秒)
     show_mod_hover_panel: bool = True  # 是否显示 Mod 悬停面板
     double_click_active_mod: bool = True  # 是否双击启用/停用 Mod
@@ -126,14 +127,14 @@ class AppConfig:
     在这里定义字段和默认值，类型安全且清晰。
     """
     # --- 路径设置 ---
-    game_install_path: str = ""    # RimWorld 安装路径
-    user_data_path: str = ""       # 用户数据文件夹
-    game_config_path: str = ""     # RimWorld 配置文件夹
-    game_saves_path: str = ""      # RimWorld 存档文件夹
-    game_dlc_path: str = ""        # RimWorld DLC 文件夹
-    local_mods_path: str = ""      # RimWorld 本地模组文件夹
+    # game_install_path: str = ""    # RimWorld 安装路径
+    # user_data_path: str = ""       # 用户数据文件夹
+    # game_config_path: str = ""     # RimWorld 配置文件夹
+    # game_saves_path: str = ""      # RimWorld 存档文件夹
+    # game_dlc_path: str = ""        # RimWorld DLC 文件夹
+    # local_mods_path: str = ""      # RimWorld 本地模组文件夹
     workshop_mods_path: str = ""   # RimWorld 公共工坊模组文件夹
-    use_workshop_mods: bool = True  # 是否使用公共工坊模组
+    # use_workshop_mods: bool = True  # 是否使用公共工坊模组
     steam_path: str = ""          # Steam 安装路径
     home_path: str = str(HOME_DIR) # 本程序路径
     
@@ -141,15 +142,14 @@ class AppConfig:
     steamcmd_path: str = str(TOOLS_DIR / "steamcmd")
     steamcmd_mods_path: str = str(TOOLS_DIR / "steamcmd" / "steamapps" / "workshop" / "content" / "294100")
     self_mods_path: str = str(MODS_DIR)  # 本程序默认模组路径
-    use_self_mods: bool = True          # 是否使用本程序模组
+    # use_self_mods: bool = True          # 是否使用本程序模组
     move_old_self_mods: bool = False    # 修改路径后是否移动原有模组
     
     # --- 游戏设置 ---
-    game_version: str = ""               # RimWorld 版本
+    # game_version: str = ""               # RimWorld 版本
     current_profile_id: str = "default"   # 当前激活的环境ID
-    run_commands: List[str] = field(default_factory=list)   # 启动时运行的命令
+    # run_commands: List[str] = field(default_factory=list)   # 启动时运行的命令
     prefer_steam_launch: bool = True         # 是否通过 Steam 启动游戏
-    
     
     # --- 高级设置 ---
     backup_retention_days: int = 30           # 备份保留天数
@@ -162,6 +162,7 @@ class AppConfig:
     coexist_mod_folder_name_type: str = "workshop_id" # 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: bool = True      # 是否显示共存Mod提示
     check_language_support: bool = True        # 是否检查语言支持
+    
     # --- 社区设置 ---
     community_workshop_db_url: str = "https://github.com/RimSort/Steam-Workshop-Database/blob/main/steamDB.json"
     community_workshop_db_path: str = str(COMMUNITY_WORKSHOP_DB_PATH)
@@ -260,10 +261,7 @@ class SettingsManager:
             self._recursive_update(self.config, data)
             # 加载完成后，手动同步一次衍生路径
             self._sync_derived_paths()
-            # 检查旧版配置兼容性
-            legacy_game_data = data.get('network', {}).get('game_data_path')
-            if not self.config.user_data_path and legacy_game_data:
-                self.config.user_data_path = legacy_game_data
+            
         except Exception as e:
             print(f"Config load error: {e}")
     
@@ -354,21 +352,6 @@ class SettingsManager:
                 changed = True
         if changed:
             self.save()
-
-    def validate_paths(self) -> bool:
-        """检查核心路径是否配置且有效"""
-        from backend.managers.mgr_game import GameManager
-        p1 = GameManager.detect_executable(self.config.game_install_path)
-        p2 = self.config.game_config_path
-        # 检测路径是否有效，无效则创建
-        if not os.path.exists(self.config.self_mods_path):
-            os.makedirs(os.path.dirname(self.config.self_mods_path), exist_ok=True)
-            from backend.managers.mgr_files import FileManager
-            FileManager.sync_steamcmd_root_link()
-            
-        if p1 and os.path.exists(p1) and p2 and os.path.exists(p2):
-            return True
-        return False
 
 # 全局单例实例
 settings = SettingsManager()

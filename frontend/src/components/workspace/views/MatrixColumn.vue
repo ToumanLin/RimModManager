@@ -253,15 +253,4 @@ const handleContextMenu = (event, targetMod) => {
 }
 
 
-
-
-const handleTransfer = async (mod, targetType) => {
-  // 复用现有的 localize 逻辑（需要改造后端接收单项或在前端组装）
-  // 为了稳定，直接借用 modStore 原有的方法（需要确保该项已被选中）
-  modStore.clearSelection()
-  modStore.selectMods(mod.package_id)
-  if (targetType === 'local') {
-    await modStore.localizeSelectedMods()
-  }
-}
 </script>

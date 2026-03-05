@@ -6,8 +6,9 @@ import re
 from typing import Any, Dict, List, cast
 import uuid
 from peewee import chunked, fn, JOIN
-from backend.database.models import GameProfile, SubscribedCollection, db, ModAsset, UserModData, GroupData, GroupMod
+from backend.database.models import SubscribedCollection, db, ModAsset, UserModData, GroupData, GroupMod
 from backend.managers.mgr_files import file_mgr
+from backend.managers.mgr_profile import ProfileContext
 from backend.settings import settings
 from backend.utils.logger import logger
 
@@ -22,7 +23,7 @@ class ModDAO:
     """
 
     @staticmethod
-    def get_profile_mods(profile_id: str = ''):
+    def get_profile_mods(context: ProfileContext|None):
         """
         根据当前环境获取模组列表。
         实现了 Context Filtering (环境过滤) 和 Shadowing Strategy (遮蔽策略)。
@@ -30,24 +31,13 @@ class ModDAO:
         :return: List[Dict] 处理后的模组列表
         """
         # 1. 解析环境上下文 (Context Resolution)
-        if not profile_id:
-            profile_id = settings.config.current_profile_id
+        if not context: return [] # 空上下文直接返回空列表
 
         # 获取环境配置
-        # 兜底逻辑：如果 ID 是 default 或者 库里没查到，就用 settings 的全局配置
-        profile = GameProfile.get_or_none(GameProfile.id == profile_id)
-        
-        if profile:
-            local_root = os.path.join(profile.game_install_path, "Mods")
-            data_root = os.path.join(profile.game_install_path, "Data")
-            use_workshop_mods = profile.use_workshop_mods
-            use_self_mods = profile.use_self_mods
-        else:
-            # Default 环境兜底
-            local_root = os.path.join(settings.config.game_install_path, "Mods")
-            data_root = os.path.join(settings.config.game_install_path, "Data")
-            use_workshop_mods = settings.config.use_workshop_mods
-            use_self_mods = settings.config.use_self_mods
+        local_root = context.local_mods_path
+        dlc_root = context.game_dlc_path
+        use_workshop_mods = context.use_workshop_mods
+        use_self_mods = context.use_self_mods
             
         workshop_root = settings.config.workshop_mods_path
         self_mods_root = settings.config.self_mods_path
@@ -57,7 +47,7 @@ class ModDAO:
         def norm(p): return os.path.normpath(p).lower() + os.sep if p else ""
         
         L_PATH = norm(local_root)
-        D_PATH = norm(data_root)
+        D_PATH = norm(dlc_root)
         W_PATH = norm(workshop_root)
         S_PATH = norm(self_mods_root)
 
@@ -72,7 +62,7 @@ class ModDAO:
         if use_self_mods and S_PATH: conditions.append(ModAsset.path.startswith(S_PATH))
         
         if local_root: local_root = os.path.normpath(local_root).lower()
-        if data_root: data_root = os.path.normpath(data_root).lower()
+        if dlc_root: dlc_root = os.path.normpath(dlc_root).lower()
         if workshop_root: workshop_root = os.path.normpath(workshop_root).lower()
         if self_mods_root: self_mods_root = os.path.normpath(self_mods_root).lower()
             
@@ -146,7 +136,7 @@ class ModDAO:
         return list(merged_map.values())
 
     @staticmethod
-    def get_triple_domain_assets():
+    def get_triple_domain_assets(context: ProfileContext|None):
         """
         全量获取三域 Mod 资产，不进行 Profile 遮蔽过滤。
         返回格式: { 'workshop': [], 'manager': [], 'local': [] }
@@ -158,17 +148,9 @@ class ModDAO:
         result = {'workshop': [], 'self': [], 'local': [], 'missing': [], 'unknown': []}
         
         # # 1. 解析环境上下文 (Context Resolution)
-        profile_id = settings.config.current_profile_id
-        # 获取环境配置
-        # 兜底逻辑：如果 ID 是 default 或者 库里没查到，就用 settings 的全局配置
-        profile = GameProfile.get_or_none(GameProfile.id == profile_id)
-        if profile:
-            local_root = os.path.join(profile.game_install_path, "Mods")
-            dlc_root = os.path.join(profile.game_install_path, "Data")
-        else:
-            # Default 环境兜底
-            local_root = os.path.join(settings.config.game_install_path, "Mods")
-            dlc_root = os.path.join(settings.config.game_install_path, "Data")
+        
+        local_root = context.local_mods_path if context else ''
+        dlc_root = context.game_dlc_path if context else ''
         
         # # 获取管理器和工坊的基准路径 (用于判断来源)
         # manager_root = os.path.normpath(settings.config.self_mods_path).lower()

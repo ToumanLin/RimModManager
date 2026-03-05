@@ -281,13 +281,17 @@ def clear_db():
         # 5. 重新创建表
         with db.atomic():
             db.create_tables(all_models[1:], safe=True)
-            from backend.settings import settings
             GameProfile.create(
                 id='default',
-                name='Default Profile',
-                game_version=settings.config.game_version or "", # 防止 None 报错
-                game_install_path=settings.config.game_install_path or "", # 防止 None 报错
-                user_data_path=settings.config.user_data_path or "",
+                name='Default',
+                description='Default Profile',
+                user_data_path='',
+                game_install_path='',
+                game_version='',
+                is_steam=False,
+                use_workshop_mods=True, # 默认非Steam版不加载工坊
+                use_self_mods=False,    # 默认不加载 Self Mod
+                run_commands=[]
             )
         # 6. 恢复外键约束
         db.execute_sql('PRAGMA foreign_keys = ON;')

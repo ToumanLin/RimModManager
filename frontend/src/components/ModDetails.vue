@@ -4,7 +4,7 @@
     <div class="w-full aspect-video opacity-90 backdrop-blur-sm bg-black/40 rounded-xl overflow-hidden relative border border-text-main/10 shadow-lg group">
       
       <!-- 图片 (优先显示大图，没有大图时回退显示 store 中的缩略图，防止留白) -->
-      <Transition name="fade">
+      <Transition :name="appStore.settings.ui.detail_delay ?'fade': ''">
         <!-- 这里的 key Mod ID，变动时触发动画 -->
         <img v-if="selectedMod.preview_url" :key="selectedMod.package_id" :src="selectedMod.preview_url" 
           class="absolute inset-0 w-full h-full object-cover"/>
@@ -531,6 +531,7 @@ import LampEffect from './utils/LampEffect.vue';
 import LuxBreatheIcon from './utils/LuxBreatheIcon.vue'
 import { ChevronDown, ChevronUp, Copy } from 'lucide-vue-next'
 import FixedPopover from './common/FixedPopover.vue'
+import { useProfileStore } from '../stores/profileStore'
 
 // 随机选30个Mod的图标URL
 const imageUrls = computed(() => Array.from(modStore.allModsMap.values())
@@ -559,6 +560,7 @@ const StatItem = {
 const appStore = useAppStore()
 const modStore = useModStore()
 const groupStore = useGroupStore()
+const profileStore = useProfileStore()
 const userTags = ref([])
 const userAliasName = ref('')
 const userNotes = ref('')
@@ -587,8 +589,8 @@ const expandTextarea = ref(false)
 const rawSelectedMod = computed(() => modStore.lastSelectedMod)
 
 // 2. 创建一个防抖的引用
-// 含义：当 rawSelectedMod 变化时，debouncedMod 会等待 300ms 且无新变化后才更新
-const selectedMod = refDebounced(rawSelectedMod, 200) 
+// 含义：当 rawSelectedMod 变化时，debouncedMod 会等待 200ms 且无新变化后才更新
+const selectedMod = refDebounced(rawSelectedMod, appStore.settings.ui.detail_delay) 
 const modType = computed(() => modStore.displayModType(selectedMod.value))
 
 
@@ -712,7 +714,7 @@ const displayNameById = (id) => {
 // 检查版本是否兼容
 const versionIsCompatible = (version) => {
   // 截取版本号（只保留主版本号，如 1.2.3 截取为 1.2）
-  const game_version = appStore.settings.game_version.match(/^\d+\.\d+/)?.[0] || ''
+  const game_version = profileStore.activeContext.game_version.match(/^\d+\.\d+/)?.[0] || ''
   // 转为浮点数比较版本号，返回 true 表示兼容，false 表示不兼容
   return parseFloat(version) >= parseFloat(game_version)
 }

@@ -256,6 +256,9 @@
     <!-- 确认弹窗 -->
     <Confirm />
 
+    <!-- 更新弹窗 -->
+    <!-- <UpdateModal ref="updateModal" /> -->
+
     <!-- 右键菜单 -->
     <ContextMenu />
 
@@ -297,8 +300,9 @@ import Test from './components/temp/test.vue'
 import AiReviewModal from './components/AiReviewModal.vue'
 import PromptManager from './components/PromptManager.vue'
 import WorkspaceOverlay from './components/workspace/WorkspaceOverlay.vue'
+// import UpdateModal from './components/UpdateModal.vue'
 
-
+const updateModal = ref(null);
 
 const appStore = useAppStore()
 const modStore = useModStore()
@@ -408,9 +412,13 @@ const stopResize = () => {
   document.body.style.userSelect = ''
 }
 
+// 处理更新弹窗
+function handleUpdate(changelog) {
+  // updateModal.value.show(changelog); // 注意要加 .value
+}
+
 // 生命周期与自适应
 let resizeObserver = null
-
 onMounted(() => {
   console.log("应用已启动，正在初始化存储……")
   // 确保 API 存在
@@ -422,7 +430,23 @@ onMounted(() => {
     })
   }
   appStore.initialize()  // 初始化存储（加载数据）
-  
+
+  const ctx = appStore.upgradeContext
+  if (ctx && ctx.version_changed) {
+    // 检查后端是否下发了显示新闻的任务
+    if (ctx.pending_actions && ctx.pending_actions.includes('show_update_news')) {
+      if (ctx.changelog && ctx.changelog.length > 0) {
+        handleUpdate(ctx.changelog)
+      }
+    }
+    
+    // 如果有推荐扫描的建议，也可以在这里触发
+    if (ctx.pending_actions.includes('recommend_scan')) {
+      appStore.toast.info("检测到核心版本更新，建议执行一次全量扫描。")
+    }
+  }
+
+
   // === 动态尺寸调整 ===
   distributeEvenly()  // 初始平均分配宽度
   // 监听容器尺寸变化
@@ -438,12 +462,10 @@ onMounted(() => {
           distributeEvenly()
           return
         }
-
         // 按比例缩放所有列
         const scale = newTotalWidth / currentTotalWidth
         // 避免除以0或无效缩放
         if (!isFinite(scale) || scale === 0) return 
-
         colWidths.value = colWidths.value.map(w => w * scale)
       }
     })

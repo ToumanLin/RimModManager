@@ -83,35 +83,23 @@ class GameManager:
                 return p
         return None
 
-    def launch_game(self, custom_args: list = []):
+    def launch_game(self, game_install_path, custom_args: list = []):
         """
         启动 RimWorld。
         :param custom_args: 启动参数列表，例如 ['-savedatafolder=D:/Profile1']
         """
-        if not custom_args or not custom_args[0]:
-            from backend.settings import settings
-            install_path = settings.config.game_install_path
-            if not install_path or not os.path.exists(install_path):
-                raise Exception("游戏安装路径未配置或不存在")
-
-            target_exe = self.detect_executable(install_path)
-            if not target_exe:
-                raise Exception(f"在安装目录下找不到可执行文件")
-        else:
-            target_exe = custom_args[0]
-            install_path = os.path.dirname(target_exe)
-
+        target_exe = self.detect_executable(game_install_path)
+        if not target_exe:
+            raise Exception(f"在安装目录下找不到可执行文件")
         system_name = platform.system()
         # 确保 custom_args 是列表
         args = custom_args[1:] if custom_args else []
-
         try:
             if system_name == 'Windows':
                 # Windows 拼接方式：[exe_path, arg1, arg2]
                 cmd = [target_exe] + args
                 # creationflags=subprocess.CREATE_NEW_CONSOLE 确保游戏进程独立于管理器
-                subprocess.Popen(cmd, cwd=install_path, creationflags=subprocess.CREATE_NEW_CONSOLE)
-
+                subprocess.Popen(cmd, cwd=game_install_path, creationflags=subprocess.CREATE_NEW_CONSOLE)
             elif system_name == 'Darwin': # macOS
                 # macOS 下如果是 .app 文件夹，需要使用 open 命令
                 if target_exe.endswith('.app'):
@@ -120,10 +108,9 @@ class GameManager:
                 else:
                     cmd = [target_exe] + args
                 subprocess.Popen(cmd)
-
             else: # Linux
                 cmd = [target_exe] + args
-                subprocess.Popen(cmd, cwd=install_path)
+                subprocess.Popen(cmd, cwd=game_install_path)
             from backend.utils.logger import logger 
             logger.debug(f"通过游戏本体命令启动 RimWorld: {cmd}")
             return True

@@ -26,7 +26,7 @@ enable_dpi_awareness()
 
 import multiprocessing
 import os
-from decimal import __version__
+from backend._version import __version__
 from backend.utils.logger import logger 
 from backend.settings import settings, BASE_RESOURCE_DIR, HOME_DIR
 from backend.utils.event_bus import EventBus
@@ -120,7 +120,7 @@ def main():
     from backend.api import API
     
     # 记录启动信息
-    logger.info(f"Starting RimModManager... Ver: {settings.config.game_version or 'Dev'}")
+    logger.info(f"Starting RimModManager... Ver: {__version__ or 'Dev'}")
     logger.debug(f"Debug Mode: {settings.config.debug_mode}")
     
     api = API()
