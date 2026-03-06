@@ -227,7 +227,9 @@ class ModDAO:
         Value: { mtime, size, package_id }
         """
         # 需要 package_id，以便在跳过 XML 解析时依然能告诉扫描器这个 Mod 是谁
-        query = ModAsset.select( ModAsset.path_hash, ModAsset.file_modify_time, ModAsset.file_size, ModAsset.package_id, ModAsset.disabled ).dicts()
+        query = ModAsset.select( ModAsset.path_hash, ModAsset.file_modify_time, ModAsset.file_size, 
+                                ModAsset.package_id, ModAsset.workshop_id, ModAsset.disabled, ModAsset.name, ModAsset.version, 
+                                ModAsset.store, ModAsset.supported_versions ).dicts()
         
         snapshots = {}
         for row in query:
@@ -236,7 +238,12 @@ class ModDAO:
                 'mtime': row['file_modify_time'] or 0,
                 'size': row['file_size'] or 0,
                 'package_id': row['package_id'].lower(), # 缓存 ID
-                'disabled': row['disabled']
+                'workshop_id': row['workshop_id'],
+                'disabled': row['disabled'],
+                'name': row.get('name', ''),
+                'version': row.get('version', ''),
+                'store': row.get('store', 'local'),
+                'supported_versions': row.get('supported_versions', [])
             }
         return snapshots
 

@@ -32,6 +32,15 @@
           {{ appStore.aiBatchResults.length }}
         </span>
       </button>
+
+      <div v-tooltip="`加载序列`" class="p-2 rounded-full group/folder relative hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
+        <ClipboardList class="size-6" />
+        <div class="absolute top-full right-0 w-35 overflow-hidden rounded-md flex flex-col items-center justify-center bg-glass-medium border border-text-main/10 shadow-2xl backdrop-blur-lg opacity-0 
+          invisible transform origin-top-right group-hover/folder:opacity-100 group-hover/folder:visible transition-all duration-300">
+          <button @click="loadOrder()" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent">导入加载序列</button>
+          <button @click="exportOrder()" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent">导出加载序列</button>
+        </div>
+      </div>
       
       <div v-tooltip="`打开文件夹`" class="p-2 rounded-full group/folder relative hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
         <svg class="size-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
@@ -74,14 +83,34 @@
 import { useAppStore } from '../stores/appStore'
 import { useToast } from "vue-toastification";
 import ProfileSwitcher from './utils/ProfileSwitcher.vue';
-import { BotMessageSquare, CloudCog } from 'lucide-vue-next';
+import { BotMessageSquare, ClipboardList, CloudCog } from 'lucide-vue-next';
 import { useProfileStore } from '../stores/profileStore';
+import { useOrderStore } from '../stores/orderStore';
 
 
 const toast = useToast();
 const appStore = useAppStore()
+const orderStore = useOrderStore()
 const profileStore = useProfileStore()
 
+
+// 导出当前加载顺序
+const exportOrder = async (path='0') => {
+  // 调用后端另存为接口
+  await orderStore.exportLoadOrder(path)
+  refresh()
+}
+// 从导入列表加载
+const loadOrder = async (path=null) => {
+  // 调用后端加载接口
+  const data = await orderStore.getBackupOrder(path)
+  if (data) {
+    // console.log(data)
+    rawData.value.import.push(data)
+    appStore.uiState.showDiffDrawer = true
+  }
+  refresh()
+}
 </script>
 
 

@@ -17,10 +17,10 @@
           <!-- 中间：水平发光标签页 -->
           <div class="absolute left-1/2 -translate-x-1/2 flex items-center bg-black/40 p-1 rounded-xl border border-text-main/10 shadow-inner">
             <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id"
-              class="relative px-6 py-1.5 text-sm font-bold rounded-lg transition-all duration-300 z-10"
+              class="relative px-3 py-1.5 text-sm font-bold rounded-lg transition-all duration-300 z-10"
               :class="currentTab === tab.id ? 'text-text-main text-shadow-md' : 'text-text-dim hover:text-text-main/80'">
               
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 ">
                 <component :is="tab.icon" class="size-4" />
                 {{ tab.label }}
               </div>

@@ -737,7 +737,7 @@ export const useAppStore = defineStore('app', () => {
     }
   }
   // 删除文件/文件夹
-  const deletePath = async (path) => {
+  const deletePath = async (path, reScan=true) => {
     if(!window.pywebview) return
     const confirmStore = useConfirmStore()
     const confirm = await confirmStore.confirmAction(
@@ -748,9 +748,11 @@ export const useAppStore = defineStore('app', () => {
     const res = await window.pywebview.api.path_delete(path)
     if (checkResult(res, "删除文件/文件夹")) {
       toast.success(`已删除: \n${path}`)
-      // 刷新Mod列表
-      const modStore = useModStore()
-      modStore.scanMods()
+      if(reScan){
+        // 刷新Mod列表
+        const modStore = useModStore()
+        modStore.scanMods()
+      }
       return true
     }
   }

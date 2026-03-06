@@ -53,13 +53,13 @@
 
             <!-- 右侧：文本与交互 -->
             <div class="flex-1 min-w-0 flex flex-col justify-center">
-              <h3 class="text-base font-bold text-text-main tracking-wide leading-snug mb-1.5 flex items-center gap-2">
+              <h3 class="text-base font-bold text-text-main tracking-wide text-wrap break-all leading-snug mb-1.5 flex items-center gap-2">
                 {{ confirmStore.state.title }}
               </h3>
               
               <div v-if="confirmStore.state.message" class="text-xs text-text-dim/90 leading-relaxed text-pretty font-medium">
-                <span v-if="confirmStore.state.isHtml" v-html="confirmStore.state.message"></span>
-                <span v-else>{{ confirmStore.state.message }}</span>
+                <span v-if="confirmStore.state.isHtml" v-html="confirmStore.state.message" class="text-wrap break-all"></span>
+                <span v-else class="text-wrap break-all">{{ confirmStore.state.message }}</span>
               </div>
             </div>
           </div>

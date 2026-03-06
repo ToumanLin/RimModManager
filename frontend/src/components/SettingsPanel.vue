@@ -535,7 +535,7 @@ const checkPaths = async () => {
       paths_data[key] = formData.value[key]
     }
   }
-  console.log('检查路径', paths_data)
+  // console.log('检查路径', paths_data)
   const res = await appStore.checkPaths(paths_data)
   if (res) {
     formData.value['check_info'] = res

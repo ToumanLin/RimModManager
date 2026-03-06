@@ -427,6 +427,9 @@ export const useModStore = defineStore('mods', () => {
       toast.info("选中的模组中没有来自工坊的项");
       return;
     }
+    await localizeMods(workshopIds, store)
+  }
+  const localizeMods = async (workshopIds, store='workshop') => {
     const confirm = await confirmStore.confirmAction(
       '本地化确认',
       `确定要将选中的 ${workshopIds.length} 个${store}模组复制到本地目录吗？\n复制后将独立占用磁盘空间，Steam / 管理器 的更新将不再影响这些本地副本。`,
@@ -1181,7 +1184,7 @@ export const useModStore = defineStore('mods', () => {
     // Actions
     setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, 
     updateInactiveIds, takeInactiveIds, removeIdsOnAllList, selectMods, clearSelection, changeModsActive,
-    scanMods, scanComplete, autoSortMods, localizeSelectedMods, disableMods,
+    scanMods, scanComplete, autoSortMods, localizeSelectedMods, localizeMods, disableMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, batchUpdateModsUserData,
     setModsColor, setModsType, addModsTags, removeModsTags, selectModsTag, selectModsGroup, 
     getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getIssusTargetIds, getMissingLocalDependencies, getMissingLanguagePacks, 

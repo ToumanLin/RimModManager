@@ -168,7 +168,9 @@ class ModAnalyzer:
         """
         try:
             # 找到 Languages 后的第一个文件夹
-            idx = path_parts.index('Languages')
+            lower_path_parts = [part.lower() for part in path_parts]
+            # 查找小写的 'languages' 位置（支持任意大小写的原文件夹名）
+            idx = lower_path_parts.index('languages')
             if idx + 1 < len(path_parts):
                 folder_name = path_parts[idx+1]
                 # 处理 "ChineseSimplified (简体中文)" -> "ChineseSimplified"

@@ -76,10 +76,31 @@
                         {{ mod.supported_versions?.at(-1) || '?' }}</span>
                       <!-- 来源高亮 -->
                       <span class="text-xs px-1 rounded"
-                        :class="mod.source === 'local' ? 'text-accent-success border border-accent-success/30' : (mod.source === 'workshop' ? 'text-accent-primary border border-accent-primary/10' : 'text-text-dim border border-text-dim/10')">
-                        {{ mod.source }}</span>
+                        :class="mod.store === 'local' ? 'text-accent-success border border-accent-success/30' : (mod.store === 'workshop' ? 'text-accent-primary border border-accent-primary/10' : 'text-text-dim border border-text-dim/10')">
+                        {{ mod.store }}</span>
                     </div>
                     <div class="text-xs text-text-dim mt-1 truncate font-mono" v-tooltip="mod.path">{{ mod.path }}</div>
+                    <!-- Workshop 的快捷操作区 -->
+                    <div v-if="mod.store === 'workshop' || mod.workshop_id" class="flex items-center gap-2" @click.stop>
+                      <!-- 本地化按钮 -->
+                      <button v-if="mod.store === 'workshop'" 
+                              @click="handleLocalize(mod)"
+                              v-tooltip="'将此工坊物品备份为本地模组'" 
+                              class="flex items-center gap-1 px-1.5 py-0.5 rounded border border-text-main/10 text-[10px] text-text-dim hover:text-accent-primary hover:border-accent-primary/30 hover:bg-accent-primary/10 transition-colors">
+                        <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        本地化
+                      </button>
+                      
+                      <!-- 取消订阅按钮 -->
+                      <button v-if="mod.workshop_id" 
+                              @click="handleUnsubscribe(mod)"
+                              v-tooltip="'在 Steam 中取消订阅此模组'" 
+                              class="flex items-center gap-1 px-1.5 py-0.5 rounded border border-text-main/10 text-[10px] text-text-dim hover:text-accent-danger hover:border-accent-danger/30 hover:bg-accent-danger/10 transition-colors">
+                        <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                        取消订阅
+                      </button>
+                    </div>
+
                   </div>
 
                   <!-- 未选中时的操作配置 (禁用/删除) -->
@@ -160,9 +181,11 @@ import { useAppStore } from '../stores/appStore'
 import { useToast } from "vue-toastification"
 import CommonSwitch from './common/input/CommonSwitch.vue'
 import { Folder, XCircle } from 'lucide-vue-next'
+import { useConfirmStore } from '../stores/confirmStore'
 
 const appStore = useAppStore()
 const modStore = useModStore()
+const confirmStore = useConfirmStore();
 const toast = useToast()
 
 const visible = ref(false)
@@ -214,8 +237,8 @@ watch(
       totalList.forEach((group) => {
         const pid = group.package_id;
 
-        // 智能默认选择：优先保留 Local 来源的 Mod
-        const localVersion = group.items.find(m => m.source === 'workshop');
+        // 智能默认选择
+        const localVersion = group.items.find(m => m.store === 'workshop' || m.store === 'self');
         const defaultWinner = localVersion || group.items[0];
 
         selections[pid] = defaultWinner.path;
@@ -303,8 +326,6 @@ const submit = async () => {
       visible.value = false
       // 强制重置扫描状态，确保重新开始
       await appStore.refreshData() // 这会读取数据库，但数据库里现在还没有新Mod
-      // 关键：必须重新触发一次扫描，让保留下来的那个Mod（因为没有竞争者了）正常入库
-      modStore.scanMods()
     } else {
       toast.error("处理失败: " + res.message)
     }
@@ -314,6 +335,23 @@ const submit = async () => {
   } finally {
     processing.value = false
   }
+}
+
+const handleLocalize = async (mod) => {
+  if (!mod.workshop_id) return;
+  await modStore.localizeMods([mod.workshop_id])
+}
+
+const handleUnsubscribe = async (mod) => {
+  if (!mod.workshop_id) return;
+  // 增加二次确认，防止误触
+  const ok = await confirmStore.confirmAction(
+    '取消订阅',
+    `确定要从 Steam 取消订阅 [${mod.name || mod.workshop_id}] 吗？\n文件将在后台被 Steam 移除。`,
+    { type: 'warning' }
+  );
+  if (!ok) return;
+  await appStore.unsubscribeMod([mod.workshop_id])
 }
 </script>
 

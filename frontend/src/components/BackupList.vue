@@ -404,7 +404,7 @@ const handleDelete = async (e, item) => {
   }, e.target)
   if (!confirmed) return
   // 调用后端删除接口
-  await orderStore.deletePath(item.path)
+  await appStore.deletePath(item.path, false)
   refresh()
 }
 // 从导入列表移除

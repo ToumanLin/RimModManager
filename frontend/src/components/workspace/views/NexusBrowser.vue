@@ -55,12 +55,19 @@
       
       <template v-if="selectedMod && !workspaceStore.nexusSearch.isDetailLoading">
         <!-- 头部 Banner -->
-        <div class="h-64 shrink-0 relative overflow-hidden group">
+        <div class="h-64 shrink-0 p-5 relative overflow-hidden group">
           <img v-if="selectedMod.preview_url" :src="appStore.getRemoteUrl(selectedMod.preview_url)" 
             class="absolute inset-0 w-full h-full object-cover blur-md opacity-40 scale-110 transition-transform duration-1000 group-hover:scale-100 group-hover:opacity-60" />
           <div class="absolute inset-0 bg-linear-to-t from-bg-deep via-bg-deep/60 to-transparent"></div>
           
-          <div class="absolute inset-0 p-8 flex gap-6 items-end">
+          <div class="w-full">
+            <h2 class="text-3xl min-w-0 font-black gap-1 text-text-main text-shadow-lg truncate leading-tight">
+              {{ selectedMod.title || selectedMod?.name }}
+            </h2>
+          </div>
+          
+          <div class="pt-3 flex gap-6 items-end">
+            
             <img v-if="selectedMod.preview_url" :src="appStore.getRemoteUrl(selectedMod.preview_url)" 
               class="size-40 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] border-2 border-text-main/10 object-cover z-10" />
             <div class="size-40 rounded-xl bg-black/50 border-2 border-dashed border-text-main/20 flex items-center justify-center z-10" v-else>
@@ -68,9 +75,6 @@
             </div>
 
             <div class="flex-1 min-w-0 pb-2 z-10">
-              <h2 class="text-3xl font-black flex items-center gap-1 text-text-main text-shadow-lg truncate leading-tight">{{ selectedMod.title || selectedMod?.name }}
-                <Link @click="openWebUrl(selectedId)" title="打开创意工坊页面" class="size-5 text-text-dim hover:text-accent-primary cursor-pointer transition-all" />
-              </h2>
               <div class="flex gap-2 mt-3">
                 <span class="px-2.5 py-1 rounded bg-accent-primary/20 text-accent-primary text-[0.65rem] font-bold border border-accent-primary/30 uppercase tracking-widest">ID: {{ workspaceStore.nexusSearch.selectedId }}</span>
                 <span v-if="selectedMod.time_updated" class="px-2.5 py-1 rounded bg-black/60 text-text-main text-[0.65rem] font-bold border border-text-main/20 flex items-center gap-1 backdrop-blur-sm">
@@ -81,16 +85,20 @@
             </div>
             
             <!-- 动作按钮 -->
-            <div class="flex flex-col gap-3 mb-2 z-10 shrink-0">
-              <button v-if="!isSubscribed([selectedId])" @click="handleSubscribe([selectedId])" class="w-36 py-2.5 rounded-xl bg-accent-primary/20 text-accent-primary text-sm border border-accent-primary/40 font-bold hover:scale-105 hover:bg-accent-primary active:scale-95 transition-all hover:text-black flex items-center justify-center gap-2">
+            <div class="flex flex-col gap-2 z-10 shrink-0">
+              <button v-if="!isSubscribed([selectedId])" @click="handleSubscribe([selectedId])" class="w-36 py-2 rounded-xl bg-accent-primary/20 text-accent-primary text-sm border border-accent-primary/40 font-bold hover:scale-105 hover:bg-accent-primary active:scale-95 transition-all hover:text-black flex items-center justify-center gap-2">
                 <CloudDownload class="size-4" /> 订阅
               </button>
-              <button v-else @click="handleUnsubscribe([selectedId])" class="w-36 py-2.5 rounded-xl bg-accent-danger/20 text-accent-danger border border-accent-danger/40 font-bold text-sm hover:bg-accent-danger hover:text-black hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all flex items-center justify-center gap-2">
+              <button v-else @click="handleUnsubscribe([selectedId])" class="w-36 py-2 rounded-xl bg-accent-danger/20 text-accent-danger border border-accent-danger/40 font-bold text-sm hover:bg-accent-danger hover:text-black hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all flex items-center justify-center gap-2">
                 <CloudDownload class="size-4" /> 取消订阅
               </button>
-              <button @click="handleDownload([selectedId])" class="w-36 py-2.5 rounded-xl bg-accent-success/20 text-accent-success border border-accent-success/40 font-bold text-sm hover:bg-accent-success hover:text-black hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
+              <button @click="handleDownload([selectedId])" class="w-36 py-2 rounded-xl bg-accent-success/20 text-accent-success border border-accent-success/40 font-bold text-sm hover:bg-accent-success hover:text-black hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
                 <Download class="size-4" /> 管理器下载
               </button>
+              <span @click="openWebUrl(selectedId)" title="打开创意工坊页面" class="px-2.5 py-1 rounded bg-black/60 text-[0.65rem] text-text-dim hover:text-accent-primary cursor-pointer transition-all font-bold border border-text-main/20 flex items-center gap-1 backdrop-blur-sm">
+                <Link class="size-2.5" />
+                打开创意工坊页面
+              </span>
             </div>
 
           </div>

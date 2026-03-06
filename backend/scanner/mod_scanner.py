@@ -222,9 +222,14 @@ class ModScanner:
                             'type': 'same_directory' # 标记类型：同级目录冲突
                         })
                 if has_hard_conflict:
-                    # 发生硬冲突，暂时都不入库，让用户去修
+                    # 发生硬冲突，同样入库
                     logger.warning(f"Hard conflict detected for {pid}")
-                    # continue
+                    # 强制将硬冲突也加入待更新列表，否则数据库里没数据
+                    for mod in entries:
+                        if not mod.get('_skipped'): mods_to_upsert.append(mod)
+                        # 硬冲突通常不执行部署(Deploy)，所以跳过 _classify_for_deploy
+                    continue # 结束当前这组的后续软冲突逻辑
+                
                 # --- 检查软冲突 (跨目录遮蔽/共存) ---
                 # 走到这里说明 len(entries) > 1 且没有硬冲突
                 final_coexistences.append({
@@ -393,15 +398,7 @@ class ModScanner:
 
         # 如果快照存在且被禁用，直接跳过
         if snapshot and is_disabled:
-            return {
-                '_skipped': True, 
-                'path_hash': path_hash,
-                'package_id': snapshot['package_id'],
-                'path': mod_path, 
-                'mtime': mtime,
-                'file_size': snapshot['size'], # 复用旧大小
-                'disabled': is_disabled
-            }
+            return self._build_skipped_result(snapshot, path_hash, mod_path, mtime, snapshot['size'], is_disabled)
             
         disabled_change = not(snapshot and snapshot['disabled'] is is_disabled)
         
@@ -416,27 +413,11 @@ class ModScanner:
                 current_size = get_folder_size(mod_path)
                 if snapshot['size'] > 0 and snapshot['size'] == current_size:
                     # 时间和大小都一致，判定为没变，跳过解析
-                    return {
-                        '_skipped': True, 
-                        'path_hash': path_hash,
-                        'package_id': snapshot['package_id'],
-                        'path': mod_path, 
-                        'mtime': mtime,
-                        'file_size': current_size,
-                        'disabled': is_disabled
-                    }
+                    return self._build_skipped_result(snapshot, path_hash, mod_path, mtime, current_size, is_disabled)
                 # 走到这里说明大小变了，需要继续向下解析
             else:
                 # 如果没开大小检测，且修改时间没变，直接视为跳过
-                return {
-                    '_skipped': True, 
-                    'path_hash': path_hash,
-                    'package_id': snapshot['package_id'],
-                    'path': mod_path, 
-                    'mtime': mtime,
-                    'file_size': snapshot['size'], # 复用旧大小
-                    'disabled': is_disabled
-                }
+                return self._build_skipped_result(snapshot, path_hash, mod_path, mtime, snapshot['size'], is_disabled)
         
         # 解析 XML (CPU 密集)
         # parser 内部如果处理异常会返回默认空结构，这里直接调
@@ -533,6 +514,22 @@ class ModScanner:
         #     file_mgr.ensure_thumbnail(pkg_id, mod_data['preview_path'])
             
         return mod_data
+    
+    def _build_skipped_result(self, snapshot: dict, path_hash, mod_path, mtime, current_size, is_disabled):
+        return {
+            '_skipped': True, 
+            'path_hash': path_hash,
+            'package_id': snapshot['package_id'],
+            'workshop_id': snapshot.get('workshop_id', ''),
+            'name': snapshot.get('name', ''),                         
+            'version': snapshot.get('version', ''),
+            'store': snapshot.get('store', 'local'),                 
+            'supported_versions': snapshot.get('supported_versions', []), 
+            'path': mod_path, 
+            'mtime': mtime,
+            'file_size': current_size,
+            'disabled': is_disabled
+        }
 
     def _resolve_workshop_id(self, mod_path):
         """
