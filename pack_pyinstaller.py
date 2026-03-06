@@ -105,6 +105,7 @@ def packApplication(main_file="main.py", icon_path="", name="", version="1.0.0",
             "--collect-data", "litellm",
             # 排除一些可能导致问题的模块
             "--exclude-module", "setuptools",  # 排除这个模块， 避免打包时出现问题
+            # "--exclude-module", "_distutils_hack.override",
             "--exclude-module", "pkg_resources", # 通常这两个是一起出现的，建议一并排除
             
             "--clean",  # 清理旧构建文件

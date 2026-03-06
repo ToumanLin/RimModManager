@@ -355,6 +355,12 @@ export const useRuleStore = defineStore('rules', () => {
       isLoading.value = false
     }
   }
+  // 更新创意工坊库
+  const updateWorkshop = async () => {
+    isLoading.value = true
+    const res = await appStore.updateExternalDB('workshop_db')
+    isLoading.value = false
+  }
   // 导出规则
   const handleExport = async () => {
     const ids = userDynamicRules.value.map(r => r.rule_id)

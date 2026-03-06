@@ -204,6 +204,22 @@
                   </div>
                 </div>
 
+                <div v-if="currentTab === 'workshop'" class="mb-4 p-4 rounded-xl bg-accent-secondary/10 border border-accent-secondary/20 flex justify-between items-center">
+                  <div class="text-sm text-accent-secondary">
+                    <p class="font-bold mb-1">创意工坊离线数据库</p>
+                    <p class="opacity-80">社区维护定期更新的创意工坊离线模组数据。</p>
+                  </div>
+                  <div class="flex flex-col items-center gap-2">
+                    <button @click="ruleStore.updateCommunity" class="px-3 py-1.5 bg-accent-secondary/20 hover:bg-accent-secondary/40 text-accent-secondary rounded-lg text-sm font-bold transition-all border border-accent-secondary/30">
+                      手动更新库
+                    </button>
+                    <span class="text-xs px-2 py-0.5 rounded bg-text-main/5 text-text-dim border border-text-main/5">
+                      <!-- 更新时间: {{ ruleStore.communityRulesUpdateTime? new Date(ruleStore.communityRulesUpdateTime).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '无' }} -->
+                      <!-- 更新时间: {{ ruleStore.communityRulesUpdateTime }} -->
+                    </span>
+                  </div>
+                </div>
+
                 <div v-for="item in filteredStaticRules" :key="item.id" 
                   class="flex gap-2 p-2 rounded-xl bg-text-main/2 border border-text-main/5 hover:bg-text-main/5 transition-colors">
                   

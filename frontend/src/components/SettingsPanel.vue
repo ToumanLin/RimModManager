@@ -200,10 +200,15 @@
 
               <!-- 社区设置 -->
               <section v-if="currentTab === 'community'" class="animate-in fade-in slide-in-from-right-4">
-                <h3 class="text-lg font-bold text-text-main mb-6">社区配置管理</h3>
+                <h3 class="text-lg font-bold text-text-main mb-6 flex items-center justify-between">社区配置管理
+                  
+                  <button @click="resetToDefaultCommunityPaths" v-tooltip="'将社区配置相关路径重置为默认值'" class="px-3 py-1 bg-accent-warn/10 hover:bg-accent-warn/20 border border-accent-warn/30 rounded text-xs font-bold text-accent-warn transition-all">
+                    重置为默认路径
+                  </button>
+                </h3>
                 <div class="space-y-6">
-                  <CommonPathInput label="SteamCMD 路径" v-model="formData.steamcmd_path" @browse="handleBrowse('steamcmd_path')" :check="formData.check_info?.steamcmd_path" />
-                  <div class="flex items-end gap-1.5">
+                  <CommonPathInput label="SteamCMD 路径" v-model="formData.steamcmd_path" @browse="handleBrowse('steamcmd_path')" @blur="checkPath('steamcmd_path', formData.steamcmd_path)" :check="formData.check_info?.steamcmd_path" />
+                  <div class="flex items-end gap-1.5" description="用于管理器下载模组的外置工具，路径中不能包含中文。">
                     <CommonInput label="社区规则 URL" v-model="formData.community_rules_url" />
                     <button @click="ruleStore.updateCommunity()" v-tooltip="'下载更新 社区规则'" :class="{'opacity-50 cursor-not-allowed pointer-events-none' :ruleStore.isLoading }"
                       class="shrink-0 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
@@ -247,10 +252,11 @@
                       <div class="col-span-6">
                           <CommonTagInput label="不走代理的域名" v-model="formData.network.proxy.bypass_list" />
                       </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                      <CommonSwitch label="是否为 SteamCMD 使用代理" v-model="formData.network.use_proxy_on_steamcmd" :description="'SteamCMD 是否使用代理服务器。\n\n如果启用，SteamCMD 下载、更新、安装等操作将通过代理服务器进行。'" />
-                      <CommonSwitch label="是否为 AI请求 使用代理" v-model="formData.network.use_proxy_on_ai" :description="'如果启用，AI 将通过代理服务器进行。已经是国内代理后的端口不用开此选项。'" />
+
+                      <div class="col-span-6 grid grid-cols-2 gap-3">
+                        <CommonSwitch label="是否为 SteamCMD 使用代理" v-model="formData.network.use_proxy_on_steamcmd" :description="'SteamCMD 是否使用代理服务器。\n\n如果启用，SteamCMD 下载、更新、安装等操作将通过代理服务器进行。'" />
+                        <CommonSwitch label="是否为 AI请求 使用代理" v-model="formData.network.use_proxy_on_ai" :description="'如果启用，AI 将通过代理服务器进行。已经是国内代理后的端口不用开此选项。'" />
+                      </div>
                     </div>
                   </div>
                   
@@ -285,7 +291,7 @@
                           :class="formData.ai.api_type === 'official' ? 'bg-accent-special text-black shadow-[0_0_15px_rgba(var(--color-accent-special),0.4)]' : 'text-text-dim hover:text-text-main'">
                           官方原生 API
                         </button>
-                        <button @click="handleApiTypeChange('custom')" 
+                        <button @click="handleApiTypeChange('custom')" v-tooltip="'国产的大部分厂家模型都可以用这个选项，填写请求地址和模型即可。'"
                           class="px-4 py-1 rounded-md text-sm font-bold transition-all duration-300"
                           :class="formData.ai.api_type === 'custom' ? 'bg-accent-special text-black shadow-[0_0_15px_rgba(var(--color-accent-special),0.4)]' : 'text-text-dim hover:text-text-main'">
                           自定义代理 / 本地部署
@@ -507,8 +513,14 @@ const autoDetect = async () => {
   const paths = await appStore.autoDetectPaths(false)
   if (paths) Object.assign(formData.value, paths)
 }
+const resetToDefaultCommunityPaths = async () => {
+  const paths = await appStore.getDefaultCommunityPaths()
+  if (paths) Object.assign(formData.value, paths)
+}
+
 // 检查游戏路径是否有效
 const checkPath = async (type, path) => {
+  console.log('checkPath:', type, path)
   const res = await appStore.checkPath(type, path)
   if (!formData.value['check_info']) {
     formData.value['check_info'] = {};
@@ -542,24 +554,17 @@ const handleGameBrowse = async () => {
 }
 // 手动选择其他路径
 const handleBrowse = async (pathKey, fileTypes) => {
-  // 处理嵌套路径 (如 'steamcmd_path')
-  const keys = pathKey.split('.')
-  let current = formData.value
-  for (let i = 0; i < keys.length - 1; i++) {
-    current = current[keys[i]]
-  }
-  const lastKey = keys[keys.length - 1]
   console.log('路径选择',pathKey, fileTypes)
   let res
   if (fileTypes) {
-    res = await appStore.getFilePath(current[lastKey], fileTypes)
+    res = await appStore.getFilePath(pathKey, fileTypes)
   } else {
-    res = await appStore.getFolderPath(current[lastKey])
+    res = await appStore.getFolderPath(pathKey)
   }
   if (res) {
-    current[lastKey] = res
+    formData.value[pathKey] = res
     // 自动检查路径是否有效
-    checkPath(lastKey, res)
+    await checkPath(pathKey, res)
   }
 }
 

@@ -184,6 +184,7 @@ class ProfileManager:
         # if 'id' in clean_data: del clean_data['id']
         clean_data['game_version'] = GameManager.get_game_version(clean_data.get('game_install_path'))
         clean_data['is_steam'] = os.path.normpath(clean_data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
+        clean_data['use_workshop_mods'] = True if profile_id =='default' else clean_data.get('use_workshop_mods', False)
         
         path_fields = ['user_data_path', 'game_install_path']
         # 验证路径有效性
@@ -278,12 +279,12 @@ class ProfileManager:
         """
         if not profile_id: profile_id = 'default'
         profile = GameProfile.get_or_none(GameProfile.id == profile_id)
-        if not profile: ValueError("环境不存在")   # 检测环境数据是否存在
+        if not profile: raise ValueError("环境不存在")   # 检测环境数据是否存在
         # 验证游戏安装路径是否有效
         check_install = PathChecker.check_install_path(profile.game_install_path)
         # 验证用户数据路径是否有效
         check_data = PathChecker.check_normal_path(profile.user_data_path)
-        if not check_install['pass'] or not check_data['pass']: 
+        if (not check_install['pass'] or not check_data['pass']) and profile_id != 'default': 
             self.activate_profile('default')
             msg = f"""{check_install['msg'] if not check_install['pass'] else ""}\n{check_data['msg'] if not check_data['pass'] else ''}"""
             raise ValueError(msg.strip())
@@ -301,7 +302,7 @@ class ProfileManager:
             use_workshop_mods=profile.use_workshop_mods,
             use_self_mods=profile.use_self_mods
         )
-        # 3. 校验健康度，强制建立物理目
+        # 3. 校验健康度，强制建立物理目录
         context.validate_health()
         
         return context

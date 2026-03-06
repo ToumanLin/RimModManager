@@ -689,23 +689,23 @@ class FileManager:
                     to_delete_paths.append(entry.path)
                     continue
                 
-                    name_lower = entry.name.lower()
-                    # 判定 A: 在目标清单中？
-                    if name_lower not in target_map.keys():
-                        # 指向错误、或者是多余的链接，加入删除队列
-                        to_delete_paths.append(entry.path)
-                        continue
-                    # 判定 B: 链接指向是否正确？(使用无 IO 开销的 readlink)
-                    expected_src = target_map.get(name_lower, {}).get('src_path')
-                    if not expected_src:
-                        # 目标清单中不存在此链接，加入删除队列
-                        to_delete_paths.append(entry.path)
-                        continue
-                    if not FileManager._is_link_correct(entry.path, expected_src):
-                        to_delete_paths.append(entry.path)
-                        continue
+                    # name_lower = entry.name.lower()
+                    # # 判定 A: 在目标清单中？
+                    # if name_lower not in target_map.keys():
+                    #     # 指向错误、或者是多余的链接，加入删除队列
+                    #     to_delete_paths.append(entry.path)
+                    #     continue
+                    # # 判定 B: 链接指向是否正确？(使用无 IO 开销的 readlink)
+                    # expected_src = target_map.get(name_lower, {}).get('src_path')
+                    # if not expected_src:
+                    #     # 目标清单中不存在此链接，加入删除队列
+                    #     to_delete_paths.append(entry.path)
+                    #     continue
+                    # if not FileManager._is_link_correct(entry.path, expected_src):
+                    #     to_delete_paths.append(entry.path)
+                    #     continue
                         
-                    existing_valid_keys.add(name_lower)
+                    # existing_valid_keys.add(name_lower)
                 
         except OSError as e:
             from backend.utils.logger import logger
@@ -774,6 +774,9 @@ class FileManager:
         real_storage_path = os.path.normpath(os.path.abspath(settings.config.self_mods_path))
         # SteamCMD 期望的下载路径 (Link Location, 通常是 .../294100)
         steamcmd_link_path = os.path.normpath(os.path.abspath(settings.config.steamcmd_mods_path))
+        
+        os.makedirs(os.path.dirname(steamcmd_link_path), exist_ok=True)
+        os.makedirs(real_storage_path, exist_ok=True)
 
         logger.info(f"Redirecting SteamCMD: {steamcmd_link_path} -> {real_storage_path}")
 
@@ -1015,6 +1018,28 @@ class PathChecker:
         if exe_path.exists():
             return cls._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
         return cls._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
+    
+    @classmethod
+    def check_steamcmd_path(cls, path_str: str) -> Dict:
+        """
+        检查 SteamCMD 路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
+        if not path_str: return cls._format_res(False, msg="未指定 SteamCMD 路径")
+        # 中文路经检查，steamcmd路径不能包含任何中文
+        pattern = re.compile(r'[\u4e00-\u9fff]')
+        result = pattern.search(path_str)
+        if result: return cls._format_res(False, msg="SteamCMD 路径不能包含中文")
+        
+        exe_path = Path(path_str) / "steamcmd.exe"
+        if exe_path.exists():
+            return cls._format_res(True, data=path_str, msg=f"SteamCMD 客户端：{exe_path}")
+        return cls._format_res(False, msg="路径下未找到 steamcmd.exe", msg_type="warn")
         
     @classmethod
     def paths_check(cls, paths_data: Dict[str, str]) -> Dict:
@@ -1036,11 +1061,13 @@ class PathChecker:
             # 4. Steam 主程序
             if "steam_path" in paths_data:
                 results["steam_path"] = cls.check_steam_path(paths_data["steam_path"])
+            if "steamcmd_path" in paths_data:
+                results["steamcmd_path"] = cls.check_steamcmd_path(paths_data["steamcmd_path"])
             if "user_data_path" in paths_data:
                 results["user_data_path"] = cls.check_user_data_path(paths_data["user_data_path"])
             # 5. 其他路径
             for key, path in paths_data.items():
-                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path", "user_data_path"]: continue
+                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path", "steamcmd_path", "user_data_path"]: continue
                 results[key] = cls.check_normal_path(path)
 
             return results
@@ -1050,3 +1077,6 @@ class PathChecker:
         
     
 file_mgr = FileManager()
+
+
+

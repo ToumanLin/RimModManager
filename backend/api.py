@@ -32,7 +32,8 @@ if __name__ == "__main__":
         sys.path.insert(0, str(project_root))
 
 # 1. 引入配置管理
-from backend.settings import DATA_DIR, HOME_DIR, settings, RULES_DIR
+from backend.managers.mgr_steamcmd_core import SteamCMDController
+from backend.settings import COMMUNITY_INSTEAD_DB_PATH, COMMUNITY_WORKSHOP_DB_PATH, DATA_DIR, HOME_DIR, settings, RULES_DIR
 from backend.utils.event_bus import EventBus
 from backend._version import __version__, __build__, get_changelog_since
 from backend.utils.tools import current_ms
@@ -199,9 +200,14 @@ class API:
         self.github_mgr = GithubManager(self.download_mgr)
         self.file_mgr = FileManager()
         self.steam_mgr = SteamManager()
+        self.steamcmd_controller = SteamCMDController(self.steam_mgr.steamcmd_exe)
         self.ai_mgr = AIManager()
         self.browser_window = SubBrowserManager(self)
         self.update_mgr = UpdateManager()
+        
+        # 每次启动 API 时，强制检查并修复 SteamCMD 的软链接！
+        if settings.config.self_mods_path and settings.config.steamcmd_mods_path:
+            FileManager.sync_steamcmd_root_link()
         
         # 执行升级检查
         self._handle_app_version_upgrade()
@@ -226,6 +232,9 @@ class API:
             self.game_log_mgr = None
             self.sorter = None
             return # 提早退出，阻止系统继续加载 Mod 数据
+
+        # 确保 self_mods_path 目录存在
+        os.makedirs(settings.config.self_mods_path, exist_ok=True)
         
         # 依赖注入：将上下文发给所有的 Manager
         self.scanner = ModScanner(self.active_context)
@@ -248,13 +257,14 @@ class API:
 
         # --- 执行具体的升级任务 ---
         try:
-            
             from distutils.version import LooseVersion
-            # 这里我们不强制扫，而是给前端发一个信号
-            if LooseVersion(last_version) < LooseVersion("0.17.9"): 
+            # 这里不强制扫，而是给前端发一个信号
+            if LooseVersion(last_version) < LooseVersion("0.17.10"): 
                 self._upgrade_context["pending_actions"].append("recommend_scan")
                 self._upgrade_context["messages"].append("检测到核心解析引擎升级，建议执行全量扫描以获得更好的兼容性。")
                 self.ai_mgr.reset_system_prompts()  # 强制重置/同步 AI 提示词
+                settings.set('community_workshop_db_path',str(COMMUNITY_WORKSHOP_DB_PATH))
+                settings.set('community_instead_db_path',str(COMMUNITY_INSTEAD_DB_PATH))
             
             # 弹窗展示更新日志
             self._upgrade_context["pending_actions"].append("show_update_news")
@@ -273,10 +283,13 @@ class API:
         if self.game_monitor: self.game_monitor.running = False
         # 暂停所有事件发送
         EventBus.pause()
-            
         from backend.database.models import close_db
         logger.info("Closing database connection...")
         close_db()
+        # 强制杀死正在运行的 SteamCMD 进程
+        if hasattr(self, 'steamcmd_controller') and self.steamcmd_controller:
+            self.steamcmd_controller.kill_all()
+        
     
     def set_window(self, window: webview.Window):
         """设置主窗口"""
@@ -332,6 +345,7 @@ class API:
             "app_version": __version__,
             "build_mode": __build__,
             "settings": asdict(settings.config), # 转为字典发给前端
+            "asset_port": self.file_mgr.get_port(),
             "context_healthy": False, 
             "health_report": {},
             "all_mods": [],  # 返回过滤后的列表
@@ -360,9 +374,14 @@ class API:
             active_load_order = self.load_order_mgr.read_active_mods()
         else:
             active_load_order = {'active_mods': [], 'modify_time': 0}
+            
+        replacements = self.workshop_db_mgr.get_replacements()
+        replacements_map = {r['old_workshop_id']: r for r in replacements}
         
         dlc_parser = DLCParser(self.active_context.game_dlc_path)
         rule_mgr = self.sorter.rule_mgr if (self.sorter and self.sorter.rule_mgr) else None
+        current_version = self.active_context.game_version[:3]
+        
         # 5. 数据加工：注入翻译和图片 URL
         for mod in context_mods:
             # 翻译注入, 传入当前语言，Parser 内部会查找缓存
@@ -372,7 +391,10 @@ class API:
                 mod['rules'] = rule_mgr.get_effective_mod_rules(mod['package_id'], mod)
             else:
                 mod['rules'] = {}
-                
+            if mod['workshop_id'] and  mod['workshop_id'] in replacements_map:
+                mod['replacement'] = replacements_map[mod['workshop_id']]
+            else:
+                mod['replacement'] = None
             # # 图片 URL 注入
             # pkg_id = mod['package_id']
             # # 优先使用物理路径（Source Path），即使它是被链接的 Workshop Mod
@@ -392,7 +414,6 @@ class API:
             
         result.update({
             "all_mods": context_mods,  # 返回过滤后的列表
-            "asset_port": self.file_mgr.get_port(),
             "groups": all_groups,
             "active_load_order": active_load_order.get('active_mods', []),
             "active_load_modify_time": active_load_order.get('modify_time', 0),
@@ -498,6 +519,12 @@ class API:
         return ApiResponse.warning("仅检测到部分路径，请手动设置！",{"paths": result})
 
     @log_api_call
+    def get_default_community_paths(self):
+        """获取默认的社区路径"""
+        default_paths = settings.get_default_community_paths()
+        return ApiResponse.success({"paths": default_paths})
+
+    @log_api_call
     def save_setting(self, key: str, value: Any):
         """保存单个设置项"""
         return self.save_all_settings({key: value})
@@ -584,11 +611,12 @@ class API:
                     if os.path.exists(self.active_context.local_mods_path):
                         paths_to_scan.append(self.active_context.local_mods_path)
                     # 3. Self Mods (管理器的 Mods 目录)
-                    if os.path.exists(cfg.self_mods_path) and self.active_context.use_self_mods:
+                    if os.path.exists(cfg.self_mods_path):
                         paths_to_scan.append(cfg.self_mods_path)
                     # 4. Workshop Mods (公共工坊目录)
                     # Profile 禁用了 Workshop (use_workshop_mods=False)，则不再扫描
-                    if os.path.exists(cfg.workshop_mods_path) and self.active_context.use_workshop_mods:
+                    if os.path.exists(cfg.workshop_mods_path) and \
+                        (self.active_context.use_workshop_mods or self.active_context.profile_id=='default'):
                         paths_to_scan.append(cfg.workshop_mods_path)
                 else:
                     return ApiResponse.error("当前 环境 未激活，无法扫描 Mods")
@@ -991,6 +1019,8 @@ class API:
                 res = PathChecker.check_user_data_path(path)
             elif path_type == "steam_path":
                 res = PathChecker.check_steam_path(path)
+            elif path_type == "steamcmd_path":
+                res = PathChecker.check_steamcmd_path(path)
             else:
                 res = PathChecker.check_normal_path(path)
                 
@@ -1540,6 +1570,17 @@ class API:
                 elif task.status == TaskStatus.ERROR:
                     logger.error(f"Setup task failed: {task_id}")
                     pending.remove(item)
+        # 初始化
+        is_initialized = (Path(settings.config.steamcmd_path) / "public").exists()
+        if os.path.exists(self.steamcmd_controller.steamcmd_exe) and not is_initialized:
+            controller = SteamCMDController(self.steamcmd_controller.steamcmd_exe)
+            def on_progress(percent, msg):
+                # 将进度推给前端
+                from backend.utils.event_bus import EventBus
+                EventBus.emit('steamcmd-init-progress', {'percent': percent, 'msg': msg})
+            success, msg = controller.initialize_steamcmd(on_progress)
+            if not success:
+                logger.error(f"SteamCMD 初始化彻底失败: {msg}")
 
     @log_api_call
     def steam_subscribe(self, workshop_ids: str):
@@ -1857,6 +1898,7 @@ class API:
                 # 当 workshop_db 更新完毕时，通知规则系统重建关联缓存
                 if data_type == "workshop_db" and self.sorter:
                     self.sorter.rule_mgr.build_workshop_rules()
+                self.workshop_db_mgr.load_all_cache()
                 # self.sorter.rule_mgr.load_all()
                 EventBus.send_toast(f"社区 {data_type} 数据库更新完毕！", type="success")
             def on_db_error(task):
@@ -2048,6 +2090,17 @@ class API:
             "online_time": info["time_updated"],
             "replacement": replacement # 如果有替代品，这里会包含 new_id 和 new_name
         })
+    
+    def get_workshop_ids_by_package_ids_map(self, package_ids: list[str]):
+        """
+        根据 PackageID 获取对应的 WorkshopID 映射
+        """
+        if not package_ids: return ApiResponse.error("无效的 PackageID")
+        meta_map = WorkshopMeta.select(WorkshopMeta.package_id, WorkshopMeta.workshop_id).where(WorkshopMeta.package_id.in_(package_ids)).dicts()
+        if not meta_map: return ApiResponse.error("未找到对应的 WorkshopID")
+        return ApiResponse.success(
+            { meta['package_id']: meta['workshop_id'] for meta in meta_map }
+        )
     
     @log_api_call
     def workspace_get_all_domains(self):

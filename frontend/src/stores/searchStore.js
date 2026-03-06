@@ -29,6 +29,7 @@ export const useSearchStore = defineStore('search', () => {
     // === 布尔值 ===
     save_breaking: { type: FIELD_TYPES.BOOLEAN, label: '是否坏档' },
     shadow_paths: { type: FIELD_TYPES.BOOLEAN, label: '存在禁用包名' },
+    replacement: { type: FIELD_TYPES.BOOLEAN, label: '存在替代版本' },
 
     // === 来源 (枚举) ===
     source: { 
@@ -90,6 +91,7 @@ export const useSearchStore = defineStore('search', () => {
             /colors?$/i,      // 屏蔽所有以 color 结尾的 (color)
             'description','descriptions_by_version' ,'notes',    // 屏蔽描述 (太长，不适合 key:value 搜索，适合全文搜索)
             'version','id','mod_id', 'path_hash','rules', 'disabled',
+            'package_id_raw',
             'file_size',
             // 'ignored_issues',
         ]

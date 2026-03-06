@@ -35,6 +35,7 @@ from backend.settings import BASE_RESOURCE_DIR, HOME_DIR, TOOLS_DIR, settings
 from backend.managers.mgr_network import network_mgr
 from backend.utils.event_bus import EventBus
 from backend.managers.mgr_download import TaskStatus
+from backend.managers.mgr_steamcmd_core import SteamCMDController
 
 # RimWorld App ID
 RIMWORLD_APP_ID = "294100"
@@ -250,6 +251,21 @@ class SteamManager:
             
             tid = download_mgr.add_task(url, self.steamcmd_dir, "steamcmd_package.zip")
             tasks.append({"type": "steamcmd", "id": tid})
+            
+        is_initialized = (Path(settings.config.steamcmd_path) / "public").exists()
+        
+        if os.path.exists(self.steamcmd_exe) and not is_initialized:
+            controller = SteamCMDController(self.steamcmd_exe)
+            
+            def on_progress(percent, msg):
+                # 将进度推给前端
+                from backend.utils.event_bus import EventBus
+                EventBus.emit('steamcmd-init-progress', {'percent': percent, 'msg': msg})
+                
+            success, msg = controller.initialize_steamcmd(on_progress)
+            if not success:
+                logger.error(f"SteamCMD 初始化彻底失败: {msg}")
+            
         return tasks
     
     def post_download_setup(self, task_type, file_path):

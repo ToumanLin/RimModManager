@@ -53,29 +53,29 @@
     <!-- 右侧：全息详情展示 (65%) -->
     <div class="flex-1 bg-black/40 border border-text-main/10 rounded-2xl overflow-hidden flex flex-col relative shadow-2xl">
       
-      <template v-if="workspaceStore.nexusSearch.detailData && !workspaceStore.nexusSearch.isDetailLoading">
+      <template v-if="selectedMod && !workspaceStore.nexusSearch.isDetailLoading">
         <!-- 头部 Banner -->
         <div class="h-64 shrink-0 relative overflow-hidden group">
-          <img v-if="workspaceStore.nexusSearch.detailData.preview_url" :src="appStore.getRemoteUrl(workspaceStore.nexusSearch.detailData.preview_url)" 
+          <img v-if="selectedMod.preview_url" :src="appStore.getRemoteUrl(selectedMod.preview_url)" 
             class="absolute inset-0 w-full h-full object-cover blur-md opacity-40 scale-110 transition-transform duration-1000 group-hover:scale-100 group-hover:opacity-60" />
           <div class="absolute inset-0 bg-linear-to-t from-bg-deep via-bg-deep/60 to-transparent"></div>
           
           <div class="absolute inset-0 p-8 flex gap-6 items-end">
-            <img v-if="workspaceStore.nexusSearch.detailData.preview_url" :src="appStore.getRemoteUrl(workspaceStore.nexusSearch.detailData.preview_url)" 
+            <img v-if="selectedMod.preview_url" :src="appStore.getRemoteUrl(selectedMod.preview_url)" 
               class="size-40 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] border-2 border-text-main/10 object-cover z-10" />
             <div class="size-40 rounded-xl bg-black/50 border-2 border-dashed border-text-main/20 flex items-center justify-center z-10" v-else>
               <span class="text-xs text-text-dim">NO IMAGE</span>
             </div>
 
             <div class="flex-1 min-w-0 pb-2 z-10">
-              <h2 class="text-3xl font-black flex items-center gap-1 text-text-main text-shadow-lg truncate leading-tight">{{ workspaceStore.nexusSearch.detailData.title || workspaceStore.nexusSearch.detailData?.name }}
-                <Link @click="openWebUrl(workspaceStore.nexusSearch.selectedId)" title="打开创意工坊页面" class="size-5 text-text-dim hover:text-accent-primary cursor-pointer transition-all" />
+              <h2 class="text-3xl font-black flex items-center gap-1 text-text-main text-shadow-lg truncate leading-tight">{{ selectedMod.title || selectedMod?.name }}
+                <Link @click="openWebUrl(selectedId)" title="打开创意工坊页面" class="size-5 text-text-dim hover:text-accent-primary cursor-pointer transition-all" />
               </h2>
               <div class="flex gap-2 mt-3">
                 <span class="px-2.5 py-1 rounded bg-accent-primary/20 text-accent-primary text-[0.65rem] font-bold border border-accent-primary/30 uppercase tracking-widest">ID: {{ workspaceStore.nexusSearch.selectedId }}</span>
-                <span v-if="workspaceStore.nexusSearch.detailData.time_updated" class="px-2.5 py-1 rounded bg-black/60 text-text-main text-[0.65rem] font-bold border border-text-main/20 flex items-center gap-1 backdrop-blur-sm">
+                <span v-if="selectedMod.time_updated" class="px-2.5 py-1 rounded bg-black/60 text-text-main text-[0.65rem] font-bold border border-text-main/20 flex items-center gap-1 backdrop-blur-sm">
                   <Calendar class="size-3 text-text-dim"/>
-                  云端更新: {{ formatDate(workspaceStore.nexusSearch.detailData.time_updated) }}
+                  云端更新: {{ formatDate(selectedMod.time_updated) }}
                 </span>
               </div>
             </div>
@@ -88,7 +88,7 @@
               <button v-else @click="handleUnsubscribe([selectedId])" class="w-36 py-2.5 rounded-xl bg-accent-danger/20 text-accent-danger border border-accent-danger/40 font-bold text-sm hover:bg-accent-danger hover:text-black hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all flex items-center justify-center gap-2">
                 <CloudDownload class="size-4" /> 取消订阅
               </button>
-              <button @click="handleDownload" class="w-36 py-2.5 rounded-xl bg-accent-success/20 text-accent-success border border-accent-success/40 font-bold text-sm hover:bg-accent-success hover:text-black hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
+              <button @click="handleDownload([selectedId])" class="w-36 py-2.5 rounded-xl bg-accent-success/20 text-accent-success border border-accent-success/40 font-bold text-sm hover:bg-accent-success hover:text-black hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
                 <Download class="size-4" /> 管理器下载
               </button>
             </div>
@@ -99,7 +99,7 @@
         <!-- 内容区 (使用 Tailwind Typography) -->
         <div class="flex-1 overflow-y-auto p-5 custom-scrollbar bg-text-main/2">
           <!-- 依赖提示框 (如果是解析得到的) -->
-          <div v-if="workspaceStore.nexusSearch.detailData?.dependencies_mods && dependencies_ids.length > 0" 
+          <div v-if="selectedMod?.dependencies_mods && dependencies_ids.length > 0" 
             class="mb-6 p-3 rounded-xl bg-accent-warn/10 border border-accent-warn/30">
             <div class="flex justify-between items-center mb-2">
               <h4 class="text-xs font-bold text-accent-warn uppercase tracking-widest flex items-center gap-1">
@@ -118,7 +118,7 @@
               </div>
             </div>
             <div class="flex flex-wrap gap-2">
-              <span v-for="(name, wid) in workspaceStore.nexusSearch.detailData?.dependencies_mods" :key="wid"
+              <span v-for="(name, wid) in selectedMod?.dependencies_mods" :key="wid"
                 class="px-2 py-0.5 text-sm group relative rounded border border-text-main/10 font-mono"
                 :class="[isSubscribed([wid]) ? 'bg-accent-primary/20 text-accent-primary' : isInstalled([wid]) ? 'bg-accent-success/20 text-accent-success' : 'bg-text-main/10 text-text-dim']"
                 >

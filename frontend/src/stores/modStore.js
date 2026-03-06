@@ -112,7 +112,8 @@ export const useModStore = defineStore('mods', () => {
       package_id: id,
       name: `⚠ ${defaultName} (${id})`,
       path: null,
-      description: '该模组在本地未找到，可能未下载，或已被手动删除。'
+      description: '该模组在本地未找到，可能未下载，或已被手动删除。',
+      isMissing: true,
     }
   }
   // 获取 Mod 对象列表
@@ -727,8 +728,8 @@ export const useModStore = defineStore('mods', () => {
       const id = mod.package_id.toLowerCase()
 
       // A. 文件缺失
-      if (!mod.path) {
-        _add(id, ISSUE_TYPE.ERROR_MISSING_FILE, ISSUE_LEVEL.ERROR, '本地文件缺失或无法解析')
+      if (!mod.path || mod.isMissing) {
+        _add(id, ISSUE_TYPE.ERROR_MISSING_FILE, ISSUE_LEVEL.ERROR, '本地文件缺失或无法解析', id)
         continue // 文件都没了，没必要查别的
       }
 
@@ -990,6 +991,21 @@ export const useModStore = defineStore('mods', () => {
       }
     }
   }
+  // 获取问题项目目标ID
+  const getIssusTargetIds = (targetIds, issueType) => {
+    const toActivate = new Set()
+    targetIds.forEach(id => {
+      const issues = modIssues.value.get(id.toLowerCase())
+      if (issues) {
+        issues.forEach(issue => {
+          if (issue.type === issueType && issue.targetId) {
+            toActivate.add(issue.targetId)
+          }
+        })
+      }
+    })
+    return Array.from(toActivate)
+  }
   // 提取当前列表所有未启用的有效依赖项 ID
   const getMissingLocalDependencies = (targetIds) => {
     const toActivate = new Set()
@@ -1151,7 +1167,7 @@ export const useModStore = defineStore('mods', () => {
     })
     return result
   }
-
+  
 
   return {
     // State
@@ -1168,6 +1184,6 @@ export const useModStore = defineStore('mods', () => {
     scanMods, scanComplete, autoSortMods, localizeSelectedMods, disableMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, batchUpdateModsUserData,
     setModsColor, setModsType, addModsTags, removeModsTags, selectModsTag, selectModsGroup, 
-    getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getMissingLocalDependencies, getMissingLanguagePacks,
+    getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getIssusTargetIds, getMissingLocalDependencies, getMissingLanguagePacks, 
   }
 })

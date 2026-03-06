@@ -271,8 +271,22 @@ class SettingsManager:
         """
         # 根据 steamcmd_path 计算 steamcmd_mods_path
         if self.config.steamcmd_path:
-            new_path = str(Path(self.config.steamcmd_path) / "steamapps" / "workshop" / "content" / "294100")
+            base_path = Path(self.config.steamcmd_path).resolve()
+            new_path = str(base_path / "steamapps" / "workshop" / "content" / "294100")
             self.config.steamcmd_mods_path = new_path
+            
+    def get_default_community_paths(self):
+        """获取默认的社区路径"""
+        default_paths = {
+            # "self_mods_path": str(),
+            "steamcmd_mods_path": str(TOOLS_DIR / "steamcmd"),
+            "community_workshop_db_path": str(COMMUNITY_WORKSHOP_DB_PATH),
+            "community_instead_db_path": str(COMMUNITY_INSTEAD_DB_PATH),
+            "community_rules_path": str(COMMUNITY_RULES_PATH),
+            "user_rules_path": str(USER_RULES_PATH),
+        }
+        return default_paths
+        
     
     def get(self, key: str) -> Any:
         """

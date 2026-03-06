@@ -674,12 +674,19 @@ export const useAppStore = defineStore('app', () => {
   const autoDetectPaths = async (updateStore=true) => {
     if(!window.pywebview) return
     const res = await window.pywebview.api.auto_detect_paths(false)
-    if (checkResult(res, "自动检测路径") && res.data.paths) {
+    if (checkResult(res, "自动检测路径",true) && res.data.paths) {
        // 更新本地 setting store
       if(updateStore) {
         Object.assign(settings.value, res.data.paths)
         toast.success("路径已更新")
       }
+      return res.data.paths
+    }
+  }
+  const getDefaultCommunityPaths = async () => {
+    if(!window.pywebview) return
+    const res = await window.pywebview.api.get_default_community_paths()
+    if (checkResult(res, "获取默认社区路径",true) && res.data.paths) {
       return res.data.paths
     }
   }
@@ -879,6 +886,29 @@ export const useAppStore = defineStore('app', () => {
       const steamUrl = url.replace('https://steamcommunity.com/sharedfiles/filedetails/?id=', 'steam://url/CommunityFilePage/')
       window.open(steamUrl, '_blank')
     }
+  }
+  // 根据包名下载Mod
+  const downloadPackageIds = async (packageIds) => {
+    if (!packageIds) return false
+    const workshopStore = useWorkspaceStore()
+    const workshopIdsMap = await workshopStore.getWorkshopIdsByPackageIdsMap(packageIds)
+    if (!workshopIdsMap) return false
+    // {zetrith.prepatcher: '2934420800'}
+    const workshopIds = Object.values(workshopIdsMap)
+    // 调用下载函数
+    await downloadWorkshopItems(workshopIds)
+    return true
+  }
+  // 根据包名订阅Mod
+  const subscribePackageIds = async (packageIds) => {
+    if (!packageIds) return false
+    const workshopStore = useWorkspaceStore()
+    const workshopIdsMap = await workshopStore.getWorkshopIdsByPackageIdsMap(packageIds)
+    if (!workshopIdsMap) return false
+    const workshopIds = Object.values(workshopIdsMap)
+    // 调用订阅函数
+    await subscribeMod(workshopIds)
+    return true
   }
   // 订阅模组
   const subscribeMod = async (workshop_ids) => {
@@ -1122,7 +1152,7 @@ export const useAppStore = defineStore('app', () => {
         const task_id = res.data.task_id
         const filePath = await waitForDownload(task_id)
         // 重新获取数据
-        // await fetchRules() 
+        await refreshData() 
       }
     } catch (error) {
       toast.error("更新社区库失败: " + error.message)
@@ -1135,8 +1165,8 @@ export const useAppStore = defineStore('app', () => {
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode,
     getThumbUrl, getLocalUrl, getRemoteUrl,
     // 游戏相关
-    checkPath, checkPaths, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
-    startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems,
+    checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultCommunityPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
+    startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds,
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, updateExternalDB,
     // AI处理

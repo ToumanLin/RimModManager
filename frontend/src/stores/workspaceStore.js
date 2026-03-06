@@ -219,6 +219,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   // 打开并加载模组变更时间线
   const openTimeline = async (workshopId, modName, is_steamcmd=false) => {
+    if (!window.pywebview) return
     timeline.isOpen = true
     timeline.workshopId = workshopId
     timeline.modName = modName
@@ -235,6 +236,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
   // 打开并加载 Github 模组变更时间线
   const openTimelineGithub = async (path) => {
+    if (!window.pywebview) return
     timeline.isOpen = true
     console.log("打开Github时间线", path, github.subscribedRepos)
     const repo = github.subscribedRepos.find(repo => path.includes(repo.local_folder))
@@ -350,8 +352,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  // 获取并展开选中合集的内部阵列 (动态计算缺失状态)
+  // 获取并展开选中合集的内部列表 (动态计算缺失状态)
   const selectCollection = async (coll) => {
+    if (!window.pywebview) return
     collections.activeId = coll.id
     collections.isChildrenLoading = true
     
@@ -367,11 +370,23 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  // 根据包名获取创意工坊ID映射
+  const getWorkshopIdsByPackageIdsMap = async (packageIds) => {
+    if (!window.pywebview) return
+    if (!packageIds) return []
+    const res = await window.pywebview.api.get_workshop_ids_by_package_ids_map(packageIds)
+    if (checkResult(res, '根据包名获取创意工坊ID')) {
+      return res.data || {}
+    }
+    
+    return []
+  }
+
   
   // 打开Steam创意工坊
   const openSteamWorkshopUrl = (workshop_id, on_steam=true) => {
     if(!workshop_id) return
-    const steamUrl = on_steam ? `https://steamcommunity.com/sharedfiles/filedetails/?id=${workshop_id}` : `steam://url/CommunityFilePage/${workshop_id}`
+    const steamUrl = on_steam ? `steam://url/CommunityFilePage/${workshop_id}` : `https://steamcommunity.com/sharedfiles/filedetails/?id=${workshop_id}` 
     window.open(steamUrl, '_blank')
   }
 
@@ -380,7 +395,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     librariesMods, isFetching, librariesSize,
     nexusSearch, timeline,
     fetchLibrariesMods, doNexusSearch, fetchNexusDetails, openTimeline, openTimelineGithub, setupListeners,
-    github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl,
+    github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl, getWorkshopIdsByPackageIdsMap,
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection
   }
 })

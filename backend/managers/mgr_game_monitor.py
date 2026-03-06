@@ -100,7 +100,6 @@ class GameMonitor:
             from main import get_entrypoint
             target_url = self.resume_url if self.resume_url else get_entrypoint()
             window.load_url(target_url)
-            # 不要在这里 sleep 和 resume！
             # 让前端在 onMounted 时主动调用 API 恢复
             logger.info("[Monitor] 等待前端 UI 唤醒确认...")
         except Exception as e:

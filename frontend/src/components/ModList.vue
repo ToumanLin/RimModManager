@@ -171,6 +171,30 @@
         </VirtualList>
 
         <div class="absolute bottom-2 right-2 flex items-center justify-end gap-2">
+          <!-- 一键订阅缺失的模组 -->
+          <div v-if="missingModIds.length > 0" @click.stop="appStore.subscribePackageIds(missingModIds)" 
+            v-tooltip="`[[一键订阅共计 ${missingModIds.length} 个缺失的模组]]\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+            class="px-1 py-1 group relative bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
+            <Flag />
+
+            <button @click.stop="appStore.downloadPackageIds(missingModIds)" 
+              v-tooltip="`##一键下载共计 ${missingModIds.length} 个缺失的模组##\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+              class="px-1 py-1 right-1/2 translate-x-1/2 absolute bottom-full mb-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all duration-200" >
+              <Download />
+            </button>
+          </div>
+          <!-- 一键订阅缺失的依赖项 -->
+          <div v-if="missingDependencies.length > 0" @click.stop="appStore.subscribePackageIds(missingDependencies)" 
+            v-tooltip="`[[一键订阅共计 ${missingDependencies.length} 个缺失的依赖项]]\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+            class="px-1 py-1 group relative bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
+            <Flag />
+
+            <button @click.stop="appStore.downloadPackageIds(missingDependencies)" 
+              v-tooltip="`##一键下载共计 ${missingDependencies.length} 个缺失的依赖项##\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+              class="px-1 py-1 right-1/2 translate-x-1/2 absolute bottom-full mb-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all duration-200" >
+              <Download />
+            </button>
+          </div>
           <!-- 添加未启用的依赖项 -->
           <button v-if="inactiveDependenciesToAdd.length > 0" @click="addInactiveMods(inactiveDependenciesToAdd)" 
             v-tooltip="`^^一键添加共计 ${inactiveDependenciesToAdd.length} 个未启用的依赖项^^`"
@@ -210,8 +234,9 @@ import { ISSUE_TITLE_MAP, ISSUE_TYPE } from '../utils/constants';
 import ModItem from './utils/ModItem.vue';
 import TagsSearch from './common/TagsSearch/TagsSearch.vue';
 import DependencyGraph from './utils/DependencyGraph.vue'
-import { GitPullRequestCreate, Megaphone, MegaphoneOff, MessageSquarePlus, SearchAlert, Trash2 } from 'lucide-vue-next';
+import { Download, Flag, GitPullRequestCreate, Megaphone, MegaphoneOff, MessageSquarePlus, SearchAlert, Trash2 } from 'lucide-vue-next';
 import { useContextMenuStore } from '../stores/contextMenuStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -307,6 +332,18 @@ const searchHelpText = computed(() => {
   if (!engine.value) return 'Loading...';
   // 这里可以做一层缓存，避免每次 render 都生成字符串
   return generateHtmlHelp(engine.value);
+})
+
+// 提取缺失模组列表
+const missingModIds = computed(() => {
+  const missingModIdsByPath = modStore.getIssusTargetIds(props.modelValue, ISSUE_TYPE.ERROR_MISSING_FILE)
+  const missingModIdsByOrder = props.modelValue.filter(package_id => !modStore.allModsMap.has(package_id.toLowerCase()))
+  return [...missingModIdsByPath, ...missingModIdsByOrder]  
+})
+// 提取完全缺失的依赖项列表
+const missingDependencies = computed(() => {
+  if (!issuesSummary.value.stats[ISSUE_TYPE.ERROR_MISSING_DEPENDENCY]?.length) return []
+  return modStore.getIssusTargetIds(props.modelValue, ISSUE_TYPE.ERROR_MISSING_DEPENDENCY)
 })
 // 提取真正需要被添加的、去重后的依赖项列表
 const inactiveDependenciesToAdd = computed(() => {
@@ -662,6 +699,7 @@ const updateChildren = async (e) => {
   await nextTick()
   isSortAsc.value=!isSortAsc.value
 }
+
 // 添加缺失的依赖项
 const addInactiveMods = async (missingIds) => {
   if (missingIds.length === 0) return
