@@ -14,24 +14,24 @@
           <div class="h-full p-1 transition-opacity relative" :style="{ width: (colWidths[index] || 0) + 'px' }" >
             <!-- 1. 详情 (Details) -->
             <div v-if="col.id === 'details'" class="h-full rounded-2xl overflow-hidden bg-bg-surface/40 backdrop-blur-sm border border-text-main/5 shadow-2xl">
-              <ModDetails />
+              <ModDetails data-tour="details-column" />
             </div>
 
             <!-- 2. 待选库 (Library) -->
             <div v-else-if="col.id === 'library'" class="h-full">
-              <ModList v-model="modStore.inactiveIds" title="未启用" listColor="primary" listId="inactive" />
+              <ModList v-model="modStore.inactiveIds" title="未启用" listColor="primary" listId="inactive" data-tour="inactive-list" />
             </div>
 
             <!-- 3. 启用/排序 (Active) - 包含规则编辑器逻辑 -->
             <div v-else-if="col.id === 'active'" class="h-full">
-              <ModList v-model="modStore.activeIds" title="启用" :hasSidebar="true" listColor="success" listId="active" />
+              <ModList v-model="modStore.activeIds" title="启用" :hasSidebar="true" listColor="success" listId="active" data-tour="active-list" />
             </div>
 
             <!-- 4. 辅助/分组 (Sidebar Tabs) -->
             <div v-else-if="col.id === 'sidebar'" class="h-full">
               <!-- 这里保留原有的逻辑：如果有规则ID，显示编辑器，否则显示列表 -->
               <ModRuleEditor v-if="ruleStore.currentId" title="规则" listColor="warn" />
-              <div v-else class="h-full flex flex-col relative">
+              <div v-else class="h-full flex flex-col relative" data-tour="sidebar-column">
                 <div class="flex-1 overflow-hidden grid grid-cols-1 grid-rows-1">
                   <Transition
                     enter-active-class="transition-opacity duration-300 ease-out"
@@ -55,7 +55,7 @@
                 </div>
 
                 <!-- 底部按钮组 -->
-                <div class="p-3 rounded-b-2xl grid grid-cols-3 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-text-main/5">
+                <div class="p-3 rounded-b-2xl grid grid-cols-3 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-text-main/5" data-tour="base-button-group">
             
                   <!-- 刷新按钮 -->
                   <div :class="{'scan': appStore.scanProgress.scanning}" v-tooltip="'默认增量扫描文件，只扫描存在变动的文件'"
@@ -277,6 +277,7 @@ import { useAppStore } from './stores/appStore'
 import { useRuleStore } from './stores/ruleStore'
 import { useGroupStore } from './stores/groupStore'
 import { useOrderStore } from './stores/orderStore'
+import { useGuideStore } from './stores/guideStore'
 import RimHeader from './components/RimHeader.vue'
 import ModDetails from './components/ModDetails.vue'
 import ModList from './components/ModList.vue'
@@ -309,6 +310,7 @@ const modStore = useModStore()
 const ruleStore = useRuleStore()
 const groupStore = useGroupStore()
 const orderStore = useOrderStore()
+const guideStore = useGuideStore()
 
 const tabs = ['临时', '分组', '备份']
 const activeTab = ref(tabs[0])
@@ -429,7 +431,11 @@ onMounted(() => {
       window.pywebview.api.monitor_frontend_ready()
     })
   }
-  appStore.initialize()  // 初始化存储（加载数据）
+  appStore.initialize().then(() => {
+    // 确保数据初始化（列表渲染）完毕后，触发引导
+    // 这里的 startMainGuide 内部有防打扰逻辑（如果已经 done 过就不会再弹）
+    guideStore.startMainGuide()
+  })  // 初始化存储（加载数据）
 
   // 监听后端传递过来的升级上下文
   watch(() => appStore.upgradeContext, (ctx) => {

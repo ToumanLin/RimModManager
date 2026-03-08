@@ -63,7 +63,7 @@
               <!-- 路径设置 (Paths) -->
               <section v-if="currentTab === 'paths'" class="animate-in fade-in slide-in-from-right-4">
                 <div class="flex items-center justify-between mb-6">
-                  <h3 class="text-lg font-bold text-text-main">路径配置
+                  <h3 class="text-lg font-bold text-text-main">环境与路径配置
                     <label v-tooltip="'此处会直接修改当前环境的路径配置'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                     <label class="ml-5 text-xs py-0.5 px-2 text-accent-cool bg-accent-cool/20 rounded-md" v-tooltip="`当前环境：${profileStore?.currentProfile?.name}\n说明：${profileStore?.currentProfile?.description}`">
                       {{ profileStore?.currentProfile?.name }}
@@ -115,7 +115,11 @@
 
               <!-- 常规设置 (General) -->
               <section v-if="currentTab === 'general'" class="animate-in fade-in slide-in-from-right-4">
-                <h3 class="text-lg font-bold text-text-main mb-6">界面与环境</h3>
+                <h3 class="text-lg font-bold text-text-main mb-6 flex items-center justify-between">界面与布局
+                  <button @click="guideStore.resetGuideRecord()" v-tooltip="'重置界面引导，将界面引导重置为默认值'" class="px-3 py-1 bg-accent-warn/10 hover:bg-accent-warn/20 border border-accent-warn/30 rounded text-xs font-bold text-accent-warn transition-all">
+                    重置界面引导
+                  </button>
+                </h3>
                 <div class="space-y-6">
                   <div class="grid grid-cols-2 gap-4 aria-disabled:pointer-events-none aria-disabled:opacity-50" :aria-disabled="true">
                     <CommonSelect label="界面语言" v-model="formData.language" :options="[{label:'简体中文', value:'ZH-cn'}, {label:'English', value:'EN'}]" />
@@ -438,12 +442,14 @@ import { useRuleStore } from '../stores/ruleStore'
 import { useAppStore } from '../stores/appStore'
 import { useConfirmStore } from '../stores/confirmStore'
 import { useProfileStore } from '../stores/profileStore'
+import { useGuideStore } from '../stores/guideStore'
 
 const toast = createToastInterface()
 const appStore = useAppStore()
 const ruleStore = useRuleStore()
 const confirmStore = useConfirmStore()
 const profileStore = useProfileStore()
+const guideStore = useGuideStore()
 
 const currentTab = ref('paths')
 const formData = ref({})

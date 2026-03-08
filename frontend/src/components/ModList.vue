@@ -2,7 +2,7 @@
   <div class="flex flex-col relative h-full bg-bg-surface/40 backdrop-blur-sm shadow-2xl"
        :class="`border-2 rounded-2xl border-accent-${listColor}/20 overflow-hidden`">
     <!-- 标题栏 -->
-    <div :class="`px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-accent-${listColor}/10`">
+    <div :data-tour="listId=='active'?'list-header':null" :class="`px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-accent-${listColor}/10`">
       <span :class="`text-sm font-bold text-accent-${listColor} uppercase tracking-wider flex items-center gap-1`">
         <div :class="`w-1.5 h-1.5 mr-1 rounded-full bg-accent-${listColor} shadow-lg shadow-accent-primary`"></div>
         <span class="mr-1">{{ title }}</span>
@@ -43,7 +43,7 @@
     </div>
     
     <!-- 工具栏 (搜索 & 筛选) -->
-    <div class="px-2 py-1 w-full flex flex-col gap-1 shadow-xl bg-bg-deep/20 z-50">
+    <div :data-tour="listId=='active'?'list-toolbar':null" class="px-2 py-1 w-full flex flex-col gap-1 shadow-xl bg-bg-deep/20 z-50">
       <div class="flex items-center justify-center gap-1 relative">
         <!-- 搜索定位 (Find) -->
         <TagsSearch :list-color="listColor" v-model="searchQuery" v-model:logic="searchLogic" ref="searchTagsRef"
@@ -121,7 +121,7 @@
 	      @click.self="modStore.clearSelection()">
       
       <!-- 左侧辅助功能区( @wheel.passive 监听滚轮事件) -->
-      <div v-if="hasSidebar && appStore.settings.ui.show_dependency_graph" class="w-[55px] h-full flex-none"
+      <div v-if="hasSidebar && appStore.settings.ui.show_dependency_graph" :data-tour="listId=='active'?'list-dependency':null" class="w-[55px] h-full flex-none"
         @wheel.passive="vListRef?.scrollToOffset(vListRef.getOffset()+$event.deltaY)">
         <DependencyGraph v-if="allowSort || filterByLine" 
           :listIds="lineData" :isFilter="filterByLine.length>0"
@@ -131,7 +131,7 @@
         />
       </div>
       <!-- 列表主体部分 -->
-      <div @click.self="modStore.clearSelection()" class="flex-1 h-full pl-1 pr-1 min-w-0 relative">
+      <div @click.self="modStore.clearSelection()" class="flex-1 h-full pl-1 pr-1 min-w-0 relative" :data-tour="listId=='active'?'list-modItem':null">
         <!-- 列表为空时的提示 -->
         <div v-show="modelValue.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed border-text-dim/60 text-gray-600 text-xs bg-bg-deep/90 select-none pointer-events-none">
             可拖拽模组到此
@@ -237,6 +237,7 @@ import DependencyGraph from './utils/DependencyGraph.vue'
 import { Download, Flag, GitPullRequestCreate, Megaphone, MegaphoneOff, MessageSquarePlus, SearchAlert, Trash2 } from 'lucide-vue-next';
 import { useContextMenuStore } from '../stores/contextMenuStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useGuideStore } from '../stores/guideStore';
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -909,6 +910,8 @@ watch(() => appStore.isLoading, async (loading) => {
     // 加载完成：等待 DOM 渲染
     await nextTick();
     restorePosition();
+    const guideStore = useGuideStore();
+    guideStore.startModListGuide();
   }
 });
 const restorePosition = () => {

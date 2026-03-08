@@ -1023,6 +1023,9 @@ export const useAppStore = defineStore('app', () => {
   // 获取AI模型 temp_config: {provider, base_url, api_key}
   const getAiModels = async (temp_config) => {
     if (!window.pywebview) return
+    if (!settings.value.ai.enabled || !temp_config || !temp_config.provider) {
+      return
+    }
     const res = await window.pywebview.api.ai_get_models(temp_config)
     if (checkResult(res, "获取AI模型")) {
       aiState.isLoading = false
