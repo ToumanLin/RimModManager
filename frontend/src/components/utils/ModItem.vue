@@ -158,7 +158,7 @@ import { useRuleStore } from '../../stores/ruleStore'
 import { useContextMenuStore } from '../../stores/contextMenuStore'
 import { useConfirmStore } from '../../stores/confirmStore'
 import { hexToRgba, hexToRgb } from '../../utils/colorDeal'
-import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal,Download, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus } from 'lucide-vue-next';
+import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Download, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus } from 'lucide-vue-next';
 import GroupItem from './GroupItem.vue'
 
 const props = defineProps({
@@ -349,7 +349,7 @@ const handleContextMenu = async (event) => {
       children: [...Object.entries(MOD_TYPE_MAP).map(([key, value]) => ({ 
         icon: MOD_TYPE_ICON_MAP[key],
         label: value, action: () => modStore.setModsType(selectedIds, key)
-      })),{ label: '恢复默认', level: 'warn', action: () => modStore.setModsType(selectedIds, null) }]
+      })),{ label: '恢复默认', icon: SquareX, level: 'warn', action: () => modStore.setModsType(selectedIds, null) }]
     },
     { label: (isActive.value?'停用':'启用') + selectedCountStr, icon: isActive.value? CircleSlash2:CircleCheckBig, 
       action: () => modStore.changeModsActive(selectedIds, !isActive.value) 
@@ -367,7 +367,7 @@ const handleContextMenu = async (event) => {
   // 单选菜单
   const singleMenuItems = [
     { divider: true },
-    { label: '编辑排序规则', icon: PencilRuler, action: () => ruleStore.currentId = props.item_id },
+    { label: '编辑规则', icon: PencilRuler, shortcut: 'Alt+左键', action: () => ruleStore.currentId = props.item_id },
     { label: '访问网页', disabled: !modData.value.url, icon: ExternalLink, action: () => appStore.openUrl(modData.value.url) },
     { label: '打开文件夹', disabled: !modData.value.path, icon: FolderInput, action: () => appStore.openPath(modData.value.path) },
     { label: 'Steam操作', icon: IconSteam, disabled: modData.value.store!=='workshop', children: [
