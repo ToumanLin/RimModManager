@@ -367,16 +367,24 @@
                         <span class="text-sm font-bold text-text-main">软件版本</span>
                         <span class="text-xs text-text-dim">当前版本: v{{ appStore.appVersion }}</span>
                       </div>
-                      <button 
-                        @click="appStore.checkUpdate(true)" 
-                        :disabled="appStore.updateState.isChecking"
-                        class="px-4 py-1.5 bg-text-main/5 hover:bg-text-main/10 border border-text-main/10 rounded-lg text-xs font-bold transition-all"
-                      >
-                        <span v-if="appStore.updateState.isChecking" class="flex items-center gap-2">
-                          <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24">...</svg>检查中
-                        </span>
-                        <span v-else>立即检查更新</span>
-                      </button>
+
+                      <div class="flex items-center justify-between gap-1">
+                        <button @click="appStore.showChangelog()"
+                          class="px-2 py-1.5 bg-accent-tip/15 hover:bg-accent-tip/30 border border-accent-tip/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
+                          <span class="flex items-center gap-2">
+                            更新日志
+                          </span>
+                        </button>
+                        <button @click="appStore.checkUpdate(true)" :disabled="appStore.updateState.isChecking"
+                          class="px-4 py-1.5 bg-text-main/5 hover:bg-text-main/10 border border-text-main/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
+                          <span v-if="appStore.updateState.isChecking" class="flex items-center gap-2">
+                            <LoaderCircle class="animate-spin h-3 w-3" />
+                            检查中
+                          </span>
+                          <span v-else>立即检查更新</span>
+                        </button>
+                      </div>
+
                     </div>
                     <CommonSelect label="日志等级" v-model="formData.log_level" :options="[{label:'DEBUG', value:'DEBUG'},{label:'INFO', value:'INFO'},{label:'WARNING', value:'WARNING'}]" />
                     <CommonNumber label="日志保留天数" v-model="formData.log_retention_days" :step="1" :min="0" :max="365" />
@@ -411,7 +419,7 @@
 
 <script setup>
 import { ref, watch, onMounted, nextTick, h } from 'vue'
-import { FolderTree, AppWindow, Globe, Cpu, Terminal, Search, Component, Settings, Drama, Download } from 'lucide-vue-next'
+import { FolderTree, AppWindow, Globe, Cpu, Terminal, Search, Component, Settings, Drama, Download, LoaderCircle } from 'lucide-vue-next'
 import { createToastInterface } from 'vue-toastification'
 import { flashComponent, shakeComponent } from '../utils/uiHelper'
 import { VueDraggable } from 'vue-draggable-plus'

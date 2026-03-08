@@ -1,25 +1,22 @@
 # backend/_version.py
-__version__ = "0.18.4"  # 主版本.次版本.补丁
+__version__ = "0.18.5"  # 主版本.次版本.补丁
 __db_version__ = "4"
 __build__ = "dev"      # dev, alpha, beta, stable, release
 
-# 更新日志：按版本从新到旧排列
-# 结构: (版本号, 日期, [更新内容列表])
+# 结构化更新日志：按版本从新到旧排列
+# type 支持: "feature" (新增), "fix" (修复), "optimize" (优化), "breaking" (重大变更)
 APP_CHANGELOG = [
+    {
+        "version": "0.2.0",
+        "date": "2025-12-07",
+        "changes": [
+            {"type": "feature", "text": "初版，奠定基础架构"}
+        ]
+    }
 ]
 
-def get_changelog_since(last_version: str):
+def get_all_changelogs():
     """
-    获取大于 last_version 的所有更新记录
+    获取全量结构化日志给前端，由前端根据 old_version 决定显示增量还是全量
     """
-    from distutils.version import LooseVersion
-    updates = []
-    for version, date, notes in APP_CHANGELOG:
-        # 如果当前循环的版本比上次运行的版本新，则加入显示列表
-        if LooseVersion(version) > LooseVersion(last_version):
-            updates.append({
-                "version": version,
-                "date": date,
-                "notes": notes
-            })
-    return updates
+    return APP_CHANGELOG

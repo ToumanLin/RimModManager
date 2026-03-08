@@ -257,7 +257,7 @@
     <Confirm />
 
     <!-- 更新弹窗 -->
-    <!-- <UpdateModal ref="updateModal" /> -->
+    <UpdateModal />
 
     <!-- 右键菜单 -->
     <ContextMenu />
@@ -300,7 +300,7 @@ import Test from './components/temp/test.vue'
 import AiReviewModal from './components/AiReviewModal.vue'
 import PromptManager from './components/PromptManager.vue'
 import WorkspaceOverlay from './components/workspace/WorkspaceOverlay.vue'
-// import UpdateModal from './components/UpdateModal.vue'
+import UpdateModal from './components/UpdateModal.vue'
 
 const updateModal = ref(null);
 
@@ -431,21 +431,15 @@ onMounted(() => {
   }
   appStore.initialize()  // 初始化存储（加载数据）
 
-  const ctx = appStore.upgradeContext
-  if (ctx && ctx.version_changed) {
-    // 检查后端是否下发了显示新闻的任务
-    if (ctx.pending_actions && ctx.pending_actions.includes('show_update_news')) {
-      if (ctx.changelog && ctx.changelog.length > 0) {
-        handleUpdate(ctx.changelog)
+  // 监听后端传递过来的升级上下文
+  watch(() => appStore.upgradeContext, (ctx) => {
+    if (ctx && ctx.version_changed) {
+      if (ctx.pending_actions && ctx.pending_actions.includes('show_update_news')) {
+        // 直接通过状态控制弹窗显示，不传参，组件内部会自己读 context
+        appStore.uiState.showUpdateModal = true
       }
     }
-    
-    // 如果有推荐扫描的建议，也可以在这里触发
-    if (ctx.pending_actions.includes('recommend_scan')) {
-      appStore.toast.info("检测到核心版本更新，建议执行一次全量扫描。")
-    }
-  }
-
+  }, { immediate: true }) // 立即执行一次以防数据已经加载
 
   // === 动态尺寸调整 ===
   distributeEvenly()  // 初始平均分配宽度

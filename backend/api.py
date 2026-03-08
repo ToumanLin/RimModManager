@@ -35,7 +35,7 @@ if __name__ == "__main__":
 from backend.managers.mgr_steamcmd_core import SteamCMDController
 from backend.settings import COMMUNITY_INSTEAD_DB_PATH, COMMUNITY_WORKSHOP_DB_PATH, DATA_DIR, HOME_DIR, settings, RULES_DIR
 from backend.utils.event_bus import EventBus
-from backend._version import __version__, __build__, get_changelog_since
+from backend._version import __version__, __build__, get_all_changelogs
 from backend.utils.tools import current_ms, generate_path_hash
 from backend.utils.logger import logger
 from backend.managers.mgr_network import network_mgr
@@ -253,7 +253,7 @@ class API:
         # 标记版本已变动
         self._upgrade_context["version_changed"] = True
         self._upgrade_context["old_version"] = last_version
-        self._upgrade_context["changelog"] = get_changelog_since(last_version)
+        self._upgrade_context["changelog"] = get_all_changelogs()
 
         # --- 执行具体的升级任务 ---
         try:
@@ -274,6 +274,12 @@ class API:
 
         except Exception as e:
             logger.error(f"Upgrade tasks failed: {e}")
+    
+    @log_api_call
+    def get_changelog(self):
+        """主动获取全量更新日志数据"""
+        from backend._version import get_all_changelogs
+        return ApiResponse.success(get_all_changelogs())
     
     def cleanup(self):
         """关闭数据库清理资源"""

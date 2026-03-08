@@ -24,6 +24,7 @@ export const useAppStore = defineStore('app', () => {
   // UI 状态
   const uiState = reactive({
     showSettingsPanel: false,    // 是否显示设置面板
+    showUpdateModal: false,      // 是否显示更新弹窗
     showDiffDrawer: false,       // 是否显示差异抽屉
     showLogDrawer: false,        // 是否显示日志抽屉
     showTestDrawer: false,       // 是否显示测试抽屉
@@ -1155,6 +1156,24 @@ export const useAppStore = defineStore('app', () => {
       updateState.isChecking = false
     }
   }
+  const showChangelog = async () => {
+    // 1. 如果当前没有日志数据（比如是从设置面板点进来的），主动从后端拉取
+    if (!upgradeContext.value.changelog || upgradeContext.value.changelog.length === 0) {
+      isLoading.value = true // 开启加载动画
+      try {
+        const res = await window.pywebview.api.get_changelog()
+        if (res.status === 'success') {
+          upgradeContext.value.changelog = res.data
+        }
+      } catch (e) {
+          console.error("无法获取更新日志:", e)
+      } finally {
+          isLoading.value = false
+      }
+    }
+    // 2. 显示弹窗
+    uiState.showUpdateModal = true
+  }
   const _showInstallPrompt = async (data) => {
     const confirmStore = useConfirmStore()
     const ok = await confirmStore.confirmAction(
@@ -1216,7 +1235,7 @@ export const useAppStore = defineStore('app', () => {
     // 游戏相关
     checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultCommunityPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
     startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds,
-    saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
+    saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, showChangelog,
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, updateExternalDB,
     // AI处理
     getAiConfig, saveAIConfig, getAiProviders, getAiModels, useAI, chatWithAI, startAiBatchTask, 
