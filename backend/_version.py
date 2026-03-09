@@ -1,16 +1,18 @@
 # backend/_version.py
-__version__ = "0.18.5"  # 主版本.次版本.补丁
+__version__ = "0.18.8"  # 主版本.次版本.补丁
 __db_version__ = "4"
 __build__ = "dev"      # dev, alpha, beta, stable, release
 
 # 结构化更新日志：按版本从新到旧排列
 # type 支持: "feature" (新增), "fix" (修复), "optimize" (优化), "breaking" (重大变更)
 APP_CHANGELOG = [
-    
     {
-        "version": "0.18.7",
+        "version": "0.18.8",
         "date": "2026-03-09",
         "changes": [
+            {"type": "feature", "text": "增加引导教程查看组件，移除自动触发引导逻辑改为手动触发"},
+            {"type": "feature", "text": "增加模组列表、库存枢纽、环境管理、备份列表的简单引导"},
+            {"type": "fix", "text": "修正引导记录储存方式为本地，避免重启软件丢失记录"},
             {"type": "feature", "text": "新增应用操作引导系统，辅助用户熟悉基础界面的交互功能"},
             {"type": "optimize", "text": "调整右键菜单布局及列表项内边距，补充编辑规则的快捷键提示"},
             {"type": "fix", "text": "增加 AI 模型获取前的环境配置有效性校验，提升网络状态异常时的容错能力"}
