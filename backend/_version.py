@@ -13,6 +13,8 @@ APP_CHANGELOG = [
             {"type": "fix", "text": "紧急修复了无法启动游戏的Bug和批量设置标签等操作的Bug。"},
             {"type": "fix", "text": "修正了保存格式问题，改为可选原格式保存。"},
             {"type": "fix", "text": "修正了工具栏的导入无效问题。"},
+            {"type": "fix", "text": "修正分组项选择问题，增加已启用提示标识。"},
+            {"type": "fix", "text": "修正规则冲突时的提示错误。"},
             {"type": "optimize", "text": "改进了页面路径编码支持中文路径。"},
             {"type": "optimize", "text": "改进了后台通信逻辑防止无响应。"},
         ]

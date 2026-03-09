@@ -401,9 +401,10 @@ export const useModStore = defineStore('mods', () => {
           })
           toast.warning(warningMessages,{position: "top-center",timeout: 5000})
           if (warnModRule.length > 0) {
+            console.log("自动排序警告:",warnModRule)
             let msg = '请检查以下Mod规则是否正确：\n'
             warnModRule.forEach(item => {
-              msg += `${displayModName(item.mod_id)} 的 ${getSourceText(item.type.name)}规则 可能存在问题：（${displayModName(item.target_id)}）\n`
+              msg += `${displayModName(item.mod_id)} 的 ${item.type.name} 规则 可能存在问题：（${displayModName(item.target_id)}）\n`
             })
             toast.warning(msg,{position: "top-center",timeout: 10000})
           }

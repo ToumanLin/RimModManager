@@ -470,11 +470,11 @@ class RuleManager:
            mid_l not in self.settings.get("excluded_community_mods", []):
             comm = self.community_rules.get(mid_l, {})
             for t, info in comm.get("loadAfter", {}).items():
-                _merge_rule("load_after", t, "community", "社区规则", detail=info)
+                _merge_rule("load_after", t, "community", "社区前置", detail=info)
             for t, info in comm.get("loadBefore", {}).items():
-                _merge_rule("load_before", t, "community", "社区规则", detail=info)
+                _merge_rule("load_before", t, "community", "社区后置", detail=info)
             for t, info in comm.get("incompatibleWith", {}).items():
-                _merge_rule("incompatible", t, "community", "社区规则", detail=info)
+                _merge_rule("incompatible", t, "community", "社区冲突", detail=info)
             # 解析 loadTop 和 loadBottom
             # 格式例如: "loadBottom": {"value": True, "comment": "必须置底"}
             isTop = comm.get("loadTop", {}).get("value") 
@@ -492,11 +492,11 @@ class RuleManager:
             rules = user.get("rules", user) # 兼容旧格式
             if isinstance(rules, dict):
                 for t, info in rules.get("loadAfter", {}).items():
-                    _merge_rule("load_after", t, "user", "用户规则", detail=info)
+                    _merge_rule("load_after", t, "user", "用户前置", detail=info)
                 for t, info in rules.get("loadBefore", {}).items():
-                    _merge_rule("load_before", t, "user", "用户规则", detail=info)
+                    _merge_rule("load_before", t, "user", "用户后置", detail=info)
                 for t, info in rules.get("incompatibleWith", {}).items():
-                    _merge_rule("incompatible", t, "user", "用户规则", detail=info)
+                    _merge_rule("incompatible", t, "user", "用户冲突", detail=info)
                 # 解析 loadTop 和 loadBottom
                 # 格式例如: "loadBottom": {"value": True, "comment": "必须置底"}
                 isTop = comm.get("loadTop", {}).get("value") 
