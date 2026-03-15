@@ -932,7 +932,7 @@ export const useModStore = defineStore('mods', () => {
             const allRelatedModIds = [...modDependencies, ...modLoadAfter]
             if(allRelatedModIds.length === 0) {
               _add(currentId, ISSUE_TYPE.WARN_UNKNOWN_TARGET, ISSUE_LEVEL.WARN,
-                `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_UNKNOWN_TARGET]}^^：语言包指向对象未知，可在规则编辑器手动指定前置对象`)
+                `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_UNKNOWN_TARGET]}^^：语言包指向对象未知，请检查该语言包是否多余，或者可在规则编辑器手动指定前置对象`)
             }
             // 如果存在依赖或前置，检测是否有任意一个启用(部分语言包支持多个Mod，只要有一个启用即可)，
             // 如果未启用则提示用户存在多余的语言包，或者提示指向对象未启用
@@ -940,7 +940,7 @@ export const useModStore = defineStore('mods', () => {
               const anyActive = allRelatedModIds.some(id => activeIndexMap.has(id))
               if(!anyActive) {
                 _add(currentId, ISSUE_TYPE.WARN_INACTIVE_TARGET, ISSUE_LEVEL.WARN,
-                  `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_TARGET]}^^：语言包指向对象未启用，请检查该语言包是否多余`)
+                  `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_TARGET]}^^：语言包指向对象未启用，请检查该语言包是否多余，或者可在规则编辑器手动指定前置对象`)
               }
             }
 

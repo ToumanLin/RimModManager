@@ -111,14 +111,14 @@
     
     <!-- 如果正在加载中，不渲染虚拟列表，防止 DOM 引擎崩溃 -->
     <div v-if="appStore.isLoading" class="w-full h-full flex items-center justify-center bg-bg-deep/50 z-50">
-        <div class="animate-spin size-8 border-4 border-accent-primary border-t-transparent rounded-full"></div>
+      <div class="animate-spin size-8 border-4 border-accent-primary border-t-transparent rounded-full"></div>
     </div>
     <!-- (tabindex="0" @keydown.ctrl.a.prevent="selectAll") 非焦点容器需要 tabindex 才能响应键盘事件 -->
     <!-- 列表区（底部渐变隐藏） -->
     <div v-else ref="listContainerRef" class="flex-1 flex pb-0.5 overflow-y-auto after:pointer-events-none 
-        after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10 
-        after:bg-linear-to-t after:from-bg-deep/80 after:to-transparent focus:outline-none"
-	      @click.self="modStore.clearSelection()">
+      after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10 
+      after:bg-linear-to-t after:from-bg-deep/80 after:to-transparent focus:outline-none"
+      @click.self="modStore.clearSelection()">
       
       <!-- 左侧辅助功能区( @wheel.passive 监听滚轮事件) -->
       <div v-if="hasSidebar && appStore.settings.ui.show_dependency_graph" :data-tour="listId=='active'?'list-dependency':null" class="w-[55px] h-full flex-none"

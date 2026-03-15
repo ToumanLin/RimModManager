@@ -51,7 +51,7 @@
             <div class="size-8 border-4 border-accent-warn border-t-transparent rounded-full animate-spin"></div>
           </div>
           <!-- 单个子 Mod 卡片 -->
-          <div v-for="mod in wsStore.collections.activeChildren" :key="mod.workshop_id"
+          <div v-for="mod in wsStore.activeChildrenWithStatus" :key="mod.workshop_id"
             class="flex items-center gap-3 p-2 rounded-xl border transition-all group hover:bg-text-main/5"
             :class="(mod.is_workshop || mod.is_self || mod.is_local) ? 'border-text-main/10 bg-text-main/2' : 'border-accent-danger/30 bg-accent-danger/5 opacity-80'">
             
@@ -133,15 +133,15 @@
                 
             <!-- 底部信息 -->
             <div class="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end z-10 pointer-events-none">
-              <span class="text-xs font-black text-text-main/80 text-shadow-lg drop-shadow-md leading-tight mb-1">{{ coll.description || '暂无说明' }}</span>
+              <span class="text-xs font-black text-text-main/80 text-shadow-lg drop-shadow-md leading-tight mb-1" >{{cleanRichText(coll.description,50) || '暂无说明'}}</span>
               
               <!-- 统计指示条 -->
               <div class="flex items-center justify-between mt-1">
                 <span class="text-[0.6rem] font-mono text-text-dim bg-black/60 px-1.5 py-0.5 rounded border border-white/5 backdrop-blur-sm">ID: {{ coll.id }}</span>
                 
                 <div class="flex gap-1.5">
-                  <span v-if="coll.need_download > 0" class="px-1.5 py-0.5 rounded bg-accent-danger/20 text-accent-danger text-[0.6rem] font-bold border border-accent-danger/30 flex items-center gap-1 shadow-lg shadow-accent-danger/20">
-                    <AlertCircle class="size-2.5"/> 缺 {{ coll.need_download }}
+                  <span v-if="getListMissingCount(coll) > 0" class="px-1.5 py-0.5 rounded bg-accent-danger/20 text-accent-danger text-[0.6rem] font-bold border border-accent-danger/30 flex items-center gap-1">
+                    <AlertCircle class="size-2.5"/> 缺 {{ getListMissingCount(coll) }}
                   </span>
                   <span class="px-1.5 py-0.5 rounded bg-text-main/10 text-text-main/80 text-[0.6rem] font-bold border border-text-main/10 flex items-center gap-1">
                     <Layers class="size-2.5"/> 共 {{ coll.total || 0 }}
@@ -175,6 +175,7 @@ import { useAppStore } from '../../../stores/appStore'
 import { useModStore } from '../../../stores/modStore'
 import { useConfirmStore } from '../../../stores/confirmStore'
 import { formatDate } from '../../../utils/uiHelper'
+import { cleanRichText, parseUnityRichText } from '../../../utils/unityTextParser'
 
 const toast = useToast()
 const wsStore = useWorkspaceStore()
@@ -186,10 +187,25 @@ const confirmStore = useConfirmStore()
 const newCollectionInput = ref('')
 
 // 计算当前合集的缺失数量
-const missingCount = computed(() => wsStore.collections.activeChildren.filter(c => (!c.is_workshop && !c.is_self && !c.is_local)).length)
+const missingCount = computed(() => wsStore.activeChildrenWithStatus.filter(c => !c.is_installed).length)
+
+// 动态计算列表项的缺失数
+const getListMissingCount = (coll) => {
+  if (!coll.children) return 0;
+  return coll.children.filter(child => {
+      const wid = String(child.workshop_id)
+      const pid = child.package_id ? String(child.package_id).toLowerCase() : null
+      const is_installed =
+          wsStore.librariesMods.workshop.some(m => !m.is_missing && String(m.workshop_id) === wid) ||
+          wsStore.librariesMods.self.some(m => !m.is_missing && String(m.workshop_id) === wid) ||
+          wsStore.librariesMods.local.some(m => !m.is_missing && ((pid && m.package_id?.toLowerCase() === pid) || (m.workshop_id && String(m.workshop_id) === wid)))
+      return !is_installed
+  }).length;
+}
 
 const tooltipFormat = (coll) => {
-  return `**${coll.title || '未知合集'}**\n\n${coll.description || '暂无说明'}\n\n[[共 ${coll.total || 0} 个模组]] | ^^需要订阅: ${coll.need_download}^^`
+  const missing = getListMissingCount(coll)
+  return `**${coll.title || '未知合集'}**\n\n${cleanRichText(coll.description) || '暂无说明'}\n\n[[共 ${coll.total || 0} 个模组]] | ^^需要下载/订阅: ${missing}^^`
 }
 
 // --- 动作：添加与删除合集 ---

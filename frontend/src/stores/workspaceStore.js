@@ -112,6 +112,27 @@ const confirmStore = useConfirmStore()
 
   const isFetching = ref(false)
 
+  // 响应式计算 Mod 状态
+  const activeChildrenWithStatus = computed(() => {
+    return collections.activeChildren.map(child => {
+      const wid = String(child.workshop_id)
+      const pid = child.package_id ? String(child.package_id).toLowerCase() : null
+      const is_workshop = librariesMods.workshop.some(m => !m.is_missing && String(m.workshop_id) === wid)
+      const is_self = librariesMods.self.some(m => !m.is_missing && String(m.workshop_id) === wid)
+      // 本地目录用包名比对最准，没有包名回退使用 wid
+      const is_local = librariesMods.local.some(m => !m.is_missing &&
+          ((pid && m.package_id?.toLowerCase() === pid) || (m.workshop_id && String(m.workshop_id) === wid))
+      )
+      return {
+        ...child,
+        is_workshop,
+        is_self,
+        is_local,
+        is_installed: is_workshop || is_self || is_local
+      }
+    })
+  })
+
   // --- Actions ---
   // 初始化数据
   const initData = async () => {
@@ -174,33 +195,24 @@ const confirmStore = useConfirmStore()
     })
     // 监听合集更新
     window.addEventListener('workspace-collection-updated', (e) => {
-    const updated = e.detail // { id, data: { collection, children, ... } }
-    // 如果当前用户正在看的正是这个合集，立即无感替换数据
+      const updated = e.detail // { id, data: { collection, children, ... } }
+      // 如果当前用户正在看的正是这个合集，立即无感替换数据
     if (collections.activeId === updated.id) {
       collections.activeDetails = updated.data.collection
       collections.activeChildren = updated.data.children
-      collections.isChildrenLoading = false
+      collections.isChildrenLoading = false // 后台更新完毕，取消 loading
     }
-    // 同时更新右侧合集列表中的统计数字
-    const target = collections.savedList.find(c => c.id === updated.id)
-    if (target) {
-      Object.assign(target, {
-        total: updated.data.total,
-        need_download: updated.data.need_download,
-        preview_url: updated.data.collection.preview_url,
-        title: updated.data.collection.title
-      })
-    }
-    const self_workshop_ids = librariesMods.self.map(mod => mod.workshop_id)
-    const workshop_workshop_ids = librariesMods.workshop.map(mod => mod.workshop_id)
-    const local_package_ids = librariesMods.local.map(mod => mod.package_id)
-
-    collections.activeChildren.forEach(child => {
-      child.is_self = self_workshop_ids.includes(child.workshop_id)
-      child.is_workshop = workshop_workshop_ids.includes(child.workshop_id)
-      child.is_local = local_package_ids.includes(child.package_id)
+      // 同时更新右侧合集列表中的统计数字
+      const target = collections.savedList.find(c => c.id === updated.id)
+      if (target) {
+        Object.assign(target, {
+          total: updated.data.total,
+          preview_url: updated.data.collection.preview_url,
+          title: updated.data.collection.title
+        })
+        target.children = updated.data.children // 保存 children 供列表计算
+      }
     })
-  })
   }
 
   // 拉取无遮蔽的三个库全量数据
@@ -388,20 +400,12 @@ const confirmStore = useConfirmStore()
     collections.isParsing = true
     toast.info("正在解析并接入合集数据...")
     try {
-      const res = await window.pywebview.api.collection_add_and_fetch(collId)
-      if (checkResult(res, '解析并接入合集')) {
-        // 假设后端返回了保存成功的合集概览对象
-        const newColl = {
-          id: collId,
-          title: res.data.collection?.title || `合集 ${collId}`,
-          preview_url: res.data.collection?.preview_url,
-          total: res.data.total || 0,
-          need_download: res.data.need_download || 0
-        }
-        collections.savedList.unshift(newColl)
-        toast.success("合集编队接入成功！")
-        // 可选：自动选中刚添加的合集
-        selectCollection(newColl)
+      // 调用专门的同步接口
+      const res = await window.pywebview.api.collection_add(collId)
+      if (checkResult(res, '解析并接入合集',true)) {
+        collections.savedList.unshift(res.data)
+        // 立刻自动选中
+        selectCollection(res.data)
       }
     } finally {
       collections.isParsing = false
@@ -438,11 +442,12 @@ const confirmStore = useConfirmStore()
     if (res.status === 'success' && res.data) {
       collections.activeDetails = res.data.collection
       collections.activeChildren = res.data.children
-      // 如果返回的是缓存，我们依然保持 loading 状态（或者显示一个“同步中”的小标志）
-      if (!res.data.is_cache) {
+      // 如果后端判定是强力缓存且不过期，取消 loading
+      if (res.data.is_cache) {
         collections.isChildrenLoading = false
       }
     }
+    // 如果没有缓存，loading 继续保持 true，等待 EventBus 触发
   }
 
   // 根据包名获取创意工坊ID映射
@@ -483,7 +488,7 @@ const confirmStore = useConfirmStore()
 
 
   return {
-    librariesMods, isFetching, librariesSize,
+    librariesMods, isFetching, librariesSize, activeChildrenWithStatus,
     nexusSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
     fetchLibrariesMods, doNexusSearch, fetchNexusDetails, openTimeline, openTimelineGithub, setupListeners,
     github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl, getWorkshopIdsByPackageIdsMap, goBackNexusDetail,

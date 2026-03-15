@@ -7,7 +7,6 @@ from typing import Any, Dict, List, cast
 import uuid
 from peewee import chunked, fn, JOIN
 from backend.database.models import SubscribedCollection, db, ModAsset, UserModData, GroupData, GroupMod
-from backend.managers.mgr_files import file_mgr
 from backend.managers.mgr_profile import ProfileContext
 from backend.settings import settings
 from backend.utils.logger import logger
@@ -846,17 +845,18 @@ class CollectionDAO:
         return SubscribedCollection.get_or_none(SubscribedCollection.id == str(coll_id))
 
     @staticmethod
-    def upsert_collection(coll_id: str, meta: dict, children: list, total: int, need_download: int):
+    def upsert_collection(coll_id: str, meta: dict, children: list, total: int):
         """持久化合集及其子项的所有元数据"""
+        from backend.utils.tools import current_ms
         return SubscribedCollection.insert(
             id=str(coll_id),
             title=meta.get('title'),
             description=meta.get('description'),
             preview_url=meta.get('preview_url'),
-            children=children, # 存入完整的子项列表快照
+            children=children, # 传入完整的子项快照
             total=total,
-            need_download=need_download,
-            time_updated=meta.get('time_updated', 0)
+            time_updated=meta.get('time_updated', 0),
+            last_sync_time=current_ms() # 记录同步时间
         ).on_conflict_replace().execute()
 
     @staticmethod

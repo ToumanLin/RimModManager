@@ -1,6 +1,6 @@
 # backend/database/migrator.py
 from playhouse.migrate import SqliteMigrator, migrate
-from backend.database.models import GameProfile, GroupData, GroupMod, ModAsset, UserModData, db, SystemInfo
+from backend.database.models import GameProfile, GroupData, GroupMod, ModAsset, UserModData, db, SystemInfo, SubscribedCollection
 from backend.utils.logger import logger 
 from backend.settings import settings
 
@@ -15,6 +15,9 @@ def run_migrations(old_version):
     if old_version == "3":
         _3to4()
         old_version = "4"
+    if old_version == "4":
+        _4to5()
+        old_version = "5"
     
     # 最后更新版本号
     SystemInfo.update(value=old_version).where(SystemInfo.key == 'db_version').execute()
@@ -247,5 +250,28 @@ def _3to4():
     except Exception as e:
         logger.error(f"迁移 save_breaking 时出错: {e}")
         raise # 抛出异常以便上层回滚或停止升级
+
+def _4to5():
+    """从版本 4 升级到版本 5
+    从旧表中移除字段 SubscribedCollection 的 need_download
+    """
+    migrator = SqliteMigrator(db)
+    try:
+        # 1. 检查字段是否存在（防御性编程）
+        columns = [f.name for f in db.get_columns('subscribedcollection')]
+        
+        if 'need_download' in columns:
+            # 2. 执行迁移操作
+            # Peewee 会自动处理 SQLite 的复杂转换逻辑（创建临时表等）
+            migrate(
+                migrator.drop_column('subscribedcollection', 'need_download')
+            )
+            logger.info("字段 need_download 已成功移除")
+        else:
+            logger.info("字段 need_download 不存在，跳过移除操作")
+            
+    except Exception as e:
+        logger.error(f"迁移过程中出错: {e}")
+
 
 

@@ -400,7 +400,6 @@ class OrderSorter:
                 m_data = mod_map.get(mid, {})
                 # 计算默认基础权重 (类型/作者等)
                 w = self.calculate_mod_base_weight(m_data)
-                
                 # 获取该 Mod 生效的所有规则
                 effective_rules = self.rule_mgr.get_effective_mod_rules(mid, m_data)
                 # 【核心新增】应用绝对位置覆盖 (Top / Bottom)
@@ -446,13 +445,9 @@ class OrderSorter:
         effective_weights = group_base_weights.copy()
         # 简单的传播算法：如果 u -> v，u 应该比 v 早。
         # 在 Kahn 算法的 PriorityQueue 中，希望早出来的权重小。
-        # 这里的 propagate 逻辑可以保留之前的，或者简化。
-        # 原逻辑：child 的权重小于 parent，则 parent 权重降级。
         # adj[u] = {v: w} 表示 u -> v，即 u 在前。
         # 如果 effective_weights[v] (后) < effective_weights[u] (前)
-        # 这是“汉化包置底(900) -> Core(0)”的情况？通常不会发生。
         # 通常是 Core(0) -> Mod(500)。
-        # 这里保留原逻辑以防万一。
         changed = True
         while changed:
             changed = False

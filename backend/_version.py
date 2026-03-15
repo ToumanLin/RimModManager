@@ -1,6 +1,6 @@
 # backend/_version.py
 __version__ = "0.18.10"  # 主版本.次版本.补丁
-__db_version__ = "4"
+__db_version__ = "5"
 __build__ = "dev"      # dev, alpha, beta, stable, release
 
 # 结构化更新日志：按版本从新到旧排列

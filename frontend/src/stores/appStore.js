@@ -479,12 +479,12 @@ export const useAppStore = defineStore('app', () => {
             toast.error(`更新出错: ${data.msg}`)
         }
     })
-
     // 监听：AI 批量处理进度
     window.addEventListener('ai-batch-progress', (e) => {
       Object.assign(aiState, e.detail)
       aiState.isLoading = true 
     })
+
     // 每完成一个 Chunk，将数据推入数组，供弹窗实时渲染
     window.addEventListener('ai-batch-chunk-ready', (e) => {
       if (Array.isArray(e.detail)) {
@@ -508,7 +508,6 @@ export const useAppStore = defineStore('app', () => {
         toast.error(`AI 任务异常: ${e.detail.message}`)
       }
     })
-
     // 监听：本地化进度
     window.addEventListener('localize-progress', (e) => {
         // 复用 scanProgress 的状态，或者建立独立的 localizeProgress

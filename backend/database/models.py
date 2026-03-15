@@ -175,10 +175,10 @@ class SubscribedCollection(BaseModel):
     preview_url = cast(str, CharField(null=True))
     # 统计快照
     total = cast(int, IntegerField(default=0))
-    need_download = cast(int, IntegerField(default=0))
     # 时间戳
     time_updated = cast(int, BigIntegerField(default=0)) # 合集在 Steam 上的最后更新时间
     created_time = cast(int, BigIntegerField(default=current_ms))
+    last_sync_time = cast(int, BigIntegerField(default=0)) # 上次从 Steam 成功同步数据的本地时间
     # 存储子项数据的快照：JSON 数组格式
     # 结构: [{"workshop_id": "...", "package_id": "...", "title": "...", "preview_url": "...", "is_installed": bool}]
     children = cast(list, UTF8JSONField(default=list))

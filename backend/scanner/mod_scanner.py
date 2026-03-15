@@ -315,8 +315,7 @@ class ModScanner:
             self._finish_scan(result)
 
             duration = time.time() - start_time
-            logger.info(f"Scan finished in {duration:.2f}s. Added: {stats['added']}, Updated: {stats['updated']}, Skipped: {stats['skipped']}, \
-                        Removed: {stats['removed']}, Conflicts: {len(final_conflicts)}, Coexistences: {len(final_coexistences)}. {deploy_msg}")
+            logger.info(f"Scan finished in {duration:.2f}s. Added: {stats['added']}, Updated: {stats['updated']}, Skipped: {stats['skipped']}, Removed: {stats['removed']}, Conflicts: {len(final_conflicts)}, Coexistences: {len(final_coexistences)}. {deploy_msg}")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -507,12 +506,7 @@ class ModScanner:
             'source': mod_data.get('source', 'local'), # 来源
             'disabled': False, # 如果它存在 About.xml，说明它是激活的。强制重置为 False
         })
-
-        # 缩略图生成 (耗时操作，线程池内执行)
-        # if mod_data.get('preview_path'):
-        #     from backend.managers.mgr_files import file_mgr
-        #     file_mgr.ensure_thumbnail(pkg_id, mod_data['preview_path'])
-            
+        
         return mod_data
     
     def _build_skipped_result(self, snapshot: dict, path_hash, mod_path, mtime, current_size, is_disabled):

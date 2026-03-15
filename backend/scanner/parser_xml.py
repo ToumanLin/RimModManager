@@ -83,7 +83,6 @@ class ModXMLParser:
             
 
         # package_id 去除首尾空格
-        # todo ： 当前的 package_id 全部转换为小写，后续需要根据实际情况处理，可能需要保留原始格式
         if data["package_id"]:
             data["package_id"] = data["package_id"].strip().lower()
         
