@@ -24,7 +24,7 @@ class ExtDAO:
         return None
     
     @staticmethod
-    def search_nexus(query: str, page: int = 1, page_size: int = 100):
+    def search_workshop(query: str, page: int = 1, page_size: int = 100):
         """外置数据分页搜索 (仅查找 Mod，排除合集)"""
         # 排除合集：合集通常没有 package_id，或者我们可以靠长度/内容判断
         q = WorkshopMeta.select(
@@ -61,7 +61,7 @@ class ExtDAO:
     
     
     @staticmethod
-    def get_nexus_detail(workshop_id: str):
+    def get_workshop_detail(workshop_id: str):
         """获取 Mod 的完整云端档案 (含详情、依赖、替代品)"""
         wid = str(workshop_id)
         meta = WorkshopMeta.get_or_none(WorkshopMeta.workshop_id == wid)
@@ -72,7 +72,7 @@ class ExtDAO:
         }
     
     @staticmethod
-    def get_nexus_detail_extended(workshop_id: str):
+    def get_workshop_detail_extended(workshop_id: str):
         """获取 Mod 的完整云端档案及生态圈数据"""
         wid = str(workshop_id)
         meta = WorkshopMeta.get_or_none(WorkshopMeta.workshop_id == wid)

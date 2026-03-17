@@ -173,24 +173,24 @@
         <div class="absolute bottom-2 right-2 flex items-center justify-end gap-2">
           <!-- 一键订阅缺失的模组 -->
           <div v-if="missingModIds.length > 0" @click.stop="appStore.subscribePackageIds(missingModIds)" 
-            v-tooltip="`[[一键订阅共计 ${missingModIds.length} 个缺失的模组]]\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+            v-tooltip="`[[一键订阅共计 ${missingModIds.length} 个缺失的模组]]\n^^注意：部分创意工坊已经下架或者离线数据库无法查找到的模组将自动忽略！^^`"
             class="px-1 py-1 group relative bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
             <Flag />
 
             <button @click.stop="appStore.downloadPackageIds(missingModIds)" 
-              v-tooltip="`##一键下载共计 ${missingModIds.length} 个缺失的模组##\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+              v-tooltip="`##一键下载共计 ${missingModIds.length} 个缺失的模组##\n^^注意：部分创意工坊已经下架或者离线数据库无法查找到的模组将自动忽略！^^`"
               class="px-1 py-1 right-1/2 translate-x-1/2 absolute bottom-full mb-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all duration-200" >
               <Download />
             </button>
           </div>
           <!-- 一键订阅缺失的依赖项 -->
           <div v-if="missingDependencies.length > 0" @click.stop="appStore.subscribePackageIds(missingDependencies)" 
-            v-tooltip="`[[一键订阅共计 ${missingDependencies.length} 个缺失的依赖项]]\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+            v-tooltip="`[[一键订阅共计 ${missingDependencies.length} 个缺失的依赖项]]\n^^注意：部分创意工坊已经下架或者离线数据库无法查找到的模组将自动忽略！^^`"
             class="px-1 py-1 group relative bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
             <Flag />
 
             <button @click.stop="appStore.downloadPackageIds(missingDependencies)" 
-              v-tooltip="`##一键下载共计 ${missingDependencies.length} 个缺失的依赖项##\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+              v-tooltip="`##一键下载共计 ${missingDependencies.length} 个缺失的依赖项##\n^^注意：部分创意工坊已经下架或者离线数据库无法查找到的模组将自动忽略！^^`"
               class="px-1 py-1 right-1/2 translate-x-1/2 absolute bottom-full mb-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all duration-200" >
               <Download />
             </button>

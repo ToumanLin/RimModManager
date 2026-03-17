@@ -1,4 +1,6 @@
+import json
 import os
+import socket
 import time
 import threading
 import psutil
@@ -8,6 +10,7 @@ from backend.utils.logger import logger
 from backend.utils.event_bus import EventBus
 
 from backend.static_page import IDLE_HTML # 不再使用字符串注入，改用文件
+
 
 class GameMonitor:
     def __init__(self, api):

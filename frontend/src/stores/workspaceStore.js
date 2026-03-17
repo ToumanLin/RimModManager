@@ -39,7 +39,7 @@ const confirmStore = useConfirmStore()
       all.filter(m => m.path && !m.is_missing).map(m => String(m.workshop_id))
     )
   })
-  // 4. 提供一个快捷判断函数供 NexusBrowser 使用
+  // 4. 提供一个快捷判断函数供 WorkshopBrowser 使用
   const getModStatus = (workshopId) => {
     const wid = String(workshopId)
     return {
@@ -69,7 +69,7 @@ const confirmStore = useConfirmStore()
     return results
   })
   // 2. 缓存工坊数据库搜索状态
-  const nexusSearch = reactive({
+  const workshopSearch = reactive({
     query: '',
     page: 1,
     hasMore: true, // 是否还有下一页
@@ -237,70 +237,70 @@ const confirmStore = useConfirmStore()
   }
 
   // 搜索缓存工坊数据库 (支持重置或追加)
-  const doNexusSearch = async (queryStr = '', isAppend = false) => {
+  const doWorkshopSearch = async (queryStr = '', isAppend = false) => {
     if (!window.pywebview) return
     // 防御性拦截
-    if (nexusSearch.isLoading || nexusSearch.isLoadMore) return
-    if (isAppend && !nexusSearch.hasMore) return
+    if (workshopSearch.isLoading || workshopSearch.isLoadMore) return
+    if (isAppend && !workshopSearch.hasMore) return
     // 状态设置
     if (isAppend) {
-      nexusSearch.isLoadMore = true
-      nexusSearch.page += 1
+      workshopSearch.isLoadMore = true
+      workshopSearch.page += 1
     } else {
-      nexusSearch.isLoading = true
-      nexusSearch.page = 1
-      nexusSearch.results = [] // 清空旧数据
+      workshopSearch.isLoading = true
+      workshopSearch.page = 1
+      workshopSearch.results = [] // 清空旧数据
     }
-    nexusSearch.query = queryStr
+    workshopSearch.query = queryStr
     try {
-      const res = await window.pywebview.api.nexus_search(queryStr, nexusSearch.page)
+      const res = await window.pywebview.api.workshop_search(queryStr, workshopSearch.page)
       if (checkResult(res, '工坊检索')) {
         const newItems = res.data.items || []
         if (isAppend) {
           // 核心修复：不要用 push！使用展开运算符创建新数组引用！
-          // nexusSearch.results.push(...newItems)
-          nexusSearch.results = [...nexusSearch.results, ...newItems] 
+          // workshopSearch.results.push(...newItems)
+          workshopSearch.results = [...workshopSearch.results, ...newItems] 
         } else {
-          nexusSearch.results = newItems
-          nexusSearch.total = res.data.total
+          workshopSearch.results = newItems
+          workshopSearch.total = res.data.total
         }
         // 判断是否还有下一页
-        nexusSearch.hasMore = nexusSearch.results.length < res.data.total
+        workshopSearch.hasMore = workshopSearch.results.length < res.data.total
       }
     } finally {
-      nexusSearch.isLoading = false
-      nexusSearch.isLoadMore = false
+      workshopSearch.isLoading = false
+      workshopSearch.isLoadMore = false
     }
   }
   // 获取云端详情 (包含网页抓取截图)
   // isNavigate: 是否是通过点击“推荐卡片”触发的内部跳转
-  const fetchNexusDetails = async (workshop_id, isNavigate = false) => {
-    if (!window.pywebview || nexusSearch.selectedId === workshop_id) return
+  const fetchWorkshopDetails = async (workshop_id, isNavigate = false) => {
+    if (!window.pywebview || workshopSearch.selectedId === workshop_id) return
     // 如果是点击左侧主列表，清空历史记录，重新开始
     if (!isNavigate) {
-      nexusSearch.historyStack = []
-    } else if (nexusSearch.selectedId) {
+      workshopSearch.historyStack = []
+    } else if (workshopSearch.selectedId) {
       // 如果是内部跳转，将当前 ID 压入栈中
-      nexusSearch.historyStack.push(nexusSearch.selectedId)
+      workshopSearch.historyStack.push(workshopSearch.selectedId)
     }
-    nexusSearch.selectedId = workshop_id
-    nexusSearch.isDetailLoading = true
+    workshopSearch.selectedId = workshop_id
+    workshopSearch.isDetailLoading = true
     try {
-      const res = await window.pywebview.api.nexus_get_details(workshop_id)
+      const res = await window.pywebview.api.workshop_get_details(workshop_id)
       if (checkResult(res, '获取云端详情')) {
-        nexusSearch.detailData = res.data
+        workshopSearch.detailData = res.data
       }
     } finally {
-      nexusSearch.isDetailLoading = false
+      workshopSearch.isDetailLoading = false
     }
   }
   // 详情页后退功能
-  const goBackNexusDetail = async () => {
-    if (nexusSearch.historyStack.length === 0) return
-    const prevId = nexusSearch.historyStack.pop()
-    await fetchNexusDetails(prevId, true)
+  const goBackWorkshopDetail = async () => {
+    if (workshopSearch.historyStack.length === 0) return
+    const prevId = workshopSearch.historyStack.pop()
+    await fetchWorkshopDetails(prevId, true)
     // 抵消刚刚 push 进去的动作
-    nexusSearch.historyStack.pop() 
+    workshopSearch.historyStack.pop() 
   }
 
 
@@ -489,9 +489,9 @@ const confirmStore = useConfirmStore()
 
   return {
     librariesMods, isFetching, librariesSize, activeChildrenWithStatus,
-    nexusSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
-    fetchLibrariesMods, doNexusSearch, fetchNexusDetails, openTimeline, openTimelineGithub, setupListeners,
-    github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl, getWorkshopIdsByPackageIdsMap, goBackNexusDetail,
+    workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
+    fetchLibrariesMods, doWorkshopSearch, fetchWorkshopDetails, openTimeline, openTimelineGithub, setupListeners,
+    github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl, getWorkshopIdsByPackageIdsMap, goBackWorkshopDetail,
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection
   }
 })

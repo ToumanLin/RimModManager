@@ -73,7 +73,7 @@ const appStore = useAppStore()
 
 const tabs = [
   { id: 'library', label: '全库数据管理', icon: Library, colorClass: 'bg-accent-success shadow-[0_0_10px_var(--color-accent-success)]' },
-  { id: 'nexus', label: '创意工坊检索', icon: Globe, colorClass: 'bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]' },
+  { id: 'workshop', label: '创意工坊检索', icon: Globe, colorClass: 'bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]' },
   { id: 'collection', label: '合集订阅管理', icon: FolderArchive, colorClass: 'bg-accent-warn shadow-[0_0_10px_var(--color-accent-warn)]' },
   { id: 'github', label: 'GitHub订阅', icon: Github, colorClass: 'bg-text-main shadow-[0_0_10px_rgba(255,255,255,0.8)]' } 
 ]
@@ -83,13 +83,13 @@ const currentTab = ref('library')
 // 异步组件加载
 const LibraryMatrix = defineAsyncComponent(() => import('./views/LibraryMatrix.vue'))
 const CollectionCommand = defineAsyncComponent(() => import('./views/CollectionCommand.vue'))
-const NexusBrowser = defineAsyncComponent(() => import('./views/NexusBrowser.vue'))
+const WorkshopBrowser = defineAsyncComponent(() => import('./views/WorkshopBrowser.vue'))
 const GithubCommand = defineAsyncComponent(() => import('./views/GithubCommand.vue'))
 
 const currentComponent = computed(() => {
   if (currentTab.value === 'library') return LibraryMatrix
   if (currentTab.value === 'collection') return CollectionCommand
-  if (currentTab.value === 'nexus') return NexusBrowser
+  if (currentTab.value === 'workshop') return WorkshopBrowser
   if (currentTab.value === 'github') return GithubCommand 
   return null
 })
@@ -98,7 +98,7 @@ const currentComponent = computed(() => {
 const activeBgGlow = computed(() => {
   if (currentTab.value === 'library') return 'bg-[radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.05),_transparent_50%)]'
   if (currentTab.value === 'collection') return 'bg-[radial-gradient(ellipse_at_bottom_left,_rgba(234,179,8,0.05),_transparent_50%)]'
-  if (currentTab.value === 'nexus') return 'bg-[radial-gradient(ellipse_at_bottom_left,_rgba(59,130,246,0.05),_transparent_50%)]'
+  if (currentTab.value === 'workshop') return 'bg-[radial-gradient(ellipse_at_bottom_left,_rgba(59,130,246,0.05),_transparent_50%)]'
   return ''
 })
 

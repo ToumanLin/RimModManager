@@ -167,7 +167,7 @@ class SteamWebAPI:
                     screenshots=screenshots
                 ).where(WorkshopMeta.workshop_id == workshop_id).execute()
         # 3. 从外置数据库获取详细信息
-        detail = ExtDAO.get_nexus_detail_extended(workshop_id)
+        detail = ExtDAO.get_workshop_detail_extended(workshop_id)
         if not detail or not detail.get('meta',{}): return None
         
         response = detail.get('meta',{})

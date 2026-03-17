@@ -38,7 +38,7 @@
               class="flex-1 py-1.5 bg-accent-success/20 hover:bg-accent-success text-accent-success hover:text-black text-xs font-black rounded-lg border border-accent-success/30 transition-all flex items-center justify-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
               <DownloadCloud class="size-3.5" /> 补齐下载 ({{ missingCount }})
             </button>
-            <button @click="applyAsLoadOrder" v-tooltip="'应用到当前环境的加载顺序，请确保全部已下载！'"
+            <button @click="applyAsLoadOrder" v-tooltip="'应用合集列表顺序为加载顺序，请确保全部已下载！'"
               class="flex-1 px-3 py-1.5 bg-text-main/10 hover:bg-accent-warn hover:text-black text-text-main text-xs font-bold rounded-lg border border-text-main/10 transition-colors flex items-center justify-center gap-1 ">
               <ListOrdered class="size-3.5" /> 应用加载顺序
             </button>
@@ -239,7 +239,8 @@ const handleUnsubscribeAll = () => {
 
 // 2. 仅下载缺失项 (SteamCMD)
 const handleDownloadMissing = () => {
-  const wids = wsStore.collections.activeChildren.filter(m => (!m.is_workshop && !m.is_self && !m.is_local)).map(m => String(m.workshop_id))
+  const wids = wsStore.activeChildrenWithStatus.filter(m => (!m.is_workshop && !m.is_self && !m.is_local)).map(m => String(m.workshop_id))
+  
   if (!wids.length) {
     toast.info("所有模组均已就绪，无需下载！")
     return
@@ -259,13 +260,14 @@ const applyAsLoadOrder = async () => {
     if (!ok) return
   }
   // 从后端的 activeChildren 中提取 package_id (前提是后端 `lifecycle_fetch_collection` 必须把 ext_db 里的 package_id 连带查出来返回)
-  const pids = wsStore.collections.activeChildren.map(c => c.package_id).filter(Boolean)
+  const pids = wsStore.activeChildrenWithStatus.map(c => c.package_id).filter(Boolean)
+  console.log("加载序列 activeChildren:", wsStore.activeChildrenWithStatus)
   if (pids.length === 0) {
     toast.error("无法提取包名。可能后端接口未返回 package_id。")
     return
   }
-  if (pids.length < wsStore.collections.activeChildren.length) {
-    toast.warning("部分模组无法解析包名，可能已从 Steam 下架或数据缺失，已被过滤。")
+  if (pids.length < wsStore.activeChildrenWithStatus.length) {
+    toast.warning("部分模组无法解析包名，可能 已从Steam下架 或 缓存数据缺失，已被过滤。")
   }
   // 应用 modStore 的 activeIds
   modStore.activeIds = pids

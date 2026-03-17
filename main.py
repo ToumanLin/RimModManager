@@ -149,7 +149,7 @@ def main():
     # additional_args.append("--disable-features=RendererCodeIntegrity") 
     # 某些环境下需要这个来允许本地文件交互
     additional_args.append('--allow-file-access-from-files') 
-            
+    
     # 设置环境变量传给 WebView2
     os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = " ".join(additional_args)
     entrypoint = get_entrypoint()

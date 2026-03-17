@@ -2508,7 +2508,10 @@ class API:
                     "owner": payload.get("owner"),
                     "repo_name": payload.get("repo"),
                     "target_branch": payload.get("default_branch"),
-                    "install_type": payload.get("install_type", "source")
+                    "install_type": payload.get("install_type", "source"),
+                    "installed_version": payload.get("installed_version"),
+                    "online_info_cache": payload.get("info"),
+                    "last_sync_time": current_ms(),
                 }
             )
             # 如果是新建的，写入初始日志

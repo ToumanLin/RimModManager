@@ -151,8 +151,8 @@ class GithubModRecord(BaseModel):
     owner = CharField()                       # 仓库作者
     repo_name = CharField()                   # 仓库名
     install_type = CharField(default="source")# 偏好类型: source(源码) 或 release(发行版)
-    installed_version = CharField(null=True)  # 当前安装的版本(Release的TagName 或 源码的CommitHash)
     target_branch = CharField(default="main") # 绑定的分支(通常是 main 或 master)
+    installed_version = CharField(null=True)  # 当前安装的版本(Release的TagName 或 源码的CommitHash)
     local_folder = CharField(null=True)       # 实际解压到的物理文件夹名称
     online_info_cache = cast(dict, UTF8JSONField(default=dict))
     last_sync_time = cast(int, BigIntegerField(default=0)) # 上次刷新时间
