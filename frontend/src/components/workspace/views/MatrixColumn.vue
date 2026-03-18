@@ -117,7 +117,7 @@ import { useProfileStore } from '../../../stores/profileStore'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import CommonSelect from '../../common/input/CommonSelect.vue'
 import { Motion } from 'motion-v'
-import { Activity, Copy, DownloadCloud, ExternalLink, ArrowRightLeft, Flag, FlagOff, FolderDot, FolderInput, Lock, LockOpen, Trash2 } from 'lucide-vue-next'
+import { Activity, Copy, DownloadCloud, ExternalLink, ArrowRightLeft, Flag, FlagOff, FolderDot, FolderInput, Lock, LockOpen, Trash2, Upload } from 'lucide-vue-next'
 import { IconSelf, IconSteam } from '../../../utils/constants'
 import { useConfirmStore } from '../../../stores/confirmStore'
 
@@ -278,17 +278,28 @@ const handleContextMenu = async (event, targetMod) => {
       label: '转移...' + selectedNumStr, icon: ArrowRightLeft, children: [
         { label: '复制到 游戏本地库', disabled: targetMod.store == 'local', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedIds.value, 'local', 'copy') },
         { label: '复制到 管理器库', disabled: targetMod.store == 'self', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedIds.value, 'self', 'copy') },
+        { label: '复制到 创意工坊库', disabled: targetMod.store == 'workshop', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedIds.value, 'workshop', 'copy') },
         { divider: true },
         // 移动操作 (如果是工坊则不可移动)
         { label: '移动到 游戏本地库', disabled: targetMod.store == 'local' || targetMod.store == 'workshop', icon: FolderInput, action: () => workspaceStore.modTransfer(localSelectedIds.value, 'local', 'move') },
         { label: '移动到 管理器库', disabled: targetMod.store == 'self' || targetMod.store == 'workshop', icon: FolderInput, action: () => workspaceStore.modTransfer(localSelectedIds.value, 'self', 'move') },
+        { label: '移动到 创意工坊库', disabled: targetMod.store == 'workshop', icon: FolderInput, action: () => workspaceStore.modTransfer(localSelectedIds.value, 'workshop', 'move') },
       ]
     })
   }
-  menuItems.push({ label: '下载到管理器' + selectedNumStr, disabled: !targetMod.workshop_id, icon: DownloadCloud, action: () => downloadMods(localSelectedIds.value) },)
+  // 更新
+  if(targetMod.steam_status?.needs_update){
+    if(targetMod.store === 'workshop'){
+      menuItems.push({ label: '更新模组[再次订阅]' + selectedNumStr, disabled: !targetMod.workshop_id, icon: Upload, action: () => appStore.subscribeMod(getModsData(localSelectedIds.value, 'workshop_id')) })
+    }else{
+      menuItems.push({ label: '更新模组[再次下载]' + selectedNumStr, disabled: !targetMod.workshop_id, icon: Upload, action: () => downloadMods(localSelectedIds.value) })
+    }
+  }
+
+  menuItems.push({ label: '下载到管理器' + selectedNumStr, disabled: !targetMod.workshop_id, icon: DownloadCloud, action: () => downloadMods(localSelectedIds.value) })
   // 3. Steam API 相关操作
   menuItems.push({ label: 'Steam操作', icon: IconSteam, children: [
-      { label: '访问创意工坊', disabled: targetMod.source!=='workshop', icon: IconSteam, action: () => appStore.openSteamWorkshopUrl(targetMod.url) },
+    { label: '访问创意工坊', disabled: targetMod.source!=='workshop', icon: IconSteam, action: () => appStore.openSteamWorkshopUrl(targetMod.url) },
     { label: '订阅模组' + selectedNumStr, disabled: (!targetMod.workshop_id || targetMod.steam_status?.is_subscribed), icon: Flag, action: () => appStore.subscribeMod(getModsData(localSelectedIds.value, 'workshop_id')) },
     { label: '取消订阅' + selectedNumStr, disabled: targetMod.store !== 'workshop', icon: FlagOff, level: 'danger', action: () => unsubscribeMod(localSelectedIds.value, false) },
   ]})

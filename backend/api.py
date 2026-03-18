@@ -9,11 +9,9 @@ import threading
 import time
 import functools
 import uuid
-from regex import E
 import webview
 from dataclasses import dataclass, asdict, is_dataclass
 from typing import Any, Dict, List
-from send2trash import send2trash
 from datetime import datetime
 from peewee import Model, JOIN
 from playhouse.shortcuts import model_to_dict
@@ -273,7 +271,7 @@ class API:
             logger.info(f"应用升级处理完成: {last_version} -> {current_version}")
 
         except Exception as e:
-            logger.error(f"Upgrade tasks failed: {e}")
+            logger.error(f"Upgrade tasks failed: {e}", exc_info=True)
     
     @log_api_call
     def get_changelog(self):
@@ -1025,7 +1023,7 @@ class API:
             })
             return ApiResponse.success(message=f"{msg}成功，祝你游玩愉快！")
         except Exception as e:
-            logger.error(f"Launch Game Error: {e}")
+            logger.error(f"Launch Game Error: {e}", exc_info=True)
             return ApiResponse.error(f"启动游戏时出错: {e}")
     
 
@@ -1076,7 +1074,7 @@ class API:
             info = PathChecker.paths_check(paths_data)
             return ApiResponse.success(info)
         except Exception as e:
-            logger.error(f"Check Paths Error: {e}")
+            logger.error(f"Check Paths Error: {e}", exc_info=True)
             return ApiResponse.error(f"检查路径时出错: {e}")
     
     @log_api_call
@@ -1086,7 +1084,7 @@ class API:
             logger.info(f"打开路径: {path}")
             return ApiResponse.success()
         except Exception as e:
-            logger.error(f"打开路径时出错: {e}")
+            logger.error(f"打开路径时出错: {e}", exc_info=True)
             return ApiResponse.error(f"打开路径时出错: {e}")
     
     @log_api_call
@@ -1185,19 +1183,21 @@ class API:
         if not self.active_context: 
             return ApiResponse.error("未指定环境")
         # 1. 拦截非法目标
-        if target_store == 'workshop':
-            return ApiResponse.error("为了保证 Steam 同步机制不被破坏，禁止手动向创意工坊目录导入文件。")
+        # if target_store == 'workshop':
+        #     return ApiResponse.error("为了保证 Steam 同步机制不被破坏，禁止手动向创意工坊目录导入文件。")
         # 2. 确定目标根目录
         target_root = ""
         if target_store == 'local':
             target_root = self.active_context.local_mods_path
         elif target_store == 'self':
             target_root = settings.config.self_mods_path
+        elif target_store == 'workshop':
+            target_root = settings.config.workshop_mods_path
         if not target_root or not os.path.exists(target_root):
             return ApiResponse.error(f"目标库 {target_store} 的目录未配置或不存在！")
         # 3. 查出源文件信息
         from backend.database.models import ModAsset
-        source_mods = ModAsset.select(ModAsset.path, ModAsset.package_id, ModAsset.store, ModAsset.name).where(ModAsset.path_hash.in_(path_hashes)).dicts() # type: ignore
+        source_mods = ModAsset.select(ModAsset.path_hash, ModAsset.path, ModAsset.package_id, ModAsset.store, ModAsset.name).where(ModAsset.path_hash.in_(path_hashes)).dicts() # type: ignore
         source_mods = list(source_mods)
         if not source_mods: return ApiResponse.error("未找到指定的源文件")
         # 4. 执行物理操作
@@ -1445,7 +1445,7 @@ class API:
                 return ApiResponse.success(message="导出成功")
             return ApiResponse.warning("已取消")
         except Exception as e:
-            logger.error(f"Export failed: {e}")
+            logger.error(f"Export failed: {e}", exc_info=True)
             return ApiResponse.error(str(e))
 
     @log_api_call
@@ -1463,7 +1463,7 @@ class API:
                 return ApiResponse.success(message="规则包导入成功")
             return ApiResponse.warning("已取消")
         except Exception as e:
-            logger.error(f"Import failed: {e}")
+            logger.error(f"Import failed: {e}", exc_info=True)
             return ApiResponse.error(f"导入失败: {e}")
     
     @log_api_call
@@ -1493,7 +1493,7 @@ class API:
                     EventBus.send_toast("社区规则库更新完毕！", type="success")
             
             def on_rules_error(task):
-                logger.error(f"Rules download failed: {task.error_msg}")
+                logger.error(f"Rules download failed: {task.error_msg}", exc_info=True)
                 EventBus.send_toast("社区规则库更新失败！", type="error")
 
             task_id = self.download_mgr.add_task(
@@ -1507,7 +1507,7 @@ class API:
             return ApiResponse.success(data={"task_id": task_id}, message="社区规则库开始更新")
             
         except Exception as e:
-            logger.error(f"Update community rules failed: {e}")
+            logger.error(f"Update community rules failed: {e}", exc_info=True)
             return ApiResponse.error(f"系统错误: {str(e)}")
 
     
@@ -1605,7 +1605,7 @@ class API:
             # info.to_dict() 包含了 local_status ('remote'|'downloading'|'ready')
             return ApiResponse.success(info.to_dict())
         except Exception as e:
-            logger.error(f"Check update failed: {e}")
+            logger.error(f"Check update failed: {e}", exc_info=True)
             return ApiResponse.error(f"检查更新失败: {str(e)}")
 
     @log_api_call
@@ -1630,7 +1630,7 @@ class API:
                 return ApiResponse.success(result, message="开始下载更新包")
                 
         except Exception as e:
-            logger.error(f"Update action failed: {e}")
+            logger.error(f"Update action failed: {e}", exc_info=True)
             return ApiResponse.error(str(e))
 
     @log_api_call
@@ -1685,7 +1685,7 @@ class API:
                     self.steam_mgr.post_download_setup(task_type, task.dest_path)
                     pending.remove(item)
                 elif task.status == TaskStatus.ERROR:
-                    logger.error(f"Setup task failed: {task_id}")
+                    logger.error(f"Setup task failed: {task_id}", exc_info=True)
                     pending.remove(item)
         # 初始化
         is_initialized = (Path(settings.config.steamcmd_path) / "public").exists()
@@ -1697,7 +1697,7 @@ class API:
                 EventBus.emit('steamcmd-init-progress', {'percent': percent, 'msg': msg})
             success, msg = controller.initialize_steamcmd(on_progress)
             if not success:
-                logger.error(f"SteamCMD 初始化彻底失败: {msg}")
+                logger.error(f"SteamCMD 初始化彻底失败: {msg}", exc_info=True)
 
     @log_api_call
     def steam_subscribe(self, workshop_ids: str):
@@ -2042,7 +2042,7 @@ class API:
                 # self.sorter.rule_mgr.load_all()
                 EventBus.send_toast(f"社区 {data_type} 数据库更新完毕！", type="success")
             def on_db_error(task):
-                logger.error(f"{data_type} download failed: {task.error_msg}")
+                logger.error(f"{data_type} download failed: {task.error_msg}", exc_info=True)
                 EventBus.send_toast(f"社区 {data_type} 数据库更新失败！", type="error")
             task_id = self.download_mgr.add_task(
                 url=url, 
@@ -2055,7 +2055,7 @@ class API:
             return ApiResponse.success(data={"task_id": task_id}, message=f"社区 {data_type} 数据库开始更新")
             
         except Exception as e:
-            logger.error(f"Update community {data_type} failed: {e}")
+            logger.error(f"Update community {data_type} failed: {e}", exc_info=True)
             return ApiResponse.error(f"系统错误: {str(e)}")
     
     @log_api_call
@@ -2334,10 +2334,10 @@ class API:
         return ApiResponse.success(self.steam_mgr.get_item_timeline(workshop_id, is_steamcmd))
     
     @log_api_call
-    def nexus_search(self, query: str, page: int = 1):
+    def workshop_search(self, query: str, page: int = 1):
         """离线库搜索 + 在线静默预热"""
         # 1. 从本地 SQLite 获取当前页的数据 (瞬间完成)
-        data = ExtDAO.search_nexus(query, page, page_size=100)
+        data = ExtDAO.search_workshop(query, page, page_size=100)
         items = data['items']
         if items:
             # 2. 提取 ID 列表，去 Steam 检查是否有更新 (利用你已有的缓存机制)
@@ -2356,7 +2356,7 @@ class API:
         return ApiResponse.success(data)
 
     @log_api_call
-    def nexus_get_details(self, workshop_id: str):
+    def workshop_get_details(self, workshop_id: str):
         """获取云端详细图文"""
         details = SteamWebAPI.get_or_fetch_details(workshop_id)
         if details:
@@ -2554,7 +2554,7 @@ class API:
                     if "error" not in info:
                         updated_records[repo_url] = info
                 except Exception as e:
-                    logger.error(f"后台刷新 GitHub Repo 失败: {e}")
+                    logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
 
         # 如果没有成功获取到任何数据，直接结束
         if not updated_records: return

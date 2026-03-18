@@ -96,7 +96,8 @@ class ProfileManager:
         'user_data_path', 
         'use_workshop_mods', 
         'use_self_mods', 
-        'run_commands'
+        'run_commands',
+        'last_played_time'
     }
     
     def __init__(self):
@@ -182,9 +183,11 @@ class ProfileManager:
         # valid_field_names = set(GameProfile._meta.fields.keys()) # type: ignore
         # clean_data = {k: v for k, v in data.items() if k in valid_field_names}
         # if 'id' in clean_data: del clean_data['id']
-        clean_data['game_version'] = GameManager.get_game_version(clean_data.get('game_install_path'))
-        clean_data['is_steam'] = os.path.normpath(clean_data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
-        clean_data['use_workshop_mods'] = True if profile_id =='default' else clean_data.get('use_workshop_mods', False)
+        if('game_install_path' in clean_data):
+            clean_data['game_version'] = GameManager.get_game_version(clean_data.get('game_install_path'))
+            clean_data['is_steam'] = os.path.normpath(clean_data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
+        if('use_workshop_mods' in clean_data):
+            clean_data['use_workshop_mods'] = True if profile_id =='default' else clean_data.get('use_workshop_mods', False)
         
         path_fields = ['user_data_path', 'game_install_path']
         # 验证路径有效性

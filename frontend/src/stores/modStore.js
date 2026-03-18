@@ -99,6 +99,14 @@ export const useModStore = defineStore('mods', () => {
   const allModTags = computed(() => {
     return [...new Set(Array.from(allModsMap.value.values()).flatMap(mod => mod.tags || []))]
   })
+  // 获取所有模组的所有创意工坊ID（去重）
+  const allModWorkshopIds = computed(() => {
+    return new Set(Array.from(allModsMap.value.values()).filter(mod => mod.store === 'workshop').map(mod => mod.workshop_id))
+  })
+  // 获取所有模组的所有包名ID（去重）
+  const allModPackageIds = computed(() => {
+    return new Set(Array.from(allModsMap.value.values()).map(mod => mod.package_id))
+  })
 
 
   // === Actions ===
@@ -1180,7 +1188,7 @@ export const useModStore = defineStore('mods', () => {
     selectedIds, lastSelectedMod, currentTargetId, 
 
     // Getters
-    isDirty, selectedMods, selectedStats, allModTags, modIssues, 
+    isDirty, selectedMods, selectedStats, allModTags, modIssues, allModWorkshopIds, allModPackageIds,
 
     // Actions
     setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, 

@@ -5,6 +5,7 @@ import { useAppStore } from './appStore'
 import { checkResult } from '../utils/tools'
 import { createToastInterface } from 'vue-toastification'
 import { useConfirmStore } from './confirmStore'
+import { SOURCE_TYPE_MAP } from '../utils/constants'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const toast = createToastInterface()
@@ -465,7 +466,7 @@ const confirmStore = useConfirmStore()
   const modTransfer = async (path_hashs, target_store, mode) => {
     const check = await confirmStore.confirmAction(
       '确认转移',
-      `确定要将选中的模组 ${mode === 'move' ? '移动' : '复制'} 到 [${target_store === 'local' ? '游戏本地' : '管理器'}] 库吗？`,
+      (`确定要将选中的模组 ${mode === 'move' ? '移动' : '复制'} 到 [${SOURCE_TYPE_MAP[target_store]}] 库吗？`+ (target_store=='workshop'?'\n注意：转移到创意工坊目录后可能会被Steam再次改变':'')),
       { type: 'info' }
     )
     if(check) {

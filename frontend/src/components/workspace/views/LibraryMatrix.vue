@@ -64,6 +64,9 @@ const workspaceStore = useWorkspaceStore()
 
 const handleOpenTimeline = (mod) => {
   console.log('handleOpenTimeline',mod)
+  if (mod.path.includes('_GH_')) {
+    return workspaceStore.openTimelineGithub(mod.path)
+  }
   if (mod.store === 'local') {
     toast.warning("该 Mod 位于游戏本地目录中，无法获取变动轨迹")
     return
@@ -71,10 +74,6 @@ const handleOpenTimeline = (mod) => {
   if (!mod.workshop_id) {
     toast.warning("该 Mod 没有绑定工坊 ID，无法获取变动轨迹")
     return
-  }
-
-  if (mod.path.includes('_GH_')) {
-    return workspaceStore.openTimelineGithub(mod.path)
   }
   return workspaceStore.openTimeline(mod.workshop_id, mod.name || mod.package_id, (mod.store === 'self'))
 }

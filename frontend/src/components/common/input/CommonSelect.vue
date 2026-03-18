@@ -37,7 +37,7 @@
         <!-- 有选项时 -->
         <template v-if="filteredOptions.length > 0">
           <button v-for="(opt, index) in filteredOptions" :key="opt.value" :ref="(el) => setOptionRef(el, index)" type="button" @click="selectOption(opt)"
-            class="w-full flex items-center px-3 py-1 rounded-lg text-xs text-left transition-all duration-150"
+            class="w-full flex items-center px-2 py-1 rounded-lg text-xs text-left transition-all duration-150"
             :class="[
               // 1. 选中状态
               isActive(opt.value) ? 'bg-accent-primary/20 text-accent-primary font-medium' : 'text-gray-300 hover:bg-text-main/10 hover:text-text-main',
@@ -48,7 +48,7 @@
             ]"
           >
             <!-- 选中状态的小圆点 -->
-            <div class="size-1.5 rounded-full mr-2.5 transition-all shrink-0"
+            <div class="size-1.5 rounded-full mr-1.5 transition-all shrink-0"
               :class="isActive(opt.value) ? 'bg-accent-primary shadow-[0_0_8px_currentColor] scale-100' : 'scale-0'">
             </div>
             <!-- 如果有额外描述可以放在tooltip中 -->

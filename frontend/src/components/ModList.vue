@@ -11,7 +11,8 @@
           class="text-xs text-text-main/80 bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
           已筛选
         </span>
-        <span v-if="sortMode !== 'default' || !isSortAsc" v-tooltip="sortTooltip" class="text-xs text-text-main/80 bg-accent-highlight/30 px-1 rounded-full">
+        <span v-if="sortMode !== 'default' || !isSortAsc" v-tooltip="sortTooltip" @click="clearSort"
+          class="text-xs text-text-main/80 bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
           已排序
         </span>
       </span>
@@ -327,6 +328,11 @@ const clearFilter = () => {
   filterByLine.value = []
   filterIssueType.value = ''
 }
+// 清除排序
+const clearSort = () => {
+  sortMode.value = 'default'
+  isSortAsc.value = true
+}
 
 // 动态计算帮助文本
 const searchHelpText = computed(() => {
@@ -400,6 +406,7 @@ const sortTooltip = computed(() => {
   let text = `按${SORT_MODE_MAP[sortMode.value]}排序`
   text += `${isSortAsc.value ? '（升序）' : '（降序）'}`
   text += "\n__筛选和排序只供视觉检阅，^^不影响实际顺序^^，\n并且此状态下^^禁止拖拽排序或插入^^__"
+  text += `\n\n__[[(点击恢复默认排序)]]__`
   return text
 })
 // 筛选提示

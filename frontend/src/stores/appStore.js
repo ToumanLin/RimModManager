@@ -898,6 +898,12 @@ export const useAppStore = defineStore('app', () => {
       window.open(steamUrl, '_blank')
     }
   }
+  const openSteamWorkshopById = (id) => {
+    if(id) {
+      const steamUrl = `steam://url/CommunityFilePage/${id}`
+      window.open(steamUrl, '_blank')
+    }
+  }
   // 根据包名下载Mod
   const downloadPackageIds = async (packageIds) => {
     if (!packageIds) return false
@@ -1245,7 +1251,7 @@ export const useAppStore = defineStore('app', () => {
     getThumbUrl, getLocalUrl, getRemoteUrl,
     // 游戏相关
     checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultCommunityPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
-    startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds,
+    startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds, openSteamWorkshopById,
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, showChangelog, setSidebarTab,
     
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, updateExternalDB,
