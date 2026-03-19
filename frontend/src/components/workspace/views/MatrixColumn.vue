@@ -6,6 +6,10 @@
         <h3 class="text-sm font-bold text-text-main flex items-center gap-2 cursor-help" v-tooltip="tooltip">
           <div class="w-2.5 h-2.5 rounded-full shadow-lg" :class="iconColor.replace('text-', 'bg-')"></div>
           {{ title }}
+          <CommonSwitch v-if="profileStore.currentProfile?.id!='default' && storeType === 'workshop'" label="" mini class="w-22 -ml-4"
+            v-model="use_workshop_mods" description="启用后将通过链接方式自动为游戏添加创意工坊 Mod，仅在非Steam启动时生效，Steam 运行时会自动加载创意工坊 Mod。" />
+          <CommonSwitch v-else-if="storeType === 'self'" label="" mini class="w-22 -ml-4"
+            v-model="use_self_mods" description="为当前环境使用管理器Mod，启用后将通过链接方式自动为游戏添加管理器 Mod。" />
         </h3>
         <div class="flex gap-2">
           <span class="text-[0.65rem] font-mono text-text-dim bg-black/40 px-2 py-0.5 rounded-md border border-text-main/5">
@@ -102,6 +106,7 @@ import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import { IconSteam, SOURCE_TYPE_MAP } from '../../../utils/constants'
 import { formatFileSize } from '../../../utils/uiHelper'
 import { getMatrixItemState, getMatrixReplacementTargets, matchesMatrixFilter, MATRIX_FILTER_STATE_OPTIONS } from '../utils/matrixItemState'
+import CommonSwitch from '../../common/input/CommonSwitch.vue'
 
 const props = defineProps({
   title: String,
@@ -130,6 +135,23 @@ const localSelectedIds = ref([])
 const vListRef = ref(null)
 
 const lastPlayedTime = computed(() => profileStore.currentProfile?.last_played_time || 0)
+const use_workshop_mods = computed({
+  get() {
+    return profileStore.currentProfile?.use_workshop_mods || false
+  },
+  set(val) {
+    profileStore.updateProfile(profileStore.currentProfile?.id, { use_workshop_mods: val })
+  }
+})
+const use_self_mods = computed({
+  get() {
+    return profileStore.currentProfile?.use_self_mods || false
+  },
+  set(val) {
+    profileStore.updateProfile(profileStore.currentProfile?.id, { use_self_mods: val })
+  }
+})
+
 
 const clearSelection = () => {
   localSelectedIds.value = []
@@ -154,15 +176,9 @@ const getShortPathLabel = (path, fallback = '缺失记录') => {
 const buildJumpMenuItem = (label, icon, targets) => {
   if (!targets.length) return null
   if (targets.length === 1) {
-    return {
-      label,
-      icon,
-      action: () => workspaceStore.jumpToMatrixItem(targets[0].path_hash)
-    }
+    return { label, icon, action: () => workspaceStore.jumpToMatrixItem(targets[0].path_hash) }
   }
-  return {
-    label: `${label} (${targets.length} 项)`,
-    icon,
+  return { label: `${label} (${targets.length} 项)`, icon,
     children: targets.map(target => ({
       label: `${SOURCE_TYPE_MAP[target.store] || target.store} · ${getShortPathLabel(target.path, target.name || target.package_id)}`,
       icon: CornerUpRight,

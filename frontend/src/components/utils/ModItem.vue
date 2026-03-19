@@ -159,7 +159,7 @@ import { useRuleStore } from '../../stores/ruleStore'
 import { useContextMenuStore } from '../../stores/contextMenuStore'
 import { useConfirmStore } from '../../stores/confirmStore'
 import { hexToRgba, hexToRgb } from '../../utils/colorDeal'
-import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Download, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight } from 'lucide-vue-next';
+import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Download, Eraser, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight } from 'lucide-vue-next';
 import GroupItem from './GroupItem.vue'
 
 const props = defineProps({
@@ -379,8 +379,8 @@ const handleContextMenu = async (event) => {
     { label: '编辑规则', icon: PencilRuler, shortcut: 'Alt+左键', action: () => ruleStore.currentId = props.item_id },
     { label: '访问网页', disabled: !modData.value.url, icon: ExternalLink, action: () => appStore.openUrl(modData.value.url) },
     { label: '打开文件夹', disabled: !modData.value.path, icon: FolderInput, action: () => appStore.openPath(modData.value.path) },
-    { label: 'Steam操作', icon: IconSteam, disabled: modData.value.store!=='workshop', children: [
-      { label: '访问创意工坊', disabled: modData.value.store!=='workshop', icon: IconSteam, action: () => appStore.openSteamWorkshopUrl(modData.value.url) },
+    { label: 'Steam操作', icon: IconSteam, disabled: !modData.value.workshop_id, children: [
+      { label: '访问创意工坊', icon: IconSteam, action: () => appStore.openSteamWorkshopById(modData.value.workshop_id) },
       { label: '订阅模组', disabled: (!!modData.value.workshop_id && !!modData.value.path), icon: Flag, action: () => appStore.subscribeMod([props.item_id]) },
       { label: '取消订阅'+ selectedCountStr, disabled: modData.value.store!=='workshop', icon: FlagOff, level: 'danger', action: () => unsubscribeMod() },
       { label: '取订并删除'+ selectedCountStr, disabled: modData.value.store!=='workshop', icon: Trash2, level: 'danger', action: () => unsubscribeMod(true) },
@@ -401,11 +401,14 @@ const handleContextMenu = async (event) => {
 
   if (modStore.selectedMods.some(m => (m.isMissing || !m.path))) {
     const package_ids = modStore.selectedMods.filter(m => (m.isMissing || !m.path)).map(m => m.package_id)
+    const workshop_ids = modStore.selectedMods.filter(m => (m.isMissing || !m.path)&&!!m.workshop_id).map(m => m.workshop_id)
     const _selectedCountStr = package_ids.length>1?` (${package_ids.length}项)`:''
+    const _selectedCountStr2 = workshop_ids.length>1?` (${workshop_ids.length}项)`:''
     singleMenuItems.push(
-      { label: '尝试补充缺失', icon: CircleFadingPlus, children:[
-        { label: '订阅缺失项'+ _selectedCountStr, icon: Flag, action: () => appStore.subscribePackageIds(package_ids) },
-        { label: '下载缺失项'+ _selectedCountStr, icon: Download, action: () => appStore.downloadPackageIds(package_ids) },
+      { label: '缺失处理', icon: CircleFadingPlus, children:[
+        { label: '移除缺失项'+ _selectedCountStr, icon: Eraser, action: () => modStore.removeIdsOnAllList(package_ids) },
+        { label: '订阅缺失项'+ _selectedCountStr2, disabled: workshop_ids.length === 0, icon: Flag, action: () => appStore.subscribeMod(workshop_ids) },
+        { label: '下载缺失项'+ _selectedCountStr2, disabled: workshop_ids.length === 0, icon: Download, action: () => appStore.downloadWorkshopItems(workshop_ids) },
       ]}
     )
   }

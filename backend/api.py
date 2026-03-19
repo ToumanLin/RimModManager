@@ -2306,6 +2306,19 @@ class API:
         )
     
     @log_api_call
+    def get_workshop_details_by_package_ids(self, package_ids: list):
+        """
+        批量获取包名对应的缓存信息（完全离线，无网络请求）
+        """
+        try:
+            from backend.database.dao_ext import ExtDAO
+            res = ExtDAO.get_workshop_details_by_package_ids(package_ids)
+            return ApiResponse.success(res)
+        except Exception as e:
+            logger.error(f"get_workshop_details_by_package_ids failed: {e}", exc_info=True)
+            return ApiResponse.error(str(e))
+    
+    @log_api_call
     def workspace_get_all_domains(self):
         """
         三域数据全量获取 (统合 DB、ACF、Log 数据)
@@ -2537,10 +2550,6 @@ class API:
 
         return ApiResponse.success(initial_data)
 
-    def _normalize_collection_package_id(self, package_id: Any) -> str | None:
-        value = str(package_id or '').strip().lower()
-        return value or None
-
     def _resolve_collection_package_map(self, child_wids: list[str]) -> dict[str, str]:
         normalized_wids: list[str] = []
         seen_wids: set[str] = set()
@@ -2562,7 +2571,7 @@ class API:
         )
         for meta in meta_records:
             wid = str(meta.get('workshop_id') or '').strip()
-            pid = self._normalize_collection_package_id(meta.get('package_id'))
+            pid = meta.get('package_id')
             if wid and pid:
                 resolved_map[wid] = pid
 
@@ -2582,7 +2591,7 @@ class API:
         )
         for asset in asset_records:
             wid = str(asset.get('workshop_id') or '').strip()
-            pid = self._normalize_collection_package_id(asset.get('package_id'))
+            pid = asset.get('package_id')
             if not wid or not pid:
                 continue
 

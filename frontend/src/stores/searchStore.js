@@ -29,6 +29,7 @@ export const useSearchStore = defineStore('search', () => {
     supported_languages: { type: FIELD_TYPES.LIST, suggest: true, label: '支持语言' },
 
     // === 布尔值 ===
+    // isMissing: { type: FIELD_TYPES.BOOLEAN, label: '是否缺失' },
     save_breaking: { type: FIELD_TYPES.BOOLEAN, label: '是否坏档' },
     shadow_paths: { type: FIELD_TYPES.BOOLEAN, label: '存在禁用包名' },
     replacement: { type: FIELD_TYPES.BOOLEAN, label: '存在替代版本' },

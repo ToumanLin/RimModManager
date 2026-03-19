@@ -184,6 +184,55 @@ export const useModStore = defineStore('mods', () => {
       return (mA?.name || a).localeCompare(mB?.name || b)
     })
   }
+  // 批量查询未知 PackageID 并将其作为幽灵项存入 Map
+  const fetchAndCacheGhostMods = async (ids = []) => {
+    if (!ids || ids.length === 0 || !window.pywebview) return
+    
+    // 筛选出本地缺失(完全未知或本身就是 isMissing )的 ID
+    const unknownIds = ids.map(id => id.toLowerCase()).filter(id => {
+      const existing = allModsMap.value.get(id)
+      return !existing || existing.isMissing
+    })
+    if (unknownIds.length === 0) return
+    try {
+      const res = await window.pywebview.api.get_workshop_details_by_package_ids(unknownIds)
+      if (res?.status === 'success' && res.data) {
+        let changed = false
+        const metaMap = res.data
+        unknownIds.forEach(id => {
+          const meta = metaMap[id]
+          // 1. 尝试获取现有对象引用，如果没有则创建一个基础对象
+          let ghostMod = allModsMap.value.get(id) || { package_id: id }
+          if (meta) {
+            // 2. 【核心改进】：全量合并 meta 信息 (包含 author, workshop_id, preview_url, is_replacement_derived 等)
+            Object.assign(ghostMod, meta)
+            // 3. 强制修正/补充显示名称
+            ghostMod.name = `⚠ ${meta.name || id} (${id})`
+            ghostMod.display_name = meta.name
+            
+            changed = true
+          } else if (!allModsMap.value.has(id)) {
+            // 数据库也没查到，设置为最简未知幽灵
+            ghostMod.name = `⚠ 未知模组 (${id})`
+            changed = true
+          }
+          // 4. 【最后设防】：无论 meta 里有什么，强制确保这四个幽灵项核心属性不变
+          ghostMod.path = null
+          ghostMod.isMissing = true
+          ghostMod.description = '该模组在本地未找到，可能未下载，或已被手动删除。'
+          // 确保 package_id 始终是请求时的那个，防止 meta 里的 package_id 大小写不一致
+          ghostMod.package_id = id 
+          // 存入/更新 Map
+          allModsMap.value.set(id, ghostMod)
+        })
+        if (changed) {
+          dataVersion.value++ // 触发响应式计算
+        }
+      }
+    } catch (e) {
+      console.error("加载幽灵模组缓存信息失败:", e)
+    }
+  }
   // 设置 Mod 数据
   const setMods = (data) => {
     activeIds.value = (data.active_load_order || []).map(id => id.toLowerCase())
@@ -213,6 +262,9 @@ export const useModStore = defineStore('mods', () => {
     // 重新计算 Inactive列表 (排除 Active 和 Temp)（本质上 Temp列表 与 Inactive列表 一样，但在前端分出差异方便整理）
     updateInactiveIds()
     dataVersion.value++    // 更新数据版本号（刷新标记）
+
+    // 初始化获取完所有模组后，如果 activeIds 中存在未知项，批量缓存它们！
+    fetchAndCacheGhostMods(activeIds.value)
   }
   // 重置 Mod 数据
   const reset = () => {
@@ -729,7 +781,7 @@ export const useModStore = defineStore('mods', () => {
 
     // 辅助函数：添加问题
     const _add = (id, type, level, message, targetId = null) => {
-      const mod = allModsMap.value.get(id)
+      const mod = takeModById(id)
       if (!mod) return
       // 忽略检查
       if (mod.ignored_issues && mod.ignored_issues.includes(type)) return
@@ -797,8 +849,14 @@ export const useModStore = defineStore('mods', () => {
 
     for (let i = 0; i < len; i++) {
       const currentId = activeIds.value[i].toLowerCase()
-      const mod = allModsMap.value.get(currentId)
-      if (!mod || !mod.rules) continue // 如果没有 rules 数据（可能未初始化），跳过
+      const mod = takeModById(currentId)
+      if (!mod) continue
+      // X. 文件缺失
+      if (mod.isMissing) {
+        _add(mod.package_id, ISSUE_TYPE.ERROR_MISSING_FILE, ISSUE_LEVEL.ERROR, '本地文件缺失或无法解析', mod.package_id)
+        continue // 文件都没了，没必要查别的
+      }
+      if(!mod.rules) continue // 如果没有 rules 数据（可能未初始化），跳过
 
       // const rules = mod.rules ，这是后端计算好的 { dependencies, load_after, incompatible ... }
       // 兼容性处理：如果后端还没刷新，rules可能为空
@@ -1196,7 +1254,7 @@ export const useModStore = defineStore('mods', () => {
     isDirty, selectedMods, selectedStats, allModTags, modIssues, allModWorkshopIds, allModPackageIds,
 
     // Actions
-    setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, 
+    setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, fetchAndCacheGhostMods,
     updateInactiveIds, takeInactiveIds, removeIdsOnAllList, selectMods, clearSelection, changeModsActive,
     scanMods, scanComplete, autoSortMods, localizeSelectedMods, localizeMods, disableMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, batchUpdateModsUserData,

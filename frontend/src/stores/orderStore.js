@@ -92,6 +92,8 @@ export const useOrderStore = defineStore('order', () => {
       modStore.savedActiveIds = [...order.active_ids] || []
       modStore.activeLoadModifyTime = order.active_load_modify_time || order.modify_time || 0
       modStore.updateInactiveIds()
+      // 加载外部存档文件时解析未知项
+      modStore.fetchAndCacheGhostMods(modStore.activeIds)
       toast.success("Mod序列已加载")
     }
   }
@@ -102,6 +104,8 @@ export const useOrderStore = defineStore('order', () => {
       // 除了 active_ids 之外，还要把格式、列表名和结构化明细一起缓存下来，
       // 后面 diff 抽屉显示标题、名称和一键订阅都依赖这些字段。
       setBackupOrder(order, mods_config_file_path)
+      // 加载外部存档文件时解析未知项
+      modStore.fetchAndCacheGhostMods(order.activeIds)
       return {
         path: currentBackupFile.value,
         modify_time: backupLoadModifyTime.value,
@@ -117,6 +121,8 @@ export const useOrderStore = defineStore('order', () => {
     if (!backupIds.value) return
     modStore.activeIds = backupIds.value
     modStore.updateInactiveIds()
+    // 加载外部存档文件时解析未知项
+    modStore.fetchAndCacheGhostMods(modStore.activeIds)
     toast.success("已应用Mod序列")
   }
   // 保存Mod加载顺序
