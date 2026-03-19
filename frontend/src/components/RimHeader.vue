@@ -39,8 +39,18 @@
         <ClipboardList class="size-6" />
         <div class="absolute top-full right-0 w-35 overflow-hidden rounded-md flex flex-col items-center justify-center bg-glass-medium border border-text-main/10 shadow-2xl backdrop-blur-lg opacity-0 
           invisible transform origin-top-right group-hover/folder:opacity-100 group-hover/folder:visible transition-all duration-300">
-          <button @click="loadOrder('0')" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent">导入加载序列</button>
-          <button @click="exportOrder()" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent">导出加载序列</button>
+          <button @click="loadOrder('0')" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent"
+            v-tooltip="'导入Mod加载序列（支持 存档.rws / 序列.xml）'" >
+            导入加载序列
+          </button>
+          <button @click="exportOrder()" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent"
+            v-tooltip="'导出为 ModsConfig.xml（仅含包名）'">
+            导出加载序列
+          </button>
+          <button @click="exportOrder(null,'modlist')" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent"
+            v-tooltip="'导出为 ModList.xml（含包名和工坊ID）'" >
+            导出分享列表
+          </button>
         </div>
       </div>
       
@@ -96,12 +106,6 @@ const orderStore = useOrderStore()
 const profileStore = useProfileStore()
 
 
-// 导出当前加载顺序
-const exportOrder = async (path='0') => {
-  // 调用后端另存为接口
-  await orderStore.exportLoadOrder(path)
-  refresh()
-}
 // 从导入列表加载
 const loadOrder = async (path=null) => {
   // 调用后端加载接口
@@ -109,6 +113,20 @@ const loadOrder = async (path=null) => {
   if (data) {
     // console.log(data)
     appStore.uiState.showDiffDrawer = true
+  }
+}
+// 导出当前加载顺序
+const exportOrder = async (path, format='modsconfig') => {
+  // 调用后端另存为接口
+  await orderStore.exportLoadOrder(path, true, format)
+  refresh()
+}
+const refresh = async () => {
+  loading.value = true
+  try {
+    await orderStore.getBackups(orderStore.backupProfileId)
+  } finally {
+    loading.value = false
   }
 }
 </script>

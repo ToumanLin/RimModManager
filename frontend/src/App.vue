@@ -29,11 +29,11 @@
 
             <!-- 4. 辅助/分组 (Sidebar Tabs) -->
             <div v-else-if="col.id === 'sidebar'" class="h-full">
-              <!-- 这里保留原有的逻辑：如果有规则ID，显示编辑器，否则显示列表 -->
-              <ModRuleEditor v-if="ruleStore.currentId" title="规则" listColor="warn" />
-              <div v-else class="h-full flex flex-col relative" data-tour="sidebar-column">
+              <div class="h-full flex flex-col relative" data-tour="sidebar-column">
                 <div class="flex-1 overflow-hidden grid grid-cols-1 grid-rows-1">
-                  <Transition
+                  <!-- 如果有规则ID，显示编辑器，否则显示列表 -->
+                  <ModRuleEditor v-if="ruleStore.currentId" title="规则" listColor="warn" class="rounded-b-none col-start-1 row-start-1 w-full" />
+                  <Transition v-else
                     enter-active-class="transition-opacity duration-300 ease-out"
                     enter-from-class="opacity-0"
                     enter-to-class="opacity-100"
@@ -51,7 +51,7 @@
                 <!-- 标签页切换 -->
                 <div class="absolute left-5.5 top-0.5 p-0.5 h-8 flex text-sm font-bold" data-tour="sidebar-tab">
                   <!-- <FocusTabs v-model="activeTab" :tabs="tabs" :blurAmount="3" borderColor="#059669" class="top-0 opacity-100"/> -->
-                  <SegmentedTabs v-model="appStore.activeSidebarTab" :options="appStore.SIDEBAR_TABS" />
+                  <SegmentedTabs v-model="appStore.activeSidebarTab" :options="appStore.SIDEBAR_TABS" @click="ruleStore.currentId=null" />
                 </div>
 
                 <!-- 底部按钮组 -->
@@ -160,70 +160,15 @@
     </Transition>
 
     <!-- 列表对比抽屉 -->
-    <Teleport to="body">
-      <Transition 
-        enter-active-class="transition-transform duration-300 ease-out"
-        enter-from-class="-translate-x-full"
-        enter-to-class="translate-x-0"
-        leave-active-class="transition-transform duration-300 ease-in"
-        leave-from-class="translate-x-0"
-        leave-to-class="-translate-x-full"
-      >
-        <div v-if="appStore.uiState.showDiffDrawer" 
-          class="fixed inset-y-8 top-18 left-0 w-[50vw] z-100 flex flex-col"
-        >
-
-          <!-- 1. 上方内凹边角 -->
-          <div class="absolute -top-4.5 left-0 w-5 h-5 z-10">
-            <!-- 模糊与背景层：利用 mask 裁剪出内凹形状 -->
-            <div class="w-full h-full bg-bg-surface/80 
-              mask-[radial-gradient(circle_at_100%_0,transparent_1.25rem,black_1rem)]">
-            </div>
-            <!-- 边框层：SVG 绘制弧线 -->
-            <svg class="absolute inset-0 w-full h-full text-text-main/10 fill-none pointer-events-none" viewBox="0 0 20 20">
-              <!-- 从左上(0,0) 画弧到 右下(20,20) -->
-              <path d="M0,0 A20,20 0 0,0 20,20" stroke="currentColor" stroke-width="1" />
-            </svg>
-          </div>
-
-          <!-- 2. 抽屉主体 -->
-          <div class="flex-1 flex flex-col bg-transparent backdrop-blur-xl rounded-r-2xl border-y border-r border-text-main/10 shadow-2xl overflow-hidden relative">
-            
-            <!-- 抽屉内容：Diff 组件 -->
-            <div class="flex-1 overflow-hidden">
-                <ListDiffView v-if="appStore.uiState.showDiffDrawer"
-                  :list-a="modStore.activeIds" title-a="当前启用"
-                  :list-b="orderStore.backupIds||[]" title-b="对比文件"
-                  class="rounded-b-none rounded-tl-none col-start-1 row-start-1 w-full"
-                />
-            </div>
-            
-            <!-- 底部动作栏 -->
-            <div class="p-2 px-5 bg-black/20 flex items-center justify-between border-t border-text-main/5">
-              <h2 class="text-text-main/80 font-bold">Mod序列对比</h2>
-              <div class="flex items-center gap-2">
-                <button @click="orderStore.applyBackup()" class="px-3 py-1.5 rounded-lg bg-accent-success/20 hover:bg-accent-success/40 text-accent-success border border-accent-success/30 text-xs font-bold transition-all">应用文件序列</button>
-                <button @click="appStore.uiState.showDiffDrawer = false" class="px-3 py-1.5 rounded-lg bg-accent-danger/10 hover:bg-accent-danger/20 text-text-dim border border-text-main/10 text-xs font-bold transition-all">关闭</button>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- 3. 下方内凹边角 -->
-          <div class="absolute -bottom-[19px] left-0 w-5 h-5 z-10">
-            <!-- 模糊与背景层 -->
-            <div class="w-full h-full bg-transparent backdrop-blur-xl mask-[radial-gradient(circle_at_100%_100%,transparent_1.25rem,black_1.3rem)]">
-            </div>
-            <!-- 边框层 -->
-            <svg class="absolute inset-0 w-full h-full text-text-main/10 fill-none pointer-events-none" viewBox="0 0 20 20">
-              <!-- 从右上(20,0) 画弧到 左下(0,20) -->
-              <path d="M20,0 A20,20 0 0,0 0,20" stroke="currentColor" stroke-width="1" />
-            </svg>
-          </div>
-
-        </div>
-      </Transition>
-    </Teleport>
+    <ListDiffView
+      :list-a="modStore.activeIds"
+      title-a="当前启用"
+      :list-b="orderStore.backupIds || []"
+      :title-b="currentBackupDisplayTitle"
+      :name-map-a="modStore.nameMap"
+      :name-map-b="orderStore.backupNameMap"
+    />
+    
 
     <!-- 日志 -->
     <LogViewer />
@@ -318,6 +263,14 @@ const guideStore = useGuideStore()
 
 const tabs = ['临时', '分组', '备份']
 const activeTab = ref(tabs[0])
+const currentBackupDisplayTitle = computed(() => {
+  // 优先显示导入文件声明的列表名，其次再回退到文件名。
+  if (orderStore.currentBackupName) return orderStore.currentBackupName
+  if (orderStore.currentBackupFile) {
+    return orderStore.currentBackupFile.split(/[/\\]/).pop()
+  }
+  return '对比文件'
+})
 
 // --- 拖拽调整宽度逻辑 ---
 const containerRef = ref(null)

@@ -1,150 +1,186 @@
 <template>
-
-  <div class="flex flex-col h-full bg-bg-surface/80 rounded-xl overflow-hidden border border-text-main/10 shadow-2xl">
-    
-    <!-- 1. 顶部工具栏 -->
-    <div class="flex items-center justify-between px-3 py-2 bg-text-main/5 border-b border-text-main/5 z-20 shrink-0">
-      <!-- 图例 -->
-      <div class="flex items-center gap-3 text-xs font-bold uppercase tracking-wider">
-        <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-danger"></span>缺失{{ stats.removed }}</div>
-        <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-success"></span>新增{{ stats.added }}</div>
-        <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-warn"></span>移动{{ stats.moved }}</div>
-        <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-yellow-100"></span>偏移{{ stats.movedBlock }}</div>
-        <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-text-dim"></span>一致{{ stats.same }}</div>
-      </div>
-      
-      <!-- 开关组 -->
-      <div class="flex items-center gap-4">
-        <div class="relative flex flex-wrap items-center gap-1">
-          <input v-model="colorfulBlocks" type="checkbox" value="" id="b01" class="relative w-6 h-3 scale-80 transition-colors rounded-lg appearance-none cursor-pointer hover:bg-slate-400 after:hover:bg-slate-600 checked:hover:bg-emerald-300 checked:after:hover:bg-emerald-600 focus:outline-none checked:focus:bg-emerald-400 checked:after:focus:bg-emerald-700 focus-visible:outline-none peer bg-slate-300 after:absolute after:-top-0.5 after:-left-1.5 after:h-4 after:w-4 after:rounded-full after:bg-slate-500 after:transition-all checked:bg-emerald-200 checked:after:left-3 checked:after:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:after:bg-slate-300"/>
-          <label v-tooltip="'为不同的区块使用不同颜色便于区分'" for="b01" class="cursor-pointer text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors">
-            多彩区块
-          </label>
-        </div>
-
-        <div class="relative flex flex-wrap items-center gap-1">
-          <input v-model="hideIdentical" type="checkbox" value="" id="b02" class="relative w-6 h-3 scale-80 transition-colors rounded-lg appearance-none cursor-pointer hover:bg-slate-400 after:hover:bg-slate-600 checked:hover:bg-emerald-300 checked:after:hover:bg-emerald-600 focus:outline-none checked:focus:bg-emerald-400 checked:after:focus:bg-emerald-700 focus-visible:outline-none peer bg-slate-300 after:absolute after:-top-0.5 after:-left-1.5 after:h-4 after:w-4 after:rounded-full after:bg-slate-500 after:transition-all checked:bg-emerald-200 checked:after:left-3 checked:after:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:after:bg-slate-300"/>
-          <label v-tooltip="'折叠一致区块'" for="b02" class="cursor-pointer text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors">
-            折叠长区块
-          </label>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- 2. 标题栏 -->
-    <div class="flex items-center border-b border-text-main/5 bg-black/20 text-xs font-bold text-text-dim py-1 z-20 shrink-0">
-      <div class="flex-1 px-2 text-center text-accent-success border-r border-text-main/5 truncate">{{ titleA }} ({{ listA.length }})</div>
-      
-      <div class="flex-1 px-2 text-center truncate">{{ titleB }} ({{ listB.length }})</div>
-    </div>
-
-    <!-- 3. 核心对比区 -->
-    <div class="flex-1 overflow-y-auto custom-scrollbar relative w-full" ref="scrollContainer">
-      <div class="flex min-h-full relative w-full">
-        
-        <!-- 左侧列表 (List A) -->
-        <div class="flex-1 flex flex-col min-w-0" ref="listARef">
-          <template v-for="item in displayListA" :key="item.uiKey">
-            
-            <!-- 普通项 -->
-            <div v-if="!item.isPlaceholder" :data-id="item.id" @click="targetItem(item.id)"
-                 class="flex items-center h-7 px-2 border-b border-x border-text-main/5 transition-colors relative cursor-pointer"
-                 :style="{ backgroundColor: getBgColor(item) }"
-            >
-              <!-- 指示条 (仅在有色时显示) -->
-              <div v-if="shouldShowIndicator(item)" 
-                   class="absolute right-0 top-0 bottom-0 w-0.5" 
-                   :style="{ backgroundColor: getRenderColor(item) }">
-              </div>
-
-              <span class="w-6 text-xs font-mono text-text-main text-right mr-2 select-none shrink-0 opacity-80">{{ item.originalIndex + 1 }}</span>
-              
-              <!-- 文字颜色逻辑 -->
-              <div class="flex-1 truncate text-sm font-medium" 
-                   :class="getTextClass(item)"
-                   v-tooltip="displayNameById(item.id)">
-                {{ displayNameById(item.id) }}
-              </div>
-            </div>
-
-            <!-- 折叠项 -->
-            <div v-else class="h-7 flex items-center justify-center border-b border-x border-text-main/5 select-none relative"
-              :style="{ backgroundColor: getBgColor(item) }">
-              <span class="absolute left-4 text-xl text-text-dim" style="writing-mode: vertical-rl;">···</span>
-              <!-- 指示条也继承 -->
-              <div v-if="shouldShowIndicator(item)" class="absolute right-0 w-0.5 h-full" 
-                   :style="{ backgroundColor: getRenderColor(item) }">
-              </div>
-              <span class="text-xs text-text-dim/60 tracking-widest scale-90">
-                ··· 已折叠{{ item.count }}项 ···
-              </span>
-            </div>
-
-          </template>
-        </div>
-
-        <!-- 中间画布 (SVG) -->
-        <div class="w-[48px] shrink-0 relative z-10 bg-black/20">
-          <svg class="absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible">
-             <!-- 绘制区块 (fill) -->
-             <path v-for="block in renderBlocks" :key="block.id"
-               :d="block.path"
-               :fill="block.renderColor"
-               fill-opacity="0.15" 
-               stroke="none"
-               class="transition-all duration-300"
-             />
-             <!-- 绘制线条 (stroke) -->
-             <path v-for="line in renderLines" :key="line.id"
-               :d="line.path"
-               fill="none"
-               :stroke="line.renderColor"
-               stroke-width="1.5"
-               stroke-opacity="0.5"
-             />
+  <Teleport to="body">
+    <Transition 
+        enter-active-class="transition-transform duration-300 ease-out"
+        enter-from-class="-translate-x-full"
+        enter-to-class="translate-x-0"
+        leave-active-class="transition-transform duration-300 ease-in"
+        leave-from-class="translate-x-0"
+        leave-to-class="-translate-x-full"
+      >
+      <!-- 将抽屉壳体收敛到组件内部，保持原有动画和层级结构不变。 -->
+      <div v-if="appStore.uiState.showDiffDrawer" class="fixed inset-y-8 top-18 left-0 w-[50vw] z-100 flex flex-col">
+        <!-- 1. 上方内凹边角 -->
+        <div class="absolute -top-4.5 left-0 w-5 h-5 z-10">
+          <!-- 模糊与背景层：利用 mask 裁剪出内凹形状 -->
+          <div class="w-full h-full bg-bg-surface/80 mask-[radial-gradient(circle_at_100%_0,transparent_1.25rem,black_1rem)]"></div>
+          <!-- 边框层：SVG 绘制弧线 -->
+          <svg class="absolute inset-0 w-full h-full text-text-main/10 fill-none pointer-events-none" viewBox="0 0 20 20">
+            <!-- 从左上(0,0) 画弧到 右下(20,20) -->
+            <path d="M0,0 A20,20 0 0,0 20,20" stroke="currentColor" stroke-width="1" />
           </svg>
         </div>
 
-        <!-- 右侧列表 (List B) -->
-        <div class="flex-1 flex flex-col min-w-0" ref="listBRef">
-          <template v-for="item in displayListB" :key="item.uiKey">
+        <!-- 2. 抽屉主体 -->
+        <div class="flex-1 flex flex-col bg-transparent backdrop-blur-xl rounded-r-2xl border-y border-r border-text-main/10 shadow-2xl overflow-hidden relative">
+          
+          <div class="flex flex-col h-full bg-bg-surface/80 overflow-hidden border border-text-main/10 shadow-2xl">
             
-            <div v-if="!item.isPlaceholder" :data-id="item.id" class="flex items-center h-7 px-2 border-b border-x border-text-main/5 transition-colors relative"
-                :style="{ backgroundColor: getBgColor(item) }">
-              <div v-if="shouldShowIndicator(item)" 
-                   class="absolute left-0 top-0 bottom-0 w-0.5" 
-                   :style="{ backgroundColor: getRenderColor(item) }">
+            <!-- 1. 顶部工具栏 -->
+            <div class="flex items-center justify-between px-3 py-2 bg-text-main/5 border-b border-text-main/5 z-20 shrink-0">
+              <!-- 图例 -->
+              <div class="flex items-center gap-3 text-xs font-bold uppercase tracking-wider">
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-danger"></span>缺失{{ stats.removed }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-success"></span>新增{{ stats.added }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-warn"></span>移动{{ stats.moved }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-yellow-100"></span>偏移{{ stats.movedBlock }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-text-dim"></span>一致{{ stats.same }}</div>
               </div>
-
-              <span class="w-6 text-xs font-mono text-text-main text-right mr-2 select-none shrink-0 opacity-80">{{ item.originalIndex + 1 }}</span>
               
-              <div class="flex-1 truncate text-sm font-medium"
-                   :class="getTextClass(item)"
-                   v-tooltip="displayNameById(item.id)">
-                 {{ displayNameById(item.id) }}
+              <!-- 开关组 -->
+              <div class="flex items-center gap-4">
+                <div class="relative flex flex-wrap items-center gap-1">
+                  <input v-model="colorfulBlocks" type="checkbox" value="" id="b01" class="relative w-6 h-3 scale-80 transition-colors rounded-lg appearance-none cursor-pointer hover:bg-slate-400 after:hover:bg-slate-600 checked:hover:bg-emerald-300 checked:after:hover:bg-emerald-600 focus:outline-none checked:focus:bg-emerald-400 checked:after:focus:bg-emerald-700 focus-visible:outline-none peer bg-slate-300 after:absolute after:-top-0.5 after:-left-1.5 after:h-4 after:w-4 after:rounded-full after:bg-slate-500 after:transition-all checked:bg-emerald-200 checked:after:left-3 checked:after:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:after:bg-slate-300"/>
+                  <label v-tooltip="'为不同的区块使用不同颜色便于区分'" for="b01" class="cursor-pointer text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors">
+                    多彩区块
+                  </label>
+                </div>
+
+                <div class="relative flex flex-wrap items-center gap-1">
+                  <input v-model="hideIdentical" type="checkbox" value="" id="b02" class="relative w-6 h-3 scale-80 transition-colors rounded-lg appearance-none cursor-pointer hover:bg-slate-400 after:hover:bg-slate-600 checked:hover:bg-emerald-300 checked:after:hover:bg-emerald-600 focus:outline-none checked:focus:bg-emerald-400 checked:after:focus:bg-emerald-700 focus-visible:outline-none peer bg-slate-300 after:absolute after:-top-0.5 after:-left-1.5 after:h-4 after:w-4 after:rounded-full after:bg-slate-500 after:transition-all checked:bg-emerald-200 checked:after:left-3 checked:after:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:after:bg-slate-300"/>
+                  <label v-tooltip="'折叠一致区块'" for="b02" class="cursor-pointer text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors">
+                    折叠长区块
+                  </label>
+                </div>
               </div>
+
             </div>
 
-            <div v-else class="h-7 flex items-center justify-center border-b border-x border-text-main/5 select-none relative"
-              :style="{ backgroundColor: getBgColor(item) }">
-              <span class="absolute left-4 text-xl text-text-dim" style="writing-mode: vertical-rl;">···</span>
-              <!-- 指示条也继承 -->
-              <div v-if="shouldShowIndicator(item)" class="absolute left-0 w-0.5 h-full" 
-                   :style="{ backgroundColor: getRenderColor(item) }">
-              </div>
-              <span class="text-xs text-text-dim/60 tracking-widest scale-90">
-                ··· 已折叠{{ item.count }}项 ···
-              </span>
+            <!-- 2. 标题栏 -->
+            <div class="flex items-center border-b border-text-main/5 bg-black/20 text-xs font-bold text-text-dim py-1 z-20 shrink-0">
+              <div class="flex-1 px-2 text-center text-accent-success border-r border-text-main/5 truncate">{{ titleA }} ({{ listA.length }})</div>
+              <div class="flex-1 px-2 text-center truncate">{{ titleB }} ({{ listB.length }})</div>
             </div>
 
-          </template>
+            <!-- 3. 核心对比区 -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar relative w-full" ref="scrollContainer">
+              <div class="flex min-h-full relative w-full">
+                
+                <!-- 左侧列表 (List A) -->
+                <div class="flex-1 flex flex-col min-w-0" ref="listARef">
+                  <template v-for="item in displayListA" :key="item.uiKey">
+                    
+                    <!-- 普通项 -->
+                    <div v-if="!item.isPlaceholder" :data-id="item.id" @click="targetItem(item.id)" :style="{ backgroundColor: getBgColor(item) }"
+                      class="flex items-center h-7 px-2 border-b border-x border-text-main/5 transition-colors relative cursor-pointer">
+                      <!-- 指示条 (仅在有色时显示) -->
+                      <div v-if="shouldShowIndicator(item)" class="absolute right-0 top-0 bottom-0 w-0.5" :style="{ backgroundColor: getRenderColor(item) }"></div>
+                      <span class="w-6 text-xs font-mono text-text-main text-right mr-2 select-none shrink-0 opacity-80">{{ item.originalIndex + 1 }}</span>
+                      
+                      <!-- 文字颜色逻辑 -->
+                      <div class="flex-1 truncate text-sm font-medium" :class="getTextClass(item)" v-tooltip="displayNameById(item.id, 'a')">
+                        {{ displayNameById(item.id, 'a') }}
+                      </div>
+                    </div>
+
+                    <!-- 折叠项 -->
+                    <div v-else class="h-7 flex items-center justify-center border-b border-x border-text-main/5 select-none relative"
+                      :style="{ backgroundColor: getBgColor(item) }">
+                      <span class="absolute left-4 text-xl text-text-dim" style="writing-mode: vertical-rl;">···</span>
+                      <!-- 指示条也继承 -->
+                      <div v-if="shouldShowIndicator(item)" class="absolute right-0 w-0.5 h-full" :style="{ backgroundColor: getRenderColor(item) }"></div>
+                      <span class="text-xs text-text-dim/60 tracking-widest scale-90">
+                        ··· 已折叠{{ item.count }}项 ···
+                      </span>
+                    </div>
+
+                  </template>
+                </div>
+
+                <!-- 中间画布 (SVG) -->
+                <div class="w-[48px] shrink-0 relative z-10 bg-black/20">
+                  <svg class="absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible">
+                    <!-- 绘制区块 (fill) -->
+                    <path v-for="block in renderBlocks" :key="block.id"
+                      :d="block.path"
+                      :fill="block.renderColor"
+                      fill-opacity="0.15" 
+                      stroke="none"
+                      class="transition-all duration-300"
+                    />
+                    <!-- 绘制线条 (stroke) -->
+                    <path v-for="line in renderLines" :key="line.id"
+                      :d="line.path"
+                      fill="none"
+                      :stroke="line.renderColor"
+                      stroke-width="1.5"
+                      stroke-opacity="0.5"
+                    />
+                  </svg>
+                </div>
+
+                <!-- 右侧列表 (List B) -->
+                <div class="flex-1 flex flex-col min-w-0" ref="listBRef">
+                  <template v-for="item in displayListB" :key="item.uiKey">
+                    <div v-if="!item.isPlaceholder" :data-id="item.id" class="flex items-center h-7 px-2 border-b border-x border-text-main/5 transition-colors relative"
+                        :style="{ backgroundColor: getBgColor(item) }">
+                      <div v-if="shouldShowIndicator(item)" class="absolute left-0 top-0 bottom-0 w-0.5" :style="{ backgroundColor: getRenderColor(item) }"></div>
+                      <span class="w-6 text-xs font-mono text-text-main text-right mr-2 select-none shrink-0 opacity-80">{{ item.originalIndex + 1 }}</span>
+                      <div class="flex-1 truncate text-sm font-medium" :class="getTextClass(item)" v-tooltip="displayNameById(item.id, 'b')">
+                        {{ displayNameById(item.id, 'b') }}
+                      </div>
+                    </div>
+
+                    <div v-else class="h-7 flex items-center justify-center border-b border-x border-text-main/5 select-none relative"
+                      :style="{ backgroundColor: getBgColor(item) }">
+                      <span class="absolute left-4 text-xl text-text-dim" style="writing-mode: vertical-rl;">···</span>
+                      <!-- 指示条也继承 -->
+                      <div v-if="shouldShowIndicator(item)" class="absolute left-0 w-0.5 h-full" 
+                          :style="{ backgroundColor: getRenderColor(item) }">
+                      </div>
+                      <span class="text-xs text-text-dim/60 tracking-widest scale-90">
+                        ··· 已折叠{{ item.count }}项 ···
+                      </span>
+                    </div>
+
+                  </template>
+                </div>
+
+              </div>
+            </div>
+          </div>
+  
+          <!-- 底部动作栏 -->
+          <div class="p-2 px-5 bg-black/20 flex items-center justify-between border-t border-text-main/5">
+            <div class="min-w-0">
+              <h2 class="text-text-main/80 font-bold">Mod序列对比</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <button v-if="orderStore.missingBackupSubscribableCount > 0" @click="orderStore.subscribeMissingBackupMods()" class="px-3 py-1.5 rounded-lg bg-accent-warn/12 hover:bg-accent-warn/25 text-accent-warn border border-accent-warn/30 text-xs font-bold transition-all">
+                订阅缺失项 ({{ orderStore.missingBackupSubscribableCount }})
+              </button>
+              <button @click="orderStore.applyBackup()" class="px-3 py-1.5 rounded-lg bg-accent-success/20 hover:bg-accent-success/40 text-accent-success border border-accent-success/30 text-xs font-bold transition-all">应用文件序列</button>
+              <button @click="appStore.uiState.showDiffDrawer = false" class="px-3 py-1.5 rounded-lg bg-accent-danger/10 hover:bg-accent-danger/20 text-text-dim border border-text-main/10 text-xs font-bold transition-all">关闭</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 3. 下方内凹边角 -->
+        <div class="absolute -bottom-[19px] left-0 w-5 h-5 z-10">
+          <!-- 模糊与背景层 -->
+          <div class="w-full h-full bg-transparent backdrop-blur-xl mask-[radial-gradient(circle_at_100%_100%,transparent_1.25rem,black_1.3rem)]">
+          </div>
+          <!-- 边框层 -->
+          <svg class="absolute inset-0 w-full h-full text-text-main/10 fill-none pointer-events-none" viewBox="0 0 20 20">
+            <!-- 从右上(20,0) 画弧到 左下(0,20) -->
+            <path d="M20,0 A20,20 0 0,0 0,20" stroke="currentColor" stroke-width="1" />
+          </svg>
         </div>
 
       </div>
-    </div>
-  </div>
-  
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
@@ -152,13 +188,21 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useModStore } from '../stores/modStore'
 import { useDebounceFn } from '@vueuse/core'
 import { getTailwindColorHex, hexToRgba } from '../utils/colorDeal'
+import { useOrderStore } from '../stores/orderStore'
+import { useAppStore } from '../stores/appStore'
 
+
+// 抽屉的显隐和底部操作继续复用现有 store，避免迁移后行为变化。
+const appStore = useAppStore()
+const orderStore = useOrderStore()
 
 const props = defineProps({
   listA: { type: Array, required: true },
   listB: { type: Array, required: true },
   titleA: { type: String, default: 'List A' },
-  titleB: { type: String, default: 'List B' }
+  titleB: { type: String, default: 'List B' },
+  nameMapA: { type: Object, default: () => ({}) },
+  nameMapB: { type: Object, default: () => ({}) }
 })
 
 const modStore = useModStore()
@@ -184,7 +228,15 @@ const COLOR_MOVED = getTailwindColorHex('accent-warn')
 const COLOR_MOVED_GRAY = getTailwindColorHex('text-dim')
 
 
-const displayNameById = (id) => modStore.displayModName(id)  // 根据ID获取显示名称
+const displayNameById = (id, side = 'a') => {
+  // 右侧导入列表中的缺失项可能不在本地 modStore，需要用导入文件自带名称兜底显示。
+  const lowerId = String(id || '').toLowerCase()
+  if (lowerId && modStore.allModsMap.has(lowerId)) {
+    return modStore.displayModName(lowerId)
+  }
+  const fallbackMap = side === 'b' ? props.nameMapB : props.nameMapA
+  return fallbackMap?.[lowerId] || modStore.displayModName(id)
+}
 const displayListA = computed(() => foldList(analysis.value.resA))  // 左侧列表 (List A)，经过折叠处理
 const displayListB = computed(() => foldList(analysis.value.resB))   // 右侧列表 (List B)，经过折叠处理
 
