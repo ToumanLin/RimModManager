@@ -873,6 +873,7 @@ class CollectionDAO:
     def upsert_collection(coll_id: str, meta: dict, children: list, total: int):
         """持久化合集及其子项的所有元数据"""
         from backend.utils.tools import current_ms
+        existing = SubscribedCollection.get_or_none(SubscribedCollection.id == str(coll_id))
         return SubscribedCollection.insert(
             id=str(coll_id),
             title=meta.get('title'),
@@ -881,6 +882,7 @@ class CollectionDAO:
             children=children, # 传入完整的子项快照
             total=total,
             time_updated=meta.get('time_updated', 0),
+            created_time=existing.created_time if existing else current_ms(),
             last_sync_time=current_ms() # 记录同步时间
         ).on_conflict_replace().execute()
 

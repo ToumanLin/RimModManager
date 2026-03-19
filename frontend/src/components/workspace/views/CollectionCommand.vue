@@ -76,6 +76,7 @@
 
               <!-- 操作按钮组 (Hover 显示) -->
               <div class="hidden group-hover:flex items-center gap-1 bg-bg-surface/80 p-1 rounded-lg backdrop-blur-md border border-text-main/10 shadow-lg">
+                <button @click="appStore.openSteamWorkshopById(mod.workshop_id)" v-tooltip="'访问创意工坊页面'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-black transition-colors"><ExternalLink class="size-3.5" /></button>
                 <button v-if="mod.is_workshop" @click="handleUnsubscribeSingle(mod.workshop_id)" v-tooltip="'取消订阅'" class="p-1.5 rounded-md hover:bg-accent-danger text-text-dim hover:text-black transition-colors"><FlagOff class="size-3.5" /></button>
                 <button v-else @click="handleSubscribeSingle(mod.workshop_id)" v-tooltip="'Steam 订阅'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-black transition-colors"><Flag class="size-3.5" /></button>
                 <button v-if="!mod.is_self" @click="handleDownloadSingle(mod.workshop_id)" v-tooltip="'SteamCMD 下载'" class="p-1.5 rounded-md hover:bg-accent-success text-text-dim hover:text-black transition-colors"><Download class="size-3.5" /></button>
@@ -168,14 +169,14 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { Layers, Plus, CircleCheck, Download, DownloadCloud, BoxSelect, Package, Trash2, ListOrdered, Flag, FlagOff, AlertCircle, FolderArchive, FolderDot } from 'lucide-vue-next'
+import { Layers, Plus, Download, DownloadCloud, BoxSelect, Package, Trash2, ListOrdered, Flag, FlagOff, AlertCircle, FolderArchive, FolderDot, ExternalLink } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useModStore } from '../../../stores/modStore'
 import { useConfirmStore } from '../../../stores/confirmStore'
 import { formatDate } from '../../../utils/uiHelper'
-import { cleanRichText, parseUnityRichText } from '../../../utils/unityTextParser'
+import { cleanRichText } from '../../../utils/unityTextParser'
 
 const toast = useToast()
 const wsStore = useWorkspaceStore()
@@ -185,6 +186,10 @@ const confirmStore = useConfirmStore()
 
 // 本地 UI 状态
 const newCollectionInput = ref('')
+const OFFICIAL_PREFIX = 'ludeon.rimworld'
+
+const normalizePackageId = (value) => String(value || '').trim().toLowerCase()
+const isOfficialPackageId = (value) => normalizePackageId(value).startsWith(OFFICIAL_PREFIX)
 
 // 计算当前合集的缺失数量
 const missingCount = computed(() => wsStore.activeChildrenWithStatus.filter(c => !c.is_installed).length)
@@ -210,8 +215,10 @@ const tooltipFormat = (coll) => {
 
 // --- 动作：添加与删除合集 ---
 const submitAddCollection = async () => {
-  await wsStore.addCollection(newCollectionInput.value)
-  newCollectionInput.value = '' // 如果成功，清空输入框
+  const added = await wsStore.addCollection(newCollectionInput.value)
+  if (added) {
+    newCollectionInput.value = ''
+  }
 }
 
 const confirmRemove = async (coll) => {
@@ -259,20 +266,45 @@ const applyAsLoadOrder = async () => {
     const ok = await confirmStore.confirmAction("警示", `当前合集有 ${missingCount.value} 个模组未安装。\n强行应用会导致排序中出现幽灵节点（空项）。强烈建议先下载补齐。\n是否继续强行应用？`, { type: 'warning' })
     if (!ok) return
   }
-  // 从后端的 activeChildren 中提取 package_id (前提是后端 `lifecycle_fetch_collection` 必须把 ext_db 里的 package_id 连带查出来返回)
-  const pids = wsStore.activeChildrenWithStatus.map(c => c.package_id).filter(Boolean)
-  console.log("加载序列 activeChildren:", wsStore.activeChildrenWithStatus)
-  if (pids.length === 0) {
+
+  const officialIds = modStore.activeIds
+    .map(id => normalizePackageId(id))
+    .filter(id => id && isOfficialPackageId(id))
+
+  const collectionIds = []
+  const seenPackageIds = new Set(officialIds)
+  let unresolvedCount = 0
+  let duplicateCount = 0
+
+  wsStore.activeChildrenWithStatus.forEach(child => {
+    const pid = normalizePackageId(child.package_id)
+    if (!pid) {
+      unresolvedCount += 1
+      return
+    }
+    if (seenPackageIds.has(pid)) {
+      duplicateCount += 1
+      return
+    }
+    seenPackageIds.add(pid)
+    collectionIds.push(pid)
+  })
+
+  const nextActiveIds = [...officialIds, ...collectionIds]
+  if (nextActiveIds.length === 0) {
     toast.error("无法提取包名。可能后端接口未返回 package_id。")
     return
   }
-  if (pids.length < wsStore.activeChildrenWithStatus.length) {
-    toast.warning("部分模组无法解析包名，可能 已从Steam下架 或 缓存数据缺失，已被过滤。")
+  if (unresolvedCount > 0) {
+    toast.warning(`有 ${unresolvedCount} 个合集项无法解析包名，可能是缓存缺失或本地未安装，已跳过这些项。`)
   }
-  // 应用 modStore 的 activeIds
-  modStore.activeIds = pids
-  // 给点视觉反馈，提示用户去主界面保存
-  toast.success("已应用于当前环境的加载序列！\n请返回主界面点击【保存】生效。")
+  if (duplicateCount > 0) {
+    toast.info(`已跳过 ${duplicateCount} 个重复包名项，避免生成重复加载节点。`)
+  }
+
+  modStore.activeIds = nextActiveIds
+  modStore.updateInactiveIds()
+  toast.success("已按合集顺序覆盖当前启用列表。\n官方 Core/DLC 会按当前启用状态保留，请返回主界面点击【保存】生效。")
 }
 </script>
 

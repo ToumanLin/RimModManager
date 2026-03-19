@@ -322,8 +322,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const updated = e.detail // { id, data: { collection, children, ... } }
       // 如果当前用户正在看的正是这个合集，立即无感替换数据
     if (collections.activeId === updated.id) {
-      collections.activeDetails = updated.data.collection
-      collections.activeChildren = updated.data.children
+      collections.activeDetails = {
+        ...(collections.activeDetails || {}),
+        ...(updated.data.collection || {})
+      }
+      collections.activeChildren = updated.data.children || []
       collections.isChildrenLoading = false // 后台更新完毕，取消 loading
     }
       // 同时更新右侧合集列表中的统计数字
@@ -332,7 +335,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         Object.assign(target, {
           total: updated.data.total,
           preview_url: updated.data.collection.preview_url,
-          title: updated.data.collection.title
+          title: updated.data.collection.title,
+          description: updated.data.collection.description,
+          time_updated: updated.data.collection.time_updated
         })
         target.children = updated.data.children // 保存 children 供列表计算
       }
@@ -509,17 +514,17 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   // 接入(解析并保存)新合集
   const addCollection = async (inputUrl) => {
-    if (!window.pywebview || !inputUrl) return
+    if (!window.pywebview || !inputUrl) return false
     // 智能提取 ID
     const match = inputUrl.match(/id=(\d+)/) || inputUrl.match(/(\d+)/)
     const collId = match ? match[1] : inputUrl.trim()
     if (!/^\d+$/.test(collId)) {
       toast.error("无效的合集 ID 或链接，请输入纯数字或包含 id=xxx 的链接")
-      return
+      return false
     }
     if (collections.savedList.some(c => c.id === collId)) {
       toast.warning("该合集已在你的记录中！")
-      return
+      return false
     }
     collections.isParsing = true
     toast.info("正在解析并接入合集数据...")
@@ -529,11 +534,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (checkResult(res, '解析并接入合集',true)) {
         collections.savedList.unshift(res.data)
         // 立刻自动选中
-        selectCollection(res.data)
+        await selectCollection(res.data)
+        return true
       }
     } finally {
       collections.isParsing = false
     }
+    return false
   }
 
   // 移除合集记录
@@ -559,17 +566,26 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const selectCollection = async (coll) => {
     if (!window.pywebview) return
     collections.activeId = coll.id
+    collections.activeDetails = coll || null
+    collections.activeChildren = Array.isArray(coll?.children) ? [...coll.children] : []
     collections.isChildrenLoading = true
     
     // 这步会立即返回数据库里的旧数据 (或者为 null)
-    const res = await window.pywebview.api.lifecycle_fetch_collection(coll.id)
-    if (res.status === 'success' && res.data) {
-      collections.activeDetails = res.data.collection
-      collections.activeChildren = res.data.children
-      // 如果后端判定是强力缓存且不过期，取消 loading
-      if (res.data.is_cache) {
+    try {
+      const res = await window.pywebview.api.lifecycle_fetch_collection(coll.id)
+      if (res.status === 'success' && res.data) {
+        collections.activeDetails = res.data.collection
+        collections.activeChildren = res.data.children
+        // 如果后端判定是强力缓存且不过期，取消 loading
+        if (res.data.is_cache) {
+          collections.isChildrenLoading = false
+        }
+      } else if (res.status !== 'success') {
         collections.isChildrenLoading = false
       }
+    } catch (e) {
+      collections.isChildrenLoading = false
+      toast.error(`加载合集失败: ${e.message}`)
     }
     // 如果没有缓存，loading 继续保持 true，等待 EventBus 触发
   }

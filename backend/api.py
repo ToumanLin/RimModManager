@@ -2449,18 +2449,7 @@ class API:
         online_results, _ = SteamWebAPI.fetch_item_details(all_ids, force_refresh=True)
         if coll_id not in online_results: return ApiResponse.error("无法获取合集信息")
         main_info = online_results[coll_id]
-        meta_records = WorkshopMeta.select(WorkshopMeta.workshop_id, WorkshopMeta.package_id).where(WorkshopMeta.workshop_id.in_(child_wids))
-        pid_map = {str(m.workshop_id): m.package_id for m in meta_records}
-
-        final_children = []
-        for wid in child_wids:
-            info = online_results.get(wid, {})
-            final_children.append({
-                "workshop_id": wid,
-                "package_id": pid_map.get(wid),
-                "title": info.get("title", f"Mod {wid}"),
-                "preview_url": info.get("preview_url", "")
-            })
+        final_children = self._build_collection_children(child_wids, online_results)
 
         total = len(final_children)
         # 持久化
@@ -2495,6 +2484,105 @@ class API:
 
         return ApiResponse.success(initial_data)
 
+    def _normalize_collection_package_id(self, package_id: Any) -> str | None:
+        value = str(package_id or '').strip().lower()
+        return value or None
+
+    def _resolve_collection_package_map(self, child_wids: list[str]) -> dict[str, str]:
+        normalized_wids: list[str] = []
+        seen_wids: set[str] = set()
+        for wid in child_wids:
+            wid_str = str(wid or '').strip()
+            if wid_str and wid_str not in seen_wids:
+                seen_wids.add(wid_str)
+                normalized_wids.append(wid_str)
+
+        if not normalized_wids:
+            return {}
+
+        resolved_map: dict[str, str] = {}
+        meta_records = (
+            WorkshopMeta
+            .select(WorkshopMeta.workshop_id, WorkshopMeta.package_id)
+            .where(WorkshopMeta.workshop_id.in_(normalized_wids))
+            .dicts()
+        )
+        for meta in meta_records:
+            wid = str(meta.get('workshop_id') or '').strip()
+            pid = self._normalize_collection_package_id(meta.get('package_id'))
+            if wid and pid:
+                resolved_map[wid] = pid
+
+        store_priority = {'workshop': 0, 'self': 1, 'local': 2}
+        installed_candidates: dict[str, dict[str, dict[str, int]]] = {}
+        asset_records = (
+            ModAsset
+            .select(
+                ModAsset.workshop_id,
+                ModAsset.package_id,
+                ModAsset.store,
+                ModAsset.disabled,
+                ModAsset.path
+            )
+            .where(ModAsset.workshop_id.in_(normalized_wids)) # type: ignore
+            .dicts()
+        )
+        for asset in asset_records:
+            wid = str(asset.get('workshop_id') or '').strip()
+            pid = self._normalize_collection_package_id(asset.get('package_id'))
+            if not wid or not pid:
+                continue
+
+            candidates_by_pid = installed_candidates.setdefault(wid, {})
+            candidate = candidates_by_pid.setdefault(pid, {
+                'count': 0,
+                'disabled_rank': 1,
+                'store_rank': 99,
+                'path_len': 10 ** 9,
+            })
+            candidate['count'] += 1
+            candidate['disabled_rank'] = min(candidate['disabled_rank'], 1 if asset.get('disabled') else 0)
+            candidate['store_rank'] = min(candidate['store_rank'], store_priority.get(asset.get('store'), 99))
+            path_len = len(str(asset.get('path') or '').strip())
+            if path_len > 0:
+                candidate['path_len'] = min(candidate['path_len'], path_len)
+
+        for wid, candidates in installed_candidates.items():
+            best_pid = min(
+                candidates.items(),
+                key=lambda item: (
+                    -item[1]['count'],
+                    item[1]['disabled_rank'],
+                    item[1]['store_rank'],
+                    item[1]['path_len'],
+                    item[0]
+                )
+            )[0]
+            resolved_map[wid] = best_pid
+
+        return resolved_map
+
+    def _build_collection_children(self, child_wids: list[str], online_results: dict[str, dict]) -> list[dict]:
+        pid_map = self._resolve_collection_package_map(child_wids)
+        final_children: list[dict] = []
+        seen_wids: set[str] = set()
+
+        for raw_wid in child_wids:
+            wid = str(raw_wid or '').strip()
+            if not wid or wid in seen_wids:
+                continue
+            seen_wids.add(wid)
+
+            info = online_results.get(wid, {})
+            final_children.append({
+                "workshop_id": wid,
+                "package_id": pid_map.get(wid),
+                "title": info.get("title", f"Mod {wid}"),
+                "preview_url": info.get("preview_url", "")
+            })
+
+        return final_children
+
     def _bg_refresh_collection(self, coll_id: str):
         """后台刷新任务 (网络密集 + 数据库写入)"""
         try:
@@ -2508,21 +2596,8 @@ class API:
             if coll_id not in online_results: return
             main_info = online_results[coll_id]
 
-            # 3. 反查 PackageID
-            from backend.database.models_ext import WorkshopMeta
-            meta_records = WorkshopMeta.select(WorkshopMeta.workshop_id, WorkshopMeta.package_id).where(WorkshopMeta.workshop_id.in_(child_wids))
-            pid_map = {str(m.workshop_id): m.package_id for m in meta_records}
-
-            # 5. 组装并准备持久化
-            final_children = []
-            for wid in child_wids:
-                info = online_results.get(wid, {})
-                final_children.append({
-                    "workshop_id": wid,
-                    "package_id": pid_map.get(wid),
-                    "title": info.get("title", f"Mod {wid}"),
-                    "preview_url": info.get("preview_url", ""),
-                })
+            # 3. 组装并准备持久化
+            final_children = self._build_collection_children(child_wids, online_results)
             total = len(final_children)
             # 6. 存入数据库
             CollectionDAO.upsert_collection(coll_id, main_info, final_children, total)
