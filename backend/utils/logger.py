@@ -1,4 +1,5 @@
 # backend/utils/logger.py
+import linecache
 import logging
 import json
 import math
@@ -26,6 +27,9 @@ class BaseLogReader:
 
     def _add_or_merge_block(self, blocks, new_block, lookback_limit=20):
         """通用去重合并逻辑：如果短时间内出现重复日志，则累加 count 并推至末尾"""
+        # 确保 new_block 有 raw_lines 列表
+        if 'raw_lines' not in new_block:
+            new_block['raw_lines'] = []
         if not blocks:
             blocks.append(new_block)
             return
@@ -42,6 +46,10 @@ class BaseLogReader:
                 matched_block['count'] = matched_block.get('count', 1) + new_block.get('count', 1)
                 if new_block.get('timestamp'): 
                     matched_block['timestamp'] = new_block['timestamp']
+                # 合并物理行号
+                if 'raw_lines' not in matched_block:
+                    matched_block['raw_lines'] = []
+                matched_block['raw_lines'].extend(new_block['raw_lines'])
                 blocks.append(matched_block)
                 return
         
@@ -66,6 +74,96 @@ class BaseLogReader:
             'total_pages': total_pages,
             'current_page': page
         }
+    
+    def get_logs_by_ids(self, log_ids: list, filename: str = '') -> list:
+        """根据 ID 列表高效获取日志对象"""
+        if not log_ids:
+            return []
+        
+        # 1. 确定从哪个文件缓存中查找
+        #    如果 filename 未指定，需要遍历所有缓存文件，但通常前端会知道当前是哪个文件
+        #    这里我们简化为：假设所有 ID 来自最新的缓存文件
+        cache_key = next(iter(self._cache)) if self._cache and not filename else filename
+        if not cache_key or cache_key not in self._cache:
+            return []
+
+        # 2. 使用 Set 加速查找
+        id_set = set(log_ids)
+        
+        # 3. 遍历缓存并返回
+        return [block for block in self._cache[cache_key]['blocks'] if block.get('id') in id_set]
+    
+    # 基于行号的高效反查机制
+    def get_raw_logs_by_lines(self, filepath: str, target_lines: list) -> list:
+        """
+        通过行号列表，直接从磁盘文件中提取完整的 JSON 字符串，并反序列化。
+        这避免了在庞大的 _cache 数组中遍历查找，时间复杂度接近 O(1)。
+        """
+        if not os.path.exists(filepath) or not target_lines: return []
+        raw_logs = []
+        # 去重并排序行号，优化读取效率
+        unique_lines = sorted(list(set(target_lines)))
+        # 使用 Python 内置的 linecache，它针对同一文件的多次随机行读取做了高度优化
+        for line_num in unique_lines:
+            line_str = linecache.getline(filepath, line_num).strip()
+            if line_str:
+                try:
+                    data = json.loads(line_str)
+                    # 必须把这行日志的物理行号注入进去，否则 AI 看不到
+                    data['raw_lines'] = [line_num] 
+                    # 稳妥起见，顺手把 ID 也生成一下，防止老版本日志没这个字段
+                    if 'id' not in data:
+                        data['id'] = generate_log_id(data.get('timestamp', ''), data.get('level', 'INFO'), data.get('message', ''))
+                    raw_logs.append(data)
+                except json.JSONDecodeError:
+                    pass
+        
+        # 清理缓存，防止内存泄漏 (如果是常驻服务)
+        # linecache.clearcache() 视情况决定是否调用
+        return raw_logs
+
+    def _parse_file_base(self, filepath, line_processor_cb=None):
+        """
+        【新增】底层通用文件读取与解析器
+        处理流式读取、行号注入、基础 JSON 解析与去重。
+        line_processor_cb: 回调函数，用于各子类处理特有逻辑（如游戏日志的正则匹配）
+        """
+        blocks = []
+        is_json = filepath.endswith('.json') or 'RMM_Realtime' in os.path.basename(filepath)
+        
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                if is_json:
+                    for line_idx, line in enumerate(f):
+                        line_str = line.strip()
+                        if not line_str: continue
+                        try:
+                            data = json.loads(line_str)
+                            # 归一化处理
+                            data['message'] = data.get('message', '').replace('\\n', '\n')
+                            data['details'] = (data.get('details') or data.get('exception', '')).replace('\\n', '\n')
+                            # 统一生成ID并注入行号
+                            data['id'] = generate_log_id(data.get('timestamp', ''), data.get('level', 'INFO'), data['message'])
+                            data['raw_lines'] = [line_idx + 1] # linecache 从 1 开始
+                            
+                            # 执行子类自定义逻辑
+                            if line_processor_cb:
+                                data = line_processor_cb(data, is_json=True)
+                                
+                            if data:
+                                self._add_or_merge_block(blocks, data)
+                        except Exception: continue
+                else:
+                    # 纯文本读取(向下兼容 Player.log)
+                    current_block = None
+                    # 这里省略了对纯文本的具体处理，子类可以通过重写或继续延用原逻辑
+                    pass
+        except Exception as e:
+            logger.error(f"Error reading log {filepath}: {e}", exc_info=True)
+            
+        return blocks[-self.max_blocks:]
+    
+    
 
 # 定义日志格式
 class JSONFormatter(logging.Formatter):
@@ -269,7 +367,6 @@ class LoggerManager:
     def logger(self) -> logging.Logger:
         return self._logger
 
-
 class AppLogReader(BaseLogReader):
     def __init__(self):
         # App 日志默认在前端只展示最近几千条，这里适当降低后端缓存上限，减少长期占用内存
@@ -307,38 +404,20 @@ class AppLogReader(BaseLogReader):
         return self.get_paged_data(self._cache[filepath]['blocks'], page, page_size)
 
     def _parse_file(self, filepath):
-        blocks = []
-        try:
-            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line: continue
-                    try:
-                        data = json.loads(line)
-                        # 归一化处理
-                        data['message'] = data.get('message', '').replace('\\n', '\n')
-                        
-                        data['details'] = (data.get('details') or data.get('exception', '')).replace('\\n', '\n')
-                        
-                        # 生成统一哈希ID
-                        data['id'] = generate_log_id(data.get('timestamp', ''), data.get('level', 'INFO'), data['message'])
-                            
-                        # 规范化上下文
-                        if 'module' in data and 'context' not in data:
-                            data['context'] = {
-                                'source': 'app',
-                                'module': data.pop('module'),
-                                'func': data.pop('func', ''),
-                                'line': data.pop('line', '')
-                            }
-                        
-                        self._add_or_merge_block(blocks, data)
-                    except Exception: continue
-		    
-        except Exception as e:
-            import traceback
-            print(f"Error reading app log {filepath}: {e}")
-        return blocks[-self.max_blocks:]
+        """利用基类重构 App 日志读取"""
+        def _app_processor(data, is_json):
+            # App 专属上下文规范化
+            if 'module' in data and 'context' not in data:
+                data['context'] = {
+                    'source': 'app',
+                    'module': data.pop('module'),
+                    'func': data.pop('func', ''),
+                    'line': data.pop('line', '')
+                }
+            return data
+            
+        return self._parse_file_base(filepath, line_processor_cb=_app_processor)
+
 
 # 暴露单例供 API 路由使用
 app_log_reader = AppLogReader()

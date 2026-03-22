@@ -41,7 +41,7 @@ from backend.managers.mgr_network import network_mgr
 # 2. 引入数据库层
 from backend.database.models import ModAsset, UserModData, GithubModRecord, GithubTimeline, init_db, db
 from backend.database.dao import CollectionDAO, ModDAO, GroupDAO
-from backend.database.models_ext import WorkshopMeta, ext_db
+from backend.database.models_ext import WorkshopMeta
 from backend.database.dao_ext import ExtDAO
 
 # 3. 引入业务逻辑管理器
@@ -1996,6 +1996,74 @@ class API:
         }, message="批量任务已在后台启动")
     
     @log_api_call
+    def ai_prepare_diagnosis(self, payload: dict):
+        """
+        诊断预检接口：接收物理行号，提取原文，浓缩并计算 Token。
+        """
+        raw_lines = payload.get("raw_lines", [])
+        filename = payload.get("filename", "")
+        source_type = payload.get("log_source_type", "game")
+
+        if not raw_lines or not filename:
+            return ApiResponse.error("无效的分析请求：缺失日志行号或文件名。")
+
+        from backend.utils.logger import app_log_reader
+        reader = self.game_log_mgr if source_type == 'game' else app_log_reader
+        if not reader: return ApiResponse.error("日志读取器未初始化")
+        
+        if source_type == 'game':
+            filepath = os.path.join(self.active_context.user_data_path, filename) if self.active_context else ""
+        else:
+            filepath = os.path.join(DATA_DIR, 'logs', filename)
+
+        full_logs = reader.get_raw_logs_by_lines(filepath, raw_lines)
+        if not full_logs:
+            return ApiResponse.error("无法读取指定的日志内容，文件可能已被清理。")
+
+        
+        token_limit = settings.config.ai.max_tokens
+
+        # 【核心修改】将 token_limit 传给浓缩器，让它计算 80% 的安全容量
+        from backend.managers.mgr_game_logs import LogCondenser
+        condensed_data = LogCondenser.condense_for_ai(full_logs, token_limit=token_limit)
+
+        import litellm
+        text_to_estimate = json.dumps(condensed_data, ensure_ascii=False)
+        estimated_tokens = litellm.token_counter(model=settings.config.ai.model, text=text_to_estimate)
+
+        # 【核心修改】无论是否超限，都返回统一数据结构给前端
+        return ApiResponse.success({
+            "is_over_limit": estimated_tokens > token_limit,
+            "estimated_tokens": estimated_tokens,
+            "token_limit": token_limit,
+            "condensed_data": condensed_data
+        })
+
+
+    @log_api_call
+    def ai_diagnostic_chat(self, payload: dict):
+        """
+        【修改】处理前端的智能诊断请求，现在直接接收浓缩后的数据
+        payload 结构: { "history": [], "condensed_data": {...}, "question": "..." }
+        """
+        if not settings.config.ai.enabled:
+            return ApiResponse.error("AI 功能未启用，请前往设置开启。")
+            
+        try:
+            from backend.utils.logger import app_log_reader
+            source_type = payload.get("log_source_type", "game")
+            reader = self.game_log_mgr if source_type == 'game' else app_log_reader
+            if not reader: return ApiResponse.error("日志读取器未初始化")
+            
+            # 直接使用传入的浓缩数据，不再自己计算
+            result = self.ai_mgr.ai_diagnostic_chat(payload, self.active_context, reader=reader)
+            return ApiResponse.success(result)
+        except Exception as e:
+            # 增加异常堆栈打印，方便调试
+            logger.error(f"智能诊断异常: {str(e)}", exc_info=True)
+            return ApiResponse.error(f"智能诊断异常: {str(e)}")
+    
+    @log_api_call
     def ai_get_prompts(self):
         """获取所有提示词"""
         return ApiResponse.success(self.ai_mgr.prompts)
@@ -2487,9 +2555,9 @@ class API:
 
     
     
-    
+    # ==========================================
     # 收藏合集相关接口
-    
+    # ==========================================
     @log_api_call
     def collection_get_all(self):
         """从数据库获取已保存的合集列表"""
@@ -2679,8 +2747,10 @@ class API:
         except Exception as e:
             logger.error(f"后台刷新合集失败: {e}", exc_info=True)
     
-    # GitHub 相关接口
     
+    # ==========================================
+    # GitHub 相关接口
+    # ==========================================
     @log_api_call
     def github_fetch_info(self, url: str):
         """解析并获取远程仓库信息"""
@@ -2794,6 +2864,8 @@ class API:
         GithubModRecord.delete().where(GithubModRecord.repo_url == url).execute()
         GithubTimeline.delete().where(GithubTimeline.repo_url == url).execute()
         return ApiResponse.success(message="已移除订阅记录")
+    
+    
     
     
 if __name__ == "__main__":

@@ -95,23 +95,22 @@
       </div>
 
       <!-- 虚拟滚动容器 -->
-      <DynamicScroller
-        v-if="filteredLogs.length"
-        :items="filteredLogs"
-        :min-item-size="28"
-        class="h-full custom-scrollbar px-2"
-        key-field="id"
-        ref="scrollerRef"
-        @scroll="onScroll"
-      >
+      <DynamicScroller v-if="filteredLogs.length" :items="filteredLogs" :min-item-size="28" class="h-full custom-scrollbarpx-2" 
+        key-field="id" ref="scrollerRef" @scroll="onScroll" v-selectable-list="selectionConfig" >
         <template v-slot="{ item, index, active }">
-          <DynamicScrollerItem
-            :item="item"
-            :active="active"
-            :data-index="index"
-            :size-dependencies="getRowSizeDependencies(item)">
-            <div class="flex gap-2 group/row rounded-sm border-l-2 transition-colors select-text text-[13px] wrap-break-word leading-relaxed hover:bg-text-main/5 mb-0.5"
-                :class="getBorderClass(item.level)">
+          <DynamicScrollerItem :item="item" :active="active" :data-index="index" :size-dependencies="getRowSizeDependencies(item)" >
+            <!-- 行容器：绑定 data-id，增加选中高亮背景，增加 swipe-trigger 类名以支持拖拽滑动多选 -->
+            <div class="flex gap-2 group/row rounded-sm border-l-2 transition-colors text-[13px] wrap-break-word leading-relaxed hover:bg-text-main/5 mb-0.5"
+                :class="[ getBorderClass(item.level), selectedIds.includes(item.id) ? 'bg-accent-primary/10 border-accent-primary' : '' ]"
+                :data-id="item.id">
+              
+              <!-- 多选框区 (click-trigger 支持单点/Shift多选) -->
+              <div class="shrink-0 flex items-start pt-1 pl-1 select-trigger swipe-trigger cursor-pointer">
+                <div class="w-4 h-4 rounded border flex items-center justify-center transition-colors pointer-events-none"
+                    :class="selectedIds.includes(item.id) ? 'bg-accent-primary border-accent-primary text-bg-deep' : 'border-text-dim/40 group-hover/row:border-text-dim'">
+                  <svg v-if="selectedIds.includes(item.id)" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                </div>
+              </div>
               
               <!-- 时间戳与级别 (紧凑显示) -->
               <div class="shrink-0 w-24 flex items-start text-text-dim/60 select-none pt-0.5 pl-1">
@@ -119,7 +118,7 @@
               </div>
 
               <!-- 主体内容 -->
-              <div class="flex-1 min-w-0 py-0.5 pr-2">
+              <div class="flex-1 min-w-0 py-0.5 pr-2 select-text">
                 
                 <!-- 智能诊断标签区 -->
                 <div v-if="item.context" class="flex flex-wrap gap-1 mb-1 items-center">
@@ -185,11 +184,15 @@
               </div>
 
               <!-- 右侧重复计数 -->
-              <div class="shrink-0 flex items-start pt-0.5 pr-1">
+              <div class="shrink-0 flex items-start pt-0.5 pr-1 gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
                 <div v-if="item.count && item.count > 1"
                   class="px-1.5 py-0.5 rounded-full bg-text-main/10 text-text-main text-[10px] font-bold">
                   x{{ item.count }}
                 </div>
+                <!-- 复制按钮 -->
+                <button @click="copyLogContent([item])" class="p-1 rounded hover:bg-text-main/20 text-text-dim hover:text-text-main transition-colors" v-tooltip="'复制日志内容'">
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
               </div>
             </div>
           </DynamicScrollerItem>
@@ -214,6 +217,8 @@ import { formatFileSize } from '../../utils/uiHelper'
 const props = defineProps({
   sourceType: { type: String, default: 'app' } // 'app' or 'game'
 })
+// 向父组件暴露选中项，用于 AI 分析
+const emit = defineEmits(['update:selectedLogs'])
 
 const appStore = useAppStore()
 const toast = useToast()
@@ -223,6 +228,7 @@ const files = ref([])
 const selectedFile = ref('')
 const allLoadedLogs = ref([]) // 本地缓存的日志数组
 
+const selectedIds = ref([])
 
 // 分页与懒加载状态
 const loadingFile = ref(false)
@@ -305,6 +311,39 @@ function normalizeBlock(raw) {
 
   return base;
 }
+
+// 提取纯净日志文本
+const copyLogContent = async (logsArray) => {
+  if (!logsArray || logsArray.length === 0) return;
+  const textToCopy = logsArray.map(l => {
+    const msg = l.message || '';
+    const details = l.details ? `\n[Stacktrace]\n${l.details}` : '';
+    return `${msg}${details}`;
+  }).join('\n\n--- ✂ ---\n\n');
+  
+  try {
+    await navigator.clipboard.writeText(textToCopy);
+    toast.success(`成功复制 ${logsArray.length} 条日志`);
+  } catch (err) {
+    toast.error('复制失败，可能是浏览器权限限制');
+  }
+}
+
+// 暴露给父组件(LogViewer)使用的批量复制方法
+defineExpose({
+  clearSelection: () => { selectedIds.value = [] },
+  copySelection: () => { 
+    const selectedObjects = allLoadedLogs.value.filter(log => selectedIds.value.includes(log.id));
+    copyLogContent(selectedObjects);
+  },
+  // 获取全局错误供一键排错使用
+  getGlobalErrorLogs: () => {
+    return allLoadedLogs.value.filter(l => l.level === 'ERROR' || l.level === 'WARNING' || l.level === 'EXCEPTION');
+  },
+  // 暴露当前文件名给父组件调用预检接口
+  selectedFile: selectedFile 
+})
+
 
 // --- 模式判断 ---
 const LIVE_FILES = {
@@ -589,6 +628,34 @@ const filteredLogs = computed(() => {
   
   return result
 })
+
+// 提取当前过滤后日志的所有 ID，提供给 vSelection 计算 Shift 连选范围
+const filteredLogIds = computed(() => {
+  return filteredLogs.value.map(log => log.id)
+})
+
+// 监听选中项变化，向父组件 (LogViewer) 抛出具体的日志对象
+watch(selectedIds, (newIds) => {
+  const selectedLogObjects = allLoadedLogs.value.filter(log => newIds.includes(log.id))
+  emit('update:selectedLogs', selectedLogObjects)
+}, { deep: true })
+
+// v-selectable-list 指令的配置对象
+const selectionConfig = computed(() => ({
+  data: filteredLogIds.value,     // 当前列表数据的全集 IDs
+  selectedIds: selectedIds.value, // 当前已选中的 IDs
+  clickClass: 'select-trigger',   // 触发点击选择的区域
+  swipeClass: 'swipe-trigger',    // 触发滑动选择的区域
+  idAttribute: 'data-id',         // DOM 绑定的 ID 属性
+  onSelect: (newSelectedIds, anchorId) => {
+    selectedIds.value = newSelectedIds
+  },
+  onClear: () => {
+    selectedIds.value =[]
+  }
+}))
+
+
 
 // === 辅助工具 ===
 const formatTime = (ts) => {

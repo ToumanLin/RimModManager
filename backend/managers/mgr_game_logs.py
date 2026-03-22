@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 import threading
 import time
+from typing import List, Dict, Any
 
 from backend.managers.mgr_load_order import LoadOrderManager
 from backend.managers.mgr_profile import ProfileContext
@@ -242,64 +243,126 @@ class GameLogManager(BaseLogReader): # 继承基类
                 self.analyzer.analyze(block, is_realtime_json=is_json_log, active_mods=active_mods_set)
 
     def _parse_file_to_blocks(self, filepath):
-        """
-        流式读取文件，并转为结构化 Block 列表
-        修正：不再物理截断老旧日志
-        """
-        blocks =[]
+        """重写：使用基类方法处理 JSON，保留纯文本特化逻辑"""
         filename = os.path.basename(filepath)
         is_json = filename.endswith('.json') or filename.startswith('RMM_Realtime')
         
+        # 如果是 JSON，直接复用基类的高效解析
+        if is_json:
+            # 注意：分析逻辑交给了 read_log_page 里的 _analyze_page，所以这里不传回调直接返回
+            return self._parse_file_base(filepath)
+            
+        # --- 下面保留原有的纯文本流式读取逻辑 (Player.log) ---
+        blocks = []
         try:
             with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-                # --- JSON 流式读取 ---
-                if is_json:
-                    for line in f:
-                        try:
-                            data = json.loads(line)
-                            # 历史数据兼容与格式归一化
-                            data['message'] = data.get('message', '').replace('\\n', '\n')
-                            
-                            data['details'] = data.get('details', '').replace('\\n', '\n')
-                            
-                            # 为来自文件的数据统一打上强一致性 Hash ID
-                            data['id'] = generate_log_id(data.get('timestamp', ''), data.get('level', 'INFO'), data['message'])
-                            
-                            # 注意：移除了这里的 analyzer.analyze()，交给了上面的 read_log_page
-                            self._add_or_merge_block(blocks, data)
-                        except: continue
-                # --- 纯文本流式读取 (向下兼容) ---
-                else:
-                    current_block = None
-                    idx = 0
-                    for line in f:
-                        line_content = line.rstrip('\r\n')
-                        if not line_content: continue
+                current_block = None
+                for idx, line in enumerate(f):
+                    line_content = line.rstrip('\r\n')
+                    if not line_content: continue
+                    
+                    if line_content.startswith((' ', '\t', 'at ', '(Filename:')) and current_block:
+                        current_block['details'] += '\n' + line_content
+                    else:
+                        if current_block: 
+                            self._add_or_merge_block(blocks, current_block)
                         
-                        if line_content.startswith((' ', '\t', 'at ', '(Filename:')) and current_block:
+                        level = 'INFO'
+                        if self._patterns['error'].search(line_content): level = 'ERROR'
+                        elif self._patterns['warning'].search(line_content): level = 'WARNING'
                         
-                            current_block['details'] += '\n' + line_content
-                        else:
-                            if current_block: 
-                                self._add_or_merge_block(blocks, current_block)
-                            
-                            level = 'INFO'
-                            if self._patterns['error'].search(line_content): level = 'ERROR'
-                            elif self._patterns['warning'].search(line_content): level = 'WARNING'
-                            
-                            current_block = {
-                                # Player.log 同一文本会在文件中反复出现；仅用 message 生成 id 会导致前端虚拟列表 key 冲突
-                                # 这里把块序号并入 id，保证同文件内每个 block 都有稳定且唯一的标识
-                                'id': generate_log_id(f'playerlog_{idx}', level, line_content),
-                                'timestamp': '', 'level': level, 'message': line_content, 'details': '', 'count': 1
-                            }
-                            idx += 1
-
-                    if current_block:
-                        self._add_or_merge_block(blocks, current_block)
-            
-                
+                        current_block = {
+                            'id': generate_log_id(f'playerlog_{idx}', level, line_content),
+                            'timestamp': '', 'level': level, 'message': line_content, 'details': '', 'count': 1,
+                            'raw_lines': [idx + 1] # 文本模式同样注入行号
+                        }
+                if current_block:
+                    self._add_or_merge_block(blocks, current_block)
         except Exception as e:
-            logger.error(f"Error reading log {filepath}: {e}", exc_info=True)
-
+            logger.error(f"Error reading text log {filepath}: {e}", exc_info=True)
+            
         return blocks[-self.max_blocks:]
+
+
+class LogCondenser:
+    """
+    智能日志浓缩器：
+    负责将海量/冗长的日志裁剪提炼为低 Token、高信息密度的摘要，供 AI 分析隐性冲突。
+    """
+    
+    # 匹配无用堆栈的正则（Unity、Mono、系统底层核心）
+    JUNK_STACK_PATTERN = re.compile(r'^(UnityEngine\.|System\.|Mono\.|Verse\.Log:|mscorlib|System\.Runtime)', re.IGNORECASE)
+
+    @classmethod
+    def clean_stack_trace(cls, stack_trace: str, max_lines: int = 6) -> str:
+        """清洗堆栈：剔除废话，仅保留触发点和源头"""
+        if not stack_trace:
+            return ""
+        
+        lines =[line.strip() for line in stack_trace.split('\n') if line.strip()]
+        # 剔除垃圾堆栈，保留业务代码（如 RimWorld 源码、Mod 源码）
+        cleaned_lines =[line for line in lines if not cls.JUNK_STACK_PATTERN.match(line)]
+        
+        # 如果清洗后依然很长，保留头部（异常抛出点）和尾部（最初的调用源头）
+        if len(cleaned_lines) > max_lines:
+            half = max_lines // 2
+            return "\n".join(cleaned_lines[:half]) + "\n\n...[大量调用堆栈已折叠]...\n\n" + "\n".join(cleaned_lines[-half:])
+        return "\n".join(cleaned_lines)
+
+    @classmethod
+    def condense_for_ai(cls, raw_logs: list, token_limit: int = 8000) -> dict:
+        """
+        动态漏斗提取核心要点（目录模式）
+        """
+        if not raw_logs: return {"error": "无有效日志输入"}
+        # 1. 过滤出真正的错误
+        error_logs = [log for log in raw_logs if log.get("level", "").upper() in ("ERROR", "WARNING", "EXCEPTION")]
+        if not error_logs:
+            error_logs = raw_logs
+        # 2. 核心算法：按时间顺序提取 Unique 错误目录
+        error_logs.sort(key=lambda x: x.get("timestamp", ""))
+        
+        toc_list = []
+        seen_types = set()
+        
+        # 粗略估算：混合中英文代码，1 Token 大约相当于 2.5 个字符
+        # 按照用户建议，使用上限的 80% 作为安全容量
+        max_safe_chars = int(token_limit * 0.8 * 2.5) 
+        current_chars = 0
+
+        for log in error_logs:
+            ctx = log.get("context", {})
+            # 用 inferredType 或 消息前 50 个字作为去重指纹
+            fingerprint = ctx.get("inferredType") or log.get("message", "")[:50] 
+            
+            if fingerprint not in seen_types:
+                seen_types.add(fingerprint)
+                
+                # 构建极简目录项（丢弃庞大的 details/stack_trace）
+                # 必须保留 id，供 AI 后续调用 Tool 取回
+                item = {
+                    "log_id": log.get("id"),
+                    "lines": log.get("raw_lines", []),
+                    "time": log.get("timestamp", ""),
+                    "type": ctx.get("inferredType", "Unknown"),
+                    "suspect_mods": ctx.get("relatedModIds", []),
+                    # "message_preview": log.get("message", "")[:150] + "..." # 仅保留极少预览
+                    "message_preview": log.get("message", "")
+                }
+                
+                item_str = json.dumps(item, ensure_ascii=False)
+                item_chars = len(item_str)
+                
+                # 如果加入这条记录会超出安全上限，则停止收集
+                if current_chars + item_chars > max_safe_chars:
+                    break
+                    
+                toc_list.append(item)
+                current_chars += item_chars
+
+        return {
+            "summary": f"共扫描 {len(raw_logs)} 条日志，为你提取了 {len(toc_list)} 种不同的首发错误目录。",
+            "instruction": "请浏览以下错误目录。如果你需要查看某个错误的完整堆栈以确定原因，请使用 get_full_log_details 工具并传入对应的 lines 数组。",
+            "error_table_of_contents": toc_list
+        }
+    
