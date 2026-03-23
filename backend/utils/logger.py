@@ -1,4 +1,5 @@
 # backend/utils/logger.py
+import copy
 import linecache
 import logging
 import json
@@ -24,6 +25,16 @@ class BaseLogReader:
     def __init__(self, max_blocks=50000):
         self._cache = {}
         self.max_blocks = max_blocks
+
+    def _ensure_cache(self, filepath, loader):
+        """统一的缓存入口，避免不同读取路径重复拼装缓存逻辑。"""
+        stat = os.stat(filepath)
+        if filepath not in self._cache or self._cache[filepath]['mtime'] != stat.st_mtime:
+            self._cache[filepath] = {
+                'mtime': stat.st_mtime,
+                'blocks': loader(filepath)
+            }
+        return self._cache[filepath]['blocks']
 
     def _add_or_merge_block(self, blocks, new_block, lookback_limit=20):
         """通用去重合并逻辑：如果短时间内出现重复日志，则累加 count 并推至末尾"""
@@ -122,7 +133,7 @@ class BaseLogReader:
         # linecache.clearcache() 视情况决定是否调用
         return raw_logs
 
-    def _parse_file_base(self, filepath, line_processor_cb=None):
+    def _parse_file_base(self, filepath, line_processor_cb=None, keep_all=False):
         """
         【新增】底层通用文件读取与解析器
         处理流式读取、行号注入、基础 JSON 解析与去重。
@@ -131,6 +142,8 @@ class BaseLogReader:
         blocks = []
         is_json = filepath.endswith('.json') or 'RMM_Realtime' in os.path.basename(filepath)
         
+        # 防御性截断，全局扫描最多解析文件末尾的 80000 行
+        MAX_GLOBAL_LINES = 80000 
         try:
             with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
                 if is_json:
@@ -153,6 +166,9 @@ class BaseLogReader:
                             if data:
                                 self._add_or_merge_block(blocks, data)
                         except Exception: continue
+                        if keep_all and len(blocks) > MAX_GLOBAL_LINES:
+                            # 为了不过度消耗内存，直接清理掉老旧的上古日志，只抓重点
+                            blocks.pop(0) 
                 else:
                     # 纯文本读取(向下兼容 Player.log)
                     current_block = None
@@ -161,7 +177,7 @@ class BaseLogReader:
         except Exception as e:
             logger.error(f"Error reading log {filepath}: {e}", exc_info=True)
             
-        return blocks[-self.max_blocks:]
+        return blocks if keep_all else blocks[-self.max_blocks:]
     
     
 
@@ -197,6 +213,36 @@ class WebviewHandler(logging.Handler):
     """
     将日志实时推送到前端的 Handler
     """
+    def __init__(self):
+        super().__init__()
+        self._app_log_path = str(DATA_DIR / 'logs' / 'app.log')
+        self._last_known_line = None
+        self._last_known_size = None
+
+    def _resolve_raw_line(self):
+        try:
+            current_size = os.path.getsize(self._app_log_path)
+        except OSError:
+            return []
+
+        needs_recount = (
+            self._last_known_line is None
+            or self._last_known_size is None
+            or current_size < self._last_known_size
+        )
+
+        if needs_recount:
+            try:
+                with open(self._app_log_path, 'r', encoding='utf-8', errors='replace') as fh:
+                    self._last_known_line = sum(1 for _ in fh)
+            except OSError:
+                return []
+        elif self._last_known_line:
+            self._last_known_line += 1
+
+        self._last_known_size = current_size
+        return [self._last_known_line] if self._last_known_line else []
+
     def emit(self, record):
         from backend.utils.event_bus import EventBus
         # 如果 EventBus 没有窗口引用，直接跳过，防止报错
@@ -222,6 +268,7 @@ class WebviewHandler(logging.Handler):
                 "message": msg,
                 "details": exc,
                 "count": 1,
+                "raw_lines": self._resolve_raw_line(),
                 "context": {
                     "source": "app",
                     "module": record.module,
@@ -392,18 +439,21 @@ class AppLogReader(BaseLogReader):
         filepath = os.path.join(self.log_dir, filename)
         if not os.path.exists(filepath): return {'error': '文件不存在'}
 
-        stat = os.stat(filepath)
+        blocks = self._ensure_cache(filepath, self._parse_file)
+        return self.get_paged_data(blocks, page, page_size)
 
-        # 缓存机制：如果文件未修改，直接取缓存
-        if filepath not in self._cache or self._cache[filepath]['mtime'] != stat.st_mtime:
-            self._cache[filepath] = {
-                'mtime': stat.st_mtime,
-                'blocks': self._parse_file(filepath)
-            }
-            
-        return self.get_paged_data(self._cache[filepath]['blocks'], page, page_size)
+    def get_all_blocks(self, filepath, full_scan=False):
+        """返回当前文件的完整结构化日志块，供 AI 全局扫描复用。"""
+        if not os.path.exists(filepath):
+            return []
+        # 全局扫描时走一次完整解析，避免被前端分页缓存的块数上限截断。
+        blocks = self._parse_file(filepath, keep_all=True) if full_scan else self._ensure_cache(filepath, self._parse_file)
+        logger.debug(
+            f"[App日志] 读取日志块 filepath={filepath} block_count={len(blocks)} full_scan={full_scan}"
+        )
+        return copy.deepcopy(blocks)
 
-    def _parse_file(self, filepath):
+    def _parse_file(self, filepath, keep_all=False):
         """利用基类重构 App 日志读取"""
         def _app_processor(data, is_json):
             # App 专属上下文规范化
@@ -416,7 +466,7 @@ class AppLogReader(BaseLogReader):
                 }
             return data
             
-        return self._parse_file_base(filepath, line_processor_cb=_app_processor)
+        return self._parse_file_base(filepath, line_processor_cb=_app_processor, keep_all=keep_all)
 
 
 # 暴露单例供 API 路由使用

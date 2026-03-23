@@ -184,14 +184,14 @@
               </div>
 
               <!-- 右侧重复计数 -->
-              <div class="shrink-0 flex items-start pt-0.5 pr-1 gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
+              <div class="shrink-0 flex items-start pt-0.5 pr-1 gap-1">
                 <div v-if="item.count && item.count > 1"
                   class="px-1.5 py-0.5 rounded-full bg-text-main/10 text-text-main text-[10px] font-bold">
                   x{{ item.count }}
                 </div>
                 <!-- 复制按钮 -->
-                <button @click="copyLogContent([item])" class="p-1 rounded hover:bg-text-main/20 text-text-dim hover:text-text-main transition-colors" v-tooltip="'复制日志内容'">
-                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                <button @click="copyLogContent([item])" class="p-1 rounded opacity-0 group-hover/row:opacity-100 hover:bg-text-main/20 text-text-dim hover:text-text-main transition-all" v-tooltip="'复制日志内容'">
+                  <Copy class="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -213,6 +213,7 @@ import {  ref, computed, onMounted, onUnmounted, nextTick, onActivated, onDeacti
 import { useToast } from 'vue-toastification'
 import { useAppStore } from '../../stores/appStore'
 import { formatFileSize } from '../../utils/uiHelper'
+import { Copy } from 'lucide-vue-next'
 
 const props = defineProps({
   sourceType: { type: String, default: 'app' } // 'app' or 'game'
@@ -319,7 +320,7 @@ const copyLogContent = async (logsArray) => {
     const msg = l.message || '';
     const details = l.details ? `\n[Stacktrace]\n${l.details}` : '';
     return `${msg}${details}`;
-  }).join('\n\n--- ✂ ---\n\n');
+  }).join('\n\n------\n\n');
   
   try {
     await navigator.clipboard.writeText(textToCopy);
@@ -464,6 +465,7 @@ async function switchFile(filename) {
   
   loadingFile.value = true;
   cleanupPanel(); // 清理旧的监听
+  selectedIds.value = []
 
   selectedFile.value = filename;
   currentPage.value = 1;
@@ -550,6 +552,7 @@ function handleRealtimeLog(e) {
   if (lastLog && lastLog.message === entry.message && lastLog.level === entry.level && lastLog.details === entry.details) {
     lastLog.count = (lastLog.count || 1) + 1;
     lastLog.timestamp = entry.timestamp;
+    lastLog.raw_lines = [...new Set([...(lastLog.raw_lines || []), ...(entry.raw_lines || [])])];
     // 强制 Vue 更新
     allLoadedLogs.value.splice(allLoadedLogs.value.length - 1, 1, { ...lastLog });
   } else {

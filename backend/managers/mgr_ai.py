@@ -1,5 +1,6 @@
 # backend/managers/mgr_ai.py
 import json
+import linecache
 import os
 import re
 import time
@@ -24,6 +25,10 @@ from backend.utils.constants import get_lang_by_code
 from backend.utils.event_bus import EventBus
 from backend.database.dao import ModDAO
 from backend.managers.mgr_rules import RuleManager
+from backend.managers.mgr_game_logs import LogCondenser
+from backend.managers.mgr_network import network_mgr
+from backend.database.dao import ModDAO
+from backend.managers.mgr_load_order import LoadOrderManager
 from backend.managers.mgr_game_logs import LogCondenser
 
 class AIManager:
@@ -142,7 +147,6 @@ class AIManager:
         """(内部方法) 发送网络请求探测代理/本地服务的模型列表"""
         proxies = None
         if settings.config.network.use_proxy_on_ai:
-            from backend.managers.mgr_network import network_mgr
             url = network_mgr.get_proxy_url()
             if url: proxies = {"http": url, "https": url}
             
@@ -243,7 +247,6 @@ class AIManager:
 
         # 核心逻辑：判断 AI 代理开关
         if settings.config.network.use_proxy_on_ai:
-            from backend.managers.mgr_network import network_mgr
             proxy_url = network_mgr.get_proxy_url()
             if proxy_url:
                 kwargs["proxy_url"] = proxy_url
@@ -275,12 +278,270 @@ class AIManager:
             logger.error(f"JSON Repair 彻底失败: {e}\n原文: {text[:200]}...")
             return None
 
+    def _estimate_text_tokens(self, text: str, model_name: str) -> int:
+        """
+        使用后端统一的 tokenizer 估算文本 Token。
+        这里的结果用于诊断链路的全局 Token 统计，比前端按字符粗算更稳定。
+        """
+        if not text:
+            return 0
+        try:
+            return int(litellm.token_counter(model=model_name, text=text))
+        except Exception as e:
+            logger.debug(f"[AI诊断] 文本 Token 估算失败，改走字符兜底: {e}")
+            return max(1, len(text) // 3)
+
+    def _estimate_messages_tokens(self, messages: list[dict], model_name: str) -> int:
+        """
+        估算整轮 messages 进入模型前的输入 Token。
+        某些模型不返回 usage 时，后端统一用这个值来做累计统计。
+        """
+        if not messages:
+            return 0
+        try:
+            return int(litellm.token_counter(model=model_name, messages=messages))
+        except Exception as e:
+            logger.debug(f"[AI诊断] Messages Token 估算失败，改走文本拼接兜底: {e}")
+            merged_text = "\n".join(str(m.get("content", "")) for m in messages)
+            return self._estimate_text_tokens(merged_text, model_name)
+
+    def _normalize_litellm_content(self, content: Any) -> str:
+        """
+        兼容 LiteLLM 不同模型返回的 content 结构，统一转成纯文本。
+        某些模型会返回 list[part]，这里做一次后端规整，便于诊断流与兜底逻辑复用。
+        """
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            text_parts = []
+            for part in content:
+                if isinstance(part, dict):
+                    if part.get("type") == "text":
+                        text_parts.append(str(part.get("text", "")))
+                    elif "text" in part:
+                        text_parts.append(str(part.get("text", "")))
+                else:
+                    text_parts.append(str(part))
+            return "".join(text_parts)
+        return str(content)
+
+    def _is_retryable_stream_error(self, error: Exception) -> bool:
+        """
+        判断是否属于典型的流式中断异常。
+        这类错误常见于代理/网关提前断开 chunked 响应，适合自动回退到非流式重试。
+        """
+        error_text = str(error or "").lower()
+        retry_signals = (
+            "midstreamfallbackerror",
+            "incomplete chunked read",
+            "peer closed connection",
+            "connection aborted",
+            "server disconnected",
+            "chunkedencodingerror",
+        )
+        return any(signal in error_text for signal in retry_signals)
+
+    def _complete_diagnostic_without_stream(self, messages: list[dict], llm_kwargs: dict, tools=None, tool_choice=None) -> dict:
+        """
+        非流式兜底请求。
+        当流式输出半途断开时，退回同步 completion，尽量保住本轮分析结果或工具调用计划。
+        """
+        request_kwargs = dict(llm_kwargs)
+        if tools is not None:
+            request_kwargs["tools"] = tools
+        if tool_choice is not None:
+            request_kwargs["tool_choice"] = tool_choice
+
+        response = completion(messages=messages, **request_kwargs)
+        message = response.choices[0].message # type: ignore
+        tool_calls = getattr(message, "tool_calls", None) or []
+
+        if tool_calls:
+            formatted_tool_calls = []
+            for index, tool_call in enumerate(tool_calls):
+                function_obj = getattr(tool_call, "function", None)
+                formatted_tool_calls.append({
+                    "id": getattr(tool_call, "id", None) or f"tool_call_{index}",
+                    "type": getattr(tool_call, "type", None) or "function",
+                    "function": {
+                        "name": getattr(function_obj, "name", None) or "",
+                        "arguments": getattr(function_obj, "arguments", None) or "{}"
+                    }
+                })
+            return {"is_tool_call": True, "tool_calls": formatted_tool_calls, "final_text": ""}
+
+        return {
+            "is_tool_call": False,
+            "tool_calls": [],
+            "final_text": self._normalize_litellm_content(getattr(message, "content", ""))
+        }
+
+    def _run_diagnostic_completion_with_fallback(self, messages: list[dict], llm_kwargs: dict, session_id: str, tools=None, tool_choice=None) -> dict:
+        """
+        统一封装诊断请求：
+        1. 优先走流式，保留前端逐字体验；
+        2. 如果流式在中途断开，则自动回退到非流式补救，避免把网络异常直接甩给用户。
+        """
+        try:
+            return self._stream_diagnostic_completion(
+                messages=messages,
+                llm_kwargs=llm_kwargs,
+                session_id=session_id,
+                tools=tools,
+                tool_choice=tool_choice
+            )
+        except Exception as e:
+            if not self._is_retryable_stream_error(e):
+                raise
+
+            logger.warning(
+                f"[AI诊断] 流式输出中断，自动回退为非流式补救 "
+                f"session_id={session_id} error={type(e).__name__}: {e}"
+            )
+            return self._complete_diagnostic_without_stream(
+                messages=messages,
+                llm_kwargs=llm_kwargs,
+                tools=tools,
+                tool_choice=tool_choice
+            )
+
+    def _summarize_tool_result(self, name: str, tool_result: str) -> str:
+        """
+        为前端步骤面板生成一条简短摘要，便于用户快速判断这一步拿回了什么信息。
+        """
+        try:
+            parsed = json.loads(tool_result)
+            if isinstance(parsed, dict):
+                if name == "get_log_context" and not parsed.get("error"):
+                    block_span = parsed.get("provided_context") or parsed.get("context_provided", "目标日志内容")
+                    return f"已返回 {block_span} 的日志内容"
+                if parsed.get("error"):
+                    return f"执行失败：{parsed['error']}"
+                if name == "get_log_context":
+                    return f"已返回 {parsed.get('provided_context', '指定范围')} 的日志内容"
+                if name == "get_active_mod_list":
+                    return f"已返回 {parsed.get('total_active', 0)} 个激活模组"
+                if name == "get_load_order_context":
+                    surrounding = parsed.get("surrounding_mods_order", [])
+                    return f"已返回目标模组前后 {len(surrounding)} 个排序上下文"
+                if name == "get_mod_info":
+                    return f"已返回模组元数据：{parsed.get('name') or '未知名称'}"
+        except Exception:
+            pass
+
+        safe_text = (tool_result or "").replace("\r", " ").replace("\n", " ").strip()
+        if not safe_text:
+            return "工具执行完成，但没有返回可展示内容"
+        return safe_text[:180] + ("..." if len(safe_text) > 180 else "")
+
+    def _parse_diagnostic_final_text(self, final_text: str) -> dict[str, Any]:
+        """
+        统一解析模型最终回答，把 actions 从正文里剥离出来。
+        """
+        parsed_json = self._extract_json_from_text(final_text) 
+        
+        # 兼容性处理。有时候模型虽然返回了 JSON，但没包裹在 ``` 里面
+        # 我们的第一要务是拿到 actions
+        actions = []
+        if isinstance(parsed_json, dict) and "actions" in parsed_json:
+            actions = parsed_json["actions"]
+            
+        elif isinstance(parsed_json, list):
+            # 万一模型自作主张直接返回了数组
+            actions = parsed_json
+
+        if actions:
+            # 安全地将包含 actions 的 JSON 块从原文中剔除
+            # (不需要完美的正则表达式，只需简单抹掉代码块，剩余的就是纯文本分析)
+            clean_text = re.sub(
+                r'```(?:json)?[\s\S]*?(?:"actions"|"type"|"ENABLE_MOD")[\s\S]*?```', 
+                '', 
+                final_text, 
+                flags=re.IGNORECASE
+            ).strip()
+            
+            # 如果原文只是一整块 JSON 而没有 Markdown 包裹，通过 repair_json 兜底
+            if not clean_text and isinstance(parsed_json, dict) and "analysis" in parsed_json:
+                clean_text = parsed_json["analysis"]
+                
+            return {
+                "analysis": clean_text or "（已生成自动化操作建议）",
+                "actions": actions
+            }
+
+        return {"analysis": final_text.strip(), "actions": []}
+
+    def _stream_diagnostic_completion(
+        self,
+        messages: list[dict],
+        llm_kwargs: dict,
+        session_id: str,
+        tools: list[dict] | None = None,
+        tool_choice: str | None = None
+    ) -> dict[str, Any]:
+        """
+        统一处理流式诊断请求：
+        - 自动聚合 Tool Calls
+        - 自动把普通文本流推给前端
+        """
+        completion_kwargs = {
+            "messages": messages,
+            "stream": True,
+            **llm_kwargs
+        }
+        if tools is not None:
+            completion_kwargs["tools"] = tools
+            completion_kwargs["tool_choice"] = tool_choice or "auto"
+
+        response = completion(**completion_kwargs)
+        is_tool_call = False
+        tool_calls_dict: dict[int, dict[str, str]] = {}
+        final_text = ""
+
+        for chunk in response:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+
+            if getattr(delta, "tool_calls", []):
+                is_tool_call = True
+                for tc in delta.tool_calls:
+                    idx = tc.index
+                    if idx not in tool_calls_dict:
+                        tool_calls_dict[idx] = {"id": "", "name": "", "arguments": ""}
+                    if tc.id:
+                        tool_calls_dict[idx]["id"] += tc.id
+                    if getattr(tc.function, "name", None):
+                        tool_calls_dict[idx]["name"] += tc.function.name
+                    if getattr(tc.function, "arguments", None):
+                        tool_calls_dict[idx]["arguments"] += tc.function.arguments
+            elif getattr(delta, "content", None):
+                content_chunk = delta.content
+                final_text += content_chunk
+                EventBus.emit('ai-chat-stream', {'session_id': session_id, 'chunk': content_chunk})
+
+        formatted_tool_calls = []
+        if is_tool_call:
+            for _, tc in sorted(tool_calls_dict.items()):
+                formatted_tool_calls.append({
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {"name": tc["name"], "arguments": tc["arguments"]}
+                })
+
+        return {
+            "is_tool_call": is_tool_call,
+            "tool_calls": formatted_tool_calls,
+            "final_text": final_text
+        }
+
     def _safe_format(self, template: str, variables: dict) -> str:
         """
         安全格式化工具：只替换模板中存在的变量，忽略其他大括号。
         解决 JSON 示例与 Python .format() 的冲突。
         """
-        import re
         # 使用正则匹配 {key}，只有当 key 在 variables 字典中时才替换
         # 这样即使模板里有 {"package_id": "xxx"}，因为 package_id 不在变量里，就会被原样保留
         pattern = re.compile(r'\{(\w+)\}')
@@ -629,16 +890,87 @@ class AIManager:
     # ---------------------------------------------------------
     def _get_diagnostic_tools(self):
         """定义供 AI 调用的标准化工具 (Tools)"""
-        return[
+        return [
+            { 
+                "type": "function",
+                "function": {
+                    "name": "get_log_context",
+                    "description": "基于报错摘要中的 target_line，获取该行对应的完整原版日志块及堆栈。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_line": {"type": "integer", "description": "要查询的目标行号"},
+                            "expand_range": {"type": "integer", "description": "最多保留多少行堆栈摘要。默认 20。"}
+                        },
+                        "required": ["target_line"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_mods",
+                    "description": "通过模糊关键词（如Mod名称的片段或作者名）搜索当前安装的模组，获取准确的 package_id。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "keyword": {"type": "string", "description": "搜索关键词，例如 'RimFridge' 或 'Harmony'"}
+                        },
+                        "required": ["keyword"]
+                    }
+                }
+            },
             {
                 "type": "function",
                 "function": {
                     "name": "get_mod_info",
-                    "description": "获取指定 package_id 的模组信息，包括：作者、当前启用状态、以及它原生(About.xml)声明的强依赖规则。",
+                    "description": "获取指定 package_id 模组的物理属与及元数据。",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "package_id": {"type": "string", "description": "模组的包名，全小写，例如 ludeon.rimworld"}
+                            "package_id": {"type": "string", "description": "模组的包名，全小写，如 ludeon.rimworld"},
+                            "scope": {
+                                "type": "string",
+                                "enum": ["simple", "all", "specific"],
+                                "description": "信息范围：simple(基础), all(全量), specific(指定属性)"
+                            },
+                            "fields": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "当 scope 为 specific 时，指定要请求的字段，如 ['path', 'version', 'mod_type']"
+                            }
+                        },
+                        "required": ["package_id"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_mod_rules",
+                    "description": "获取该模组当前生效的所有排序与冲突规则（包含前置、后置、不兼容等）。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "package_id": {"type": "string"},
+                            "native_only": {
+                                "type": "boolean",
+                                "description": "true=仅获取Mod作者原生写入About.xml的规则；false=获取合并了社区和玩家自定义后的最终生效规则"
+                            }
+                        },
+                        "required": ["package_id"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_user_mod_data",
+                    "description": "说明：此工具获取的数据仅影响模组在管理器UI中的颜色、标签、分组等，【不影响游戏】，仅用于辅助了解玩家的主观归类。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "package_id": {"type": "string"}
                         },
                         "required": ["package_id"]
                     }
@@ -648,11 +980,11 @@ class AIManager:
                 "type": "function",
                 "function": {
                     "name": "get_load_order_context",
-                    "description": "获取指定模组在当前加载列表中的排序上下文，返回它前面和后面的各3个模组，用于侦测排序引发的问题。",
+                    "description": "获取指定模组在当前加载列表中的排位上下文（前后相邻项），用于排查排位错误。",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "package_id": {"type": "string", "description": "中心参照模组的包名"}
+                            "package_id": {"type": "string"}
                         },
                         "required": ["package_id"]
                     }
@@ -662,37 +994,12 @@ class AIManager:
                 "type": "function",
                 "function": {
                     "name": "get_active_mod_list",
-                    "description": "获取当前玩家所有已启用模组的加载顺序列表（包名）。用于排查全局性的框架排序错误。",
+                    "description": "获取当前所有激活的模组包名列表，用于宏观框架的排序检视。",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "include_names": {
-                                "type": "boolean", 
-                                "description": "如果需要知道包名及对应的具体名称传 true。"
-                            }
+                            "include_names": {"type": "boolean", "description": "是否附带具体名称。体积较大，非必要传 false。"}
                         }
-                    }
-                }
-            },
-            { 
-                "type": "function",
-                "function": {
-                    # 【核心修改】替换原有鸡肋工具，改为物理上下文切片工具
-                    "name": "get_log_context",
-                    "description": "传入错误目录中的 target_line，从物理日志文件中切片读取该报错前后的真实上下文（包含错误前系统在做什么以及完整的堆栈信息）。",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "target_line": {
-                                "type": "integer", 
-                                "description": "要查询的目标行号 (提取自错误目录的 target_line)"
-                            },
-                            "expand_range": {
-                                "type": "integer",
-                                "description": "向上下各扩展读取的行数。建议默认传 20 即可，如果是复杂的崩溃可传 50，最大限制为 100。"
-                            }
-                        },
-                        "required": ["target_line"]
                     }
                 }
             }
@@ -707,44 +1014,97 @@ class AIManager:
             return json.dumps({"error": "参数解析失败"})
 
         try:
-            if name == "get_mod_info":
-                pkg_id = args.get("package_id", "").lower()
-                from backend.database.dao import ModDAO
-                all_mods = ModDAO.get_profile_mods(active_context)
-                mod = next((m for m in all_mods if m.get("package_id", "").lower() == pkg_id), None)
-                if not mod:
-                    return json.dumps({"error": f"本地未安装或找不到此模组: {pkg_id}"})
-                
+            logger.debug(f"[AI诊断] 开始执行工具 name={name} args={args}")
+            if name == "get_log_context":
+                # 【核心修复】先定位目标行所在的日志块，再返回该日志块的精简版内容。
+                # 这里不会再返回“前后多少行”的盲切片，而是返回目标日志本身。
+                try:
+                    target_line = int(args.get("target_line") or 0)
+                except (TypeError, ValueError):
+                    target_line = 0
+
+                if target_line <= 0:
+                    return json.dumps({"error": "必须提供有效的 target_line 参数"})
+
+                # expand_range 在这里改为“最多保留多少行堆栈摘要”。
+                stack_excerpt_lines = max(6, min(int(args.get("expand_range", 20) or 20), 80))
+
+                source_type = payload.get("log_source_type", "game") if payload else "game"
+                filename = payload.get("filename", "")
+
+                if not filename:
+                    return json.dumps({"error": "前端未提供当前日志文件名 filename。"})
+
+                if source_type == 'game':
+                    filepath = os.path.join(active_context.user_data_path, filename) if active_context else ""
+                else:
+                    filepath = os.path.join(DATA_DIR, 'logs', filename)
+
+                if not os.path.exists(filepath):
+                    return json.dumps({"error": f"找不到对应日志文件: {filename}"})
+
+                if not reader or not hasattr(reader, "get_raw_logs_by_lines"):
+                    return json.dumps({"error": "当前日志读取器不支持按行反查日志块"})
+
+                def _normalize_raw_lines(raw_values):
+                    normalized = []
+                    for raw_value in raw_values or []:
+                        try:
+                            normalized.append(int(raw_value))
+                        except (TypeError, ValueError):
+                            continue
+                    return sorted(set(normalized))
+
+                matched_blocks = reader.get_raw_logs_by_lines(filepath, [target_line])
+                target_block = None
+                for block in matched_blocks:
+                    if target_line in _normalize_raw_lines(block.get("raw_lines", [])):
+                        target_block = block
+                        break
+                if target_block is None and matched_blocks:
+                    target_block = matched_blocks[0]
+
+                if target_block is None:
+                    logger.debug(
+                        f"[AI诊断] get_log_context 未命中日志块 "
+                        f"filename={filename} target_line={target_line}"
+                    )
+                    return json.dumps({"error": f"无法定位目标行 {target_line} 所在的日志块，文件可能已变更。"})
+
+                block_raw_lines = _normalize_raw_lines(target_block.get("raw_lines", []))
+                matched_line = target_line if target_line in block_raw_lines else (block_raw_lines[0] if block_raw_lines else target_line)
+                level = str(target_block.get("level", "INFO") or "INFO")
+                message = str(target_block.get("message", "") or "").strip()
+                details = str(target_block.get("details", "") or "").strip()
+                cleaned_details = LogCondenser.clean_stack_trace(details, max_lines=stack_excerpt_lines)
+
+                context_sections = [f"[日志内容 | 请求行号 #{target_line}] {level}: {message}"]
+                if cleaned_details:
+                    context_sections.append("[精简堆栈]")
+                    context_sections.append(cleaned_details)
+                elif details:
+                    context_sections.append("[原始堆栈]")
+                    context_sections.append(details)
+
+                logger.debug(
+                    f"[AI诊断] get_log_context 命中 "
+                    f"filename={filename} target_line={target_line} "
+                    f"log_line_count={len(block_raw_lines)} stack_excerpt_lines={stack_excerpt_lines}"
+                )
+
                 return json.dumps({
-                    "name": mod.get("name"),
-                    "author": mod.get("author", []),
-                    "is_disabled": mod.get("disabled", False),
-                    "native_dependencies": mod.get("dependencies_mods", []),
-                    "native_load_after": mod.get("load_after_mods", []),
-                    "native_incompatible": mod.get("incompatible_mods", [])
+                    "query_line": target_line,
+                    "matched_line": matched_line,
+                    "log_line_count": len(block_raw_lines),
+                    "log_lines": block_raw_lines,
+                    "stack_excerpt_lines": stack_excerpt_lines if details else 0,
+                    "provided_context": f"已返回行号 #{matched_line} 对应的日志内容",
+                    "context_content": "\n".join(section for section in context_sections if section)
                 }, ensure_ascii=False)
 
-            elif name == "get_load_order_context":
-                pkg_id = args.get("package_id", "").lower()
-                from backend.managers.mgr_load_order import LoadOrderManager
-                lo_mgr = LoadOrderManager(active_context)
-                active_ids = [m.lower() for m in lo_mgr.read_active_mods().get("active_mods", [])]
-                
-                if pkg_id not in active_ids:
-                    return json.dumps({"error": f"该模组[{pkg_id}] 未启用，没有排序上下文。"})
-                
-                idx = active_ids.index(pkg_id)
-                start = max(0, idx - 3)
-                end = min(len(active_ids), idx + 4)
-                return json.dumps({
-                    "target_index": idx,
-                    "surrounding_mods_order": active_ids[start:end]
-                })
-                
             elif name == "get_active_mod_list":
                 # 【优化】支持 include_names 控制体积
                 include_names = args.get("include_names", False)
-                from backend.managers.mgr_load_order import LoadOrderManager
                 lo_mgr = LoadOrderManager(active_context)
                 read_res = lo_mgr.read_active_mods()
                 mods_data = read_res.get('mods', [])
@@ -759,72 +1119,106 @@ class AIManager:
                     "active_order": active_list
                 }, ensure_ascii=False)
 
-            elif name == "get_log_context":
-                # 【核心逻辑】全新的纯物理文件按行切片提取机制，完美支持 JSON & Player.log
-                target_line = args.get("target_line")
-                if not target_line:
-                    return json.dumps({"error": "必须提供 target_line 参数"})
-                    
-                # 限制读取范围防炸内存，默认20，最大100
-                expand_range = min(args.get("expand_range", 20), 100)
-                    
-                source_type = payload.get("log_source_type", "game") if payload else "game"
-                filename = payload.get("filename", "") 
+            elif name == "get_load_order_context":
+                pkg_id = args.get("package_id", "").lower()
+                lo_mgr = LoadOrderManager(active_context)
+                active_ids = [m.lower() for m in lo_mgr.read_active_mods().get("active_mods", [])]
                 
-                if not filename:
-                    return json.dumps({"error": "前端未提供当前日志文件名 filename。"})
+                if pkg_id not in active_ids:
+                    return json.dumps({"error": f"该模组[{pkg_id}] 未启用，没有排序上下文。"})
                 
-                import os
-                import linecache
-                from backend.settings import DATA_DIR
-                if source_type == 'game':
-                    filepath = os.path.join(active_context.user_data_path, filename) if active_context else ""
+                idx = active_ids.index(pkg_id)
+                start = max(0, idx - 3)
+                end = min(len(active_ids), idx + 4)
+                return json.dumps({
+                    "target_index": idx,
+                    "surrounding_mods_order": active_ids[start:end]
+                })
+                
+            elif name == "search_mods":
+                keyword = args.get("keyword", "").lower()
+                all_mods = ModDAO.get_profile_mods(active_context)
+                results = []
+                for m in all_mods:
+                    if keyword in m.get('name', '').lower() or keyword in m.get('package_id', '').lower():
+                        results.append({
+                            "name": m.get('name'),
+                            "package_id": m.get('package_id'),
+                            "author": m.get('author', []),
+                            "is_disabled": m.get('disabled', False)
+                        })
+                        if len(results) >= 10:  # 限制返回数量避免过大
+                            break
+                return json.dumps({"keyword": keyword, "matched": results}, ensure_ascii=False)
+
+            elif name == "get_mod_info":
+                pkg_id = args.get("package_id", "").lower()
+                scope = args.get("scope", "simple")
+                fields = args.get("fields", [])
+                
+                # ModDAO 已经把 ModAsset 和 UserModData join 了
+                all_mods = ModDAO.get_profile_mods(active_context)
+                mod = next((m for m in all_mods if m.get("package_id", "").lower() == pkg_id), None)
+                if not mod:
+                    return json.dumps({"error": f"本地未安装或找不到此模组: {pkg_id}"})
+                
+                # 剔除我们不希望 AI 看到的庞大字典（如果不控制）
+                safe_mod = {k:v for k,v in mod.items() if k not in ['descriptions_by_version', 'gallery_paths']}
+                
+                if scope == "specific" and fields:
+                    subset = {k: safe_mod.get(k) for k in fields}
+                    return json.dumps(subset, ensure_ascii=False)
+                elif scope == "all":
+                    return json.dumps(safe_mod, ensure_ascii=False)
                 else:
-                    filepath = os.path.join(DATA_DIR, 'logs', filename)
-                
-                if not os.path.exists(filepath):
-                    return json.dumps({"error": f"找不到对应的物理日志文件: {filename}"})
-                
-                # 计算安全的读取范围
-                start_line = max(1, target_line - expand_range)
-                end_line = target_line + expand_range
-                
-                context_lines = []
-                for current_line in range(start_line, end_line + 1):
-                    # linecache 读取极其高效，因为底层加了内存缓冲
-                    line_str = linecache.getline(filepath, current_line)
-                    if not line_str: break # 读到文件末尾了
-                    
-                    line_str = line_str.rstrip()
-                    # 尝试简化 JSON（如果是 app.log 或 RMM 日志），让 AI 读起来更省 Token
-                    try:
-                        data = json.loads(line_str)
-                        level = data.get('level', 'INFO')
-                        msg = data.get('message', '').replace('\n', ' ')
-                        details = data.get('details', '')
-                        
-                        # 把又臭又长的 Details 交给凝缩器清理一遍垃圾堆栈
-                        from backend.managers.mgr_game_logs import LogCondenser
-                        clean_details = LogCondenser.clean_stack_trace(details, max_lines=20)
-                        
-                        # 组装纯文本给 AI，标明行号
-                        format_str = f"[{current_line}] {level}: {msg}"
-                        if clean_details:
-                            format_str += f"\n{clean_details}"
-                        context_lines.append(format_str)
-                    except json.JSONDecodeError:
-                        # 核心防爆点：如果是 Player.log 的纯文本，直接原样附加行号给 AI
-                        context_lines.append(f"[{current_line}] {line_str}")
-                
-                if context_lines:
                     return json.dumps({
-                        "query_target_line": target_line,
-                        "context_provided": f"Line {start_line} to {end_line}",
-                        "context_content": "\n".join(context_lines)
+                        "name": safe_mod.get("name"),
+                        "package_id": safe_mod.get("package_id"),
+                        "workshop_id": safe_mod.get("workshop_id"),
+                        "version": safe_mod.get("version"),
+                        "supported_versions": safe_mod.get("supported_versions"),
+                        "is_disabled": safe_mod.get("disabled", False),
+                        "store": safe_mod.get("store"),
+                        "path": safe_mod.get("path")
                     }, ensure_ascii=False)
-                    
-                return json.dumps({"error": f"无法提取行号上下文，文件可能已变更。"})
+
+            elif name == "get_mod_rules":
+                pkg_id = args.get("package_id", "").lower()
+                native_only = args.get("native_only", False)
+                all_mods = ModDAO.get_profile_mods(active_context)
+                mod = next((m for m in all_mods if m.get("package_id", "").lower() == pkg_id), None)
+                if not mod:
+                    return json.dumps({"error": f"本地未安装此模组: {pkg_id}"})
                 
+                if native_only:
+                    return json.dumps({
+                        "dependencies": mod.get("dependencies_mods", []),
+                        "load_after": mod.get("load_after_mods", []),
+                        "load_before": mod.get("load_before_mods", []),
+                        "incompatible": mod.get("incompatible_mods", [])
+                    }, ensure_ascii=False)
+                else:
+                    # 获取经过管理器合并后的真实生效规则
+                    from backend.managers.mgr_rules import RuleManager
+                    temp_rule_mgr = RuleManager(active_context)
+                    effective_rules = temp_rule_mgr.get_effective_mod_rules(pkg_id, mod)
+                    return json.dumps(effective_rules, ensure_ascii=False)
+
+            elif name == "get_user_mod_data":
+                pkg_id = args.get("package_id", "").lower()
+                all_mods = ModDAO.get_profile_mods(active_context)
+                mod = next((m for m in all_mods if m.get("package_id", "").lower() == pkg_id), None)
+                if not mod:
+                    return json.dumps({"error": f"本地未安装此模组: {pkg_id}"})
+                return json.dumps({
+                    "package_id": pkg_id,
+                    "alias_name": mod.get("alias_name"),
+                    "tags": mod.get("tags", []),
+                    "notes": mod.get("notes"),
+                    "color": mod.get("sign_color"),
+                    "user_type": mod.get("user_mod_type")
+                }, ensure_ascii=False)
+            
         except Exception as e:
             logger.error(f"AI工具执行异常: {str(e)}", exc_info=True)
             return json.dumps({"error": f"工具执行异常: {str(e)}"})
@@ -837,16 +1231,18 @@ class AIManager:
         payload: { "history": [...], "condensed_data": {...}, "question": "..." }
         """
         history = payload.get("history", [])
-        # 接收前端传来的已经浓缩好的数据，取代以前的 new_logs
-        condensed_data = payload.get("condensed_data", None) 
+        diagnosis_context = payload.get("diagnosis_context", None)
+        condensed_data = payload.get("condensed_data", None)
+        if diagnosis_context is None:
+            diagnosis_context = condensed_data
         question = payload.get("question", "")
         # 获取前端生成的话话 ID，用于向前端定向推送流数据
         session_id = payload.get("session_id", str(uuid.uuid4()))
         
         # 1. 系统提示词 (精准定调)
-        system_prompt = """你是一个顶级的 RimWorld 模组冲突侦探与 C# 报错排查专家。
+        system_prompt = """你是一个顶级的 RimWorld 模组冲突分析与 C# 报错排查专家。
 请注意以下工作原则：
-1. 【先看目录，再查详情】：系统会在首轮提供错误摘要。如果某个错误像是崩溃源头，务必优先调用 `get_log_context` 工具传入该错误的 `target_line` 获取真实物理上下文。
+1. 【先看目录，再查详情】：系统会在首轮提供错误摘要。如果某个错误像是崩溃源头，务必优先调用 `get_log_context` 工具传入该错误的 `target_line` 获取该行所在的完整日志块。`expand_range` 表示最多保留多少行堆栈摘要。
 2. 【全局视野】：必要时可调用 `get_active_mod_list` 查看全局加载顺序（如果只需要看框架冲突，设置 include_names 为 false 以节约时间）。
 3. 【关注隐性冲突】：不要只看报错表象，要结合上下文深挖“未显式声明的隐性冲突”。
 4. 【友好沟通与修复动作】：请直接使用 Markdown 大白话解释问题，**绝不要**把整段回复包裹在 JSON 字符串里！
@@ -855,8 +1251,8 @@ class AIManager:
 {
   "actions":[
     { "type": "ENABLE_MOD", "title": "一键启用前置", "description": "...", "payload": { "mod_id": "需要启用的包名" } },
-    { "type": "ADD_RULE", "title": "强制修正排序", "description": "...", "payload": { "mod_id": "主体包名", "rule_type": "load_after", "target_id": "必须在其后加载的包名" } },
-    { "type": "DISABLE_MOD", "title": "停用死锁模组", "description": "...", "payload": { "mod_ids": ["冲突的包名"] } }
+    { "type": "ADD_RULE", "title": "修正排序规则", "description": "...", "payload": { "mod_id": "主体包名", "rule_type": "load_after", "target_id": "必须在其后加载的包名" } },
+    { "type": "DISABLE_MOD", "title": "停用冲突模组", "description": "...", "payload": { "mod_ids": ["冲突的包名"] } }
   ]
 }
 ```
@@ -877,122 +1273,194 @@ class AIManager:
 
         # 3. 浓缩新日志并附加到当前问题
         user_content = question
-        if condensed_data:
-            # 【核心修改点】: 直接使用前端发来的 JSON 数据，无需再进行压缩计算
-            user_content = f"以下是系统浓缩后的核心错误日志摘要：\n```json\n{json.dumps(condensed_data, ensure_ascii=False)}\n```\n\n用户的补充提问：{question}"
+        if diagnosis_context:
+            user_content = f"以下是当前会话绑定的核心错误日志摘要：\n```json\n{json.dumps(diagnosis_context, ensure_ascii=False)}\n```\n\n用户的补充提问：{question}"
         
         messages.append({"role": "user", "content": user_content})
 
         llm_kwargs = self._get_litellm_kwargs()
         tools = self._get_diagnostic_tools()
+        model_name = llm_kwargs.get("model", settings.config.ai.model)
+
+        # 【新增】记录整个会话的累计 Token 和诊断轮次，供前端与调试日志使用。
+        token_usage = {
+            "estimated_prompt_tokens": 0,
+            "estimated_completion_tokens": 0,
+            "estimated_total_tokens": 0,
+            "tool_rounds": 0,
+            "forced_final_round": False,
+            "model": model_name
+        }
+
+        logger.debug(
+            f"[AI诊断] 会话开始 session_id={session_id} "
+            f"history={len(history)} has_context={bool(diagnosis_context)} "
+            f"context_items={len(diagnosis_context.get('error_table_of_contents', [])) if isinstance(diagnosis_context, dict) else 0}"
+        )
 
         # 4. Agentic 循环 (ReAct)
-        max_loops = 5
+        # 先允许模型进行若干轮“查证”，如果一直不收敛，再强制进入最终总结轮。
+        max_loops = 20
         loop_count = 0
 
         while loop_count < max_loops:
             loop_count += 1
             try:
-                # 调用大模型 (使用标准的 OpenAI Tools 格式)
-                response = completion(
-                    messages=messages,
-                    tools=tools,
-                    tool_choice="auto",
-                    # 国内模型普遍对 response_format="json_object" 支持不好
-                    # 这里依靠 System Prompt 中的强约束即可
-                    stream=True, 
-                    **llm_kwargs
+                prompt_tokens_this_round = self._estimate_messages_tokens(messages, model_name)
+                token_usage["estimated_prompt_tokens"] += prompt_tokens_this_round
+                token_usage["estimated_total_tokens"] += prompt_tokens_this_round
+                logger.debug(
+                    f"[AI诊断] 进入工具轮 session_id={session_id} loop={loop_count}/{max_loops} "
+                    f"messages={len(messages)} prompt_tokens≈{prompt_tokens_this_round}"
                 )
-                
-                is_tool_call = False
-                tool_calls_dict = {}
-                final_text = ""
-                
-                # 遍历流式返回的 Chunk
-                for chunk in response:
-                    if not chunk.choices: continue
-                    delta = chunk.choices[0].delta
-                    
-                    # 1. 拦截并聚合 Tool Calls
-                    if getattr(delta, "tool_calls", None):
-                        is_tool_call = True
-                        for tc in delta.tool_calls:
-                            idx = tc.index
-                            if idx not in tool_calls_dict:
-                                tool_calls_dict[idx] = {"id": "", "name": "", "arguments": ""}
-                            if tc.id: tool_calls_dict[idx]["id"] += tc.id
-                            if getattr(tc.function, "name", None): tool_calls_dict[idx]["name"] += tc.function.name
-                            if getattr(tc.function, "arguments", None): tool_calls_dict[idx]["arguments"] += tc.function.arguments
-                            
-                    # 2. 如果是正常的聊天内容，立刻通过 EventBus 推送给前端！
-                    elif getattr(delta, "content", None):
-                        content_chunk = delta.content
-                        final_text += content_chunk
-                        EventBus.emit('ai-chat-stream', {'session_id': session_id, 'chunk': content_chunk})
-                
-                # --- 流结束后的处理 ---
-                
+                stream_result = self._run_diagnostic_completion_with_fallback(
+                    messages=messages,
+                    llm_kwargs=llm_kwargs,
+                    session_id=session_id,
+                    tools=tools,
+                    tool_choice="auto"
+                )
+
+                completion_payload = (
+                    json.dumps(stream_result["tool_calls"], ensure_ascii=False)
+                    if stream_result["is_tool_call"] else stream_result["final_text"]
+                )
+                output_tk = self._estimate_text_tokens(completion_payload, model_name)
+                token_usage["estimated_completion_tokens"] += output_tk
+                token_usage["estimated_total_tokens"] += output_tk
+
                 # 如果模型决定调用工具
-                if is_tool_call:
-                    # 按照大模型标准格式重新组装历史记录
-                    formatted_tool_calls = []
-                    for idx, tc in sorted(tool_calls_dict.items()):
-                        formatted_tool_calls.append({
-                            "id": tc["id"], "type": "function",
-                            "function": {"name": tc["name"], "arguments": tc["arguments"]}
-                        })
-                    
-                    messages.append({ "role": "assistant", "content": "", "tool_calls": formatted_tool_calls })
-                    
+                if stream_result["is_tool_call"]:
+                    token_usage["tool_rounds"] += 1
+                    formatted_tool_calls = stream_result["tool_calls"]
+                    messages.append({"role": "assistant", "content": "", "tool_calls": formatted_tool_calls})
+
+                    logger.debug(
+                        f"[AI诊断] 触发工具轮 session_id={session_id} loop={loop_count} "
+                        f"tool_count={len(formatted_tool_calls)}"
+                    )
+
                     # 逐个执行工具，并向前端推送状态
                     for tc in formatted_tool_calls:
                         func_name = tc["function"]["name"]
                         func_args = tc["function"]["arguments"]
-                        
+                        tool_start_at = time.perf_counter()
+
                         # 通知前端：开始调用工具
                         EventBus.emit('ai-tool-call', {
-                            'session_id': session_id, 
-                            'tool_id': tc["id"], 
+                            'session_id': session_id,
+                            'tool_id': tc["id"],
                             'name': func_name,
-                            'arguments': func_args  # 【新增】将工具参数发给前端
+                            'arguments': func_args
                         })
-                        
+
                         # 执行工具
                         tool_result = self._execute_diagnostic_tool(func_name, func_args, active_context, payload=payload, reader=reader)
-                        
+                        duration_ms = int((time.perf_counter() - tool_start_at) * 1000)
+
+                        tool_ok = True
+                        try:
+                            parsed_tool_result = json.loads(tool_result)
+                            if isinstance(parsed_tool_result, dict) and parsed_tool_result.get("error"):
+                                tool_ok = False
+                        except Exception:
+                            parsed_tool_result = None
+
+                        logger.debug(
+                            f"[AI诊断] 工具完成 session_id={session_id} tool={func_name} "
+                            f"ok={tool_ok} duration_ms={duration_ms} result_chars={len(tool_result or '')}"
+                        )
+
                         # 通知前端：工具执行完毕
                         EventBus.emit('ai-tool-result', {
-                            'session_id': session_id, 'tool_id': tc["id"]
+                            'session_id': session_id,
+                            'tool_id': tc["id"],
+                            'status': 'done' if tool_ok else 'error',
+                            'duration_ms': duration_ms,
+                            'summary': self._summarize_tool_result(func_name, tool_result),
+                            'result': tool_result
                         })
-                        
+
                         messages.append({
                             "role": "tool", "tool_call_id": tc["id"], "name": func_name, "content": tool_result
                         })
-                        
-                    continue # 带着工具结果，继续进行下一轮 While 循环，让大模型继续思考
-                
+
+                    continue
+
                 # 如果没有工具调用，说明大模型完成了分析并输出了最后的内容
-                else:
-                    parsed_json = self._extract_json_from_text(final_text)
-                    if parsed_json and "actions" in parsed_json:
-                        # 【修改 2】正则安全剥离代码块，避免前端展示一坨 JSON 代码
-                        import re
-                        # 尝试切除文本最后的 ```json { ... "actions" ... } ```
-                        clean_text = re.sub(r'```(?:json)?\s*\{.*?"actions".*?\}\s*```', '', final_text, flags=re.DOTALL | re.IGNORECASE).strip()
-                        
-                        # 兼容老格式兜底：如果 AI 没听话，还是返回了整个大 JSON {"analysis": "...", "actions": ...}
-                        if not clean_text and "analysis" in parsed_json:
-                            clean_text = parsed_json["analysis"]
-                            
-                        return {"analysis": clean_text or "分析完毕。", "actions": parsed_json["actions"]}
-                    else:
-                        return {"analysis": final_text, "actions": []}
+                final_response = self._parse_diagnostic_final_text(stream_result["final_text"])
+                token_usage["estimated_total_tokens"] = (
+                    token_usage["estimated_prompt_tokens"] + token_usage["estimated_completion_tokens"]
+                )
+                final_response["token_usage"] = token_usage
+
+                logger.debug(
+                    f"[AI诊断] 会话完成 session_id={session_id} loop={loop_count} "
+                    f"analysis_chars={len(final_response.get('analysis', ''))} "
+                    f"total_tokens≈{token_usage['estimated_total_tokens']}"
+                )
+                return final_response
 
             except Exception as e:
                 logger.error(f"AI Diagnostic Error: {str(e)}", exc_info=True)
-                return {"analysis": f"AI 思考时发生异常: {str(e)}", "actions": []}
+                token_usage["estimated_total_tokens"] = (
+                    token_usage["estimated_prompt_tokens"] + token_usage["estimated_completion_tokens"]
+                )
+                return {
+                    "analysis": "AI 推理链路在本轮处理中断。系统已记录详细调试日志，请优先展开上方工具步骤并结合后端 debug 日志继续定位。",
+                    "actions": [],
+                    "token_usage": token_usage
+                }
 
-        return {"analysis": "经过多次资料查阅，AI 无法得出确切结论。", "actions": []}
+        # 【关键改进】如果模型长时间沉迷工具调用，不再直接给“无法得出结论”，
+        # 而是进入一次强制总结轮，禁止继续调工具，只基于已有证据收敛输出。
+        logger.warning(f"[AI诊断] 工具轮达到上限，转入强制总结 session_id={session_id}")
+        token_usage["forced_final_round"] = True
+        forced_messages = messages + [{
+            "role": "system",
+            "content": (
+                "你已经完成资料查阅。禁止继续调用任何工具。"
+                "请直接基于当前证据给出最终诊断；如果证据仍不足，也要明确给出最可能的 1-3 个原因、"
+                "证据依据，以及下一步建议用户如何验证。"
+            )
+        }]
+
+        try:
+            prompt_tokens_this_round = self._estimate_messages_tokens(forced_messages, model_name)
+            token_usage["estimated_prompt_tokens"] += prompt_tokens_this_round
+            logger.debug(
+                f"[AI诊断] 强制总结开始 session_id={session_id} "
+                f"messages={len(forced_messages)} prompt_tokens≈{prompt_tokens_this_round}"
+            )
+            stream_result = self._run_diagnostic_completion_with_fallback(
+                messages=forced_messages,
+                llm_kwargs=llm_kwargs,
+                session_id=session_id,
+                tools=None
+            )
+            token_usage["estimated_completion_tokens"] += self._estimate_text_tokens(stream_result["final_text"], model_name)
+            token_usage["estimated_total_tokens"] = (
+                token_usage["estimated_prompt_tokens"] + token_usage["estimated_completion_tokens"]
+            )
+
+            final_response = self._parse_diagnostic_final_text(stream_result["final_text"])
+            if not final_response.get("analysis"):
+                final_response["analysis"] = "AI 已完成查证，但没有生成有效总结文本。建议查看上方工具步骤详情，优先核对关键上下文和模组排序。"
+            final_response["token_usage"] = token_usage
+
+            logger.debug(
+                f"[AI诊断] 强制总结完成 session_id={session_id} "
+                f"analysis_chars={len(final_response.get('analysis', ''))} "
+                f"total_tokens≈{token_usage['estimated_total_tokens']}"
+            )
+            return final_response
+        except Exception as e:
+            logger.error(f"AI Diagnostic Forced Summary Error: {str(e)}", exc_info=True)
+            return {
+                "analysis": "AI 已完成多轮资料查阅，但在最终收敛阶段发生异常。请查看步骤详情和调试日志继续定位。",
+                "actions": [],
+                "token_usage": token_usage
+            }
     
     
     

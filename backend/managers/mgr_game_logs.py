@@ -1,4 +1,5 @@
 # backend/managers/mgr_game_logs.py
+import copy
 import json
 import os
 import re
@@ -157,6 +158,7 @@ class GameLogManager(BaseLogReader): # 继承基类
         """后台线程的核心工作函数：Tailing the log file"""
         try:
             with open(self.realtime_log_file, 'r', encoding='utf-8', errors='replace') as f:
+                current_line_no = sum(1 for _ in f)
                 # 直接跳到文件末尾
                 f.seek(0, 2)
                 while not self._stop_event.is_set():
@@ -164,11 +166,13 @@ class GameLogManager(BaseLogReader): # 继承基类
                     if not line:
                         time.sleep(0.1) # 没有新内容，短暂休眠
                         continue
+                    current_line_no += 1
                     
                     # 有新内容，解析并推送
                     try:
                         data = json.loads(line)
                         data['id'] = generate_log_id(data.get('timestamp', ''), data.get('level', 'INFO'), data.get('message', ''))
+                        data['raw_lines'] = [current_line_no]
                         EventBus.emit('game-log', data)
                     except json.JSONDecodeError:
                         # 忽略无法解析的行
@@ -204,28 +208,52 @@ class GameLogManager(BaseLogReader): # 继承基类
         分页读取日志，支持向上懒加载。
         page=1 代表最新的一页（文件末尾）。page 越大，读取的数据越旧（越靠前）。
         """
-        # 1. 确定物理路径
+        # 1. 确定文件路径
         filepath = os.path.join(self.context.user_data_path, filename)
             
         if not os.path.exists(filepath): return {'error': '文件不存在'}
 
-        stat = os.stat(filepath)
-
-        # 使用缓存机制，避免重复读文件
-        if filepath not in self._cache or self._cache[filepath]['mtime'] != stat.st_mtime:
-            self._cache[filepath] = {
-                'mtime': stat.st_mtime,
-                'blocks': self._parse_file_to_blocks(filepath)
-            }
-
+        # 使用统一缓存入口，避免全局扫描和分页读取走出两套状态。
+        blocks = self._ensure_cache(filepath, self._parse_file_to_blocks)
         # 3. 计算分页切片 (倒序分页算法)
-        result = self.get_paged_data(self._cache[filepath]['blocks'], page, page_size)
+        result = self.get_paged_data(blocks, page, page_size)
         
         # 如果请求的页数超出了总页数，返回空
         if result['status'] == 'success':
             self._analyze_page(result['blocks'], filename)
             
         return result
+
+    def get_raw_logs_by_lines(self, filepath: str, target_lines: list) -> list:
+        """按块反查游戏日志，兼容 JSON 与 Player.log 纯文本块。"""
+        if not os.path.exists(filepath) or not target_lines:
+            return []
+
+        blocks = self._ensure_cache(filepath, self._parse_file_to_blocks)
+
+        target_line_set = set(target_lines)
+        matched_blocks = [
+            block for block in blocks
+            if target_line_set.intersection(block.get('raw_lines', []))
+        ]
+
+        if matched_blocks:
+            self._analyze_page(matched_blocks, os.path.basename(filepath))
+
+        return [copy.deepcopy(block) for block in matched_blocks]
+
+    def get_all_blocks(self, filepath: str, full_scan: bool = False) -> list:
+        """返回完整结构化日志块，并补齐分析上下文，供 AI 全局扫描复用。"""
+        if not os.path.exists(filepath):
+            return []
+
+        # 全局扫描时单独走完整解析，避免被常规缓存上限截断较早的错误块。
+        blocks = self._parse_file_to_blocks(filepath, keep_all=True) if full_scan else self._ensure_cache(filepath, self._parse_file_to_blocks)
+        self._analyze_page(blocks, os.path.basename(filepath))
+        logger.debug(
+            f"[游戏日志] 读取日志块 filepath={filepath} block_count={len(blocks)} full_scan={full_scan}"
+        )
+        return [copy.deepcopy(block) for block in blocks]
 
     def _analyze_page(self, page_blocks, filename):
         """游戏日志特有的分析逻辑"""
@@ -242,7 +270,7 @@ class GameLogManager(BaseLogReader): # 继承基类
             if 'context' not in block or 'inferredType' not in block.get('context', {}):
                 self.analyzer.analyze(block, is_realtime_json=is_json_log, active_mods=active_mods_set)
 
-    def _parse_file_to_blocks(self, filepath):
+    def _parse_file_to_blocks(self, filepath, keep_all=False):
         """重写：使用基类方法处理 JSON，保留纯文本特化逻辑"""
         filename = os.path.basename(filepath)
         is_json = filename.endswith('.json') or filename.startswith('RMM_Realtime')
@@ -250,7 +278,7 @@ class GameLogManager(BaseLogReader): # 继承基类
         # 如果是 JSON，直接复用基类的高效解析
         if is_json:
             # 注意：分析逻辑交给了 read_log_page 里的 _analyze_page，所以这里不传回调直接返回
-            return self._parse_file_base(filepath)
+            return self._parse_file_base(filepath, keep_all=keep_all)
             
         # --- 下面保留原有的纯文本流式读取逻辑 (Player.log) ---
         blocks = []
@@ -263,6 +291,7 @@ class GameLogManager(BaseLogReader): # 继承基类
                     
                     if line_content.startswith((' ', '\t', 'at ', '(Filename:')) and current_block:
                         current_block['details'] += '\n' + line_content
+                        current_block['raw_lines'].append(idx + 1)
                     else:
                         if current_block: 
                             self._add_or_merge_block(blocks, current_block)
@@ -281,7 +310,7 @@ class GameLogManager(BaseLogReader): # 继承基类
         except Exception as e:
             logger.error(f"Error reading text log {filepath}: {e}", exc_info=True)
             
-        return blocks[-self.max_blocks:]
+        return blocks if keep_all else blocks[-self.max_blocks:]
 
 
 class LogCondenser:
@@ -310,61 +339,149 @@ class LogCondenser:
         return "\n".join(cleaned_lines)
 
     @classmethod
-    def condense_for_ai(cls, raw_logs: list, token_limit: int = 8000) -> dict:
+    def _normalize_raw_lines(cls, raw_lines: list) -> list:
+        normalized = []
+        for raw_line in raw_lines or []:
+            try:
+                normalized.append(int(raw_line))
+            except (TypeError, ValueError):
+                continue
+        return sorted(set(normalized))
+
+    @classmethod
+    def _build_fingerprint(cls, log: dict) -> str:
+        """用错误类型 + 消息摘要做聚合键，避免不同错误被硬合并。"""
+        ctx = log.get("context", {}) or {}
+        inferred_type = str(ctx.get("inferredType") or "").strip()
+        message = re.sub(r'\s+', ' ', str(log.get("message", "") or "").strip())
+        return f"{inferred_type}|{message[:180]}".lower()
+
+    @classmethod
+    def _extract_stack_preview(cls, details: str, preview_lines: int) -> str:
+        """为目录项提取少量堆栈预览，便于 AI 先做快速判断。"""
+        if preview_lines <= 0 or not details:
+            return ""
+        cleaned = cls.clean_stack_trace(details, max_lines=max(preview_lines, 2))
+        source_text = cleaned or details
+        preview = [line.strip() for line in source_text.splitlines() if line.strip()]
+        return "\n".join(preview[:preview_lines])
+
+    @classmethod
+    def condense_for_ai(
+        cls,
+        raw_logs: list,
+        token_limit: int = 8000,
+        char_budget_ratio: float = 0.65,
+        stack_preview_lines: int = 0
+    ) -> dict:
         """
         动态漏斗提取核心要点（目录模式）
         """
-        if not raw_logs: return {"error": "无有效日志输入"}
+        if not raw_logs:
+            return {"error": "无有效日志输入"}
+
+        logger.debug(
+            f"[日志压缩] 开始 input_blocks={len(raw_logs)} token_limit={token_limit} "
+            f"char_budget_ratio={char_budget_ratio:.2f} stack_preview_lines={stack_preview_lines}"
+        )
+
         # 1. 过滤出真正的错误
         error_logs = [log for log in raw_logs if log.get("level", "").upper() in ("ERROR", "WARNING", "EXCEPTION")]
         if not error_logs:
             error_logs = raw_logs
-            
-        # 2. 核心算法：按时间顺序提取 Unique 错误目录
-        error_logs.sort(key=lambda x: x.get("timestamp", ""))
-        
-        toc_list = []
-        seen_types = set()
-        
-        # 粗略估算安全容量
-        max_safe_chars = int(token_limit * 0.8 * 2.5) 
-        current_chars = 0
 
+        # 2. 统一排序，优先使用首个行号，其次才是时间戳。
+        error_logs.sort(key=lambda x: (
+            cls._normalize_raw_lines(x.get("raw_lines", []))[0] if cls._normalize_raw_lines(x.get("raw_lines", [])) else 10**12,
+            x.get("timestamp", "")
+        ))
+
+        grouped_items = {}
         for log in error_logs:
-            ctx = log.get("context", {})
-            # 用 inferredType 或 消息前 50 个字作为去重指纹
-            fingerprint = ctx.get("inferredType") or log.get("message", "")[:50] 
-            
-            if fingerprint not in seen_types:
-                seen_types.add(fingerprint)
-                
-                # 获取行号列表
-                raw_lines = log.get("raw_lines", [])
-                
-                # 构建极简目录项
-                item = {
+            ctx = log.get("context", {}) or {}
+            raw_lines = cls._normalize_raw_lines(log.get("raw_lines", []))
+            target_line = raw_lines[0] if raw_lines else 0
+            fingerprint = cls._build_fingerprint(log)
+            repeat_count = max(1, int(log.get("count", 1) or 1))
+            suspect_mods = [str(mod).strip() for mod in ctx.get("relatedModIds", []) if str(mod).strip()]
+            stack_preview = cls._extract_stack_preview(str(log.get("details", "") or ""), stack_preview_lines)
+
+            if fingerprint not in grouped_items:
+                grouped_items[fingerprint] = {
                     "log_id": log.get("id"),
-                    "target_line": raw_lines[0] if raw_lines else 0,
-                    # AI 这个报错在所选日志中重复了多少次
-                    "repeat_count": len(raw_lines),
+                    "target_line": target_line,
+                    "repeat_count": repeat_count,
+                    "merged_block_count": 1,
                     "time": log.get("timestamp", ""),
+                    "level": str(log.get("level", "") or "").upper(),
                     "type": ctx.get("inferredType", "Unknown"),
-                    "suspect_mods": ctx.get("relatedModIds", []),
-                    "message_preview": log.get("message", "")
+                    "suspect_mods": suspect_mods,
+                    "message_preview": str(log.get("message", "") or "").strip(),
+                    "stack_preview": stack_preview
                 }
-                
-                item_str = json.dumps(item, ensure_ascii=False)
-                item_chars = len(item_str)
-                
-                if current_chars + item_chars > max_safe_chars:
-                    break
-                    
-                toc_list.append(item)
-                current_chars += item_chars
+                continue
+
+            item = grouped_items[fingerprint]
+            item["repeat_count"] += repeat_count
+            item["merged_block_count"] += 1
+            if not item.get("time") and log.get("timestamp"):
+                item["time"] = log.get("timestamp", "")
+            if target_line and (not item.get("target_line") or target_line < item["target_line"]):
+                item["target_line"] = target_line
+                item["log_id"] = log.get("id")
+            if not item.get("stack_preview") and stack_preview:
+                item["stack_preview"] = stack_preview
+
+            merged_mods = item.get("suspect_mods", []) + suspect_mods
+            item["suspect_mods"] = list(dict.fromkeys(merged_mods))
+
+        # 3. 一键排错更关注“重复次数高 + 更像错误”的摘要，便于 AI 优先抓主因。
+        level_rank = {"EXCEPTION": 0, "ERROR": 1, "WARNING": 2}
+        grouped_list = sorted(
+            grouped_items.values(),
+            key=lambda item: (
+                -int(item.get("repeat_count", 1) or 1),
+                level_rank.get(str(item.get("level", "")).upper(), 9),
+                int(item.get("target_line", 0) or 0)
+            )
+        )
+
+        max_safe_chars = int(token_limit * max(0.20, min(char_budget_ratio, 0.90)) * 2.5)
+        current_chars = 0
+        toc_list = []
+        for item in grouped_list:
+            item_str = json.dumps(item, ensure_ascii=False)
+            item_chars = len(item_str)
+            if toc_list and current_chars + item_chars > max_safe_chars:
+                break
+            toc_list.append(item)
+            current_chars += item_chars
+
+        total_repeat_count = sum(int(item.get("repeat_count", 1) or 1) for item in grouped_list)
+        compression_notice = (
+            f"已压缩完成：从 {len(raw_logs)} 条日志块中筛出 {len(error_logs)} 条错误日志块，"
+            f"合并为 {len(toc_list)} 条摘要，总出现 {total_repeat_count} 次。"
+        )
+
+        logger.debug(
+            f"[日志压缩] 完成 input_blocks={len(raw_logs)} error_blocks={len(error_logs)} "
+            f"grouped_items={len(grouped_list)} output_items={len(toc_list)} "
+            f"total_repeat_count={total_repeat_count} used_chars={current_chars} max_chars={max_safe_chars}"
+        )
 
         return {
-            "summary": f"共扫描 {len(raw_logs)} 条日志，为你提取了 {len(toc_list)} 种不同的首发错误目录。",
-            "instruction": "请浏览以下错误目录。如果你需要查看某个错误的完整上下文，请使用 get_log_context 工具，传入对应的 target_line。",
+            "summary": compression_notice,
+            "instruction": "请先查看以下错误摘要；如果需要展开某条错误，请调用 get_log_context 并传入对应的 target_line。",
+            "compression_notice": compression_notice,
+            "stats": {
+                "input_block_count": len(raw_logs),
+                "error_block_count": len(error_logs),
+                "grouped_error_count": len(grouped_list),
+                "output_item_count": len(toc_list),
+                "total_repeat_count": total_repeat_count,
+                "char_budget_ratio": char_budget_ratio,
+                "stack_preview_lines": stack_preview_lines
+            },
             "error_table_of_contents": toc_list
         }
     

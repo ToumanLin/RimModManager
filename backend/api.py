@@ -1998,11 +1998,16 @@ class API:
     @log_api_call
     def ai_prepare_diagnosis(self, payload: dict):
         """
-        诊断预检接口：接收物理行号，提取原文，浓缩并计算 Token。
+        诊断预检接口：接收行号，提取日志内容，压缩并计算 Token。
         """
         raw_lines = payload.get("raw_lines", [])
         filename = payload.get("filename", "")
         source_type = payload.get("log_source_type", "game")
+
+        logger.debug(
+            f"[AI预检] 开始 source={source_type} filename={filename} "
+            f"raw_line_count={len(raw_lines)}"
+        )
 
         if not raw_lines or not filename:
             return ApiResponse.error("无效的分析请求：缺失日志行号或文件名。")
@@ -2023,13 +2028,18 @@ class API:
         
         token_limit = settings.config.ai.max_tokens
 
-        # 【核心修改】将 token_limit 传给浓缩器，让它计算 80% 的安全容量
         from backend.managers.mgr_game_logs import LogCondenser
         condensed_data = LogCondenser.condense_for_ai(full_logs, token_limit=token_limit)
 
         import litellm
         text_to_estimate = json.dumps(condensed_data, ensure_ascii=False)
         estimated_tokens = litellm.token_counter(model=settings.config.ai.model, text=text_to_estimate)
+
+        logger.debug(
+            f"[AI预检] 完成 source={source_type} filename={filename} "
+            f"log_blocks={len(full_logs)} toc_items={len(condensed_data.get('error_table_of_contents', [])) if isinstance(condensed_data, dict) else 0} "
+            f"estimated_tokens={estimated_tokens}"
+        )
 
         # 【核心修改】无论是否超限，都返回统一数据结构给前端
         return ApiResponse.success({
@@ -2052,11 +2062,23 @@ class API:
         try:
             from backend.utils.logger import app_log_reader
             source_type = payload.get("log_source_type", "game")
+            session_id = payload.get("session_id", "")
             reader = self.game_log_mgr if source_type == 'game' else app_log_reader
             if not reader: return ApiResponse.error("日志读取器未初始化")
+
+            logger.debug(
+                f"[AI诊断API] 收到请求 session_id={session_id} source={source_type} "
+                f"filename={payload.get('filename', '')} history={len(payload.get('history', []))} "
+                f"has_context={bool(payload.get('diagnosis_context') or payload.get('condensed_data'))}"
+            )
             
             # 直接使用传入的浓缩数据，不再自己计算
             result = self.ai_mgr.ai_diagnostic_chat(payload, self.active_context, reader=reader)
+            logger.debug(
+                f"[AI诊断API] 请求完成 session_id={session_id} "
+                f"analysis_chars={len(result.get('analysis', '')) if isinstance(result, dict) else 0} "
+                f"total_tokens≈{result.get('token_usage', {}).get('estimated_total_tokens', 0) if isinstance(result, dict) else 0}"
+            )
             return ApiResponse.success(result)
         except Exception as e:
             # 增加异常堆栈打印，方便调试
@@ -2068,10 +2090,12 @@ class API:
     @log_api_call
     def ai_scan_global_errors(self, payload: dict):
         """
-        绕过前端内存，直接从磁盘读取完整文件，提取所有错误并生成目录摘要
+        直接读取完整日志块并生成全局错误摘要。
         """
         filename = payload.get("filename", "")
         source_type = payload.get("log_source_type", "game")
+
+        logger.debug(f"[AI全局扫描] 开始 source={source_type} filename={filename}")
         
         if not filename:
             return ApiResponse.error("缺少文件名")
@@ -2088,50 +2112,58 @@ class API:
             filepath = os.path.join(DATA_DIR, 'logs', filename)
             
         if not os.path.exists(filepath):
-            return ApiResponse.error("找不到物理日志文件")
+            return ApiResponse.error("找不到日志文件")
 
-        # 1. 粗暴但高效地读取整个文件
-        raw_logs = []
+        if not hasattr(reader, "get_all_blocks"):
+            return ApiResponse.error("当前日志读取器不支持全局扫描")
+
+        # 直接复用读取器已经合并好的结构化日志块，保证和普通多选分析一致。
         try:
-            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-                # 为了防止文件过大（如几个G），我们只取最后 50000 行
-                from collections import deque
-                lines = deque(f, maxlen=50000)
-                
-                # 简单解析，只要包含 ERROR/WARNING 关键字的行
-                import re
-                err_pattern = re.compile(r'error|exception|warning|fail', re.IGNORECASE)
-                for idx, line in enumerate(lines):
-                    if err_pattern.search(line):
-                        # 伪造一个简单的结构给 Condenser 处理
-                        raw_logs.append({
-                            "id": f"global_{idx}",
-                            "level": "ERROR",
-                            "message": line.strip()[:500],
-                            "raw_lines": [idx + 1] # 这里的行号只是个大概，AI 查的时候 expand_range 设大点即可
-                        })
+            raw_logs = reader.get_all_blocks(filepath, full_scan=True)
         except Exception as e:
-            return ApiResponse.error(f"读取文件失败: {e}")
+            logger.error(f"[AI全局扫描] 读取完整日志块失败 filename={filename}: {e}", exc_info=True)
+            return ApiResponse.error(f"读取日志失败: {e}")
 
         if not raw_logs:
-            return ApiResponse.warning("太棒了！全局扫描未发现任何明显错误或警告。")
+            return ApiResponse.warning("当前日志文件中没有可分析的内容。")
 
-        # 2. 调用浓缩器
+        # 全局扫描默认额外保留 2 行堆栈预览，并使用更保守的预算比例，
+        # 这样前端能更快看到结果，也能让后续 AI 调用留出足够余量。
         from backend.managers.mgr_game_logs import LogCondenser
         token_limit = settings.config.ai.max_tokens
-        condensed_data = LogCondenser.condense_for_ai(raw_logs, token_limit=token_limit)
+        condensed_data = LogCondenser.condense_for_ai(
+            raw_logs,
+            token_limit=token_limit,
+            char_budget_ratio=0.55,
+            stack_preview_lines=2
+        )
         
-        # 3. 计算 Token
+        # 压缩完成后再计算实际 Token 占用，前端顶部记忆计数直接使用这个结果。
         import litellm
         import json
         text_to_estimate = json.dumps(condensed_data, ensure_ascii=False)
         estimated_tokens = litellm.token_counter(model=settings.config.ai.model, text=text_to_estimate)
 
+        stats = condensed_data.get('stats', {}) if isinstance(condensed_data, dict) else {}
+        compression_notice = (
+            condensed_data.get('compression_notice')
+            if isinstance(condensed_data, dict)
+            else ""
+        )
+
+        logger.debug(
+            f"[AI全局扫描] 完成 source={source_type} filename={filename} "
+            f"log_blocks={len(raw_logs)} error_blocks={stats.get('error_block_count', 0)} "
+            f"grouped_items={stats.get('grouped_error_count', 0)} toc_items={stats.get('output_item_count', 0)} "
+            f"estimated_tokens={estimated_tokens}"
+        )
+
         return ApiResponse.success({
             "is_over_limit": estimated_tokens > token_limit,
             "estimated_tokens": estimated_tokens,
             "token_limit": token_limit,
-            "condensed_data": condensed_data
+            "condensed_data": condensed_data,
+            "compression_notice": compression_notice
         })
     
     @log_api_call
