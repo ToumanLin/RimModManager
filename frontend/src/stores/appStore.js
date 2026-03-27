@@ -938,7 +938,7 @@ export const useAppStore = defineStore('app', () => {
       return true
     }
     else if (res.data && res.data.action === "need_start_steam") {
-      const confirmStore = (await import('./confirmStore')).useConfirmStore()
+      const confirmStore = useConfirmStore()
       const ok = await confirmStore.confirmAction(
         'Steam 未运行', 
         '调用官方 API 订阅模组需要启动 Steam 客户端。\n是否现在启动 Steam？', 
@@ -974,7 +974,7 @@ export const useAppStore = defineStore('app', () => {
       return true
     }
     else if (res.data && res.data.action === "need_start_steam") {
-      const confirmStore = (await import('./confirmStore')).useConfirmStore()
+      const confirmStore = useConfirmStore()
       const ok = await confirmStore.confirmAction(
         'Steam 未运行', 
         '调用官方 API 取消订阅需要启动 Steam 客户端。\n是否现在启动 Steam？', 

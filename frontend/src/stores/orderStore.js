@@ -243,6 +243,7 @@ export const useOrderStore = defineStore('order', () => {
         today: payload.today || [],
         earlier: payload.earlier || [],
         other: payload.other || [],
+        last_backup: payload.last_backup || [],
       }
       // 更新本地 store
       backups.value = files

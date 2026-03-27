@@ -530,6 +530,10 @@ class LoadOrderManager:
         today_files = glob.glob(os.path.join(self.today_dir, "*.xml"))
         earlier_files = glob.glob(os.path.join(self.earlier_dir, "*.xml"))
         other_files = glob.glob(os.path.join(self.other_dir, "*.xml"))
+        last_backup_file = Path(self.backup_root) / "Latest_ModList.xml"
+        if not last_backup_file.is_file():
+            last_backup_file = ''
+        
         def build_items(files):
             return [{
                 'path': f,
@@ -539,7 +543,8 @@ class LoadOrderManager:
         result = {
             "today": build_items(today_files),
             "earlier": build_items(earlier_files),
-            "other": build_items(other_files)
+            "other": build_items(other_files),
+            "last_backup": build_items([str(last_backup_file)]) if last_backup_file else []
         }
         return result
 
