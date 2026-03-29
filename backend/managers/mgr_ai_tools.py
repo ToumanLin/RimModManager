@@ -324,7 +324,7 @@ class AIToolExecutor:
     def _tool_search_mods(self, args: dict) -> str:
         """
         根据关键词搜索可见的模组，返回匹配结果。
-        匹配范围：package_id / workshp_id / name / alias_name / author
+        匹配范围：package_id / workshop_id / name / alias_name / author
         """
         keyword = str(args.get("keyword", "") or "").strip()
         if not keyword: return json.dumps({"error": "必须提供 keyword"})
@@ -345,14 +345,14 @@ class AIToolExecutor:
         for mod in ModDAO.get_profile_mods(self.context):
             name = str(mod.get('name') or '').strip()
             package_id = str(mod.get('package_id') or '').strip().lower()
-            workshp_id = str(mod.get('workshp_id') or '').strip().lower()
+            workshop_id = str(mod.get('workshop_id') or '').strip().lower()
             alias_name = str(mod.get('alias_name') or '').strip()
             authors = [str(author).strip() for author in (mod.get('author') or []) if str(author).strip()]
             score = 0
             reasons = []
             for value, reason in (
                 (package_id, 'package_id'),
-                (workshp_id, 'workshp_id'),
+                (workshop_id, 'workshop_id'),
                 (name, 'name'),
                 (alias_name, 'alias_name'),
             ):
@@ -366,7 +366,7 @@ class AIToolExecutor:
             if score <= 0: continue
             results.append({
                 'package_id': package_id,
-                'workshp_id': workshp_id or None,
+                'workshop_id': workshop_id or None,
                 'name': name,
                 'alias_name': alias_name or None,
                 'author': authors,

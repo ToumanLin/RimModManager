@@ -144,13 +144,15 @@ def show_webview2_missing_dialog():
     if res == 6: # 用户点击了“是”
         webbrowser.open(url)
 
-def validate_environment():
+def validate_environment(on_error=None):
     """
     启动前的环境全校验
     """
     # 1. 检测组件
     wv2_version = get_webview2_version()
     if not wv2_version:
+        if on_error:
+            on_error()
         show_webview2_missing_dialog()
         sys.exit(1)
 
@@ -164,6 +166,8 @@ def validate_environment():
         # 将解码后的、操作系统可识别的路径字符串转换为 Path 对象
         p = Path(path_str)
         if not p.exists():
+            if on_error:
+                on_error()
             show_native_error(
                 "资源加载失败",
                 f"找不到前端入口文件：\n{p}\n\n请检查软件安装是否完整或被杀毒软件拦截。"
