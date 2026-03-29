@@ -5,7 +5,7 @@
       class="fixed inset-0 z-100 flex items-center justify-center bg-black/70 px-3 py-4 backdrop-blur-md"
     >
       <div class="flex h-[min(88vh,780px)] w-[min(95vw,1360px)] flex-col overflow-hidden rounded-[22px] border border-accent-danger/18 bg-bg-deep shadow-[0_20px_80px_rgba(0,0,0,0.5)]">
-        <div class="shrink-0 border-b border-text-main/8 bg-[linear-gradient(135deg,rgba(15,23,42,0.94),rgba(2,6,23,0.92))] px-4 py-3">
+        <div class="shrink-0 border-b border-text-main/8 bg-[linear-gradient(135deg,rgba(15,23,42,0.94),rgba(2,6,23,0.92))] px-4 py-3" data-tour="conflict-summary">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
@@ -45,7 +45,7 @@
         </div>
 
         <div class="flex min-h-0 flex-1">
-          <div class="min-w-0 flex-1 overflow-y-auto px-4 py-4">
+          <div class="min-w-0 flex-1 overflow-y-auto px-4 py-4" data-tour="conflict-list">
             <div class="space-y-3">
               <div v-for="group in localGroups" :key="group.key"
                 class="overflow-hidden rounded-[18px] border border-text-main/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.026),rgba(255,255,255,0.015))]"
@@ -175,7 +175,7 @@
 
           <aside class="w-[300px] shrink-0 overflow-y-auto border-l border-text-main/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(2,6,23,0.92))] px-4 py-4">
             <div class="space-y-3">
-              <section class="rounded-[18px] border border-text-main/8 bg-black/20 p-3">
+              <section class="rounded-[18px] border border-text-main/8 bg-black/20 p-3" data-tour="conflict-batch">
                 <div class="text-[11px] font-black uppercase tracking-[0.16em] text-text-dim">批量选择</div>
                 <p class="mt-1 text-[11px] leading-5 text-text-dim">
                   选范围，选保留谁，再选其余副本怎么处理。
@@ -245,7 +245,7 @@
           </aside>
         </div>
 
-        <div class="flex shrink-0 items-center justify-between gap-3 border-t border-text-main/8 bg-black/22 px-4 py-3">
+        <div class="flex shrink-0 items-center justify-between gap-3 border-t border-text-main/8 bg-black/22 px-4 py-3" data-tour="conflict-submit">
           <div class="text-[11px] text-text-dim">
             提交后会自动刷新并重新扫描，保证冲突状态立即同步。
           </div>
