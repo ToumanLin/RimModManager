@@ -21,6 +21,7 @@ class SelectionManager {
       onNavigate: null, // 回调：(nextId, nextIndex, direction) => {}
       clickClass: 'select-trigger',  // 触发点击选择的类
       swipeClass: 'swipe-trigger',  // 触发划动选择的类
+      clickMode: 'single', // 点击行为：single=单选，toggle=切换多选
       idAttribute: 'data-id',  // 存储ID的属性名
       // 可自定义选框样式，支持 Tailwind 类名
       boxClass: 'absolute z-9999 rounded border-2 border-dashed border-accent-special bg-accent-special/20 pointer-events-none transition-none',
@@ -48,6 +49,7 @@ class SelectionManager {
     // 目标类别缓存
     this.isSwipeTarget = false
     this.isClickTarget = false
+    this.mouseDownItemId = null
 
     // 绑定上下文
     this.onMouseDown = this.onMouseDown.bind(this)
@@ -212,22 +214,33 @@ class SelectionManager {
 
     if (!itemId) return
 
+    const isMulti = e.ctrlKey || e.metaKey
+    const isRange = e.shiftKey
+
     // 阻止浏览器原生文字选中，防止破坏拖拽与连选判定
-    if (this.isSwipeTarget || e.shiftKey || e.ctrlKey || e.metaKey) {
+    if (this.isSwipeTarget || isRange || isMulti) {
       e.preventDefault()
     }
     this.isMouseDown = true
     this.isDragging = false
     this.isSwiping = false // 此时还没开始拖动，不算划动框选
     this.startPos = { x: e.clientX, y: e.clientY }
+    this.mouseDownItemId = itemId
     // 记录按下瞬间的滚动位置
     this.startScrollTop = this.el.scrollTop
     this.startScrollLeft = this.el.scrollLeft
 
+    // 如果当前区域支持划动，则先记录框选起点。
+    // 注意：这里不立刻进入划动模式，而是等鼠标真正移动超过阈值后再切换，
+    // 这样 clickClass 和 swipeClass 复用同一块区域时，点击与拖拽都能正常工作。
+    if (this.isSwipeTarget) {
+      this.swipeStartIndex = this.getIndexById(itemId)
+      this.lastHoveredId = itemId
+      this.selectionSnapshot = isMulti ? new Set(this.config.selectedIds) : new Set()
+    }
 
-    // console.log('isSwipeTarget', isSwipeTarget, 'isClickTarget', isClickTarget)
-    // 处理划动逻辑 (Swipe)
-    // 只有命中 swipeClass 时才启动划动模式
+    // 命中点击区域时，进入“点击候选”状态。
+    // 如果该区域同时也支持划动，则把最终动作延迟到 mouseup 判定，避免抢占拖拽框选。
     if (this.isClickTarget) {
       // === 模式 B: 准备点击选择 ===
       // 这里不立即执行反选逻辑，而是根据情况决定是否立即选中
@@ -238,9 +251,7 @@ class SelectionManager {
         this.anchorId = itemId
       } else {
         const isSelected = this.config.selectedIds.includes(itemId)
-        const isMulti = e.ctrlKey || e.metaKey
-        const isRange = e.shiftKey
-        if (!isMulti && !isRange && !isSelected) {
+        if (this.config.clickMode === 'single' && !this.isSwipeTarget && !isMulti && !isRange && !isSelected) {
           // 场景：单选未选中的项 -> 立即选中（为了让用户能立刻拖拽它）
           if (this.config.onSelect) this.config.onSelect([itemId], itemId)
           this.anchorId = itemId 
@@ -250,25 +261,6 @@ class SelectionManager {
       this.currentFocusId = itemId 
       // 对于已选中的项、或者 Ctrl/Shift 操作，逻辑推迟到 MouseUp
       // 这样做是为了区分 "点击" 和 "拖拽"
-    } else if (this.isSwipeTarget) {
-      // === 模式 A: 启动划动框选 ===
-      this.swipeStartIndex = this.getIndexById(itemId)
-      this.lastHoveredId = itemId // 【优化1】初始化最后经过ID
-      
-      // 记录快照：如果按住 Ctrl，保留原有选中；否则清空
-      if (e.ctrlKey || e.metaKey) {
-        this.selectionSnapshot = new Set(this.config.selectedIds)
-      } else {
-        this.selectionSnapshot = new Set()
-      }
-      
-      // 初始化视觉选框
-      e.preventDefault() // 防止文字选中
-      this.isSwiping = true
-      this.createSelectionBox()
-      // 立即执行一次范围计算 (单点框选)
-      this.updateSwipeRange(itemId)
-
     }
   }
   // 处理鼠标移动事件
@@ -281,6 +273,14 @@ class SelectionManager {
       const dy = e.clientY - this.startPos.y
       if (dx * dx + dy * dy > 25) { // 5px 阈值
         this.isDragging = true
+        if (this.isSwipeTarget && !this.isSwiping) {
+          // 超过阈值后才真正进入划动模式，兼容“点击”和“拖拽”复用同一区域的场景。
+          this.isSwiping = true
+          this.createSelectionBox()
+          if (this.mouseDownItemId) {
+            this.updateSwipeRange(this.mouseDownItemId)
+          }
+        }
       }
     }
 
@@ -301,13 +301,23 @@ class SelectionManager {
   // 处理鼠标松开事件
   onMouseUp(e) {
     if (!this.isMouseDown) return
+    const wasSwiping = this.isSwiping
+    const wasDragging = this.isDragging
+    const wasClickTarget = this.isClickTarget
+    const mouseDownItemId = this.mouseDownItemId
     // 移除视觉选框 (无论是否在划动模式都尝试移除，确保清洁)
     this.removeSelectionBox()
     this.lastHoveredId = null // 重置
+    this.isSwiping = false
+    this.isMouseDown = false
+    this.isDragging = false
+    this.isSwipeTarget = false
+    this.isClickTarget = false
+    this.swipeStartIndex = -1
+    this.selectionSnapshot = new Set()
+    this.mouseDownItemId = null
     // 如果是划动模式，松开即结束
-    if (this.isSwiping || this.isDragging) {
-      this.isSwiping = false
-      this.isMouseDown = false
+    if (wasSwiping || wasDragging) {
       return
     }
     // 如果发生了拖拽，则不处理点击选择逻辑 (交给 SortableJS 或其他拖拽库处理)
@@ -319,10 +329,9 @@ class SelectionManager {
     // 只有在没有发生拖拽且没在划动时才触发
     // 获取目标 ID (因为绑定在 document 上，需要重新判断 target 是否在容器内)
     // 注意：e.target 可能在松开时已经不在 el 内了，但在正常的点击操作中，Down和Up通常在同一元素上
-    if (!this.isClickTarget) return
-    const itemId = this.getItemId(e.target)
+    if (!wasClickTarget) return
+    const itemId = mouseDownItemId || this.getItemId(e.target)
     if (!itemId || !this.el.contains(e.target)) {
-        this.isMouseDown = false
         return
     }
 
@@ -336,13 +345,12 @@ class SelectionManager {
       // 从 anchorId 到 currentId
       this.handleRangeSelect(itemId, isMulti)
       
-    } else if (isMulti) {
-      // --- Ctrl 多选 (反转状态) ---
+    } else if (isMulti || this.config.clickMode === 'toggle') {
+      // --- Ctrl 多选 / 默认切换多选 ---
       const newSet = new Set(this.config.selectedIds)
       if (isSelected) newSet.delete(itemId)
       else newSet.add(itemId)
-      // 如果本来就只选中了这一个多选框，再次点击它相当于“取消勾选”
-      if (newSet.length === 1 && newSet[0] === itemId) {
+      if (newSet.size === 0) {
         if (this.config.onSelect) this.config.onSelect([], null)
         this.anchorId = null
       } else {
@@ -361,7 +369,6 @@ class SelectionManager {
 
     // 同步鼠标点击的最后一项为 Focus，这样键鼠混用时方向键才不会跳跃
     this.currentFocusId = itemId 
-    this.isMouseDown = false
   }
 
   // --- 逻辑实现函数 ---

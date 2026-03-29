@@ -1,11 +1,24 @@
 # backend/_version.py
-__version__ = "0.18.22"  # 主版本.次版本.补丁
+__version__ = "0.18.23"  # 主版本.次版本.补丁
 __db_version__ = "5"
 __build__ = "dev"      # dev, alpha, beta, stable, release
 
 # 结构化更新日志：按版本从新到旧排列
 # type 支持: "feature" (新增), "fix" (修复), "optimize" (优化), "breaking" (重大变更)
 APP_CHANGELOG = [
+    {
+        "version": "0.18.23",
+        "date": "2026-03-29",
+        "changes": [
+            { "type": "feature", "text": "新增 AI 诊断任务实时中断功能，支持通过前端按钮随时终止处理进程。" },
+            { "type": "feature", "text": "深度适配 OpenAI Responses 协议，并建立与 Chat Completions 接口的自动兼容与回退机制。" },
+            { "type": "optimize", "text": "重构 AI 核心架构，通过模块化网关与提示词管理提升系统响应效率与扩展性。" },
+            { "type": "optimize", "text": "完善应用启动生命周期管理，优化环境校验失败及主窗口加载后的启动屏关闭机制。" },
+            { "type": "optimize", "text": "统一 AI 接口校验逻辑，基于协议标准实现更智能的参数路由与配置预检。" },
+            { "type": "fix", "text": "修复在特定环境下应用更新后无法正常重启或 DLL 加载异常的问题。" },
+            { "type": "fix", "text": "修正 Steam 组件后台运行时的显示异常，并统一了部分业务字段的命名规范。" }
+        ]
+    },
     {
         "version": "0.18.22",
         "date": "2026-03-28",
