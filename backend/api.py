@@ -1948,6 +1948,7 @@ class API:
     #  12. AI 功能 (AI Features)
     # =========================================================================
 
+    
     @log_api_call
     def ai_get_config(self):
         """获取当前 AI 配置和 Prompt 列表"""
@@ -1976,10 +1977,46 @@ class API:
             return ApiResponse.error(str(e))
 
     @log_api_call
-    def ai_get_providers(self, api_type: str = "official"):
+    def ai_check_enable(self):
+        """检查 AI 功能是否启用"""
+        return self._ai_check_enable_with_config()
+
+    def _ai_check_enable_with_config(self, override_config: dict | None = None):
+        """检查 AI 功能是否启用，并支持用临时配置覆盖当前设置。"""
+        from backend.settings import AIConfig
+
+        ai_cfg = settings.config.ai
+        if isinstance(ai_cfg, dict):
+            ai_cfg = AIConfig(**ai_cfg)
+
+        if override_config:
+            merged = asdict(ai_cfg)
+            for key, value in override_config.items():
+                if key in merged:
+                    merged[key] = value
+            ai_cfg = AIConfig(**merged)
+
+        if not ai_cfg.enabled:
+            return ApiResponse.error("AI 功能未启用，请前往设置开启。")
+
+        provider = (ai_cfg.provider or "").strip()
+        base_url = (ai_cfg.base_url or "").strip()
+        model = (ai_cfg.model or "").strip()
+        api_key = (ai_cfg.api_key or "").strip()
+
+        if not provider or not base_url or not model:
+            return ApiResponse.error("AI 配置不完整，请检查配置")
+
+        if provider in ("anthropic", "gemini") and not api_key:
+            return ApiResponse.error("当前协议要求填写 API Key。")
+
+        return ApiResponse.success()
+
+    @log_api_call
+    def ai_get_providers(self):
         """获取厂商或代理协议列表"""
         try:
-            providers = self.ai_mgr.get_providers(api_type)
+            providers = self.ai_mgr.get_providers()
             return ApiResponse.success(providers)
         except Exception as e:
             return ApiResponse.error(f"获取厂商列表失败: {str(e)}")
@@ -1989,7 +2026,7 @@ class API:
         """
         获取模型列表
         自带缓存机制，极速响应。
-        :param temp_config: 前端表单中的临时配置 {api_type, provider, base_url, api_key}
+        :param temp_config: 前端表单中的临时配置 {provider, base_url, api_key}
         """
         try:
             models = self.ai_mgr.get_models(temp_config)
@@ -2000,18 +2037,28 @@ class API:
     @log_api_call
     def ai_chat(self, message: str, config_data: dict={}):
         """测试对话"""
+        result = self._ai_check_enable_with_config(config_data)
+        if not result['status'] == 'success': return result
         try:
             result = self.ai_mgr.test_chat(message, config_data)
             return ApiResponse.success(result)
         except Exception as e:
             return ApiResponse.error(str(e))
-
+        
+    @log_api_call
+    def cancel_ai_diagnostic(self, session_id: str):
+        """取消 AI 日志分析任务"""
+        ok = self.ai_mgr.cancel_diagnostic_request(session_id)
+        return ApiResponse.success() if ok else ApiResponse.error("取消失败，可能请求已完成或不存在")
+    
     @log_api_call
     def ai_execute_task(self, task_key: str, params: dict):
         """
         执行特定任务 (翻译、日志分析等)
         前端调用示例: ai_execute_task('translation', {content: 'About RimWorld', target_lang: 'Chinese'})
         """
+        result = self.ai_check_enable()
+        if not result['status'] == 'success': return result
         try:
             result = self.ai_mgr.execute_task(task_key, params)
             return ApiResponse.success(result)
@@ -2024,8 +2071,8 @@ class API:
         发起异步批量 AI 任务。
         前端调用此接口后会立即返回 task_id，随后通过 EventBus 监听进度。
         """
-        if not settings.config.ai.enabled:
-            return ApiResponse.error("AI 功能未启用")
+        result = self.ai_check_enable()
+        if not result['status'] == 'success': return result
         if not variables: variables = {}
         # 1. 生成唯一的任务 ID，供前端监听特定频道
         task_event_id = str(uuid.uuid4())
@@ -2037,7 +2084,7 @@ class API:
             try:
                 # 运行写好的批量调度引擎
                 results = loop.run_until_complete(
-                    self.ai_mgr.execute_batch_task_async(task_key, items, variables, task_event_id)
+                    self.ai_mgr.execute_batch_task_async(task_key, items, variables)
                 )
                 # 任务彻底完成后，发送 complete 事件
                 EventBus.emit(f'ai-batch-complete', {
@@ -2113,8 +2160,8 @@ class API:
         处理前端的日志诊断请求，直接接收浓缩后的数据
         payload 结构: { "history": [], "diagnosis_context": {...}, "question": "..." }
         """
-        if not settings.config.ai.enabled:
-            return ApiResponse.error("AI 功能未启用，请前往设置开启。")
+        result = self.ai_check_enable()
+        if not result['status'] == 'success': return result
         source_type = payload.get("log_source_type", "game")
         if source_type == 'app' and not settings.config.debug_mode:
             return ApiResponse.error("软件日志分析仅在 Debug 模式下可用。")
@@ -2151,6 +2198,8 @@ class API:
         """
         直接读取完整日志块并生成全局错误摘要。
         """
+        result = self.ai_check_enable()
+        if not result['status'] == 'success': return result
         filename = payload.get("filename", "")
         source_type = payload.get("log_source_type", "game")
         logger.debug(f"[AI全局扫描] 开始 source={source_type} filename={filename}")

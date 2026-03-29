@@ -188,7 +188,6 @@ export const useAppStore = defineStore('app', () => {
     // --- AI ---
     ai: {
       enabled: false,
-      api_type: 'custom',  // 可选值: 'official' 或 'custom'
       provider: 'openai',
       base_url: '',
       api_key: '',
@@ -1025,10 +1024,10 @@ export const useAppStore = defineStore('app', () => {
     }
   }
   // 获取AI厂商或代理协议列表
-  const getAiProviders = async (api_type = 'official') => {
+  const getAiProviders = async () => {
     if (!window.pywebview) return
     aiState.isLoading = true
-    const res = await window.pywebview.api.ai_get_providers(api_type)
+    const res = await window.pywebview.api.ai_get_providers()
     if (checkResult(res, "获取AI厂商或代理协议列表")) {
       aiState.isLoading = false
       return res.data
@@ -1038,25 +1037,31 @@ export const useAppStore = defineStore('app', () => {
   // 获取AI模型 temp_config: {provider, base_url, api_key}
   const getAiModels = async (temp_config) => {
     if (!window.pywebview) return
-    if (!settings.value.ai.enabled || !temp_config || !temp_config.provider) {
+    if (!temp_config || !temp_config.provider) {
       return
     }
-    const res = await window.pywebview.api.ai_get_models(temp_config)
-    if (checkResult(res, "获取AI模型")) {
+    aiState.isLoading = true
+    try {
+      const res = await window.pywebview.api.ai_get_models(temp_config)
+      if (checkResult(res, "获取AI模型")) {
+        return res.data
+      }
+    } finally {
       aiState.isLoading = false
-      return res.data
     }
   }
   // 与AI聊天
   const chatWithAI = async (prompt, temp_config) => {
     if (!window.pywebview) return
     aiState.isLoading = true
-    const res = await window.pywebview.api.ai_chat(prompt, temp_config)
-    if (checkResult(res, "与AI聊天")) {
+    try {
+      const res = await window.pywebview.api.ai_chat(prompt, temp_config)
+      if (checkResult(res, "与AI聊天")) {
+        return res.data
+      }
+    } finally {
       aiState.isLoading = false
-      return res.data
     }
-    aiState.isLoading = false
   }
   // 使用AI功能
   const useAI = async (task_key, params) => {

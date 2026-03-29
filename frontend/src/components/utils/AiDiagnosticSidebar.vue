@@ -245,13 +245,22 @@
                     placeholder="输入其它要求或直接点击右下角发送分析..." 
                     class="w-full bg-transparent border-none py-3 px-3.5 text-sm text-text-main focus:outline-none resize-none h-14 custom-scrollbar placeholder:text-text-dim/40"></textarea>
           
-          <div class="absolute right-2 bottom-2">
-            <button @click="sendMessage" :disabled="isSendDisabled"
-                    class="p-1.5 rounded-lg transition-all duration-300 flex items-center justify-center"
-                    :class="isSendDisabled ? 'text-text-dim/30 bg-transparent' : 'bg-linear-to-b from-accent-special to-accent-primary text-white hover:shadow-[0_0_15px_rgba(139,92,246,0.5)]'">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+          <div class="absolute right-2 bottom-2 flex items-center gap-2">
+            <button v-if="isThinking" @click="cancelCurrentRequest()" v-tooltip="'中断当前 AI 分析'"
+              class="p-1.5 rounded-lg bg-accent-danger/15 text-accent-danger hover:bg-accent-danger hover:text-white transition-all duration-300 flex items-center justify-center"
+              >
+              <Square class="w-4 h-4 fill-current" />
+            </button>
+            <button v-else @click="sendMessage" :disabled="isSendDisabled"
+              class="p-1.5 rounded-lg transition-all duration-300 flex items-center justify-center"
+              :class="isSendDisabled ? 'text-text-dim/30 bg-transparent' : 'bg-linear-to-b from-accent-special to-accent-primary text-white hover:shadow-[0_0_15px_rgba(139,92,246,0.5)]'"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
             </button>
           </div>
+
         </div>
 
       </div>
@@ -266,10 +275,12 @@ import { useAppStore } from '../../stores/appStore'
 import { useModStore } from '../../stores/modStore'
 import { useRuleStore } from '../../stores/ruleStore'
 import { useConfirmStore } from '../../stores/confirmStore'
+import DOMPurify from 'dompurify'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css' // 引入酷炫的暗黑代码高亮主题
-import { Copy, LoaderCircle } from 'lucide-vue-next'
+import { Copy, LoaderCircle, Square } from 'lucide-vue-next'
+import { checkResult } from '../../utils/tools'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false }, // 控制侧边栏显隐
@@ -293,13 +304,23 @@ const isThinking = ref(false)
 const currentDiagnosisContext = ref(null)
 const consumedAutoStartNonce = ref(null)
 
+const activeSessionId = ref(null)
+const abortedSessionIds = new Set()
 
 const closeSidebar = () => emit('update:modelValue', false)
-const clearChat = () => {
+
+const resetChatState = () => {
   chatHistory.value = []
   userInput.value = ''
   currentDiagnosisContext.value = null
   isThinking.value = false
+  activeSessionId.value = null
+}
+const clearChat = async () => {
+  if (isThinking.value) {
+    await cancelCurrentRequest({ keepBubble: false, silent: true })
+  }
+  resetChatState()
 }
 
 // 初始化 Markdown-it
@@ -316,6 +337,19 @@ const md = new MarkdownIt({
     return `<pre class="hljs p-3 rounded-lg text-xs overflow-x-auto custom-scrollbar my-2 border border-white/5 bg-black/50"><code>${md.utils.escapeHtml(str)}</code></pre>`
   }
 })
+
+const sanitizeRenderedHtml = (html) => DOMPurify.sanitize(html, {
+  USE_PROFILES: { html: true },
+  ADD_TAGS: ['details', 'summary'],
+  ADD_ATTR: ['class', 'target', 'rel']
+})
+
+const sanitizeInlineHtml = (html) => DOMPurify.sanitize(html, {
+  ALLOWED_TAGS: ['code'],
+  ALLOWED_ATTR: ['class']
+})
+
+const escapeHtml = (value) => md.utils.escapeHtml(String(value ?? ''))
 // 统一提取 AI 文本，避免对象内容被模板直接渲染成空 JSON/对象字面量
 const getAssistantText = (content) => {
   if (content == null) return ''
@@ -340,7 +374,8 @@ const shouldShowAssistantLoading = (msg) => {
 const renderMarkdown = (text) => {
   const content = getAssistantText(text)
   // Markdown 处理后，针对普通内联 code 进行一点样式增强
-  return md.render(content).replace(/<code>/g, '<code class="bg-black/30 text-accent-special px-1.5 py-0.5 rounded text-[12px] font-mono border border-white/5">')
+  const rendered = md.render(content).replace(/<code>/g, '<code class="bg-black/30 text-accent-special px-1.5 py-0.5 rounded text-[12px] font-mono border border-white/5">')
+  return sanitizeRenderedHtml(rendered)
 }
 
 // 提供双格式复制逻
@@ -375,10 +410,19 @@ watch(() => `${props.sourceType}:${props.filename}`, (newKey, oldKey) => {
   }
 })
 
-watch([() => props.autoStartRequest?.nonce, () => props.modelValue], async ([nonce, isOpen]) => {
+watch(
+  [
+    () => props.autoStartRequest?.nonce,
+    () => props.modelValue,
+    () => props.tokenInfo?.isLoading,
+    () => !!props.tokenInfo?.condensedData,
+  ],
+  async ([nonce, isOpen, tokenLoading, hasCondensed]) => {
   // 只认 nonce，因为只要 nonce 变了，就算没有 PendingLogs 我们也强制让AI跑起来
   if (!nonce || consumedAutoStartNonce.value === nonce) return
-  if (!isOpen || isThinking.value) return 
+  if (!isOpen || isThinking.value) return
+  const needsAttachment = props.pendingLogs.length > 0
+  if (needsAttachment && (tokenLoading || !hasCondensed)) return
   consumedAutoStartNonce.value = nonce
   clearChat()
   userInput.value = props.autoStartRequest?.question || '请深度分析我提交的日志数据，并给出修复建议。'
@@ -391,12 +435,16 @@ const scrollToBottom = async (force = false) => {
   if (!chatContainer.value) return
   const container = chatContainer.value
   // 如果滚动条距离底部小于 150px，或者被强行触发 (如刚发消息时)，则执行滚动
-  const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150
+  const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50
   if (force || isNearBottom) {
     container.scrollTop = container.scrollHeight
   }
 }
-
+const getMessageTextForTokenEstimate = (m) => {
+  if (!m) return ''
+  if (m.role === 'assistant') return getAssistantText(m.content)
+  return String(m.requestContent ?? m.content ?? '')
+}
 // 会话 Token 粗略估算 (用于 UI 顶部指示器)
 // 中英文混合，1 Token 约等于 2.5 字符
 const sessionTokens = computed(() => {
@@ -408,16 +456,15 @@ const sessionTokens = computed(() => {
   // 2. 对于那些前端刚写入、还没发给后端的最新文字或刚挂载的全局大对象，我们需要用公式粗略补充
   let uncalculatedChars = 0;
   // 计算在 lastAiMsg 之后产生的用户消息长度
-  const indexOfLastAi = chatHistory.value.lastIndexOf(lastAiMsg);
+  const indexOfLastAi = lastAiMsg ? chatHistory.value.lastIndexOf(lastAiMsg) : -1
   const newMessages = chatHistory.value.slice(indexOfLastAi + 1);
   
   newMessages.forEach(m => {
-    uncalculatedChars += (m.content || '').length;
+    uncalculatedChars += getMessageTextForTokenEstimate(m).length
     if (m._hidden_context) {
-      if (!m._hidden_context_len) m._hidden_context_len = JSON.stringify(m._hidden_context).length;
-      uncalculatedChars += m._hidden_context_len;
+      uncalculatedChars += JSON.stringify(m._hidden_context).length
     }
-  });
+  })
 
   // 如果连第一句话都没发（历史还没有 AI 回复），检查当前是否挂载了附件
   if (exactTokens === 0) {
@@ -428,7 +475,6 @@ const sessionTokens = computed(() => {
   } else {
       exactTokens += Math.round(uncalculatedChars / 2.5);
   }
-
   return exactTokens;
 });
 // 核心判断：发送按钮何时置灰
@@ -454,21 +500,21 @@ const formatToolName = (name, argsStr) => {
   
   switch(name) {
     case 'get_log_context':
-      return `读取日志 <code>${formatLineTargets()}</code>`
+      return sanitizeInlineHtml(`读取日志 <code>${escapeHtml(formatLineTargets())}</code>`)
     case 'search_mods':
-      return `搜索已安装模组 <code>${args.keyword || ''}</code>`
+      return sanitizeInlineHtml(`搜索已安装模组 <code>${escapeHtml(args.keyword || '')}</code>`)
     case 'get_active_mod_list':
       return `获取启用模组排序`
     case 'get_mod_info':
-      return `检索模组元数据 <code>${args.package_id || ''}</code>`
+      return sanitizeInlineHtml(`检索模组元数据 <code>${escapeHtml(args.package_id || '')}</code>`)
     case 'get_mod_rules':
-      return `读取模组规则 <code>${args.package_id || ''}</code>`
+      return sanitizeInlineHtml(`读取模组规则 <code>${escapeHtml(args.package_id || '')}</code>`)
     case 'get_mod_user_context':
-      return `读取用户定义信息 <code>${args.package_id || ''}</code>`
+      return sanitizeInlineHtml(`读取用户定义信息 <code>${escapeHtml(args.package_id || '')}</code>`)
     case 'get_group_mods':
-      return `读取分组成员 <code>${args.group_name || ''}</code>`
+      return sanitizeInlineHtml(`读取分组成员 <code>${escapeHtml(args.group_name || '')}</code>`)
     default:
-      return `调用系统工具 <code>${name}</code>`
+      return sanitizeInlineHtml(`调用系统工具 <code>${escapeHtml(name)}</code>`)
   }
 }
 
@@ -496,26 +542,29 @@ const prettyToolResult = (result) => {
 
 // ====== 新增：生命周期监听后端流事件 ======
 const handleStream = (e) => {
-  const { session_id, type, chunk } = e.detail
+  const { session_id, type, chunk } = e.detail || {}
+  if (!session_id || abortedSessionIds.has(session_id)) return
   const msg = chatHistory.value.find(m => m.session_id === session_id)
   if (msg) {
     if (type === 'reasoning') {
-      msg.reasoning = (msg.reasoning || '') + chunk;
+      msg.reasoning = (msg.reasoning || '') + chunk
     } else {
-      // 默认的 content
-      if (typeof msg.content === 'object') msg.content.analysis += chunk
-      else msg.content += chunk
+      if (typeof msg.content === 'object') {
+        msg.content.analysis = (msg.content.analysis || '') + chunk
+      } else {
+        msg.content = String(msg.content || '') + chunk
+      }
     }
     scrollToBottom()
   }
 }
 
 const handleToolCall = (e) => {
-  const { session_id, tool_id, name, arguments: args } = e.detail
+  const { session_id, tool_id, name, arguments: args } = e.detail || {}
+  if (!session_id || abortedSessionIds.has(session_id)) return
   const msg = chatHistory.value.find(m => m.session_id === session_id)
   if (msg) {
     if (!msg.tools) msg.tools = []
-    // 【修改】存入 arguments 以供前端解析展示
     msg.tools.push({
       id: tool_id,
       name,
@@ -531,7 +580,8 @@ const handleToolCall = (e) => {
 }
 
 const handleToolResult = (e) => {
-  const { session_id, tool_id, status, summary, result, duration_ms } = e.detail
+  const { session_id, tool_id, status, summary, result, duration_ms } = e.detail || {}
+  if (!session_id || abortedSessionIds.has(session_id)) return
   const msg = chatHistory.value.find(m => m.session_id === session_id)
   if (msg && msg.tools) {
     const tool = msg.tools.find(t => t.id === tool_id)
@@ -549,13 +599,17 @@ onMounted(() => {
   window.addEventListener('ai-chat-stream', handleStream)
   window.addEventListener('ai-tool-call', handleToolCall)
   window.addEventListener('ai-tool-result', handleToolResult)
+  window.addEventListener('ai-chat-cancelled', handleCancelled)
   document.addEventListener('click', closeToolSelector)
 })
-
 onUnmounted(() => {
+  if (activeSessionId.value && window.pywebview?.api?.cancel_ai_diagnostic) {
+    window.pywebview.api.cancel_ai_diagnostic(activeSessionId.value).catch(() => {})
+  }
   window.removeEventListener('ai-chat-stream', handleStream)
   window.removeEventListener('ai-tool-call', handleToolCall)
   window.removeEventListener('ai-tool-result', handleToolResult)
+  window.removeEventListener('ai-chat-cancelled', handleCancelled)
   document.removeEventListener('click', closeToolSelector)
 })
 
@@ -579,7 +633,9 @@ const sendMessage = async () => {
   const displayQuestionText = questionText === '请深度分析我提交的日志数据，并给出修复建议。' ? '' : questionText
 
   // 1. 生成会话 ID 绑定流
-  const sessionId = `chat_${Date.now()}`
+  const sessionId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  activeSessionId.value = sessionId
+  abortedSessionIds.delete(sessionId)
 
   // 2. 将数据推入本地聊天气泡以供展示
   chatHistory.value.push({ 
@@ -643,19 +699,32 @@ const sendMessage = async () => {
   scrollToBottom()
   try {
     const res = await window.pywebview.api.ai_diagnostic_chat(requestPayload)
-    if (res.status === 'success') {
+    if (abortedSessionIds.has(sessionId)) return
+    if (checkResult(res,'AI请求')) {
+      if (res.data?.cancelled) {
+        if (typeof aiMsg.content === 'object' && !getAssistantText(aiMsg.content)) {
+          aiMsg.content.analysis = '🛑 本次分析已中断。'
+        }
+        return
+      }
       aiMsg.actions = res.data.actions || res.data.solutions || []
       aiMsg.tokenUsage = res.data.token_usage || null
-      if (!aiMsg.content.analysis && res.data.analysis) {
-        aiMsg.content.analysis = res.data.analysis
+      if (typeof aiMsg.content === 'object') {
+        aiMsg.content.analysis = String(res.data.analysis || '')
       }
     } else {
       throw new Error(res.message)
     }
   } catch(e) {
+    if (abortedSessionIds.has(sessionId)) return
     aiMsg.content.analysis += `\n\n⚠️ 分析过程中发生错误: ${e.message}`
   } finally {
-    isThinking.value = false
+    if (activeSessionId.value === sessionId) {
+      activeSessionId.value = null
+    }
+    if (!abortedSessionIds.has(sessionId)) {
+      isThinking.value = false
+    }
     scrollToBottom()
   }
 }
@@ -667,13 +736,21 @@ const availableTools =[
   { id: 'get_mod_info', name: '模组元数据', desc: '读取模组的版本、状态等属性' },
   { id: 'get_mod_rules', name: '排序规则', desc: '核对依赖与不兼容规则' },
   { id: 'get_mod_user_context', name: '用户自定义信息', desc: '读取自定义备注与分组' },
-  { id: 'get_active_mod_list', name: '活动列表', desc: '检查整体加载顺序' }
+  { id: 'get_active_mod_list', name: '活动列表', desc: '检查整体加载顺序' },
+  { id: 'get_group_mods', name: '分组检索', desc: '读取分组成员与相关模组' },
 ]
 // 读取本地缓存，初始化选中的工具
 const showToolSelector = ref(false)
-const enabledTools = ref(
-  JSON.parse(localStorage.getItem('ai_enabled_tools')) || availableTools.map(t => t.id)
-)
+const loadEnabledTools = () => {
+  try {
+    const raw = localStorage.getItem('ai_enabled_tools')
+    const parsed = raw ? JSON.parse(raw) : null
+    return Array.isArray(parsed) ? parsed : availableTools.map(t => t.id)
+  } catch {
+    return availableTools.map(t => t.id)
+  }
+}
+const enabledTools = ref(loadEnabledTools())
 
 // 监听器：用户更改配置后实时存入本地
 watch(enabledTools, (newVal) => {
@@ -685,7 +762,9 @@ const toggleAllTools = (state) => {
   enabledTools.value = state ? availableTools.map(t => t.id) :[]
 }
 const closeToolSelector = (e) => {
-  if (showToolSelector.value && !e.target.closest('.group\\/tools')) {
+  const target = e?.target
+  if (!(target instanceof Element)) return
+  if (showToolSelector.value && !target.closest('.group\\/tools')) {
     showToolSelector.value = false
   }
 }
@@ -761,6 +840,42 @@ const executeAction = async (action) => {
     toast.error(`操作执行失败: ${e.message}`)
   }
 }
+const handleCancelled = (e) => {
+  const { session_id } = e.detail || {}
+  if (!session_id) return
+  abortedSessionIds.add(session_id)
+  if (activeSessionId.value === session_id) {
+    activeSessionId.value = null
+    isThinking.value = false
+  }
+}
+const cancelCurrentRequest = async ({ keepBubble = true, silent = false } = {}) => {
+  const sessionId = activeSessionId.value
+  if (!sessionId) return
+  abortedSessionIds.add(sessionId)
+  activeSessionId.value = null
+  isThinking.value = false
+  const aiMsg = chatHistory.value.find(m => m.session_id === sessionId)
+  if (keepBubble && aiMsg && typeof aiMsg.content === 'object') {
+    const currentText = getAssistantText(aiMsg.content)
+    const tip = '🛑 本次分析已由用户手动中断。'
+    if (!currentText && !aiMsg.reasoning && (!aiMsg.tools || aiMsg.tools.length === 0)) {
+      aiMsg.content.analysis = tip
+    } else if (!currentText.includes(tip)) {
+      aiMsg.content.analysis = `${currentText}\n\n> ${tip}`.trim()
+    }
+  }
+  try {
+    if (window.pywebview?.api?.cancel_ai_diagnostic) {
+      await window.pywebview.api.cancel_ai_diagnostic(sessionId)
+    }
+    if (!silent) toast.info('已请求中断本次 AI 分析')
+  } catch (e) {
+    if (!silent) toast.warning(`已在前端停止等待，但后端取消通知失败: ${e.message || e}`)
+  }
+  scrollToBottom()
+}
+
 </script>
 
 <style scoped>
