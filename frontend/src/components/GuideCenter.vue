@@ -103,7 +103,7 @@ const isGuideCompleted = (guideKey) => {
 const uncompletedGuides = computed(() => allGuides.filter(g => !isGuideCompleted(g.key)))
 const completedGuides = computed(() => allGuides.filter(g => isGuideCompleted(g.key)))
 
-const hasGuides = computed(() => allGuides.length > 0)
+const hasGuides = computed(() => uncompletedGuides.value.length > 0)
 const uncompletedCount = computed(() => uncompletedGuides.value.length)
 
 

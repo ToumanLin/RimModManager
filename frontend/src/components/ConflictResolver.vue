@@ -71,19 +71,19 @@
 
                 <div class="space-y-2 p-3">
                   <div v-for="mod in group.items"
-                    :key="mod.path_hash || mod.path"
+                    :key="getItemKey(mod)"
                     class="flex items-center gap-2 rounded-xl border px-3 py-2 transition-all"
-                    :class="isWinner(group, mod.path)
+                    :class="isWinner(group, mod)
                       ? 'border-accent-success/30 bg-accent-success/8'
                       : 'border-text-main/8 bg-black/16 hover:border-text-main/16 hover:bg-black/22'"
-                    @click="selectVersion(group.key, mod.path)"
+                    @click="selectVersion(group.key, getItemKey(mod))"
                   >
                     <div class="flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-black"
-                      :class="isWinner(group, mod.path)
+                      :class="isWinner(group, mod)
                         ? 'border-accent-success bg-accent-success text-black'
                         : 'border-text-main/20 text-text-dim'"
                     >
-                      <Check v-if="isWinner(group, mod.path)" class="size-3" />
+                      <Check v-if="isWinner(group, mod)" class="size-3" />
                       <X v-else class="size-3" />
                     </div>
 
@@ -104,7 +104,7 @@
                           v{{ mod.version || '?' }}
                         </span>
                         <span
-                          v-if="isWinner(group, mod.path)"
+                          v-if="isWinner(group, mod)"
                           class="rounded-full border border-accent-success/25 bg-accent-success/10 px-2 py-0.5 text-[10px] font-black text-accent-success"
                         >
                           保留
@@ -138,30 +138,30 @@
                         <Folder class="size-3.5" />
                       </button>
 
-                      <div v-if="!isWinner(group, mod.path)" class="flex items-center gap-0.5 rounded-full border border-text-main/10 bg-text-main/5 p-0.5">
+                      <div v-if="!isWinner(group, mod)" class="flex items-center gap-0.5 rounded-full border border-text-main/10 bg-text-main/5 p-0.5">
                         <label class="cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors"
-                          :class="actionMap[mod.path] === 'disable'
+                          :class="actionMap[getItemKey(mod)] === 'disable'
                             ? 'bg-accent-warn text-black'
                             : 'text-text-dim hover:text-accent-warn'"
                           v-tooltip="'保留文件，只把该副本改为禁用状态'"
                           @click.stop
                         >
                           <input class="sr-only" type="radio"
-                            :name="`action-${mod.path_hash || mod.path}`"
-                            :checked="actionMap[mod.path] === 'disable'"
-                            @change="setItemAction(group, mod.path, 'disable')"
+                            :name="`action-${getItemKey(mod)}`"
+                            :checked="actionMap[getItemKey(mod)] === 'disable'"
+                            @change="setItemAction(group, mod, 'disable')"
                           >
                           禁用
                         </label>
                         <label class="cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors"
-                          :class="actionMap[mod.path] === 'delete'
+                          :class="actionMap[getItemKey(mod)] === 'delete'
                             ? 'bg-accent-danger text-white'
                             : 'text-text-dim hover:text-accent-danger'"
                           v-tooltip="'将该副本移到回收站，不再保留文件'"
                           @click.stop
                         >
-                          <input class="sr-only" type="radio" :name="`action-${mod.path_hash || mod.path}`"
-                            :checked="actionMap[mod.path] === 'delete'" @change="setItemAction(group, mod.path, 'delete')"
+                          <input class="sr-only" type="radio" :name="`action-${getItemKey(mod)}`"
+                            :checked="actionMap[getItemKey(mod)] === 'delete'" @change="setItemAction(group, mod, 'delete')"
                           >
                           删除
                         </label>
@@ -377,6 +377,7 @@ const formatTime = (value) => {
 }
 
 const getPathLength = (mod) => String(mod?.path || '').length
+const getItemKey = (mod) => String(mod?.path_hash || mod?.path || '')
 
 const joinSupportedVersions = (mod) => {
   const versions = Array.isArray(mod?.supported_versions) ? mod.supported_versions.filter(Boolean) : []
@@ -449,7 +450,7 @@ const resolvePickConfig = (strategy = 'recommended') => {
 
 const buildGroupKey = (type, group) => {
   const ids = [...(group?.items || [])]
-    .map((item) => item.path_hash || item.path || '')
+    .map((item) => getItemKey(item))
     .sort(compareTextAsc)
   return `${type}:${group?.package_id || 'unknown'}:${ids.join('|')}`
 }
@@ -485,15 +486,26 @@ const rebuildGroups = () => {
     return compareTextAsc(left.package_id, right.package_id)
   })
 
+  const activeGroupKeys = new Set(groups.map((group) => group.key))
+  const activeItemKeys = new Set(groups.flatMap((group) => group.items.map((item) => getItemKey(item)).filter(Boolean)))
+
+  Object.keys(selections).forEach((groupKey) => {
+    if (!activeGroupKeys.has(groupKey)) delete selections[groupKey]
+  })
+  Object.keys(actionMap).forEach((itemKey) => {
+    if (!activeItemKeys.has(itemKey)) delete actionMap[itemKey]
+  })
+
   groups.forEach((group) => {
-    const selectedPath = selections[group.key]
-    const hasSelection = group.items.some((item) => item.path === selectedPath)
+    const selectedItemKey = selections[group.key]
+    const hasSelection = group.items.some((item) => getItemKey(item) === selectedItemKey)
     if (!hasSelection) {
       const winner = pickWinner(group.items, { keepRule: 'recommended' })
-      selections[group.key] = winner?.path || group.items[0]?.path
+      selections[group.key] = getItemKey(winner) || getItemKey(group.items[0])
     }
     group.items.forEach((item) => {
-      if (!actionMap[item.path]) actionMap[item.path] = 'disable'
+      const itemKey = getItemKey(item)
+      if (itemKey && !actionMap[itemKey]) actionMap[itemKey] = 'disable'
     })
   })
 
@@ -519,11 +531,11 @@ const summarizeGroups = (groups) => {
   let disable = 0
   let deleteCount = 0
   groups.forEach((group) => {
-    const keepPath = selections[group.key]
+    const keepKey = selections[group.key]
     group.items.forEach((item) => {
-      if (item.path === keepPath) return
+      if (getItemKey(item) === keepKey) return
       pending += 1
-      if ((actionMap[item.path] || 'disable') === 'delete') deleteCount += 1
+      if ((actionMap[getItemKey(item)] || 'disable') === 'delete') deleteCount += 1
       else disable += 1
     })
   })
@@ -545,11 +557,11 @@ const summary = computed(() => {
     if (group._type === 'hard') result.hardCount += 1
     else result.softCount += 1
 
-    const keepPath = selections[group.key]
+    const keepKey = selections[group.key]
     group.items.forEach((item) => {
-      if (item.path === keepPath) return
+      if (getItemKey(item) === keepKey) return
       result.pendingCount += 1
-      const action = actionMap[item.path] || 'disable'
+      const action = actionMap[getItemKey(item)] || 'disable'
       if (action === 'delete') {
         result.deleteCount += 1
         if (normalizeStore(item.store) === 'workshop') result.workshopDeleteCount += 1
@@ -567,7 +579,7 @@ const countPendingForScope = computed(() => scopedSummary.value.pending)
 const countDisableForScope = computed(() => scopedSummary.value.disable)
 const countDeleteForScope = computed(() => scopedSummary.value.deleteCount)
 
-const isWinner = (group, path) => selections[group.key] === path
+const isWinner = (group, mod) => selections[group.key] === getItemKey(mod)
 
 const getModTooltip = (mod) => {
   return [
@@ -582,14 +594,15 @@ const getModTooltip = (mod) => {
   ].join('\n')
 }
 
-const selectVersion = (groupKey, path) => {
-  selections[groupKey] = path
+const selectVersion = (groupKey, itemKey) => {
+  selections[groupKey] = itemKey
   submitFeedback.value = null
 }
 
-const setItemAction = (group, path, action) => {
-  if (isWinner(group, path)) return
-  actionMap[path] = action
+const setItemAction = (group, mod, action) => {
+  const itemKey = getItemKey(mod)
+  if (!itemKey || isWinner(group, mod)) return
+  actionMap[itemKey] = action
   submitFeedback.value = null
 }
 
@@ -602,9 +615,10 @@ const applyBatchRule = () => {
   scopedGroups.value.forEach((group) => {
     const winner = pickWinner(group.items, resolvePickConfig(batchRule.keepRule))
     if (!winner) return
-    selections[group.key] = winner.path
+    selections[group.key] = getItemKey(winner)
     group.items.forEach((item) => {
-      if (item.path !== winner.path) actionMap[item.path] = batchRule.loserAction
+      const itemKey = getItemKey(item)
+      if (itemKey && itemKey !== getItemKey(winner)) actionMap[itemKey] = batchRule.loserAction
     })
   })
 
@@ -617,9 +631,10 @@ const restoreRecommended = () => {
   localGroups.value.forEach((group) => {
     const winner = pickWinner(group.items, { keepRule: 'recommended' })
     if (!winner) return
-    selections[group.key] = winner.path
+    selections[group.key] = getItemKey(winner)
     group.items.forEach((item) => {
-      if (item.path !== winner.path) actionMap[item.path] = 'disable'
+      const itemKey = getItemKey(item)
+      if (itemKey && itemKey !== getItemKey(winner)) actionMap[itemKey] = 'disable'
     })
   })
   submitFeedback.value = null
@@ -633,9 +648,10 @@ const setLoserActionForScope = (action) => {
   }
 
   scopedGroups.value.forEach((group) => {
-    const keepPath = selections[group.key]
+    const keepKey = selections[group.key]
     group.items.forEach((item) => {
-      if (item.path !== keepPath) actionMap[item.path] = action
+      const itemKey = getItemKey(item)
+      if (itemKey && itemKey !== keepKey) actionMap[itemKey] = action
     })
   })
   submitFeedback.value = null
@@ -644,12 +660,12 @@ const setLoserActionForScope = (action) => {
 const buildOperations = () => {
   const operations = []
   localGroups.value.forEach((group) => {
-    const winner = group.items.find((item) => item.path === selections[group.key]) || group.items[0]
+    const winner = group.items.find((item) => getItemKey(item) === selections[group.key]) || group.items[0]
     if (!winner) return
     group.items.forEach((item) => {
-      if (item.path === winner.path) return
+      if (getItemKey(item) === getItemKey(winner)) return
       operations.push({
-        action: actionMap[item.path] || 'disable',
+        action: actionMap[getItemKey(item)] || 'disable',
         target_path: item.path,
         target_path_hash: item.path_hash,
         keep_id: group.package_id,

@@ -294,7 +294,7 @@
                     <div data-tour="settings-ai-connection" class="p-4 rounded-xl bg-text-main/5 border border-text-main/10 space-y-5">
                       <div class="grid grid-cols-2 gap-3">
                         <!-- 厂商/协议选择 -->
-                        <CommonSelect label="接口协议标准" 
+                        <CommonSelect label="接口协议标准" description="大部分中转站、以及国产模型一般用OpenAI协议即可"
                           v-model="formData.ai.provider" :options="currentAiProviders" @change="handleProviderChange"/>
                         <!-- 模型选择 (带刷新动作) -->
                         <div class="relative flex items-end gap-2">

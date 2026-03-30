@@ -704,16 +704,17 @@ class API:
         """
         results = []
         try:
-            # 开启事务，保证数据库操作的一致性
-            with db.atomic():
-                for op in operations:
-                    action = op.get('action')
-                    path = op.get('target_path')
-                    path_hash = op.get('target_path_hash','')
-                    keep_hash = op.get('keep_path_hash')
-                    if not path: continue
-                    success = False
-                    msg = ""
+            for op in operations:
+                action = op.get('action')
+                path = op.get('target_path')
+                path_hash = str(op.get('target_path_hash') or '').strip()
+                keep_hash = op.get('keep_path_hash')
+                if not path:
+                    continue
+
+                success = False
+                msg = ""
+                try:
                     if action == 'disable':
                         # 1. 执行物理与数据库禁用
                         success, msg = ModDAO.set_mod_disabled_status(path, disable=True)
@@ -721,18 +722,24 @@ class API:
                         if success and keep_hash:
                             ModDAO.add_shadow_path(keep_hash, path)
                     elif action == 'delete':
-                        # 执行物理删除
-                        res = ModDAO.delete_mods_physically(path_hash)
-                        success = res['success_count']>0
-                        msg = res['errors'][0] if res['errors'] else "删除成功"
+                        if not path_hash:
+                            msg = "缺少 target_path_hash，无法删除该副本"
+                        else:
+                            res = ModDAO.delete_mods_physically([path_hash])
+                            success = res['success_count'] > 0
+                            if not success:
+                                msg = res['errors'][0] if res['errors'] else "未找到可删除的模组记录"
                     else:
                         msg = f"不支持的操作类型: {action}"
-                    results.append({
-                        'path': path,
-                        'action': action,
-                        'status': 'success' if success else 'error',
-                        'msg': msg if not success else ''
-                    })
+                except Exception as op_error:
+                    msg = str(op_error)
+
+                results.append({
+                    'path': path,
+                    'action': action,
+                    'status': 'success' if success else 'error',
+                    'msg': msg if not success else ''
+                })
 
             success_count = sum(1 for item in results if item['status'] == 'success')
             error_items = [item for item in results if item['status'] != 'success']
@@ -763,9 +770,13 @@ class API:
         :param paths: 绝对路径列表
         """
         try:
-            res = ModDAO.delete_mods_physically(path_hashes)
-            if res['success_count'] != len(path_hashes):
-                return ApiResponse.warning(f"部分Mod删除失败：{len(path_hashes)-res['success_count']} 项未成功删除", data=res)
+            if isinstance(path_hashes, str):
+                normalized_hashes = [path_hashes.strip()] if path_hashes.strip() else []
+            else:
+                normalized_hashes = [str(item or '').strip() for item in path_hashes if str(item or '').strip()]
+            res = ModDAO.delete_mods_physically(normalized_hashes)
+            if res['success_count'] != len(normalized_hashes):
+                return ApiResponse.warning(f"部分Mod删除失败：{len(normalized_hashes)-res['success_count']} 项未成功删除", data=res)
             if res['errors']:
                 msg = "\n".join(res['errors'])
                 return ApiResponse.error(msg, data=res)
