@@ -94,9 +94,8 @@ def on_main_window_closed():
 def cleanup_update_remnants():
     """清理热更新遗留的 .old 文件"""
     if getattr(sys, 'frozen', False):
-        exe_dir = os.path.dirname(sys.executable)
         # 查找当前目录下所有的 .old 文件
-        for old_file in glob.glob(os.path.join(exe_dir, "*.old")):
+        for old_file in glob.glob(os.path.join(HOME_DIR, "*.old")):
             try:
                 os.remove(old_file)
                 # logger.info(f"Cleaned up old update file: {old_file}")

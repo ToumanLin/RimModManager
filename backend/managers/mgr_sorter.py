@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Dict, Optional, Set, Tuple, Any
 import heapq
 from collections import deque, defaultdict
@@ -34,6 +35,47 @@ class OrderSorter:
         self.context = context  # 环境上下文
         self.effective_rules_cache = {} # 缓存每个 Mod 的生效规则
         self.rule_mgr = RuleManager(context)
+
+    def _tool_mod_exists(self, mod_data: dict) -> Tuple[bool, str]:
+        """检查 Tool Mod 是否仍然物理存在且 About 文件可用。"""
+        mod_path = str(mod_data.get('path') or '').strip()
+        if not mod_path:
+            return False, "缺少本地路径"
+
+        mod_root = Path(mod_path)
+        if not mod_root.exists():
+            return False, f"路径不存在: {mod_path}"
+
+        about_xml = mod_root / 'About' / 'About.xml'
+        about_xml_disabled = mod_root / 'About' / 'About.xml.disabled'
+        if not (about_xml.is_file() or about_xml_disabled.is_file()):
+            return False, "缺少 About.xml / About.xml.disabled"
+
+        return True, ""
+
+    def _tool_mod_matches_game_version(self, mod_data: dict) -> Tuple[bool, str]:
+        """检查 Tool Mod 是否兼容当前环境的游戏版本。"""
+        current_version = str(self.context.game_version or '').strip()[:3]
+        if not current_version:
+            return True, ""
+
+        raw_versions = mod_data.get('supported_versions') or []
+        if isinstance(raw_versions, str):
+            raw_versions = [raw_versions]
+        if not isinstance(raw_versions, list):
+            raw_versions = []
+
+        supported_versions = {
+            str(ver).strip()[:3].lower()
+            for ver in raw_versions
+            if str(ver).strip()
+        }
+
+        # 与前端现有版本告警语义保持一致：未声明 supported_versions 时不视为不兼容。
+        if supported_versions and current_version.lower() not in supported_versions:
+            return False, f"不支持当前游戏版本 {current_version} (支持: {sorted(supported_versions)})"
+
+        return True, ""
     
     def ensure_mods(self, active_ids: List[str], mod_map: Dict[str, dict]) -> Tuple[List[str], List[str]]:
         """
@@ -61,13 +103,28 @@ class OrderSorter:
         
         if settings.config.enable_tool_mods:
             for tool_id in tool_mods:
-                if tool_id in mod_map and tool_id not in active_set:
+                tool_data = mod_map.get(tool_id)
+                if not tool_data:
+                    logger.info(f"Tool Mod 跳过: {tool_id} 未扫描到，或当前环境不可见")
+                    continue
+
+                exists_ok, exists_msg = self._tool_mod_exists(tool_data)
+                if not exists_ok:
+                    logger.info(f"Tool Mod 跳过: {tool_id} -> {exists_msg}")
+                    continue
+
+                version_ok, version_msg = self._tool_mod_matches_game_version(tool_data)
+                if not version_ok:
+                    logger.info(f"Tool Mod 跳过: {tool_id} -> {version_msg}")
+                    continue
+
+                if tool_id not in active_set:
                     active_ids.append(tool_id)
                     active_set.add(tool_id)
                     need_added_ids.append(tool_id)
         
         if need_added_ids:
-            logger.info(f"防呆拦截: 强制补全缺失的核心组件 -> {need_added_ids}")
+            logger.info(f"防呆拦截: 强制补全缺失组件 -> {need_added_ids}")
             
         return active_ids, need_added_ids
 
@@ -488,28 +545,11 @@ class OrderSorter:
         # 如果 A(500) -> B(900)，则 B 不应该跑到 A 前面去，保持拓扑序即可。
         # 如果 A(900) -> B(500)，根据拓扑序 A 必须在 B 前面，此时 A 的权重应被拉低到 500 甚至更低，以便在堆中优先弹出
         effective_weights = group_base_weights.copy()
-        # 简单的传播算法：如果 u -> v，u 应该比 v 早。
+        # 传播算法：如果 u -> v，u 应该比 v 早。
         # 在 Kahn 算法的 PriorityQueue 中，希望早出来的权重小。
         # adj[u] = {v: w} 表示 u -> v，即 u 在前。
         # 如果 effective_weights[v] (后) < effective_weights[u] (前)
         # 通常是 Core(0) -> Mod(500)。
-        
-        # changed = True
-        # while changed:
-        #     changed = False
-        #     for u in list(adj.keys()):
-        #         for v in adj[u]:
-        #             # u -> v 意味着拓扑序中 u 必须在 v 之前加载
-        #             # 传染 A：Top 拉升 (向上看齐)
-        #             # 只有当后置 v 非常急切想要先出场 (< 500)，前置 u 才必须被拉上来
-        #             if effective_weights[v] <= 500 and effective_weights[u] > effective_weights[v]:
-        #                 effective_weights[u] = effective_weights[v]
-        #                 changed = True
-        #             # 传染 B：Bottom 下压 (向下看齐)
-        #             # 只有当前置 u 非常想赖到最后 (>= 500, 如置底是 10000)，后置 v 必须被压制到更后方
-        #             if effective_weights[u] > 500 and effective_weights[v] < effective_weights[u]:
-        #                 effective_weights[v] = effective_weights[u]
-        #                 changed = True
             
         # 对于非循环图，迭代次数等于节点数即可保证完全传播
         for _ in range(len(groups) + 1):
