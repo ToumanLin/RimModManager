@@ -103,7 +103,7 @@ export const useProfileStore = defineStore('profile', () => {
   // 更新环境信息
   const updateProfile = async (profileId, updates) => {
     const res = await window.pywebview.api.profile_update(profileId, updates)
-    if (appStore.checkResult(res, `更新环境 "${updates.name}"`, true)) {
+    if (appStore.checkResult(res, `更新环境 "${profileId}"`, true)) {
       await fetchProfiles()
       if (profileId === currentProfileId.value) {
         switchProfile(profileId)

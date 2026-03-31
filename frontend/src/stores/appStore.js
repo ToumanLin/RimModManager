@@ -572,7 +572,7 @@ export const useAppStore = defineStore('app', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.save_setting(key, value)
-      if (checkResult(res, "保存单项设置")) {
+      if (checkResult(res, "保存单项设置", true)) {
         // 更新本地 store
         settings.value[key] = value
       } 

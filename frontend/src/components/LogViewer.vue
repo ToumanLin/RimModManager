@@ -28,6 +28,7 @@
               <div class="flex items-center gap-4 text-xs font-mono select-none">
                 <!-- 游戏日志，或（软件日志 + Debug模式）才允许使用 AI -->
                 <template v-if="currentTab === 'game' || appStore.settings.debug_mode">
+                  <CommonSwitch class="col-span-1" label="使用辅助工具模组" v-model="enable_tool_mods" mini description="开启后，将在保存或自动排序时自动启用辅助工具模组，提供为软件提供更加详细的游戏日志获取功能。" />
                   <!-- 一键分析 -->
                   <button data-tour="log-viewer-auto-analyze" @click="autoAnalyzeGlobalErrors"
                           class="px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all border bg-accent-danger/10 border-accent-danger/30 text-accent-danger hover:bg-accent-danger hover:text-white shadow-[0_0_10px_rgba(239,68,68,0.1)]">
@@ -123,6 +124,7 @@ import { useToast } from 'vue-toastification'
 import UnifiedLogPanel from './utils/UnifiedLogPanel.vue';
 import AiDiagnosticSidebar from './utils/AiDiagnosticSidebar.vue'
 import { checkResult } from '../utils/tools';
+import CommonSwitch from './common/input/CommonSwitch.vue';
 
 
 const appStore = useAppStore()
@@ -150,6 +152,15 @@ const tokenInfo = ref({
   limit: 32000,
   isOverLimit: false,
   condensedData: null
+})
+
+const enable_tool_mods = computed({
+  get() {
+    return appStore.settings.enable_tool_mods ?? true
+  },
+  set(val) {
+    appStore.saveSetting('enable_tool_mods', val)
+  }
 })
 
 const createEmptyTokenInfo = () => ({
