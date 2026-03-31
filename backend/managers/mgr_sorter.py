@@ -21,6 +21,21 @@ class AtomicGroup:
         return f"<AtomicGroup chain={self.is_chain} ids={self.mod_ids}>"
     
 class OrderSorter:
+    # 自动排序策略说明：
+    # 1. 名称和描述是直接给用户看的，要尽量说“会排成什么样”，而不是说算法名词。
+    # 2. 键名会写入配置文件，所以也尽量保持语义清晰，避免以后看到值却不知道代表什么。
+    SORT_STRATEGIES = {
+        "classic_sort_logic": {
+            "label": "经典自动排序（旧版）",
+            "description": "旧版本的自动排序习惯。对置顶/置底、依赖链和联锁组的牵引更保守，通常更稳定、更接近传统手工整理结果。",
+        }, 
+        "edge_enhanced_sort_logic": {
+            "label": "两端强化排序（实验版）",
+            "description": "更强调置顶/置底的整体牵引。只要模组或联锁组带有明显的置顶/置底倾向，相关模组会更积极地被推向前后两端，结果通常更强烈。",
+        },
+    }
+    DEFAULT_SORT_STRATEGY = "classic_sort_logic"
+
     # 定义规则权重：权重越高越难被打破
     # 级差设置大一些，防止多条低级规则累积压倒高级规则
     # 新版已经采用动态权重，这里保留旧版的权重定义，供参考
@@ -372,11 +387,169 @@ class OrderSorter:
 
         return warnings
 
-    def sort(self, active_ids: List[str]):
+    def _propagate_weights_classic_sort_logic(self, adj: Dict[int, Dict[int, int]], group_base_weights: Dict[int, int]) -> Dict[int, int]:
+        """
+        经典兼容排序（旧版）的权重传播：
+        如果 A 必须在 B 前，而 B 自身权重更靠前，
+        就把 A 拉到和 B 一样靠前，避免 A 显得“过重”。
+        """
+        effective_weights = group_base_weights.copy()
+        changed = True
+        while changed:
+            changed = False
+            for u in adj:
+                for v in adj[u]:
+                    if effective_weights[v] < effective_weights[u]:
+                        effective_weights[u] = effective_weights[v]
+                        changed = True
+        return effective_weights
+
+    def _get_tail_sizes_edge_enhanced_sort_logic(self, adj: Dict[int, Dict[int, int]], group_ids: List[int]) -> Dict[int, int]:
+        """
+        计算每个节点能向后覆盖多长的依赖尾巴。
+        注意这只是“节点自身”的局部尾长。
+        后续实验版真正用于比较的，是“所属置底锚点”的尾长，它会再沿链向后传播。
+        """
+        tail_size_cache = {}
+
+        def get_tail_size(start_node_id):
+            if start_node_id in tail_size_cache:
+                return tail_size_cache[start_node_id]
+            q = deque([start_node_id])
+            visited = {start_node_id}
+            count = 0
+            while q:
+                curr_id = q.popleft()
+                count += 1
+                for neighbor_id in adj.get(curr_id, []):
+                    if neighbor_id not in visited:
+                        visited.add(neighbor_id)
+                        q.append(neighbor_id)
+            tail_size_cache[start_node_id] = count
+            return count
+
+        return {gid: get_tail_size(gid) for gid in group_ids}
+
+    def _get_head_sizes_edge_enhanced_sort_logic(self, adj: Dict[int, Dict[int, int]], group_ids: List[int]) -> Dict[int, int]:
+        """
+        计算每个节点向前能覆盖多长的依赖头部。
+        这里的“头”指所有必须排在它前面的前驱链。
+        和尾长一样，这里先算节点自身的局部头长，后续再把置顶锚点的头长沿链向前传播。
+        """
+        reverse_adj = defaultdict(list)
+        for u, neighbors in adj.items():
+            for v in neighbors:
+                reverse_adj[v].append(u)
+
+        head_size_cache = {}
+
+        def get_head_size(start_node_id):
+            if start_node_id in head_size_cache:
+                return head_size_cache[start_node_id]
+            q = deque([start_node_id])
+            visited = {start_node_id}
+            count = 0
+            while q:
+                curr_id = q.popleft()
+                count += 1
+                for prev_id in reverse_adj.get(curr_id, []):
+                    if prev_id not in visited:
+                        visited.add(prev_id)
+                        q.append(prev_id)
+            head_size_cache[start_node_id] = count
+            return count
+
+        return {gid: get_head_size(gid) for gid in group_ids}
+
+    def _propagate_weights_edge_enhanced_sort_logic(self, adj: Dict[int, Dict[int, int]], group_base_weights: Dict[int, int], all_head_sizes: Dict[int, int], all_tail_sizes: Dict[int, int], groups_count: int) -> Tuple[Dict[int, int], Dict[int, int], Dict[int, int]]:
+        """
+        两端强化排序（实验版）的真正双向传播：
+        1. 置顶锚点会把自己的“头长”沿依赖链向前传播，也就是把它的前驱链整体顶到前面。
+        2. 置底锚点会把自己的“尾长”沿依赖链向后传播，也就是把依赖它的后继链整体压到底部。
+
+        真正传播的不是普通权重，而是“所属极值链的规模”：
+        - 置顶链比较头长，头更短的更靠顶
+        - 置底链比较尾长，尾更短的更靠底
+
+        返回值：
+        - effective_weights: 实际入堆使用的主权重
+        - propagated_top_head_sizes: 每个节点所属置顶链的头长
+        - propagated_bottom_tail_sizes: 每个节点所属置底链的尾长
+        """
+        propagated_top_head_sizes = {}
+        propagated_top_distances = {}
+        propagated_bottom_tail_sizes = {}
+        propagated_bottom_distances = {}
+
+        for gid, base_weight in group_base_weights.items():
+            if base_weight <= 0:
+                propagated_top_head_sizes[gid] = all_head_sizes.get(gid, 1)
+                propagated_top_distances[gid] = 0
+            elif base_weight >= 10000:
+                propagated_bottom_tail_sizes[gid] = all_tail_sizes.get(gid, 1)
+                propagated_bottom_distances[gid] = 0
+
+        for _ in range(groups_count + 1):
+            changed = False
+            for u, neighbors in adj.items():
+                for v in neighbors:
+                    # 置顶链沿反方向传播：v 被置顶，则排在它前面的 u 也应该被一起顶上去。
+                    if v in propagated_top_head_sizes:
+                        candidate_head_size = propagated_top_head_sizes[v]
+                        candidate_distance = propagated_top_distances[v] + 1
+                        current_head_size = propagated_top_head_sizes.get(u)
+                        current_distance = propagated_top_distances.get(u, 10**9)
+                        if current_head_size is None or candidate_head_size < current_head_size or (candidate_head_size == current_head_size and candidate_distance < current_distance):
+                            propagated_top_head_sizes[u] = candidate_head_size
+                            propagated_top_distances[u] = candidate_distance
+                            changed = True
+
+                    # 置底链沿正方向传播：u 被置底，则依赖它的 v 也应该被一起压下去。
+                    if u in propagated_bottom_tail_sizes:
+                        candidate_tail_size = propagated_bottom_tail_sizes[u]
+                        candidate_distance = propagated_bottom_distances[u] + 1
+                        current_tail_size = propagated_bottom_tail_sizes.get(v)
+                        current_distance = propagated_bottom_distances.get(v, 10**9)
+                        if current_tail_size is None or candidate_tail_size > current_tail_size or (candidate_tail_size == current_tail_size and candidate_distance < current_distance):
+                            propagated_bottom_tail_sizes[v] = candidate_tail_size
+                            propagated_bottom_distances[v] = candidate_distance
+                            changed = True
+            if not changed:
+                break
+
+        effective_weights = {}
+        for gid, base_weight in group_base_weights.items():
+            in_top_chain = gid in propagated_top_head_sizes
+            in_bottom_chain = gid in propagated_bottom_tail_sizes
+
+            if in_top_chain and not in_bottom_chain:
+                effective_weights[gid] = 0
+            elif in_bottom_chain and not in_top_chain:
+                effective_weights[gid] = 10000
+            elif in_top_chain and in_bottom_chain:
+                # 同时受两端牵引时，先保留节点自身的绝对语义；
+                # 普通节点则看它离哪一端更近，距离相同就回退到基础权重。
+                if base_weight <= 0 or base_weight >= 10000:
+                    effective_weights[gid] = base_weight
+                elif propagated_top_distances[gid] < propagated_bottom_distances[gid]:
+                    effective_weights[gid] = 0
+                elif propagated_bottom_distances[gid] < propagated_top_distances[gid]:
+                    effective_weights[gid] = 10000
+                else:
+                    effective_weights[gid] = base_weight
+            else:
+                effective_weights[gid] = base_weight
+
+        return effective_weights, propagated_top_head_sizes, propagated_bottom_tail_sizes
+
+    def sort(self, active_ids: List[str], strategy: str | None = None):
         """
         最终排序：原子组 -> 权重修正 -> 依赖构图 -> 权重传播 -> 拓扑排序 (带名称稳定性)
         """
-        logger.info(f"Starting sort for {len(active_ids)} mods...")
+        strategy = str(strategy or getattr(settings.config, "auto_sort_strategy", self.DEFAULT_SORT_STRATEGY) or self.DEFAULT_SORT_STRATEGY).strip()
+        if strategy not in self.SORT_STRATEGIES:
+            strategy = self.DEFAULT_SORT_STRATEGY
+        logger.info(f"Starting sort for {len(active_ids)} mods with strategy={strategy}...")
         all_mods_data = ModDAO.get_profile_mods(self.context)
         mod_map = {m['package_id'].lower(): m for m in all_mods_data}
         # 防呆：注入官方核心模组
@@ -448,10 +621,14 @@ class OrderSorter:
         groups_by_id = {id(g): g for g in groups}
 
         # 2. 计算节点自身权重 (Weight Propagation base)
+        # 这一段属于共用外壳：遍历组、取显示名、读取规则缓存。
+        # 真正的策略差异只保留在少量分支里。
         group_base_weights = {}
         group_sort_keys = {}  # 存储 (Name, PackageID) 用于稳定排序
         for g in groups:
             weights = []
+            is_top = False
+            is_bottom = False
             # 获取组内第一个 Mod 的信息作为该组的“代表名称”
             first_mod_id = g.mod_ids[0]
             first_mod_data = mod_map.get(first_mod_id, {})
@@ -480,29 +657,35 @@ class OrderSorter:
                 # 获取该 Mod 生效的所有规则
                 effective_rules = self.effective_rules_cache.get(mid, {})
                 weight_info = effective_rules.get("weight_info", {})
+                if not isinstance(weight_info, dict): weight_info = {}
+                w = weight_info.get("final_weight")
                 # 纯粹的算术应用，完全不关心业务逻辑
-                w = weight_info.get("base_weight", 500) + weight_info.get("weight_shift", 0)
+                if w is None: w = weight_info.get("base_weight", 500) + weight_info.get("weight_shift", 0)
                 # 处理决定性的绝对位置
                 abs_type = weight_info.get("absolute_type")
-                if abs_type == "top": w = 0; is_top = True  # 标记组内有置顶成员
-                elif abs_type == "bottom": w = 10000; is_bottom = True  # 标记组内有置底成员
-                weights.append(w)
-                
-            # # 一个原子组如果有多个 Mod 联锁，取最小的权重作为整个组的启动权重
-            # group_base_weights[id(g)] = min(weights) if weights else 500
-            # 修正：更精细地计算原子组的最终基础权重
-            if not weights:
-                group_base_weights[id(g)] = 500
-            elif is_top:
-                # 只要有一个成员要置顶，整个组就必须置顶
-                group_base_weights[id(g)] = 0
-            elif is_bottom:
-                # 在没有置顶成员的前提下，只要有一个成员要置底，整个组就置底
-                group_base_weights[id(g)] = 10000
+                if abs_type == "top": is_top = True  # 标记组内有置顶成员
+                elif abs_type == "bottom": is_bottom = True  # 标记组内有置底成员
+                weights.append(int(w))
+
+            # 这里只保留策略真正不同的“组基础权重判定”。
+            if strategy == "classic_sort_logic":
+                # 旧版只取组内最靠前的一个成员作为整组权重，语义更保守。
+                group_base_weights[id(g)] = min(weights) if weights else 500
             else:
-                # 如果组内都是普通模组，取最小权重，满足最靠前的约束
-                group_base_weights[id(g)] = min(weights)
-            
+                # 实验版更强调“向两端移动”的整体感：
+                # 只要组里有置顶 / 置底成员，就尽量让整组一起靠边。
+                if not weights:
+                    group_base_weights[id(g)] = 500
+                elif is_top:
+                    # 只要有一个成员要置顶，整个组就必须置顶
+                    group_base_weights[id(g)] = 0
+                elif is_bottom:
+                    # 在没有置顶成员的前提下，只要有一个成员要置底，整个组就置底
+                    group_base_weights[id(g)] = 10000
+                else:
+                    # 如果组内都是普通模组，取最小权重，满足最靠前的约束
+                    group_base_weights[id(g)] = min(weights)
+
         # 3. 构建加权依赖图
         adj, edge_details = self._build_weighted_graph(groups, mod_map, mod_to_group)
         # 4. 核心步骤：消解循环
@@ -519,92 +702,66 @@ class OrderSorter:
             if gid not in in_degree:
                 in_degree[gid] = 0
 
-        # [新增] 5.5 预计算所有节点的“依赖尾巴大小”
-        # 这是一个全局的、结构性的指标
-        tail_size_cache = {}
-        def get_tail_size(start_node_id):
-            if start_node_id in tail_size_cache:
-                return tail_size_cache[start_node_id]
-            q = deque([start_node_id])
-            visited = {start_node_id}
-            count = 0
-            while q:
-                curr_id = q.popleft()
-                count += 1
-                for neighbor_id in adj.get(curr_id, []):
-                    if neighbor_id not in visited:
-                        visited.add(neighbor_id)
-                        q.append(neighbor_id)
-            tail_size_cache[start_node_id] = count
-            return count
-        # 为所有节点计算尾巴大小
-        all_tail_sizes = {gid: get_tail_size(gid) for gid in group_ids}
-        
-        # 6. 双向权重传播 (Bidirectional Weight Propagation)
-        # 注意：这里的权重是为了让“基础权重小(应当排在前面)”的节点，能够拉低其依赖项的权重
-        # 如果 A(500) -> B(900)，则 B 不应该跑到 A 前面去，保持拓扑序即可。
-        # 如果 A(900) -> B(500)，根据拓扑序 A 必须在 B 前面，此时 A 的权重应被拉低到 500 甚至更低，以便在堆中优先弹出
-        effective_weights = group_base_weights.copy()
-        # 传播算法：如果 u -> v，u 应该比 v 早。
-        # 在 Kahn 算法的 PriorityQueue 中，希望早出来的权重小。
-        # adj[u] = {v: w} 表示 u -> v，即 u 在前。
-        # 如果 effective_weights[v] (后) < effective_weights[u] (前)
-        # 通常是 Core(0) -> Mod(500)。
-            
-        # 对于非循环图，迭代次数等于节点数即可保证完全传播
-        for _ in range(len(groups) + 1):
-            changed = False
-            # 遍历所有边 (u -> v)
-            for u, neighbors in adj.items():
-                for v in neighbors:
-                    # 规则1: 前者(u)的“推后”意愿会影响后者(v)
-                    if effective_weights[v] < effective_weights[u]:
-                        effective_weights[v] = effective_weights[u]
-                        changed = True
-                    
-                    # 规则2: 后者(v)的“提前”意愿会影响前者(u)
-                    if effective_weights[u] > effective_weights[v]:
-                        effective_weights[u] = effective_weights[v]
-                        changed = True
-            if not changed:
-                break
+        # 6. 预计算实验版的头/尾长度指标
+        all_tail_sizes = {}
+        all_head_sizes = {}
+        if strategy == "edge_enhanced_sort_logic":
+            all_tail_sizes = self._get_tail_sizes_edge_enhanced_sort_logic(adj, group_ids)
+            all_head_sizes = self._get_head_sizes_edge_enhanced_sort_logic(adj, group_ids)
 
-        # 7. Kahn算法拓扑排序 (带优先级堆和新的极值对比局规则)
-        queue = []
-        for gid in group_ids:
-            if in_degree[gid] == 0:
-                # 推入堆的元组结构：
-                # (有效权重, 排序名称, 唯一ID, 内存地址)
-                # Python 对元组比较是按顺序逐个比较的
-                s_name, s_id = group_sort_keys[gid]
-                w = effective_weights[gid]         # 最终权重
-                base_w = group_base_weights[gid]   # 原始权重
-                # 3. 依赖尾巴大小极值对比指标 (越大越靠前)
-                tail_size = all_tail_sizes.get(gid, 1)
-                tail_breaker = -tail_size 
-                # 元组结构：(最终权重, 原始权重, 尾巴极值对比指标, 名称, ID, GID)
-                # 注意：只有在权重为0或10000时，这个对比指标才真正有意义。为了代码简洁，我们对所有节点都计算它。
-                heapq.heappush(queue, (w, base_w, tail_breaker, s_name, s_id, gid))
+        # 7. 权重传播（这里才调用两个策略核心方法）
+        if strategy == "classic_sort_logic":
+            effective_weights = self._propagate_weights_classic_sort_logic(adj, group_base_weights)
+            propagated_top_head_sizes = {}
+            propagated_bottom_tail_sizes = {}
+        else:
+            effective_weights, propagated_top_head_sizes, propagated_bottom_tail_sizes = self._propagate_weights_edge_enhanced_sort_logic(adj, group_base_weights, all_head_sizes, all_tail_sizes, len(groups))
 
+        # 8. Kahn算法拓扑排序
+        # 这里仍然是共用外壳，只在入堆比较键上保留策略差异。
         sorted_groups = []
+        queue = []
+        work_in_degree = in_degree.copy()
+        for gid in group_ids:
+            if work_in_degree[gid] == 0:
+                s_name, s_id = group_sort_keys[gid]
+                if strategy == "classic_sort_logic":
+                    heapq.heappush(queue, (effective_weights[gid], s_name, s_id, gid))
+                else:
+                    if effective_weights[gid] <= 0:
+                        # 置顶链按“所属置顶锚点的头长”比较：头越短，整条链越靠顶。
+                        top_head_breaker = propagated_top_head_sizes.get(gid, all_head_sizes.get(gid, 1))
+                        heapq.heappush(queue, (effective_weights[gid], top_head_breaker, s_name, s_id, gid))
+                    elif effective_weights[gid] >= 10000:
+                        # 置底链按“所属置底锚点的尾长”比较：尾越短，整条链越靠底。
+                        bottom_tail_breaker = -propagated_bottom_tail_sizes.get(gid, all_tail_sizes.get(gid, 1))
+                        heapq.heappush(queue, (effective_weights[gid], bottom_tail_breaker, s_name, s_id, gid))
+                    else:
+                        heapq.heappush(queue, (effective_weights[gid], group_base_weights[gid], s_name, s_id, gid))
+
         while queue:
-            # 弹出时解包
-            w, base_w, tail_breaker, s_name, s_id, gid = heapq.heappop(queue)
-            if gid not in groups_by_id: continue # 安全检查
+            gid = heapq.heappop(queue)[-1]
+            if gid not in groups_by_id: continue
             g = groups_by_id[gid]
             sorted_groups.append(g)
             if gid in adj:
                 for neighbor in adj[gid]:
-                    in_degree[neighbor] -= 1
-                    if in_degree[neighbor] == 0:
+                    work_in_degree[neighbor] -= 1
+                    if work_in_degree[neighbor] == 0:
                         n_s_name, n_s_id = group_sort_keys[neighbor]
-                        n_w = effective_weights[neighbor]
-                        n_base_w = group_base_weights[neighbor]
-                        n_tail_size = all_tail_sizes.get(neighbor, 1)
-                        n_tail_breaker = -n_tail_size
-                        heapq.heappush(queue, (n_w, n_base_w, n_tail_breaker, n_s_name, n_s_id, neighbor))
+                        if strategy == "classic_sort_logic":
+                            heapq.heappush(queue, (effective_weights[neighbor], n_s_name, n_s_id, neighbor))
+                        else:
+                            if effective_weights[neighbor] <= 0:
+                                n_top_head_breaker = propagated_top_head_sizes.get(neighbor, all_head_sizes.get(neighbor, 1))
+                                heapq.heappush(queue, (effective_weights[neighbor], n_top_head_breaker, n_s_name, n_s_id, neighbor))
+                            elif effective_weights[neighbor] >= 10000:
+                                n_bottom_tail_breaker = -propagated_bottom_tail_sizes.get(neighbor, all_tail_sizes.get(neighbor, 1))
+                                heapq.heappush(queue, (effective_weights[neighbor], n_bottom_tail_breaker, n_s_name, n_s_id, neighbor))
+                            else:
+                                heapq.heappush(queue, (effective_weights[neighbor], group_base_weights[neighbor], n_s_name, n_s_id, neighbor))
 
-        # 8. 兜底检查（虽然已break_cycles，但为了绝对稳健）
+        # 10. 兜底检查（虽然已break_cycles，但为了绝对稳健）
         if len(sorted_groups) < len(groups):
             # 理论上不会进这里，除非 break_cycles 逻辑有漏网之鱼
             sorted_group_ids = {id(g) for g in sorted_groups}
@@ -618,20 +775,21 @@ class OrderSorter:
                 "affected_ids": [mid for rg in remaining_groups for mid in rg.mod_ids]
             })
 
-        # 9. 输出结果
+        # 11. 输出结果
         final_list = []
         interlock_auto_activated  = []
         for g in sorted_groups:
             final_list.extend(g.mod_ids)
             interlock_auto_activated .extend(g.auto_activated)
         
-        # 10. 合并自动激活的依赖项，形成最终的自动激活列表
+        # 12. 合并自动激活的依赖项，形成最终的自动激活列表
         all_auto_activated = list(set(interlock_auto_activated + auto_activated_deps))
 
         return {
             "sorted_ids": final_list,
             "auto_activated": all_auto_activated,
-            "warnings": cycle_warnings # 包含冲突消解的日志
+            "warnings": cycle_warnings, # 包含冲突消解的日志
+            "strategy": strategy,
         }
     
 
@@ -718,7 +876,7 @@ class OrderSorter:
                 comp_befores = [r['target_id'] for r in comp_rules.get('load_before', [])]
                 if tid_l in comp_befores: min_idx = max(min_idx, i + 1)
             # ==========================================
-            # E. 结合权重的精准落位 (附带平级决胜机制)
+            # E. 结合权重的精准落位 (附带平级对比机制)
             # ==========================================
             insert_pos = min_idx
             if min_idx > max_idx:
@@ -745,7 +903,7 @@ class OrderSorter:
                             inserted = True
                             break
                         elif comp_w == weight:
-                            # [核心修复 2] 权重相同（都是500），引入字母顺序作为决胜局 (Tie-breaker)
+                            # [核心修复 2] 权重相同（都是500），引入字母顺序作为对比 (Tie-breaker)
                             # 这样新模组就能自然地按照字母顺序融入旧模组列表中，而不会一味沉底
                             if comp_id > tid_l:
                                 insert_pos = i

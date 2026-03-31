@@ -82,7 +82,7 @@
                   <!-- 自动排序按钮 -->
                   <button data-tour="autosort-button" class="col-span-1 py-1 rounded-lg text-sm font-bold uppercase tracking-wider bg-accent-tip/80 text-black hover:bg-accent-tip shadow-lg shadow-accent-primary/10
                           flex items-center justify-center gap-1 transition-all duration-300 relative overflow-hidden"
-                          @click="modStore.autoSortMods()"
+                          @click="modStore.autoSortMods()" v-tooltip="'根据规则设定自动排序当前启用的所有模组，如果排序效果不如旧版理想，可在设置中切换回旧版排序逻辑。'"
                   >
                     <span >自动排序</span>
                   </button>
