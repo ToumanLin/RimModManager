@@ -1,8 +1,7 @@
 # backend/database/dao_ext.py
 from playhouse.shortcuts import model_to_dict
-from peewee import JOIN, fn
+from peewee import fn
 from backend.database.models_ext import WorkshopMeta, ModReplacement
-from backend.utils.logger import logger
 
 class ExtDAO:
     @staticmethod

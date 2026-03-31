@@ -1,5 +1,4 @@
 # backend/managers/mgr_steam.py
-from datetime import datetime
 import os
 import re
 import sys
@@ -11,10 +10,9 @@ import time
 import shutil
 import importlib.util
 from dateutil import parser
-from typing import Optional, cast
+from typing import cast
 from json_repair import repair_json
 from pathlib import Path
-import requests
 
 # --- 模块测试准备 ---
 if __name__ == "__main__":

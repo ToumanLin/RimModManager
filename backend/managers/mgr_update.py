@@ -14,7 +14,7 @@ from backend._version import __version__
 from backend.utils.lanzou_parser import LanzouParser
 from backend.utils.logger import logger
 from backend.settings import settings, UPDATE_DIR
-from backend.managers.mgr_download import DownloadManager, TaskStatus, DownloadTask
+from backend.managers.mgr_download import DownloadManager, DownloadTask
 from backend.utils.event_bus import EventBus
 
 # 确保缓存目录存在

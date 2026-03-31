@@ -5,7 +5,6 @@ from playhouse.migrate import SqliteMigrator, migrate
 from peewee import BigIntegerField, Model, CharField, SqliteDatabase, TextField, Field
 from backend.settings import DATA_DIR
 from backend.utils.logger import logger
-from backend.utils.tools import current_ms
 
 # 建立独立的外部数据缓存库
 ext_db = SqliteDatabase(None)

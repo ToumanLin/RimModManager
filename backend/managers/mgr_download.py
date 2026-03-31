@@ -15,7 +15,6 @@ from urllib.parse import urlparse, unquote
 
 from backend.utils.logger import logger
 from backend.utils.event_bus import EventBus
-from backend.settings import settings
 
 class TaskStatus(Enum):
     PENDING = "pending"
