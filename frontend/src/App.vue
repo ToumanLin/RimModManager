@@ -164,7 +164,7 @@
     <ListDiffView
       :list-a="modStore.activeIds"
       title-a="当前启用"
-      :list-b="orderStore.backupIds || []"
+      :list-b="orderStore.backupDisplayIds || []"
       :title-b="currentBackupDisplayTitle"
       :name-map-a="modStore.nameMap"
       :name-map-b="orderStore.backupNameMap"

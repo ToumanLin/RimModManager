@@ -30,7 +30,7 @@ class OrderSorter:
             "description": "旧版本的自动排序习惯。对置顶/置底、依赖链和联锁组的牵引更保守，通常更稳定、更接近传统手工整理结果。",
         }, 
         "edge_enhanced_sort_logic": {
-            "label": "两端强化排序（实验版）",
+            "label": "两端强化排序（新版）",
             "description": "更强调置顶/置底的整体牵引。只要模组或联锁组带有明显的置顶/置底倾向，相关模组会更积极地被推向前后两端，结果通常更强烈。",
         },
     }
@@ -408,7 +408,7 @@ class OrderSorter:
         """
         计算每个节点能向后覆盖多长的依赖尾巴。
         注意这只是“节点自身”的局部尾长。
-        后续实验版真正用于比较的，是“所属置底锚点”的尾长，它会再沿链向后传播。
+        后续新版真正用于比较的，是“所属置底锚点”的尾长，它会再沿链向后传播。
         """
         tail_size_cache = {}
 
@@ -463,7 +463,7 @@ class OrderSorter:
 
     def _propagate_weights_edge_enhanced_sort_logic(self, adj: Dict[int, Dict[int, int]], group_base_weights: Dict[int, int], all_head_sizes: Dict[int, int], all_tail_sizes: Dict[int, int], groups_count: int) -> Tuple[Dict[int, int], Dict[int, int], Dict[int, int]]:
         """
-        两端强化排序（实验版）的真正双向传播：
+        两端强化排序（新版）的真正双向传播：
         1. 置顶锚点会把自己的“头长”沿依赖链向前传播，也就是把它的前驱链整体顶到前面。
         2. 置底锚点会把自己的“尾长”沿依赖链向后传播，也就是把依赖它的后继链整体压到底部。
 
@@ -672,7 +672,7 @@ class OrderSorter:
                 # 旧版只取组内最靠前的一个成员作为整组权重，语义更保守。
                 group_base_weights[id(g)] = min(weights) if weights else 500
             else:
-                # 实验版更强调“向两端移动”的整体感：
+                # 新版更强调“向两端移动”的整体感：
                 # 只要组里有置顶 / 置底成员，就尽量让整组一起靠边。
                 if not weights:
                     group_base_weights[id(g)] = 500
@@ -702,7 +702,7 @@ class OrderSorter:
             if gid not in in_degree:
                 in_degree[gid] = 0
 
-        # 6. 预计算实验版的头/尾长度指标
+        # 6. 预计算新版的头/尾长度指标
         all_tail_sizes = {}
         all_head_sizes = {}
         if strategy == "edge_enhanced_sort_logic":

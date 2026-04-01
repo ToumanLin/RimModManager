@@ -352,7 +352,7 @@ const searchHelpText = computed(() => {
 // 提取缺失模组列表
 const missingModIds = computed(() => {
   const missingModIdsByPath = modStore.getIssusTargetIds(props.modelValue, ISSUE_TYPE.ERROR_MISSING_FILE)
-  const missingModIdsByOrder = props.modelValue.filter(package_id => !modStore.allModsMap.has(package_id.toLowerCase()))
+  const missingModIdsByOrder = props.modelValue.filter(package_id => !modStore.hasRealModById(package_id))
   return [...missingModIdsByPath, ...missingModIdsByOrder]  
 })
 // 提取完全缺失的依赖项列表

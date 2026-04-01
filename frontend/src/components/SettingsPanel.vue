@@ -193,8 +193,8 @@
                     <CommonSwitch class="col-span-1" label="检查语言支持" v-model="formData.check_language_support" description="开启后，将会在 Mod 问题提示增加“语言支持”警告，提示 Mod 是否支持当前语言。" />
                     <CommonSwitch class="col-span-1" label="显示共存冲突提示" v-model="formData.show_coexistence_message" description="关闭后，将不会显示共存Mod的冲突提示信息。" />
                     <CommonSelect class="col-span-1" label="自动排序策略" v-model="formData.auto_sort_strategy" showBottom
-                      description="旧版更保守、更接近传统手工整理结果，但对带有置顶/置底倾向的模组及其关联链的处理效果较差；实验版会更积极地把带有置顶/置底倾向的模组及其关联链推向列表两端。"
-                      :options="[{label:'经典自动排序（旧版）', value:'classic_sort_logic'},{label:'两端强化排序（实验版）', value:'edge_enhanced_sort_logic'}]" />
+                      description="旧版更保守、更接近传统手工整理结果，但对带有置顶/置底倾向的模组及其关联链的处理效果较差；新版会更积极地把带有置顶/置底倾向的模组及其关联链推向列表两端。"
+                      :options="[{label:'经典自动排序（旧版）', value:'classic_sort_logic'},{label:'两端强化排序（新版）', value:'edge_enhanced_sort_logic'}]" />
                     <CommonSelect class="col-span-1" label="排序顺序" v-model="formData.sort_mods_by" showBottom
                       description="影响自动排序时同档次的Mod顺序，处理优先级是 别名>原名>包名，所以即使Mod没有别名，也能按原名参与排序。" 
                       :options="[{label:'按别名', value:'alias_name'},{label:'按原名', value:'name'},{label:'按包名', value:'id'}]" />

@@ -4,14 +4,18 @@ import glob
 import datetime
 from pathlib import Path
 from typing import Any
+from backend.database.dao import ModDAO
+from backend.database.dao_ext import ExtDAO
 from backend.load_order import (
     FORMAT_MODLIST,
     FORMAT_MODSCONFIG,
     FORMAT_RML,
     FORMAT_SAVEGAME,
     ParsedLoadOrderData,
+    build_import_check_report,
     parse_load_order_file,
 )
+from backend.database.models_ext import ModReplacement
 from backend.managers.mgr_profile import ProfileContext
 from backend.utils.logger import logger
 
@@ -121,6 +125,77 @@ class LoadOrderManager:
                 "workshop_id_raw": workshop_id_raw,
             })
         return entries
+
+    def _load_replacements_by_workshop_id(self, workshop_ids: list[str]):
+        """
+        批量读取“旧 workshop id -> 替代规则”的映射。
+
+        这一步只做数据准备，不在这里判断状态；状态判断交给纯逻辑模块，
+        这样后续更容易补测试。
+        """
+        valid_ids = [wid for wid in (self._normalize_workshop_id(wid) for wid in workshop_ids) if wid]
+        if not valid_ids:
+            return {}
+        try:
+            query = (
+                ModReplacement
+                .select(
+                    ModReplacement.old_workshop_id,
+                    ModReplacement.old_package_id,
+                    ModReplacement.new_workshop_id,
+                    ModReplacement.new_package_id,
+                    ModReplacement.new_name,
+                    ModReplacement.new_versions,
+                )
+                .where(ModReplacement.old_workshop_id.in_(valid_ids))
+                .dicts()
+            )
+            return {
+                str(row["old_workshop_id"]): row
+                for row in query
+                if row.get("old_workshop_id")
+            }
+        except Exception as e:
+            logger.warning(f"读取替代规则失败: {e}")
+            return {}
+
+    def _build_import_check(self, parsed: ParsedLoadOrderData):
+        """
+        构建导入检查报告。
+
+        注意这里依赖当前环境上下文，因为“缺失 / 替代 / 其它版本”都必须以
+        “当前环境实际可见的安装项”为参考。
+        """
+        if not self.context:
+            return {"summary": {}, "items": []}
+
+        try:
+            installed_mods = ModDAO.get_profile_mods(self.context)
+        except Exception as e:
+            logger.warning(f"读取当前环境模组失败，无法构建导入检查报告: {e}")
+            return {"summary": {}, "items": []}
+
+        details_by_package_id = {}
+        try:
+            details_by_package_id = ExtDAO.get_workshop_details_by_package_ids(parsed.package_ids)
+        except Exception as e:
+            logger.warning(f"读取包名补全详情失败: {e}")
+
+        details_by_workshop_id = {}
+        try:
+            details_by_workshop_id = ExtDAO.get_workshop_details_by_workshop_ids(parsed.workshop_ids)
+        except Exception as e:
+            logger.warning(f"读取工坊详情失败: {e}")
+
+        replacements_by_workshop_id = self._load_replacements_by_workshop_id(parsed.workshop_ids)
+        return build_import_check_report(
+            parsed,
+            installed_mods=installed_mods,
+            details_by_package_id=details_by_package_id,
+            details_by_workshop_id=details_by_workshop_id,
+            replacements_by_old_workshop_id=replacements_by_workshop_id,
+            game_version=self.context.game_version,
+        )
 
     def _enrich_mod_entries(self, entries: list[dict]):
         """
@@ -348,6 +423,7 @@ class LoadOrderManager:
         try:
             parsed = parse_load_order_file(mods_config_file_path)
             parsed_result = self._build_entries_from_parsed(parsed)
+            import_check = self._build_import_check(parsed)
         except Exception as e:
             logger.error(f"读取排序文件时出错: {e}")
             # 解析失败时返回空结果而不是抛异常，
@@ -362,6 +438,7 @@ class LoadOrderManager:
                 "warnings": [],
                 "errors": [str(e)],
             }
+            import_check = {"summary": {}, "items": []}
 
         return {
             'active_mods': parsed_result.get('active_mods', []),
@@ -374,6 +451,7 @@ class LoadOrderManager:
             'workshop_ids': parsed.workshop_ids if 'parsed' in locals() else [],
             'warnings': parsed_result.get('warnings', []),
             'errors': parsed_result.get('errors', []),
+            'import_check': import_check,
         }
 
     def save_active_mods(self, active_ids, target_path=None, trigger_dialog=False, is_dirty=True, use_raw_ids=False, export_format: str = EXPORT_FORMAT_MODSCONFIG, list_name: str | None = None):
