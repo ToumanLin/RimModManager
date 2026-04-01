@@ -1,11 +1,22 @@
 # backend/_version.py
-__version__ = "0.18.26"  # 主版本.次版本.补丁
+__version__ = "0.19.1"  # 主版本.次版本.补丁
 __db_version__ = "5"
 __build__ = "dev"      # dev, alpha, beta, stable, release
 
 # 结构化更新日志：按版本从新到旧排列
 # type 支持: "feature" (新增), "fix" (修复), "optimize" (优化), "breaking" (重大变更)
 APP_CHANGELOG = [
+    {
+        "version": "0.19.1",
+        "date": "2026-04-1",
+        "changes": [
+            { "type": "breaking", "text": "另外注意：辅助模组主要为了给AI提供详细的日志，如果影响了游戏运行，可在功能设置或游戏日志界面关闭。" },
+            { "type": "feature", "text": "设置面板新增排序策略切换功能，支持切换回旧版排序策略，如果新版排序影响了游戏正常运行，可以尝试换回旧版策略。" },
+            { "type": "feature", "text": "优化新版排序算法逻辑，提升特定模组的关联链牵引稳定性。" },
+            { "type": "feature", "text": "优化导入检查报告，支持精确匹配、缺失项识别及版本差异等多维度判定可添加的缺失项。" },
+            { "type": "feature", "text": "导入差异视图支持缺失项的状态标识及快捷操作按钮，并提供针对缺失项的批量订阅、下载或移除功能。" }
+        ]
+    },
     {
         "version": "0.18.26",
         "date": "2026-03-31",
