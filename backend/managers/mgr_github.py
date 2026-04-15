@@ -4,6 +4,7 @@ import os
 import shutil
 from typing import Any
 
+from backend.managers.mgr_download import DownloadManager
 from backend.utils.logger import logger
 from backend.settings import HOME_DIR, settings
 from backend.database.models import GithubModRecord, GithubTimeline, db
@@ -15,8 +16,6 @@ GITHUB_ACCEPT_HEADER = "application/vnd.github+json"
 
 
 class GithubManager:
-    def __init__(self, download_mgr):
-        self.download_mgr = download_mgr
 
     def parse_repo_url(self, url: str):
         """解析 GitHub URL 提取 owner 和 repo"""
@@ -42,8 +41,7 @@ class GithubManager:
                 headers=merge_headers({"Accept": GITHUB_ACCEPT_HEADER}),
                 timeout=timeout,
             )
-            if missing_ok and response.status_code == 404:
-                return None
+            if missing_ok and response.status_code == 404: return None
             response.raise_for_status()
             return response.json()
 
@@ -79,7 +77,7 @@ class GithubManager:
         with db.atomic():
             GithubTimeline.create(repo_url=repo_url, action=action, message=message)
 
-    def trigger_download(self, repo_url: str, install_type: str = "source", target_version: str = ""):
+    def trigger_download(self, download_mgr: DownloadManager, repo_url: str, install_type: str = "source", target_version: str = ""):
         """发起下载并绑定解压钩子"""
         owner, repo = self.parse_repo_url(repo_url)
         if not owner: return False
@@ -107,12 +105,8 @@ class GithubManager:
 
         # 推入全局下载队列 (下载到 Downloads)
         dl_dir = str(HOME_DIR / 'Downloads')
-        task_id = self.download_mgr.add_task(
-            url=download_url,
-            dest_dir=dl_dir,
-            filename=filename,
-            on_complete=on_download_complete,
-            on_error=on_download_error
+        task_id = download_mgr.add_task( url=download_url, dest_dir=dl_dir, filename=filename,
+            on_complete=on_download_complete, on_error=on_download_error
         )
         return task_id
 

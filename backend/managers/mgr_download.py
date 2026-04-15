@@ -80,15 +80,8 @@ class DownloadManager:
             return new_url
         return url
 
-    def add_task(self, 
-                 url: str, 
-                 dest_dir: str, 
-                 filename: Optional[str] = None,
-                 expected_hash: Optional[str] = None,
-                 hash_algorithm: str = "md5",
-                 on_complete: Optional[Callable[[DownloadTask], Any]] = None,
-                 on_error: Optional[Callable[[DownloadTask], Any]] = None
-                 ) -> str:
+    def add_task(self, url: str, dest_dir: str, filename: Optional[str] = None, expected_hash: Optional[str] = None, hash_algorithm: str = "md5", 
+                 on_complete: Optional[Callable[[DownloadTask], Any]] = None, on_error: Optional[Callable[[DownloadTask], Any]] = None ) -> str:
         """
         添加下载任务
         :param url: 下载地址
@@ -112,14 +105,9 @@ class DownloadManager:
         final_path = os.path.join(dest_dir, filename)
 
         # 创建任务对象
-        task = DownloadTask(
-            url=real_url, 
-            dest_path=final_path, 
-            filename=filename,
-            expected_hash=expected_hash,
-            hash_algorithm=hash_algorithm,
-            on_complete=on_complete,
-            on_error=on_error
+        task = DownloadTask( url=real_url, dest_path=final_path, filename=filename,
+            expected_hash=expected_hash, hash_algorithm=hash_algorithm,
+            on_complete=on_complete, on_error=on_error
         )
         with self._lock:
             self.tasks[task.task_id] = task
