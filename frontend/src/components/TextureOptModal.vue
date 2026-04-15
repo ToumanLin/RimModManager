@@ -144,6 +144,11 @@
                   <div v-if="toolStatus.resolved_path" class="mt-2 break-all text-xs opacity-70">{{ toolStatus.resolved_path }}</div>
                 </div>
 
+                <button v-if="!toolStatus.available && !isBusy" @click="textureStore.downloadTool()"
+                  class="w-full rounded-xl bg-text-main/10 py-2 text-sm font-bold transition-colors hover:bg-text-main/20" >
+                  下载 todds
+                </button>
+
                 <section class="space-y-3 rounded-xl border border-text-main/8 bg-black/12 p-3">
                   <h3 class="text-xs font-black uppercase tracking-widest text-text-main">处理范围</h3>
                   <CommonSelect v-model="targetScope"
@@ -221,11 +226,6 @@
 
                 <button v-else @click="handleCancel" class="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-danger py-3 font-black text-white shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all active:scale-95">
                   <Ban class="w-5 h-5" /> 停止当前任务
-                </button>
-
-                <button v-if="!toolStatus.available && !isBusy" @click="textureStore.downloadTool()"
-                  class="w-full rounded-xl bg-text-main/10 py-2 text-sm font-bold transition-colors hover:bg-text-main/20" >
-                  下载 todds
                 </button>
               </div>
             </div>

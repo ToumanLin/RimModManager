@@ -67,6 +67,8 @@ from backend.managers.mgr_github import GithubManager
 from backend.managers.mgr_texture_opt import TextureOptCancelled, TextureOptimizationManager
 from playhouse.shortcuts import model_to_dict
 
+GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS = 3 * 60 * 1000
+
 
 def log_api_call(func):
     """ 
@@ -192,6 +194,9 @@ class API:
         self._native_drop_selector = '#backup-drop-zone'
         self._native_drop_element = None
         self._native_drop_handler = None
+        self._github_subs_refresh_lock = threading.Lock()
+        self._github_subs_refresh_running = False
+        self._github_subs_refresh_started_at = 0
         # 2. 实例化各个管理器
         self.workshop_db_mgr = WorkshopDBManager()
         self.game_mgr = GameManager()
@@ -3149,9 +3154,9 @@ class API:
     # GitHub 相关接口
     # ==========================================
     @log_api_call
-    def github_fetch_info(self, url: str):
+    def github_fetch_info(self, url: str, source_branch: str = ""):
         """解析并获取远程仓库信息"""
-        res = self.github_mgr.fetch_repo_info(url)
+        res = self.github_mgr.fetch_repo_info(url, source_branch=source_branch)
         if "error" in res: return ApiResponse.error(res["error"])
         return ApiResponse.success(res)
 
@@ -3160,23 +3165,37 @@ class API:
         """添加订阅到数据库"""
         url = payload.get("url")
         if not url: return ApiResponse.error("URL 不能为空")
-        
+        installed_version = str(payload.get("installed_version") or "").strip()
+        info = payload.get("info") or {}
+        install_type = str(payload.get("install_type") or "source").strip() or "source"
+        target_branch = str(payload.get("default_branch") or "").strip() or "main"
+
         with db.atomic():
             record, created = GithubModRecord.get_or_create(
                 repo_url=url,
                 defaults={
                     "owner": payload.get("owner"),
                     "repo_name": payload.get("repo"),
-                    "target_branch": payload.get("default_branch"),
-                    "install_type": payload.get("install_type", "source"),
-                    "installed_version": payload.get("installed_version"),
-                    "online_info_cache": payload.get("info"),
+                    "target_branch": target_branch,
+                    "install_type": install_type,
+                    "installed_version": installed_version,
+                    "online_info_cache": info,
                     "last_sync_time": current_ms(),
                 }
             )
-            # 如果是新建的，写入初始日志
             if created:
                 self.github_mgr.record_timeline(url, "subscribe", "已添加 GitHub 仓库监听记录")
+            else:
+                # 再次订阅同一仓库时，更新监听策略和最新在线缓存，但不擅自覆盖已部署版本。
+                record.owner = payload.get("owner") or record.owner
+                record.repo_name = payload.get("repo") or record.repo_name
+                record.target_branch = target_branch
+                record.install_type = install_type
+                record.online_info_cache = info
+                record.last_sync_time = current_ms()
+                if installed_version:
+                    record.installed_version = installed_version
+                record.save()
         return self.github_get_subscribed() # 返回最新列表
 
     @log_api_call
@@ -3186,56 +3205,83 @@ class API:
         for r in records:
             # 将缓存的字典暴露给前端的 online_info 字段
             r["online_info"] = r.get("online_info_cache", {})
-        # 2. 启动后台静默更新线程 (不阻塞当前请求)
-        threading.Thread(target=self._bg_refresh_github_subs, args=(records,), daemon=True).start()
+        self._schedule_github_subs_refresh(records)
 
         return ApiResponse.success(records)
+
+    def _schedule_github_subs_refresh(self, records: list) -> bool:
+        """给 GitHub 订阅刷新加最短触发间隔，避免页面频繁打开时重复打满 API。"""
+        if not records:
+            return False
+
+        now = current_ms()
+        with self._github_subs_refresh_lock:
+            if self._github_subs_refresh_running:
+                logger.debug("GitHub 订阅后台刷新已在执行，跳过重复触发")
+                return False
+            if now - self._github_subs_refresh_started_at < GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS:
+                logger.debug("GitHub 订阅后台刷新距离上次启动过近，跳过本轮触发")
+                return False
+            self._github_subs_refresh_running = True
+            self._github_subs_refresh_started_at = now
+
+        threading.Thread(target=self._bg_refresh_github_subs, args=(records,), daemon=True).start()
+        return True
 
     def _bg_refresh_github_subs(self, records: list):
         """
         后台多线程并发刷新 GitHub 数据
         """
-        if not records: return
-        
-        updated_records = {}
-        # 使用线程池并发请求 GitHub API，避免串行卡顿
-        # 假设有 5 个订阅，5 个线程同时发请求，耗时取决于最慢的一个 (通常 < 500ms)
-        def fetch_single(record):
-            repo_url = record["repo_url"]
-            info = self.github_mgr.fetch_repo_info(repo_url)
-            return repo_url, info
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            # 提交所有任务
-            futures = [executor.submit(fetch_single, r) for r in records]
-            for future in futures:
-                try:
-                    repo_url, info = future.result()
-                    if "error" not in info:
-                        updated_records[repo_url] = info
-                except Exception as e:
-                    logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
+        try:
+            if not records:
+                return
+            
+            updated_records = {}
+            # 使用线程池并发请求 GitHub API，避免串行卡顿
+            # 假设有 5 个订阅，5 个线程同时发请求，耗时取决于最慢的一个 (通常 < 500ms)
+            def fetch_single(record):
+                repo_url = record["repo_url"]
+                source_branch = ""
+                if str(record.get("install_type") or "").strip() == "source":
+                    source_branch = str(record.get("target_branch") or "").strip()
+                info = self.github_mgr.fetch_repo_info(repo_url, source_branch=source_branch)
+                return repo_url, info
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # 提交所有任务
+                futures = [executor.submit(fetch_single, r) for r in records]
+                for future in futures:
+                    try:
+                        repo_url, info = future.result()
+                        if "error" not in info:
+                            updated_records[repo_url] = info
+                    except Exception as e:
+                        logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
 
-        # 如果没有成功获取到任何数据，直接结束
-        if not updated_records: return
-        # 批量更新数据库的缓存
-        from backend.database.models import db, GithubModRecord
-        import time
-        current_time = int(time.time() * 1000)
-        with db.atomic():
-            for repo_url, info in updated_records.items():
-                GithubModRecord.update(
-                    online_info_cache=info,
-                    last_sync_time=current_time
-                ).where(GithubModRecord.repo_url == repo_url).execute()
-        # 【核心】通过 EventBus 将最新数据推给前端 Vue
-        EventBus.emit('github-online-update', updated_records)
-        logger.info(f"后台 GitHub 数据刷新完成，已推送 {len(updated_records)} 条更新")
+            # 如果没有成功获取到任何数据，直接结束
+            if not updated_records:
+                return
+            # 批量更新数据库的缓存
+            from backend.database.models import db, GithubModRecord
+            import time
+            current_time = int(time.time() * 1000)
+            with db.atomic():
+                for repo_url, info in updated_records.items():
+                    GithubModRecord.update(
+                        online_info_cache=info,
+                        last_sync_time=current_time
+                    ).where(GithubModRecord.repo_url == repo_url).execute()
+            # 【核心】通过 EventBus 将最新数据推给前端 Vue
+            EventBus.emit('github-online-update', updated_records)
+            logger.info(f"后台 GitHub 数据刷新完成，已推送 {len(updated_records)} 条更新")
+        finally:
+            with self._github_subs_refresh_lock:
+                self._github_subs_refresh_running = False
 
     @log_api_call
     def github_trigger_download(self, url: str, install_type: str, version: str):
         """触发下载与安装流程"""
-        task_id = self.github_mgr.trigger_download(self.download_mgr, url, install_type, version)
+        task_id = self.github_mgr.install_repo_mod(self.download_mgr, url, install_type, version)
         return ApiResponse.success({"task_id": task_id}, message="GitHub 部署任务已启动")
 
     @log_api_call

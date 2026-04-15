@@ -9,7 +9,7 @@ from urllib3.util.retry import Retry
 from backend.settings import settings
 from backend.utils.logger import logger
 
-DEFAULT_USER_AGENT = "RimModManager"
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 RimModManager"
 
 class NetworkManager:
     def __init__(self):

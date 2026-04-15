@@ -138,6 +138,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     repoTimelines: [],    // 当前选中仓库的日志
     previewInfo: null,    // 解析新链接时的预览信息
   })
+  const githubTimelinePollTimer = ref(null)
+  const githubTimelinePollSeq = ref(0)
 
   const isFetching = ref(false)
   const matrixFocusTarget = ref(null)
@@ -222,6 +224,88 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   })
   const getMatrixSameItems = (pathHash) => matrixSameMap.value.get(pathHash) || []
   const getMatrixConflictItems = (pathHash) => matrixConflictMap.value.get(pathHash) || []
+  const getGithubOnlineVersion = (repo) => {
+    if (!repo?.online_info) return ''
+    if (repo.install_type === 'release') {
+      return String(repo.online_info.latest_release_tag || '').trim()
+    }
+    return String(repo.online_info.latest_source_version || '').trim()
+  }
+  const githubRepoNeedsUpdate = (repo) => {
+    const localVersion = String(repo?.installed_version || '').trim()
+    const onlineVersion = getGithubOnlineVersion(repo)
+    if (!localVersion || !onlineVersion) return false
+    return localVersion !== onlineVersion
+  }
+  const applyGithubRepoComputedState = (repo) => {
+    if (!repo) return repo
+    repo.online_info = repo.online_info || repo.online_info_cache || {}
+    repo.has_update = githubRepoNeedsUpdate(repo)
+    return repo
+  }
+  const stopGithubTimelinePolling = () => {
+    if (githubTimelinePollTimer.value) {
+      clearInterval(githubTimelinePollTimer.value)
+      githubTimelinePollTimer.value = null
+    }
+  }
+  const clearActiveGithubRepo = () => {
+    stopGithubTimelinePolling()
+    github.activeRepo = null
+    github.repoTimelines = []
+  }
+  const fetchGithubTimeline = async (url) => {
+    if (!window.pywebview || !url) return
+    const res = await window.pywebview.api.github_get_timeline(url)
+    if (checkResult(res, '获取Github模组时间线')) {
+      if (github.activeRepo?.repo_url !== url) return
+      github.repoTimelines = res.data
+    }
+  }
+  const startGithubTimelinePolling = async (repoUrl, options = {}) => {
+    if (!repoUrl) return
+    const intervalMs = Number(options.intervalMs || 4000)
+    const maxPolls = Number(options.maxPolls || 15)
+    let pollCount = 0
+    let inFlight = false
+    const pollSeq = Date.now()
+
+    githubTimelinePollSeq.value = pollSeq
+    stopGithubTimelinePolling()
+
+    const pollOnce = async () => {
+      if (inFlight) return
+      if (githubTimelinePollSeq.value !== pollSeq) return
+      if (github.activeRepo?.repo_url !== repoUrl) {
+        stopGithubTimelinePolling()
+        return
+      }
+
+      inFlight = true
+      try {
+        await fetchGithubTimeline(repoUrl)
+        pollCount += 1
+        if (pollCount >= maxPolls) {
+          stopGithubTimelinePolling()
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+
+    await pollOnce()
+    if (github.activeRepo?.repo_url !== repoUrl) return
+    githubTimelinePollTimer.value = setInterval(pollOnce, intervalMs)
+  }
+  const selectGithubRepo = async (repo) => {
+    stopGithubTimelinePolling()
+    github.previewInfo = null
+    github.activeRepo = repo ? applyGithubRepoComputedState(repo) : null
+    github.repoTimelines = []
+    if (github.activeRepo?.repo_url) {
+      await fetchGithubTimeline(github.activeRepo.repo_url)
+    }
+  }
   const jumpToMatrixItem = (pathHash) => {
     const target = matrixModsByPathHash.value.get(pathHash)
     if (!target) return false
@@ -306,16 +390,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       github.subscribedRepos.forEach(repo => {
         if (updatedReposMap[repo.repo_url]) {
           const freshInfo = updatedReposMap[repo.repo_url]
-          
-          // 比较本地记录的 tag 和线上最新的 tag，判断是否需要更新
-          // 假设你本地记录当前安装版本的字段叫 installed_tag (如果没有请在模型里加一个或用其他方式判定)
-          const localTag = repo.installed_tag || '' 
-          const onlineTag = freshInfo.latest_release_tag || ''
-          
           repo.online_info = freshInfo
-          repo.has_update = (onlineTag !== '' && localTag !== onlineTag)
+          applyGithubRepoComputedState(repo)
         }
       })
+      if (github.activeRepo?.repo_url && updatedReposMap[github.activeRepo.repo_url]) {
+        applyGithubRepoComputedState(github.activeRepo)
+      }
     })
     // 监听合集更新
     window.addEventListener('workspace-collection-updated', (e) => {
@@ -479,21 +560,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!window.pywebview) return
     github.isLoading = true
     try {
+      const activeRepoUrl = github.activeRepo?.repo_url || ''
       // 瞬间返回带缓存的数据
       const res = await window.pywebview.api.github_get_subscribed()
       if (checkResult(res, '获取Github订阅')) {
-        github.subscribedRepos = res.data || []
+        github.subscribedRepos = (res.data || []).map(repo => applyGithubRepoComputedState(repo))
+        github.activeRepo = activeRepoUrl
+          ? github.subscribedRepos.find(repo => repo.repo_url === activeRepoUrl) || null
+          : null
+        if (!github.activeRepo) {
+          stopGithubTimelinePolling()
+          github.repoTimelines = []
+        }
       }
     } finally {
       github.isLoading = false
-    }
-  }
-  // 加载Github模组时间线
-  const fetchGithubTimeline = async (url) => {
-    if (!window.pywebview) return
-    const res = await window.pywebview.api.github_get_timeline(url)
-    if (checkResult(res, '获取Github模组时间线')) {
-      github.repoTimelines = res.data
     }
   }
 
@@ -632,7 +713,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
     matrixFocusTarget, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
     fetchLibrariesMods, doWorkshopSearch, fetchWorkshopDetails, openTimeline, openTimelineGithub, setupListeners,
-    github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl, getWorkshopIdsByPackageIdsMap, goBackWorkshopDetail,
+    github, fetchGithubRepos, fetchGithubTimeline, startGithubTimelinePolling, stopGithubTimelinePolling, selectGithubRepo, clearActiveGithubRepo,
+    getGithubOnlineVersion, githubRepoNeedsUpdate, initData, openSteamWorkshopUrl, getWorkshopIdsByPackageIdsMap, goBackWorkshopDetail,
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection
   }
 })

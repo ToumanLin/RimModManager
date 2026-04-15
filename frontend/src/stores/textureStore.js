@@ -7,6 +7,7 @@ import { createToastInterface } from 'vue-toastification'
 export const useTextureStore = defineStore('texture', () => {
   const toast = createToastInterface()
   const appStore = useAppStore()
+  let toolStatusRefreshTimer = null
 
   const createEmptyTextureStat = () => ({
     mod_path: '',
@@ -284,6 +285,25 @@ export const useTextureStore = defineStore('texture', () => {
     return false
   }
 
+  const isToddsDownloadPayload = (payload = {}) => {
+    const filename = String(payload.filename || '').toLowerCase()
+    const filePath = String(payload.file_path || '').toLowerCase()
+    return filename.startsWith('todds_') || filePath.includes('todds')
+  }
+
+  const scheduleToolStatusRefresh = (attempt = 0) => {
+    if (toolStatusRefreshTimer) {
+      clearTimeout(toolStatusRefreshTimer)
+      toolStatusRefreshTimer = null
+    }
+    toolStatusRefreshTimer = window.setTimeout(async () => {
+      await checkToolStatus()
+      if (!toolStatus.value.available && attempt < 5) {
+        scheduleToolStatusRefresh(attempt + 1)
+      }
+    }, attempt === 0 ? 900 : 1200)
+  }
+
   // 1. 检查后端工具状态
   const checkToolStatus = async () => {
     if (!window.pywebview) return
@@ -306,6 +326,7 @@ export const useTextureStore = defineStore('texture', () => {
       if (res.status === 'success') {
         if (!res.data.already_ready) {
           toast.info("已启动 todds 下载任务，请留意底部状态栏。")
+          scheduleToolStatusRefresh(0)
         } else {
           toast.success("todds 已就绪，无需下载")
           await checkToolStatus()
@@ -380,6 +401,12 @@ export const useTextureStore = defineStore('texture', () => {
     } catch (e) {
       console.error(e)
     }
+  }
+
+  const handleDownloadEvent = (payload) => {
+    if (!payload || payload.status !== 'completed') return
+    if (!isToddsDownloadPayload(payload)) return
+    scheduleToolStatusRefresh(0)
   }
 
   // 5. 接收 EventBus 推流 (此函数将在 App.vue 初始化时挂载)
@@ -464,6 +491,6 @@ export const useTextureStore = defineStore('texture', () => {
   return {
     isAnalyzing, isOptimizing, currentTaskId, currentAnalysisTaskId, currentOptimizationTaskId,
     modsData, globalSummary, progressState, viewMode, toolStatus, timerState,
-    checkToolStatus, downloadTool, startAnalysis, startOptimization, cancelCurrentTask, handleProgressEvent
+    checkToolStatus, downloadTool, startAnalysis, startOptimization, cancelCurrentTask, handleProgressEvent, handleDownloadEvent
   }
 })

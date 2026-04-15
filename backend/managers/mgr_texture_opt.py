@@ -21,7 +21,7 @@ from PIL import Image
 from backend.settings import CACHE_DIR, TOOLS_DIR, settings
 from backend.utils.event_bus import EventBus
 from backend.utils.logger import logger
-from backend.utils.tools import current_ms, extract_zip, generate_path_hash
+from backend.utils.tools import current_ms, generate_path_hash
 
 TEXTURE_TASK_TYPE = "texture-opt"
 TEXTURE_ANALYSIS_TASK_TYPE = "texture-opt-analyze"
@@ -29,6 +29,8 @@ TEXTURE_MANIFEST_VERSION = 2  # 升级清单版本
 TEXTURE_SCAN_SCHEMA_VERSION = 2
 TEXTURE_TASK_RETENTION_SECONDS = 120
 TODDS_WINDOWS_ASSET_PREFIX = "todds_Windows_"
+TODDS_FALLBACK_VERSION = "0.4.1"
+TODDS_FALLBACK_FILENAME = f"todds_Windows_{TODDS_FALLBACK_VERSION}.zip"
 SOURCE_IMAGE_EXTENSIONS = (".png",)
 
 # =========================================================
@@ -384,36 +386,43 @@ class TextureOptimizationManager:
         if status["available"]:
             return {"already_ready": True}
 
-        release = self._fetch_latest_todds_release()
-        filename = release["asset"]["name"]
-        asset = release["asset"]
+        from backend.managers.mgr_github import (
+            GITHUB_ARTIFACT_RELEASE_ASSET,
+            GITHUB_INSTALL_EXTRACT,
+            GithubArtifactRequest,
+            GithubInstallPlan,
+            GithubInstallRequest,
+            GithubManager,
+        )
+
         texture_tools_path = resolve_texture_tools_path(merged_options)
         texture_tools_path.mkdir(parents=True, exist_ok=True)
-
-        def on_complete(task):
-            try:
-                extract_zip(task.dest_path, str(texture_tools_path))
-                try:
-                    os.remove(task.dest_path)
-                except OSError:
-                    pass
-            except Exception as exc:
-                logger.error("todds download extract failed", exc_info=True)
-                EventBus.send_toast(f"todds 解压失败: {exc}", type="error", duration=6000)
-                return
-            EventBus.send_toast(f"贴图工具下载完成: {task.dest_path}", type="success", duration=4000)
-
-        def on_error(task):
-            EventBus.send_toast(f"贴图工具下载失败: {task.error_msg or task.filename}", type="error", duration=6000)
-
-        download_mgr.add_task(
-            url=asset["browser_download_url"],
-            dest_dir=str(texture_tools_path),
-            filename=filename,
-            expected_hash=asset.get("sha256") or None,
-            hash_algorithm="sha256",
-            on_complete=on_complete,
-            on_error=on_error,
+        github = GithubManager()
+        github.install_from_github(
+            download_mgr,
+            GithubInstallRequest(
+                owner="todds-encoder",
+                repo="todds",
+                artifact=GithubArtifactRequest(
+                    kind=GITHUB_ARTIFACT_RELEASE_ASSET,
+                    asset_name_prefix=TODDS_WINDOWS_ASSET_PREFIX,
+                    asset_name_suffix=".zip",
+                    fallback_download_url=f"https://github.com/todds-encoder/todds/releases/download/{TODDS_FALLBACK_VERSION}/{TODDS_FALLBACK_FILENAME}",
+                    fallback_filename=TODDS_FALLBACK_FILENAME,
+                    fallback_version=TODDS_FALLBACK_VERSION,
+                    fallback_asset_name=TODDS_FALLBACK_FILENAME,
+                ),
+                install=GithubInstallPlan(
+                    action=GITHUB_INSTALL_EXTRACT,
+                    download_dir=str(texture_tools_path),
+                    extract_dir=str(texture_tools_path),
+                    cleanup_archive=True,
+                ),
+                download_start_message="开始下载 todds 工具包",
+                install_start_message="todds 工具包获取成功，正在解压...",
+                success_toast=f"贴图工具下载完成: {texture_tools_path}",
+                failure_toast="贴图工具下载失败",
+            ),
         )
         return {"already_ready": False}
 
@@ -1836,41 +1845,6 @@ class TextureOptimizationManager:
             item["source_bytes_share_pct"] = round((int(item.get("source_total_bytes", 0)) / total_source) * 100, 2)
             item["output_bytes_share_pct"] = round((int(item.get("output_total_bytes", 0)) / total_output) * 100, 2)
             item["combined_bytes_share_pct"] = round((int(item.get("combined_total_bytes", 0)) / total_combined) * 100, 2)
-
-    def _fetch_latest_todds_release(self) -> dict[str, Any]:
-        from backend.managers.mgr_github import GithubManager
-
-        try:
-            github = GithubManager()
-            payload = github.fetch_latest_release("todds-encoder", "todds")
-        except Exception as e:
-            logger.warning(f"todds GitHub API 访问失败，使用兜底直链 ({e})")
-            fallback_name = "todds_Windows_0.4.1.zip"
-            return {
-                "tag_name": "0.4.1",
-                "published_at": "2023-11-16T06:22:45Z",
-                "asset": {
-                    "name": fallback_name,
-                    "browser_download_url": f"https://github.com/todds-encoder/todds/releases/download/0.4.1/{fallback_name}",
-                    "sha256": "",
-                },
-            }
-
-        asset = next((
-            item for item in payload.get("assets", [])
-            if str(item.get("name") or "").startswith(TODDS_WINDOWS_ASSET_PREFIX) and str(item.get("name") or "").endswith(".zip")
-        ), None)
-        if not asset:
-            raise TextureOptError("未在 todds 最新发布中找到 Windows 资产。")
-        return {
-            "tag_name": str(payload.get("tag_name") or "latest"),
-            "published_at": str(payload.get("published_at") or ""),
-            "asset": {
-                "name": str(asset.get("name") or ""),
-                "browser_download_url": str(asset.get("browser_download_url") or ""),
-                "sha256": "",
-            },
-        }
 
     def _set_task_state(self, task: TextureTask, *, status: str | None = None, progress: int | None = None, message: str | None = None, metrics: dict[str, Any] | None = None, summary: dict[str, Any] | None = None, error: str | None = None) -> None:
         if summary is not None:

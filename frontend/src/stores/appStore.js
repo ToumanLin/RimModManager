@@ -460,6 +460,10 @@ export const useAppStore = defineStore('app', () => {
     window.addEventListener('download-progress', (e) => {
       const d = e.detail
       downloadTasks.value.set(d.id, d)
+      import('./textureStore').then(({ useTextureStore }) => {
+        const textureStore = useTextureStore()
+        textureStore.handleDownloadEvent(d)
+      })
       // --- 核心：检查是否有正在等待该任务的 Promise ---
       const callback = downloadCallbacks.get(d.id)
       

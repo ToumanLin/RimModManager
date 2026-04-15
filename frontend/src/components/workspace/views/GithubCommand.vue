@@ -32,8 +32,8 @@
               <span v-if="repo.install_type === 'release'" class="px-2 py-1 text-accent-primary bg-accent-primary/10 rounded">Release</span>
               <span v-else class="px-2 py-1 text-accent-success bg-accent-success/10 rounded">Source</span>
               <span class="px-2 py-1 text-text-dim opacity-70 ml-1">{{ repo.installed_version || '未部署' }}</span>
-              <span v-if="need_update(repo)" class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-accent-warn">
-                有新版本可用 ({{ repo.online_info.latest_release_tag }})
+              <span v-if="workspaceStore.githubRepoNeedsUpdate(repo)" class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-accent-warn">
+                有新版本可用 ({{ workspaceStore.getGithubOnlineVersion(repo) }})
               </span>
             </div>
           </div>
@@ -102,8 +102,8 @@
               <span class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-text-dim border border-text-main/10">
                 已部署版本: {{ workspaceStore.github.activeRepo.installed_version || 'NONE' }}
               </span>
-              <span v-if="need_update(workspaceStore.github.activeRepo)" class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-accent-warn">
-                有新版本可用 ({{ workspaceStore.github.activeRepo.online_info.latest_release_tag }})
+              <span v-if="workspaceStore.githubRepoNeedsUpdate(workspaceStore.github.activeRepo)" class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-accent-warn">
+                有新版本可用 ({{ workspaceStore.getGithubOnlineVersion(workspaceStore.github.activeRepo) }})
               </span>
             </div>
           </div>
@@ -159,7 +159,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onBeforeUnmount, onMounted } from 'vue'
 import { Github, RefreshCw, Trash2, Link, CloudDownload, Activity } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
@@ -176,11 +176,9 @@ onMounted(() => {
   workspaceStore.fetchGithubRepos()
 })
 
-// 判断是否需要更新
-const need_update = (repo) => {
-  if(!repo.online_info || !repo.installed_version) return false
-  return repo.installed_version !== repo.online_info.latest_release_tag
-}
+onBeforeUnmount(() => {
+  workspaceStore.stopGithubTimelinePolling()
+})
 
 // 解析新仓库链接
 const parseNewRepo = async () => {
@@ -199,14 +197,14 @@ const parseNewRepo = async () => {
 // 确认订阅仓库
 const confirmSubscribe = async (type) => {
   const info = workspaceStore.github.previewInfo
-  console.log('githubinfo',info)
+  if (!info) return
   const payload = {
     url: newRepoUrl.value,
     owner: info.owner,
     repo: info.repo,
     default_branch: info.default_branch,
     install_type: type,
-    installed_version: info.latest_release_tag,
+    installed_version: '',
     info: info,
   }
   const res = await window.pywebview.api.github_subscribe(payload)
@@ -219,10 +217,8 @@ const confirmSubscribe = async (type) => {
 }
 
 // 选择仓库
-const selectRepo = (repo) => {
-  workspaceStore.github.previewInfo = null // 清除预览
-  workspaceStore.github.activeRepo = repo
-  workspaceStore.fetchGithubTimeline(repo.repo_url)
+const selectRepo = async (repo) => {
+  await workspaceStore.selectGithubRepo(repo)
 }
 
 
@@ -231,7 +227,7 @@ const removeRepo = async (url) => {
   const res = await window.pywebview.api.github_remove_subscription(url)
   if (checkResult(res, "移除订阅")) {
     if (workspaceStore.github.activeRepo?.repo_url === url) {
-      workspaceStore.github.activeRepo = null
+      workspaceStore.clearActiveGithubRepo()
     }
     workspaceStore.fetchGithubRepos()
   }
@@ -240,29 +236,37 @@ const removeRepo = async (url) => {
 // 检查并更新仓库
 const checkAndUpdate = async () => {
   const repo = workspaceStore.github.activeRepo
+  if (!repo) return
   isChecking.value = true
   try {
     // 1. 获取最新信息 (看是否有新版本)
-    const infoRes = await window.pywebview.api.github_fetch_info(repo.repo_url)
-    if (infoRes.status !== 'success') {
-      toast.error("GitHub 服务器连接失败")
-      return
-    }
+    const infoRes = await window.pywebview.api.github_fetch_info(
+      repo.repo_url,
+      repo.install_type === 'source' ? (repo.target_branch || '') : ''
+    )
     let targetVersion = repo.target_branch
-    if (repo.install_type === 'release') {
-      targetVersion = infoRes.data.latest_release_tag
+    if (infoRes.status === 'success') {
+      if (repo.install_type === 'release') {
+        targetVersion = infoRes.data.latest_release_tag
+      } else {
+        targetVersion = infoRes.data.latest_source_branch || repo.target_branch
+      }
+    } else if (repo.install_type === 'release') {
+      targetVersion = repo.online_info?.latest_release_tag || ''
+      if (!targetVersion) {
+        toast.error("无法获取 Release 版本信息，当前也没有可用缓存")
+        return
+      }
+      toast.warning("GitHub 信息查询失败，已改用本地缓存的 Release 版本继续部署")
+    } else {
+      targetVersion = repo.target_branch || repo.online_info?.latest_source_branch || 'main'
+      toast.warning("GitHub 信息查询失败，已跳过元数据刷新，直接按当前分支继续部署")
     }
     // 2. 触发下载引擎 (带着钩子)
     const dlRes = await window.pywebview.api.github_trigger_download(repo.repo_url, repo.install_type, targetVersion)
     if (checkResult(dlRes, "请求数据传输")) {
       toast.info("已开始获取数据流，请在底部状态栏查看进度", {timeout: 4000})
-      // 每隔几秒刷新一次日志轴，直到下载完成
-      let retryCount = 0
-      const timer = setInterval(() => {
-        workspaceStore.fetchGithubTimeline(repo.repo_url)
-        retryCount++
-        if (retryCount > 15) clearInterval(timer) // 最多监控一分钟
-      }, 4000)
+      workspaceStore.startGithubTimelinePolling(repo.repo_url, { intervalMs: 4000, maxPolls: 15 })
     }
   } finally {
     isChecking.value = false
