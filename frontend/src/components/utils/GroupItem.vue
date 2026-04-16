@@ -32,7 +32,7 @@
       </span>
 
       <span :class="`text-xs bg-black/30 px-2 py-0.5 rounded text-[rgba(var(--rgb-components),1)]`">
-        {{ groupData.mod_ids.length }}
+        {{ groupModIds.length }}
       </span>
 
       <!-- 编辑/保存 与 删除 -->
@@ -75,18 +75,18 @@
         <!-- pointer-events-none 确保分组本身被拖拽时禁用鼠标交互，进而禁止被意外拖入内部列表 -->
         <div class="min-h-0 overflow-hidden" :class="{ 'pointer-events-none': groupStore.isDraggingGroup }">
           <div class="p-1 mx-1 min-h-15 bg-[rgba(var(--rgb-components),0.2)] border border-b-text-main/5 border-x-text-main/5 border-t-transparent rounded-b-lg shadow-2xsl relative">
-            <div v-if="groupData.mod_ids.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed text-gray-600 text-xs bg-bg-deep/30 select-none pointer-events-none">
+            <div v-if="groupModIds.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed text-gray-600 text-xs bg-bg-deep/30 select-none pointer-events-none">
               可拖拽模组到此
               <!-- 点阵背景 -->
               <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
             </div>
 
-            <VirtualList v-model="internalModList" dataKey="id" :keeps="50" class="max-h-[45vh] min-h-15 transition-all duration-200" ref="vListRef"
+            <VirtualList v-model="internalModList" :key="listKey" dataKey="id" :keeps="50" class="max-h-[45vh] min-h-15 transition-all duration-200" ref="vListRef"
               placeholderClass="ghost" wrapClass="mb-5" :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{ x: 0, y: 10 }" :delay="appStore.settings.ui.drag_delay"
-              :group="{ name: 'mods', pull: 'clone', put:['mods'], revertDrag: true }" :animation="150" :size="itemHeight" handle=".drag-handle"
+              :group="{ name: 'mods', pull: 'clone', put:['mods'], revertDrag: true }" :animation="150" :size="itemHeight" handle=".drag-handle" :sortable="!appStore.isLoading" :disabled="appStore.isLoading"
               @drop="updateChildren" @drag="startDrag"
               v-selectable-list="{ 
-                data: groupData.mod_ids, 
+                data: groupModIds, 
                 selectedIds: modStore.selectedIds, 
                 onSelect: (ids, anchor) => modStore.selectMods(ids, anchor),
                 onClear: () => modStore.clearSelection(),
@@ -125,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { watch, ref, nextTick, computed } from 'vue' // 引入 ref
+import { watch, ref, nextTick, computed, onBeforeUnmount } from 'vue' // 引入 ref
 import VirtualList from 'vue-virtual-sortable';
 import ModItem from './ModItem.vue'
 import { useDebounceFn } from '@vueuse/core'
@@ -152,14 +152,18 @@ const appStore = useAppStore()
 const groupStore = useGroupStore()
 const internalModList = ref([])
 const vListRef = ref(null)
+const listKey = ref(0)
+const isDragging = ref(false)
+const suppressNextDrop = ref(false)
 const emit = defineEmits(['toggle', 'delete-group', 'remove-item', 'update-group', 'update-children'])
 
 
 const itemHeight = computed(() => appStore.scalePx(30)+4 )
+const groupModIds = computed(() => Array.isArray(props.groupData?.mod_ids) ? props.groupData.mod_ids : [])
 // 计算属性computed无法直接修改props.groupData.mod_ids，因为它是只读的。
 // 监听 props 变化，同步到本地 (单向数据流：父 -> 子)
 watch(
-  () => props.groupData.mod_ids,
+  () => groupModIds.value,
   (newIds) => {
     // 将纯 ID 转换为 VirtualList 需要的对象格式
     // 注意：这里要创建一个新的数组引用，防止污染
@@ -253,18 +257,54 @@ const saveGroupColor = useDebounceFn((color) => {
   emit('update-group', props.id, { color: color })
 }, 1000)
 
+const finishDragSession = ({ suppressDrop = false } = {}) => {
+  if (suppressDrop) {
+    suppressNextDrop.value = true
+  }
+  isDragging.value = false
+}
+const dispatchSyntheticDragEnd = () => {
+  if (typeof document === 'undefined') return
+  document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+  document.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }))
+  document.dispatchEvent(new Event('touchcancel', { bubbles: true, cancelable: true }))
+}
+const cancelActiveDrag = async () => {
+  if (!isDragging.value) return
+  finishDragSession({ suppressDrop: true })
+  dispatchSyntheticDragEnd()
+  await nextTick()
+  listKey.value += 1
+}
 const startDrag = (e) => {
+  isDragging.value = true
   console.log("开始拖拽:", e)
 }
 // 更新子项的排序
 const updateChildren = (e) => {
+  if (suppressNextDrop.value || appStore.isLoading) {
+    suppressNextDrop.value = false
+    finishDragSession()
+    return
+  }
+  finishDragSession()
   console.log("更新子项排序:", e)
-  const oldIds = props.groupData.mod_ids  // 原始顺序
+  const oldIds = [...groupModIds.value]  // 原始顺序
   const newIds = internalModList.value.map(item => item.id)  // 获取当前的最新顺序 ID列表
   const tempSelectedIds = modStore.selectedIds
+  const currentListDom = vListRef.value?.$el
+  if (!currentListDom) {
+    internalModList.value = oldIds.map(id => ({ id }))
+    return
+  }
+  const fromCurrent = e?.event?.from === currentListDom
+  const toCurrent = e?.event?.to === currentListDom
+  if (!fromCurrent && !toCurrent) {
+    internalModList.value = oldIds.map(id => ({ id }))
+    return
+  }
   // 检查是否是当前分组的列表，排除当前列表自身的触发
-  const currentListDom = vListRef.value.$el
-  if (e.event.from === currentListDom || e.event.from === e.event.to) {
+  if (fromCurrent && toCurrent) {
     console.log(props.groupData.name, "排序结束:", e)
     // 只有顺序真的变了才发请求
     if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
@@ -272,10 +312,15 @@ const updateChildren = (e) => {
     }
     return
   }
+  if (!toCurrent) {
+    internalModList.value = oldIds.map(id => ({ id }))
+    return
+  }
 
   // 拖动项来自分组，不允许插入
   if (e.item?.group_id) {
     console.log("分组错误插入:", e)
+    internalModList.value = oldIds.map(id => ({ id }))
     return
   }
 
@@ -292,6 +337,19 @@ const updateChildren = (e) => {
     emit('update-children', props.id, uniqueIds)
   }
 }
+
+watch(() => appStore.isLoading, async (loading) => {
+  if (loading) {
+    await cancelActiveDrag()
+  }
+})
+
+onBeforeUnmount(() => {
+  if (isDragging.value) {
+    finishDragSession({ suppressDrop: true })
+    dispatchSyntheticDragEnd()
+  }
+})
 
 // ===== 分组名称编辑逻辑 =====
 const isEditingName = ref(false)

@@ -58,11 +58,11 @@
             可点击 “ + ” 按钮新建分组
         </div>
 
-        <VirtualList v-model="groupList" dataKey="group_id" :keeps="50" class="h-full p-1" 
+        <VirtualList v-model="groupList" :key="listKey" dataKey="group_id" :keeps="50" class="h-full p-1" 
           placeholderClass="ghost" wrapClass="space-y-2 min-h-full " ref="vListRef" :delay="appStore.settings.ui.drag_delay"
-	        :appendToBody="true" :fallbackOnBody="true" :scrollSpeed="{ x: 0, y: 10 }" handle=".drag-handle"
-          :group="{ name: 'groups', pull:'clone', put: true, revertDrag: true }" :animation="150"
-          @drop="groupReorder" @drag="stratDrag">
+	        :appendToBody="true" :fallbackOnBody="true" :scrollSpeed="{ x: 0, y: 10 }" handle=".drag-handle" :sortable="!appStore.isLoading" :disabled="appStore.isLoading"
+          :group="{ name: 'groups', pull:'clone', put: false, revertDrag: true }" :animation="150"
+          @drop="groupReorder" @drag="startDrag">
           <template v-slot:item="{ record, index, dataKey }">
             <GroupItem :id="dataKey" :key="dataKey" :index="index" :groupData="record" :list-color="listColor"
               :expanded="expandedIds.has(record.group_id)" :isHighlight="currentSearchGroupId === dataKey"
@@ -95,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useModStore } from '../stores/modStore'
 import { useGroupStore } from '../stores/groupStore'
 import VirtualList from 'vue-virtual-sortable';
@@ -115,6 +115,9 @@ const modStore = useModStore()
 const groupStore = useGroupStore()
 
 const vListRef = ref<VirtualList>()
+const listKey = ref(0)
+const isDragging = ref(false)
+const suppressNextDrop = ref(false)
 
 // 搜索文本
 const searchText = ref('')
@@ -246,31 +249,73 @@ const updateGroup = (groupId: string, data = props.groupData) => {
 const updateChildren = (groupId: string, newIds: Array<string>) => {
   groupStore.groupContentReorder(groupId, newIds)
 }
-const stratDrag = () => {
+const finishDragSession = ({ suppressDrop = false } = {}) => {
+  if (suppressDrop) {
+    suppressNextDrop.value = true
+  }
+  isDragging.value = false
+  groupStore.isDraggingGroup = false
+}
+const dispatchSyntheticDragEnd = () => {
+  if (typeof document === 'undefined') return
+  document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+  document.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }))
+  document.dispatchEvent(new Event('touchcancel', { bubbles: true, cancelable: true }))
+}
+const cancelActiveDrag = async () => {
+  if (!isDragging.value) return
+  finishDragSession({ suppressDrop: true })
+  dispatchSyntheticDragEnd()
+  await nextTick()
+  listKey.value += 1
+}
+const startDrag = () => {
   // 标记当前正在拖动分组
+  isDragging.value = true
   groupStore.isDraggingGroup = true
 }
 // 分组排序
 const groupReorder = (e) => {
+  if (suppressNextDrop.value || appStore.isLoading) {
+    suppressNextDrop.value = false
+    finishDragSession()
+    return
+  }
+  finishDragSession()
   // const groupIds = groupList.value.map(g => g.group_id)
   // const originGroupIds = groupStore.groupList.map(g => g.group_id)
   // console.log("分组排序:", groupIds)
   // console.log("原始排序:", originGroupIds)
   console.log("分组排序:", e)
-  if (e.newIndex === -1 || e.event.target.dataKey) {
+  const isCrossListDrop = e?.event?.from !== e?.event?.to
+  if (isCrossListDrop || e.newIndex === -1) {
     console.log("分组排序错误")
-    // 提前返回时也要复位拖拽状态，避免内部列表交互被持续禁用
-    groupStore.isDraggingGroup = false
     return
   }
-  groupStore.groupReorder();
-  // 拖动结束后，重置状态
-  groupStore.isDraggingGroup = false
+  const nextGroupIds = Array.isArray(e.list)
+    ? e.list.map(item => item.group_id).filter(Boolean)
+    : groupList.value.map(group => group.group_id).filter(Boolean)
+  if (nextGroupIds.length > 0) {
+    groupStore.groupReorder(nextGroupIds);
+  }
 }
 // 移除模组
 const removeMod =(groupId: string, modId: Array<string>) => {
   groupStore.groupRemoveMods(groupId, modId);
 }
+
+watch(() => appStore.isLoading, async (loading) => {
+  if (loading) {
+    await cancelActiveDrag()
+  }
+})
+
+onBeforeUnmount(() => {
+  if (isDragging.value) {
+    finishDragSession({ suppressDrop: true })
+    dispatchSyntheticDragEnd()
+  }
+})
 
 </script>
 
