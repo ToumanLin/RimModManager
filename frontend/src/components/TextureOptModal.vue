@@ -2,20 +2,20 @@
   <transition name="panel-fade">
     <div
       v-if="appStore.uiState.showTextureOptModal"
-      class="fixed inset-0 z-[100] flex items-center justify-center bg-bg-deep/70 backdrop-blur-md"
+      class="fixed inset-0 z-100 flex items-center justify-center bg-bg-deep/70 backdrop-blur-md"
       @click.self="closeModal"
     >
-      <div class="flex h-[92vh] w-[92vw] max-w-screen-2xl flex-col overflow-hidden rounded-2xl border border-text-main/10 bg-bg-deep/95 shadow-2xl">
+      <div data-tour="texture-opt-modal" class="flex h-[92vh] w-[92vw] max-w-screen-2xl flex-col overflow-hidden rounded-2xl border border-text-main/10 bg-bg-deep/95 shadow-2xl">
         <header class="shrink-0 border-b border-text-main/5 bg-[linear-gradient(135deg,rgba(15,23,42,0.88),rgba(2,6,23,0.96))] px-6 py-2">
           <div class="flex items-center justify-between">
 
-            <h2 class="shrink-0 flex items-center gap-3 min-w-0 text-2xl font-black tracking-wider text-text-main">
+            <h2 data-tour="texture-opt-title" class="shrink-0 flex items-center gap-3 min-w-0 text-2xl font-black tracking-wider text-text-main">
               <Images class="w-6 h-6 text-accent-highlight" />
               <span>贴图优化</span>
               <span v-tooltip="textureOptHelpText" class="inline-flex size-5 cursor-help items-center justify-center text-lg font-bold text-text-dim hover:text-text-main hover:border-text-main/30">?</span>
             </h2>
 
-            <div class="mx-5 grid grid-cols-4 items-center rounded-xl border border-text-main/6 bg-black/18 px-4 py-2 text-xs">
+            <div data-tour="texture-opt-summary" class="mx-5 grid grid-cols-4 items-center rounded-xl border border-text-main/6 bg-black/18 px-4 py-2 text-xs">
               <div class=" text-accent-tip/80">
                 PNG <span class="ml-1 text-text-dim">{{ summary.source_total_count || 0 }} 张</span>
                 <span class="ml-1 font-mono font-bold text-accent-tip">{{ formatFileSize(summary.source_total_bytes || 0) }}</span>
@@ -70,7 +70,7 @@
 
         <div class="flex flex-1 min-h-0">
           <section class="flex min-w-0 flex-1 flex-col border-r border-text-main/5">
-            <div class="shrink-0 border-b border-text-main/5 bg-black/20 px-6 py-3">
+            <div data-tour="texture-opt-list-toolbar" class="shrink-0 border-b border-text-main/5 bg-black/20 px-6 py-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex items-center gap-1 rounded-lg bg-text-main/5 p-1">
                   <button v-for="mode in ['ALL', 'PNG', 'DDS']" :key="mode" @click="textureStore.viewMode = mode" class="px-3 py-1 rounded-md text-xs font-bold transition-all"
@@ -91,7 +91,7 @@
               </div>
             </div>
 
-            <div class="relative min-h-0 flex-1 overflow-hidden bg-black/10">
+            <div data-tour="texture-opt-list" class="relative min-h-0 flex-1 overflow-hidden bg-black/10">
               <div v-if="displayRows.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-text-dim/50" >
                 <Inbox class="mb-4 w-16 h-16 opacity-50" />
                 <p>暂无数据，请先扫描统计或直接开始生成。</p>
@@ -135,7 +135,7 @@
           </section>
 
           <aside class="flex w-96 shrink-0 flex-col bg-bg-surface">
-            <div class="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-4">
+            <div data-tour="texture-opt-options"  class="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-4">
               <div class="space-y-2">
                 <div class="rounded-lg border p-3 text-xs"
                   :class="toolStatus.available ? 'bg-accent-success/10 border-accent-success/20 text-accent-success' : 'bg-accent-danger/10 border-accent-danger/20 text-accent-danger'">
@@ -208,18 +208,18 @@
             </div>
 
             <div class="shrink-0 border-t border-text-main/5 bg-black/20 p-4">
-              <div class="space-y-2">
-                <button @click="handleAnalyze" :disabled="isBusy"
+              <div data-tour="texture-opt-actions" class="space-y-2">
+                <button data-tour="texture-opt-analyze" @click="handleAnalyze" :disabled="isBusy"
                   class="flex w-full items-center justify-center gap-2 rounded-xl border border-accent-secondary/30 bg-accent-secondary/10 py-2.5 font-bold text-accent-secondary transition-all disabled:cursor-not-allowed disabled:opacity-50">
                   <ScanSearch class="w-4 h-4" /> 扫描统计
                 </button>
 
-                <button v-if="!isBusy" @click="handleOptimize" :disabled="!toolStatus.available"
+                <button v-if="!isBusy" data-tour="texture-opt-generate" @click="handleOptimize" :disabled="!toolStatus.available"
                   class="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-primary py-3 font-black text-black shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                   <Rocket class="w-5 h-5" /> {{ config.overwrite_existing ? '全覆盖生成 DDS' : '增量生成 DDS' }}
                 </button>
 
-                <button v-if="!isBusy" @click="handleCleanGenerated" :disabled="!toolStatus.available"
+                <button v-if="!isBusy" data-tour="texture-opt-clean" @click="handleCleanGenerated" :disabled="!toolStatus.available"
                   class="flex w-full items-center justify-center gap-2 rounded-xl border border-accent-warning/30 bg-accent-warning/10 py-2.5 font-bold text-accent-warning transition-all disabled:cursor-not-allowed disabled:opacity-50">
                   <BrushCleaning class="w-4 h-4" /> 清理已生成 DDS
                 </button>

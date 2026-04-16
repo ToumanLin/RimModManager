@@ -358,7 +358,7 @@ export const workspaceGuideSteps = [
     element: '[data-tour="workspace-workshop-toolbar"]',
     popover: {
       title: "库存工具栏",
-      description: "支持搜索、筛选、排序、缺失检测和更新检测，是日常盘点库存的主工作区。",
+      description: "支持搜索、筛选、排序、缺失检测和更新检测，是日常盘点库存的主工作区。例如，可通过筛选出所有禁用的模组，多选后批量启用。",
       side: "bottom",
     },
   },
@@ -646,6 +646,62 @@ export const aiConfigGuideSteps = [
       title: "保存配置",
       description: "测试通过后别忘了保存，否则这次修改不会写回正式设置。",
       side: "top",
+    },
+  },
+];
+
+export const textureOptGuideSteps = [
+  {
+    element: '[data-tour="texture-opt-entry"]',
+    popover: {
+      title: "贴图优化入口",
+      description: "这里进入贴图优化中心。它的作用是把真实 PNG 源图预处理成 DDS，以换取更低显存占用和更快的贴图载入。",
+      side: "bottom",
+    },
+    onNextBefore: async () => {
+      if (!document.querySelector('[data-tour="texture-opt-modal"]')) {
+        await clickTourTarget('[data-tour="texture-opt-entry"]');
+      }
+    },
+  },
+  {
+    element: '[data-tour="texture-opt-summary"]',
+    popover: {
+      title: "总览统计",
+      description: "这里会把当前范围内的源图数量、现有 DDS、待生成、无效 PNG、小图跳过和显存预估集中展示。先看这里，再决定是否需要生成或清理。",
+      side: "bottom",
+    },
+  },
+  {
+    element: '[data-tour="texture-opt-list-toolbar"]',
+    popover: {
+      title: "列表筛选与排序",
+      description: "左侧主体按模组展示贴图储存占比。你可以切换 PNG / DDS 视图，搜索模组名称或路径，并按占比、待生成数量或显存节省排序。",
+      side: "bottom",
+    },
+  },
+  {
+    element: '[data-tour="texture-opt-list"]',
+    popover: {
+      title: "模组明细列表",
+      description: "这里按模组汇总贴图情况。通常优先看待生成多、体积大、显存节省高的模组；遇到无效 PNG 或无源 DDS 也会在这里暴露出来。",
+      side: "left",
+    },
+  },
+  {
+    element: '[data-tour="texture-opt-options"]',
+    popover: {
+      title: "优化选项",
+      description: "这里可以调整优化参数，影响生成的 DDS 体积和显存占用。通常而言，缩放倍率越小，越省显存，但贴图也越容易变糊。",
+      side: "left",
+    },
+  },
+  {
+    element: '[data-tour="texture-opt-actions"]',
+    popover: {
+      title: "主要操作",
+      description: "一般流程是先扫描统计，再按需要生成或清理。生成完成后系统会自动重新扫描刷新统计；清理用于回收旧 DDS 或把整库恢复到源图状态。",
+      side: "left",
     },
   },
 ];

@@ -18,6 +18,7 @@ import {
   githubGuideSteps,
   ruleCenterGuideSteps,
   conflictGuideSteps,
+  textureOptGuideSteps,
   aiConfigGuideSteps,
   aiReviewGuideSteps,
   logAnalysisGuideSteps,
@@ -71,6 +72,12 @@ export const allGuides = [
       const appStore = useAppStore();
       appStore.uiState.showRuleDrawer = true;
     }
+  },
+  {
+    key: 'textureOpt',
+    title: '贴图优化快速上手',
+    description: '了解贴图优化中心的统计含义、生成/清理规则，以及 todds 的基本使用方式。',
+    steps: textureOptGuideSteps,
   },
   {
     key: 'aiConfig',
