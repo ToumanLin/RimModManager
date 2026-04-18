@@ -22,6 +22,7 @@ export const useAppStore = defineStore('app', () => {
   const buildMode = ref('')      // 构建模式
   const isLoading = ref(false)   // 加载状态
   const isGameRunning = ref(false) // 新增：全局游戏运行状态
+  const isSuspended = ref(false) // 浏览器模式下的同页静默挂起状态
   
   // UI 状态
   const uiState = reactive({
@@ -57,6 +58,8 @@ export const useAppStore = defineStore('app', () => {
   const cancelPendingTaskIds = ref(new Set())
   const cancelPendingTimers = new Map()
   const CANCELLATION_PENDING_TIMEOUT_MS = 15000
+  let suspendRecoveryTimer = null
+  let suspendRecoveryPromise = null
 
   const upgradeContext = ref({}); // 升级上下文
 
@@ -333,6 +336,37 @@ export const useAppStore = defineStore('app', () => {
     return false
   }
 
+  const recoverFromSuspendedState = async () => {
+    if (suspendRecoveryPromise) return suspendRecoveryPromise
+
+    suspendRecoveryPromise = (async () => {
+      try {
+        const clearedScanTasks = taskStore.settleActiveTasks('scan', {
+          status: 'cancelled',
+          message: '扫描因界面挂起而中断，请重新刷新。',
+          metrics: { resumed_after_suspend: true },
+        })
+        if (clearedScanTasks > 0) {
+          toast.info('已清理挂起前遗留的扫描任务，请按需重新刷新。', { timeout: 2500 })
+        }
+
+        await waitForBackend()
+        if (window.pywebview?.api?.monitor_frontend_ready) {
+          await window.pywebview.api.monitor_frontend_ready()
+        }
+        await refreshData(false)
+      } catch (e) {
+        console.error("恢复挂起界面失败:", e)
+        toast.error(`恢复界面失败: \n${e.message || e}`)
+      } finally {
+        isLoading.value = false
+        suspendRecoveryPromise = null
+      }
+    })()
+
+    return suspendRecoveryPromise
+  }
+
   // === Actions ===
   // 初始化：获取数据并分类
   const initialize = async () => {
@@ -512,10 +546,26 @@ export const useAppStore = defineStore('app', () => {
       console.log('检测到游戏启动，停止所有界面活动...');
       // 1. 设置全局加载状态，屏蔽用户操作
       isLoading.value = true;
+      if (suspendRecoveryTimer) {
+        clearTimeout(suspendRecoveryTimer)
+        suspendRecoveryTimer = null
+      }
     });
     // 监听游戏状态变化
     window.addEventListener('game-status-changed', (e) => {
       isGameRunning.value = e.detail.running
+    })
+    window.addEventListener('app-suspending', () => {
+      isSuspended.value = true
+    })
+    window.addEventListener('app-resuming', () => {
+      isSuspended.value = false
+      isLoading.value = true
+      if (suspendRecoveryTimer) clearTimeout(suspendRecoveryTimer)
+      suspendRecoveryTimer = window.setTimeout(() => {
+        suspendRecoveryTimer = null
+        void recoverFromSuspendedState()
+      }, 120)
     })
     // 通用进度更新
     window.addEventListener('global-progress', (e) => {
@@ -708,6 +758,11 @@ export const useAppStore = defineStore('app', () => {
   const enterSleepMode = () => {
     if (window.pywebview) {
       window.pywebview.api.monitor_force_sleep()
+    }
+  }
+  const exitSleepMode = () => {
+    if (window.pywebview) {
+      window.pywebview.api.monitor_force_wake()
     }
   }
   // 自动检测路径
@@ -1290,8 +1345,8 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     appVersion, buildMode, uiState, settings, isLoading, isDownloading, isScanRunning, updateState,
-    aiState, aiBatchResults, aiBatchResultCount, currentAiBatchTask, currentAiBatchTaskId, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, upgradeContext,
-    initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode,
+    aiState, aiBatchResults, aiBatchResultCount, currentAiBatchTask, currentAiBatchTaskId, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, upgradeContext,
+    initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode, exitSleepMode,
     getThumbUrl, getLocalUrl, getRemoteUrl,
     // 游戏相关
     checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultCommunityPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
