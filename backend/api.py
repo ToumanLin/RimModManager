@@ -10,6 +10,7 @@ import time
 import functools
 import uuid
 import webview
+from pathlib import Path
 from dataclasses import dataclass, asdict, is_dataclass
 from typing import Any, Dict, List
 from datetime import datetime
@@ -172,7 +173,7 @@ class API:
     所有前端调用的 window.pywebview.api.xxx 方法都在这里定义。
     """
 
-    def __init__(self):
+    def __init__(self, runtime_mode: str = "desktop"):
         logger.info("API Layer Initializing...")
         # 1. 初始化数据库
         # 数据库文件放在当前工作目录的data目录下
@@ -182,6 +183,7 @@ class API:
         # 当 pywebview 试图序列化 API 给 JS 用时，会试图深入序列化，
         # 公开属性会导致陷入无限递归（Window -> API -> Window -> ...），最终导致堆栈溢出崩溃
         self._window = None  # 私有属性
+        self._runtime_mode = str(runtime_mode or "desktop").strip().lower() or "desktop"
         self._upgrade_context = {
             "version_changed": False,
             "old_version": "0.0.0",
@@ -194,6 +196,7 @@ class API:
         self._native_drop_selector = '#backup-drop-zone'
         self._native_drop_element = None
         self._native_drop_handler = None
+        self._browser_base_url = ""
         self._github_subs_refresh_lock = threading.Lock()
         self._github_subs_refresh_running = False
         self._github_subs_refresh_started_at = 0
@@ -344,7 +347,13 @@ class API:
     def get_window(self):
         """获取主窗口"""
         return self._window
-    
+
+    def is_browser_runtime(self) -> bool:
+        return self._runtime_mode == 'browser'
+
+    def set_browser_base_url(self, base_url: str):
+        self._browser_base_url = str(base_url or "").rstrip("/")
+
     def _on_app_loaded(self):
         """主窗口加载完毕回调"""
         self._bind_native_drag_drop()
@@ -471,6 +480,9 @@ class API:
         """前端 Vue 挂载完毕后，主动调用此接口通知后端"""
         EventBus.resume()
         EventBus.mark_ready() # 激活 EventBus
+        if self.game_monitor and not self.game_monitor.running:
+            logger.info("前端已就绪，启动游戏监视器...")
+            self.game_monitor.start()
         if self.game_monitor:
             # 告诉前端当前的游戏状态
             EventBus.emit('game-status-changed', {'running': self.game_monitor.is_game_running})
@@ -489,6 +501,7 @@ class API:
         result = {
             "app_version": __version__,
             "build_mode": __build__,
+            "runtime_mode": self._runtime_mode,
             "settings": asdict(settings.config), # 转为字典发给前端
             "asset_port": self.file_mgr.get_port(),
             "context_healthy": False, 
@@ -1989,6 +2002,7 @@ class API:
         if not self.browser_window: 
             self.browser_window = SubBrowserManager(self)
         self.browser_window.open(url, title)
+        return ApiResponse.success()
 
 
     # ==========================================
