@@ -121,6 +121,7 @@ export const useAppStore = defineStore('app', () => {
     community_instead_db_path: '',
     
     current_profile_id: 'default',
+    browser_mode: false,
     asset_port: 0,
 
     // --- 系统 ---
@@ -331,7 +332,6 @@ export const useAppStore = defineStore('app', () => {
     else toast.error(`${workname}失败: \n${res.message}`)
     return false
   }
-
 
   // === Actions ===
   // 初始化：获取数据并分类

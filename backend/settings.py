@@ -196,6 +196,7 @@ class AppConfig:
     user_rules_path: str = str(USER_RULES_PATH)
     
     # --- 开发与调试设置 ---
+    browser_mode: bool = False            # 是否默认使用浏览器模式启动
     debug_mode: bool = False  # 开发模式开关
     log_retention_days: int = 7  # 日志保留天数
     log_level: str = "INFO"  # 默认日志等级 DEBUG, INFO, WARNING, ERROR
