@@ -1,4 +1,5 @@
 import asyncio
+import base64
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -407,23 +408,46 @@ class API:
             "warnings": payload.get('warnings', []),
             "errors": payload.get('errors', []),
             "import_check": payload.get('import_check', {"summary": {}, "items": []}),
+            "version_token": payload.get('version_token', {}),
             "source_profile_id": source_profile_id,
             "source_profile_name": source_profile_name if source_profile_id else '',
         }
 
-    def _write_browser_import_temp_file(self, filename: str, content: str) -> str:
+    def _write_browser_import_temp_file(self, filename: str, content: bytes) -> str:
         suffix = Path(str(filename or "").strip() or "import.txt").suffix or ".txt"
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
+            mode="wb",
             suffix=suffix,
             prefix="rmm-import-",
             delete=False,
         ) as temp_file:
-            temp_file.write(str(content or ""))
+            temp_file.write(content or b"")
             temp_path = temp_file.name
         self._browser_import_files.add(temp_path)
         return temp_path
+
+    def _decode_browser_import_payload(self, payload: Any):
+        if isinstance(payload, dict):
+            filename = str(payload.get("filename") or "import.txt").strip() or "import.txt"
+            if payload.get("content_base64"):
+                return filename, base64.b64decode(str(payload.get("content_base64") or ""))
+            text_content = str(payload.get("content") or "")
+            encoding = str(payload.get("encoding") or "utf-8") or "utf-8"
+            return filename, text_content.encode(encoding, errors="replace")
+        filename = "import.txt"
+        return filename, str(payload or "").encode("utf-8")
+
+    def _build_save_conflict_payload(self, disk_result: dict, editing_ids: list[str]):
+        return {
+            "status": "conflict",
+            "disk_order": self._build_load_order_result(
+                disk_result.get("source_path") or (self.active_context.mods_config_file if self.active_context else ""),
+                disk_result,
+            ),
+            "editing_order": {
+                "active_ids": [str(package_id or "").strip().lower() for package_id in (editing_ids or []) if str(package_id or "").strip()],
+            },
+        }
 
     def _on_app_loaded(self):
         """主窗口加载完毕回调"""
@@ -583,6 +607,7 @@ class API:
             "groups": [],
             "active_load_order": [],
             "active_load_modify_time": 0,
+            "active_load_version_token": {},
             "is_first_db_init": self.is_first_db_init,
             "active_context": self.active_context if self.active_context else None,
             "upgrade_context": self._upgrade_context.copy() 
@@ -603,13 +628,6 @@ class API:
         # 4. 获取当前激活的加载顺序
         active_load_order = self.load_order_mgr.read_active_mods() if self.load_order_mgr else {'active_mods': [], 'modify_time': 0}
         inactive_mods_order = self.active_context.inactive_mods_order if getattr(self.active_context, 'inactive_mods_order', []) else []
-        
-        # 防呆：注入核心模组
-        current_active_ids = active_load_order.get('active_mods', [])
-        mod_map = {m['package_id'].lower(): m for m in context_mods}
-        if self.sorter:
-            active_ids, needs_added_ids = self.sorter.ensure_mods(current_active_ids, mod_map)
-            current_active_ids = self.sorter.smart_insert_mods(needs_added_ids, current_active_ids, mod_map)
         
         replacements = self.workshop_db_mgr.get_replacements()
         replacements_map = {r['old_workshop_id']: r for r in replacements}
@@ -641,9 +659,10 @@ class API:
             "all_mods": context_mods,  # 返回过滤后的列表
             "groups": all_groups,
             "interlocks": interlock_map,
-            "active_load_order": current_active_ids, # 发送完成补齐后的最终列表
+            "active_load_order": active_load_order.get('active_mods', []),
             "inactive_load_order": inactive_mods_order,
             "active_load_modify_time": active_load_order.get('modify_time', 0),
+            "active_load_version_token": active_load_order.get('version_token', {}),
         })
         
         self._reset_upgrade_context()
@@ -1327,6 +1346,7 @@ class API:
             "warnings": res.get('warnings', []),
             "errors": res.get('errors', []),
             "import_check": res.get('import_check', {"summary": {}, "items": []}),
+            "version_token": res.get('version_token', {}),
         })
     
     @log_api_call
@@ -1370,15 +1390,15 @@ class API:
         return ApiResponse.success(result)
 
     @log_api_call
-    def load_order_file_import_payload(self, filename: str, content: str, profile_id: str | None = None):
+    def load_order_file_import_payload(self, payload: Any, profile_id: str | None = None):
         """
         浏览器模式下导入拖放的文件内容。
         标准浏览器不会暴露本地绝对路径，因此这里先落临时文件，再复用现有解析流程。
         """
-        normalized_name = str(filename or "").strip() or "import.txt"
+        normalized_name, raw_bytes = self._decode_browser_import_payload(payload)
         source_profile_id = str(profile_id or "").strip()
         load_order_mgr, _context, profile = self._resolve_load_order_scope(profile_id)
-        temp_path = self._write_browser_import_temp_file(normalized_name, content)
+        temp_path = self._write_browser_import_temp_file(normalized_name, raw_bytes)
         res = load_order_mgr.read_active_mods(temp_path) if load_order_mgr else {}
         result = self._build_load_order_result(
             temp_path,
@@ -1410,13 +1430,34 @@ class API:
         保存当前激活列表到 ModsConfig.xml
         :param active_ids: 激活的 Mod 列表
         """
+        return self.load_order_save_with_token(active_ids, is_dirty=is_dirty, base_version_token=None)
+
+    @log_api_call
+    def load_order_save_with_token(self, active_ids: List[str], is_dirty: bool=True, base_version_token: dict | None = None):
+        """
+        保存当前激活列表到 ModsConfig.xml，并阻止对过期磁盘版本的静默覆盖。
+        """
         if not self.active_context: return ApiResponse.error("环境配置上下文缺失")
-        if not self.active_context.game_config_path or not os.path.exists(self.active_context.game_config_path): 
+        if not self.active_context.game_config_path or not os.path.exists(self.active_context.game_config_path):
             return ApiResponse.error("未指定游戏配置路径")
         try:
-            use_raw_ids = settings.config.use_raw_ids
-            success = self.load_order_mgr.save_active_mods(active_ids, is_dirty=is_dirty, use_raw_ids=use_raw_ids) if self.load_order_mgr else False
-            if success: return ApiResponse.success()
+            if self.load_order_mgr:
+                is_stale, current_token = self.load_order_mgr.is_version_token_stale(base_version_token)
+                if is_stale:
+                    disk_result = self.load_order_mgr.read_active_mods()
+                    return ApiResponse.warning(
+                        "磁盘加载顺序已被外部修改，请先处理冲突。",
+                        self._build_save_conflict_payload(disk_result, active_ids),
+                    )
+            success = self.load_order_mgr.save_active_mods(active_ids, is_dirty=is_dirty) if self.load_order_mgr else False
+            if success:
+                latest = self.load_order_mgr.read_active_mods() if self.load_order_mgr else {}
+                return ApiResponse.success({
+                    "saved": True,
+                    "version_token": latest.get("version_token", current_token if self.load_order_mgr else {}),
+                    "modify_time": latest.get("modify_time", 0),
+                    "active_ids": latest.get("active_mods", []),
+                })
             return ApiResponse.warning("取消保存")
         except Exception as e:
             return ApiResponse.error(f"保存 ModsConfig.xml 时出错: {e}")
@@ -1430,14 +1471,12 @@ class API:
         """
         try:
             if not target_path and not trigger_dialog: trigger_dialog = True
-            use_raw_ids = settings.config.use_raw_ids
             # 导出格式和列表名都透传给 LoadOrderManager，
             # 由底层统一决定生成 ModsConfig.xml 还是 ModList.xml。
             success = self.load_order_mgr.save_active_mods(
                 active_ids,
                 target_path,
                 trigger_dialog,
-                use_raw_ids=use_raw_ids,
                 export_format=export_format,
                 list_name=list_name
             ) if self.load_order_mgr else False
@@ -1447,6 +1486,25 @@ class API:
             return ApiResponse.error(f"导出加载顺序时出错: {e}")
 
     @log_api_call
+    def load_order_export_pick_path(self, export_format: str = 'modsconfig'):
+        if not self.load_order_mgr:
+            return ApiResponse.error("加载顺序管理器未初始化")
+        try:
+            export_format = str(export_format or 'modsconfig').strip().lower() or 'modsconfig'
+            default_name = self.load_order_mgr._default_export_name(export_format)
+            file_types = self.load_order_mgr._get_save_file_types(export_format)
+            selected = FileManager.save_file_dialog(
+                initial_dir=self.load_order_mgr.other_dir,
+                default_filename=default_name,
+                file_types=file_types,
+            )
+            if not selected:
+                return ApiResponse.warning("未选择导出路径")
+            return ApiResponse.success({"path": selected})
+        except Exception as e:
+            return ApiResponse.error(f"选择导出路径时出错: {e}")
+
+    @log_api_call
     def load_order_share_export(self, active_ids: List[str], list_name: str | None = None):
         """
         把当前加载顺序导出为分享码。
@@ -1454,11 +1512,9 @@ class API:
         if not self.load_order_mgr:
             return ApiResponse.error("加载顺序管理器未初始化")
         try:
-            use_raw_ids = settings.config.use_raw_ids
             share_code = self.load_order_mgr.export_share_code(
                 active_ids,
                 list_name=list_name,
-                use_raw_ids=use_raw_ids,
             )
             return ApiResponse.success({
                 "share_code": share_code,

@@ -25,6 +25,7 @@ export const useModStore = defineStore('mods', () => {
   const savedInactiveIds = ref([])   // 从后端拉取的历史停用顺序
   const savedActiveIds = ref([])      // 原始已激活列表快照（用于判断 列表变化）
   const activeLoadModifyTime = ref(0) // 已激活列表最后修改时间戳
+  const activeLoadVersionToken = ref({})
 
   const conflictList = ref([])        // 重复包名冲突列表
   const coexistenceList = ref([])     // 共存Mod列表
@@ -150,8 +151,10 @@ export const useModStore = defineStore('mods', () => {
     tempIds: [...tempIds.value],
     savedActiveIds: [...savedActiveIds.value],
     activeLoadModifyTime: activeLoadModifyTime.value || 0,
+    activeLoadVersionToken: { ...(activeLoadVersionToken.value || {}) },
     modTimes: createModTimeSnapshot(trackedModIds)
   })
+  const captureListHistorySnapshot = (trackedModIds = []) => createListHistorySnapshot(trackedModIds)
   const restoreModTimeSnapshot = (modTimes = {}) => {
     Object.entries(modTimes || {}).forEach(([id, times]) => {
       const mod = allModsMap.value.get(String(id).toLowerCase())
@@ -180,6 +183,7 @@ export const useModStore = defineStore('mods', () => {
     if (!isSameArray(before.inactiveIds, after.inactiveIds)) return true
     if (!isSameArray(before.tempIds, after.tempIds)) return true
     if (!isSameArray(before.savedActiveIds, after.savedActiveIds)) return true
+    if (JSON.stringify(before.activeLoadVersionToken || {}) !== JSON.stringify(after.activeLoadVersionToken || {})) return true
     return (before.activeLoadModifyTime || 0) !== (after.activeLoadModifyTime || 0)
   }
   const pushListHistoryEntry = (entry) => {
@@ -220,9 +224,15 @@ export const useModStore = defineStore('mods', () => {
     tempIds.value = [...(snapshot.tempIds || [])]
     savedActiveIds.value = [...(snapshot.savedActiveIds || [])]
     activeLoadModifyTime.value = snapshot.activeLoadModifyTime || 0
+    activeLoadVersionToken.value = { ...(snapshot.activeLoadVersionToken || {}) }
     restoreModTimeSnapshot(snapshot.modTimes)
     dataVersion.value++
     return true
+  }
+  const setActiveLoadBaseline = (ids = [], modifyTime = 0, versionToken = {}) => {
+    savedActiveIds.value = [...(ids || [])]
+    activeLoadModifyTime.value = modifyTime || 0
+    activeLoadVersionToken.value = { ...(versionToken || {}) }
   }
   const undoListHistory = () => {
     const entry = listHistoryUndoStack.value.pop()
@@ -422,13 +432,17 @@ export const useModStore = defineStore('mods', () => {
     }
   }
   // 设置 Mod 数据
-  const setMods = (data) => {
-    clearListHistory()
+  const setMods = (data, options = {}) => {
+    const { resetHistory = false } = options || {}
+    if (resetHistory) clearListHistory()
     activeIds.value = (data.active_load_order || []).map(id => id.toLowerCase())
-    savedActiveIds.value = [...data.active_load_order] || []  // 保存原始顺序，用于判定排序变动
+    setActiveLoadBaseline(
+      data.active_load_order || [],
+      data.active_load_modify_time || 0,
+      data.active_load_version_token || {}
+    )
     savedInactiveIds.value = [...data.inactive_load_order] || [] // 接收持久化停用顺序
     interlocksMap.value = data.interlocks || {}             // 接收联锁字典
-    activeLoadModifyTime.value = data.active_load_modify_time  // 排序文件修改时间（更新时间）
     // 创建一个 Set 用于 O(1) 快速查找
     const activeSet = new Set(activeIds.value);
     // 直接重建 Map，确保删除的 Mod 能被移除，新增的能被加入
@@ -465,6 +479,8 @@ export const useModStore = defineStore('mods', () => {
     inactiveIds.value = []
     tempIds.value = []
     savedActiveIds.value = []
+    activeLoadModifyTime.value = 0
+    activeLoadVersionToken.value = {}
     dataVersion.value++
   }
   // 从所有列表中移除指定 IDs
@@ -631,6 +647,11 @@ export const useModStore = defineStore('mods', () => {
     // 处理空输入，默认使用当前活动项
     if (!mod_ids || mod_ids.length === 0) mod_ids = activeIds.value 
     try {
+      const { useSupplementStore } = await import('./supplementStore')
+      const supplementStore = useSupplementStore()
+      const canContinue = await supplementStore.ensureRequiredBeforeAutosort({ activeIds: activeIds.value })
+      if (!canContinue) return
+      mod_ids = activeIds.value
       const res = await window.pywebview.api.auto_sort_mods(mod_ids)
       if (checkResult(res, "自动排序Mod")) {
         await runListHistoryTransaction({
@@ -1048,13 +1069,13 @@ export const useModStore = defineStore('mods', () => {
     // 1.5 预处理语言包映射 (Language Packs Mapping)
     // 如果用户开启了语言检测，提前找出所有语言包并映射到它们的目标 Mod
     const checkLangEnabled = appStore.settings.check_language_support
-    const targetLang = appStore.settings.language // 当前软件语言 (例如 'zh-cn', 'ChineseSimplified' 等)
+    const targetLang = appStore.settings.language // 当前软件语言，后端统一输出规范语言码
     const langPackMap = new Map() // 数据结构: { targetModId: [ LangPackMod1, LangPackMod2 ] }
     if (checkLangEnabled && targetLang) {
       for (const mod of allModsMap.value.values()) {
         const isLangPack = (mod.user_mod_type || mod.mod_type) === 'LanguagePack'
         // 匹配语言 (忽略大小写)
-        const supportsLang = mod.supported_languages?.some(l => l.toLowerCase() === targetLang.toLowerCase())
+        const supportsLang = !!targetLang && (mod.supported_languages || []).includes(targetLang)
         if (isLangPack && supportsLang) {
           // 获取该语言包所指向的目标 Mod (通常在依赖或 load_after 中)
           const rules = mod.rules || { dependencies: [], load_after: [] }
@@ -1288,7 +1309,7 @@ export const useModStore = defineStore('mods', () => {
           // pass
         } else {
           // 检查自身是否直接支持当前语言
-          const modSupportsLang = mod.supported_languages?.some(l => l.toLowerCase() === targetLang.toLowerCase())
+          const modSupportsLang = !!targetLang && (mod.supported_languages || []).includes(targetLang)
           // 如果自身不支持，且自身不是语言包本体
           if (!modSupportsLang && !isSelfLangPack) {
             const availablePacks = langPackMap.get(currentId) || []
@@ -1386,36 +1407,6 @@ export const useModStore = defineStore('mods', () => {
       if (issues) {
         issues.forEach(issue => {
           if (issue.type === issueType && issue.targetId) {
-            toActivate.add(issue.targetId)
-          }
-        })
-      }
-    })
-    return Array.from(toActivate)
-  }
-  // 提取当前列表所有未启用的有效依赖项 ID
-  const getMissingLocalDependencies = (targetIds) => {
-    const toActivate = new Set()
-    targetIds.forEach(id => {
-      const issues = modIssues.value.get(id.toLowerCase())
-      if (issues) {
-        issues.forEach(issue => {
-          if (issue.type === ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY && issue.targetId) {
-            toActivate.add(issue.targetId)
-          }
-        })
-      }
-    })
-    return Array.from(toActivate)
-  }
-  // 提取当前列表所有未启用的有效语言包 ID
-  const getMissingLanguagePacks = (targetIds) => {
-    const toActivate = new Set()
-    targetIds.forEach(id => {
-      const issues = modIssues.value.get(id.toLowerCase())
-      if (issues) {
-        issues.forEach(issue => {
-          if (issue.type === ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK && issue.targetId) {
             toActivate.add(issue.targetId)
           }
         })
@@ -1559,7 +1550,7 @@ export const useModStore = defineStore('mods', () => {
   return {
     // State
     allModsMap, dataVersion, inactiveIds, tempIds, activeIds, interlocksMap, savedInactiveIds, interlockDetailsMap, 
-    savedActiveIds, activeLoadModifyTime, conflictList, coexistenceList,
+    savedActiveIds, activeLoadModifyTime, activeLoadVersionToken, conflictList, coexistenceList,
     selectedIds, lastSelectedMod, currentTargetId, isDraggingMod,
     listHistoryUndoStack, listHistoryRedoStack, isApplyingListHistory,
 
@@ -1569,12 +1560,12 @@ export const useModStore = defineStore('mods', () => {
     canUndoListHistory, canRedoListHistory,
 
     // Actions
-    setMods, reset, takeModById, hasRealModById, takeModListByIds, displayModName, displayModType, displayModIcon, fetchAndCacheGhostMods,
+    setMods, reset, setActiveLoadBaseline, captureListHistorySnapshot, takeModById, hasRealModById, takeModListByIds, displayModName, displayModType, displayModIcon, fetchAndCacheGhostMods,
     updateInactiveIds, takeInactiveIds, setListIds, removeIdsOnAllList, selectMods, clearSelection, changeModsActive, getModInterlockChain, loadInterlockDetails,
     scanMods, scanComplete, autoSortMods, localizeSelectedMods, localizeMods, disableMods, deleteMods, smartInsertMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, healInterlock, getInterlockMissingDetails, batchUpdateModsUserData,
     setModsColor, setModsType, addModsTags, removeModsTags, selectModsTag, selectModsGroup, 
-    getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getIssusTargetIds, getMissingLocalDependencies, getMissingLanguagePacks, 
+    getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getIssusTargetIds,
     clearListHistory, runListHistoryTransaction, recordListHistory, undoListHistory, redoListHistory,
   }
 })

@@ -129,7 +129,7 @@ export const useAppStore = defineStore('app', () => {
     asset_port: 0,
 
     // --- 系统 ---
-    language: 'ZH-cn',
+    language: 'zh-cn',
     window_width: 1400,
     window_height: 900,
     completed_guides: [],
@@ -213,12 +213,10 @@ export const useAppStore = defineStore('app', () => {
     delete_missing_mods_data: false,
     auto_sort_strategy: "classic_sort_logic",  // 自动排序策略
     sort_mods_by: "name",                 // 自动排序排列方式: name, id, alias
-    auto_activate_dependencies: false,     // 是否在排序时自动激活依赖项
     coexist_mod_folder_name_type: "workshop_id", // 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: true,       // 是否显示共存Mod提示
     check_language_support: true,        // 是否检查语言支持
     language_packs_follow_targets: false, // 语言包是否贴紧其最后一个前置/依赖目标
-    use_raw_ids: false,               // 是否使用原始 Mod ID
 
     // --- 调试 (Debug) ---
     debug_mode: true,
@@ -355,7 +353,12 @@ export const useAppStore = defineStore('app', () => {
         if (window.pywebview?.api?.monitor_frontend_ready) {
           await window.pywebview.api.monitor_frontend_ready()
         }
-        await refreshData(false)
+        const orderStore = useOrderStore()
+        const resumeSnapshot = orderStore.captureRuntimeRefreshSnapshot()
+        await refreshData(false, {
+          historyLabel: '游戏退出后刷新磁盘状态',
+        })
+        await orderStore.presentRuntimeRefreshDiff(resumeSnapshot)
       } catch (e) {
         console.error("恢复挂起界面失败:", e)
         toast.error(`恢复界面失败: \n${e.message || e}`)
@@ -436,7 +439,7 @@ export const useAppStore = defineStore('app', () => {
     }
   }
   // 刷新数据 (初始化核心)
-  const refreshData = async (isInit = false) => {
+  const refreshData = async (isInit = false, options = {}) => {
     if (!window.pywebview) return
     isLoading.value = true
     try {
@@ -476,7 +479,17 @@ export const useAppStore = defineStore('app', () => {
         groupStore.setGroups(res.data.groups || [])
         // 更新 Active列表 (防止外部修改 Active列表 导致的状态不一致)
         const modStore = useModStore()
-        modStore.setMods(res.data)
+        const previousSnapshot = !isInit
+          ? modStore.captureListHistorySnapshot()
+          : null
+        modStore.setMods(res.data, { resetHistory: !!isInit })
+        if (previousSnapshot) {
+          modStore.recordListHistory({
+            before: previousSnapshot,
+            type: options.historyType || 'refresh-data',
+            label: options.historyLabel || '刷新磁盘状态',
+          })
+        }
         // 刷新动态规则
         const ruleStore = useRuleStore()
         ruleStore.fetchRules()

@@ -15,8 +15,25 @@ from .models import (
 )
 
 
+def _read_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
 def _read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore")
+    raw = _read_bytes(path)
+    for encoding in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "utf-8", "cp1252"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="ignore")
+
+
+def _parse_xml_root(path: Path):
+    try:
+        return ET.fromstring(_read_text(path))
+    except ET.ParseError:
+        return None
 
 
 def _non_comment_lines(text: str) -> list[str]:
@@ -51,11 +68,6 @@ def detect_load_order_format(file_path: str | Path) -> str:
     suffix = path.suffix.lower()
     file_name = path.name.lower()
 
-    if file_name == "modsconfig.xml":
-        return FORMAT_MODSCONFIG
-    if suffix == ".rws":
-        return FORMAT_SAVEGAME
-
     if suffix == ".json":
         data = json.loads(_read_text(path) or "null")
         if isinstance(data, dict):
@@ -65,37 +77,23 @@ def detect_load_order_format(file_path: str | Path) -> str:
                 return FORMAT_RMM_JSON
         return FORMAT_RMM_JSON
 
-    if suffix == ".xml":
-        root = ET.fromstring(_read_text(path))
+    root = _parse_xml_root(path)
+    if root is not None:
         tag_name = root.tag.lower()
 
-        if tag_name == "savegame" or root.find(".//meta/modIds") is not None:
-            return FORMAT_SAVEGAME
         if tag_name == "modlist" or root.find(".//modSteamWorkshopIds") is not None:
             return FORMAT_MODLIST
-        if tag_name == "modsconfigdata" or root.find(".//activeMods") is not None:
-            # 有些 RimPy 导出的 XML 也可能带 activeMods。
-            # 这里仍然优先认成 ModsConfig，因为它更接近游戏原生格式。
+        if tag_name == "modsconfigdata" or root.find("./activeMods") is not None or (
+            file_name == "modsconfig.xml" and root.find(".//activeMods") is not None
+        ):
             return FORMAT_MODSCONFIG
+        if tag_name == "savedmodlist" or root.find(".//meta/modSteamIds") is not None or suffix == ".rml":
+            return FORMAT_RML
+        if tag_name == "savegame" or root.find(".//meta/modIds") is not None:
+            return FORMAT_SAVEGAME
         return FORMAT_RIMPY_XML
 
-    if suffix == ".rml":
-        text = _read_text(path)
-        try:
-            root = ET.fromstring(text)
-            tag_name = root.tag.lower()
-            if tag_name == "savedmodlist" or root.find(".//meta/modIds") is not None:
-                return FORMAT_RML
-        except ET.ParseError:
-            pass
-
-        # 极端情况下，如果 .rml 并不是 XML，而只是一个文本列表，就回退到纯文本判断。
-        lines = _non_comment_lines(text)
-        if lines and all(_looks_like_workshop_value(line) for line in lines[:10]):
-            return FORMAT_WORKSHOP_IDS
-        return FORMAT_PLAIN_TEXT
-
-    if suffix in {".txt", ".list"}:
+    if suffix in {".txt", ".list", ".xml", ".rws", ".rml"}:
         lines = _non_comment_lines(_read_text(path))
         if lines and all(_looks_like_workshop_value(line) for line in lines[:10]):
             return FORMAT_WORKSHOP_IDS

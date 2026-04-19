@@ -22,6 +22,7 @@ from backend.database.models import (
 from backend.managers.mgr_profile import ProfileContext
 from backend.scanner.analyzer import ModAnalyzer
 from backend.settings import TOOL_MODS_DIR, settings
+from backend.utils.constants import normalize_language_code, normalize_language_codes
 from backend.utils.logger import logger
 from backend.utils.tools import (
     current_ms,
@@ -55,6 +56,14 @@ def _normalize_path_hashes(path_hashes: Sequence[str] | str) -> list[str]:
 def _sanitize_model_payload(payload: dict[str, Any], valid_field_names: set[str]) -> dict[str, Any]:
     """过滤掉模型上不存在的字段，避免批量写入时混入 UI 临时字段。"""
     return {key: value for key, value in payload.items() if key in valid_field_names}
+
+
+def _normalize_language_fields(asset: dict[str, Any]) -> dict[str, Any]:
+    """统一数据库读出时的语言字段格式，兼容历史旧数据。"""
+    asset["supported_languages"] = normalize_language_codes(asset.get("supported_languages", []))
+    if "language" in asset and asset.get("language") is not None:
+        asset["language"] = normalize_language_code(asset.get("language"))
+    return asset
 
 
 def _ensure_user_data_rows(mod_ids: Iterable[str]) -> None:
@@ -281,6 +290,7 @@ class ModDAO:
         sorted_assets = sorted(list(query), key=lambda asset: scope.priority_for_path(asset.get("path")), reverse=True)
 
         for asset in sorted_assets:
+            _normalize_language_fields(asset)
             package_id = normalize_package_id(asset.get("package_id"))
             if not package_id:
                 continue
@@ -330,6 +340,7 @@ class ModDAO:
 
         result = {"workshop": [], "self": [], "local": [], "missing": [], "unknown": []}
         for asset in all_assets:
+            _normalize_language_fields(asset)
             result[scope.classify_asset(asset)].append(asset)
         return result
 
@@ -347,7 +358,7 @@ class ModDAO:
         )
         if ignore_missing:
             query = query.where((ModAsset.path.is_null(False)) & (ModAsset.path != ""))  # type: ignore
-        return list(query.dicts())
+        return [_normalize_language_fields(asset) for asset in query.dicts()]
 
     @staticmethod
     def get_all_user_data():

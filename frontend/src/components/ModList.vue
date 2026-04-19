@@ -207,16 +207,11 @@
               <Download />
             </button>
           </div>
-          <!-- 添加未启用的依赖项 -->
-          <button v-if="inactiveDependenciesToAdd.length > 0" @click="addInactiveMods(inactiveDependenciesToAdd)" 
-            v-tooltip="`^^一键添加共计 ${inactiveDependenciesToAdd.length} 个未启用的依赖项^^`"
-            class="px-1 py-1 bg-accent-secondary/80 text-text-main/50 rounded-md hover:bg-accent-secondary hover:text-text-main transition-all" >
-            <GitPullRequestCreate />
-          </button>
-          <button v-if="inactiveLanguageModsToAdd.length > 0" @click="addInactiveMods(inactiveLanguageModsToAdd)" 
-            v-tooltip="`^^一键添加共计 ${inactiveLanguageModsToAdd.length} 个未启用的语言包^^`"
-            class="px-1 py-1 bg-accent-secondary/80 text-text-main/50 rounded-md hover:bg-accent-secondary hover:text-text-main transition-all" >
-            <MessageSquarePlus />
+          <button v-if="props.listId === 'active' && supplementSummary.count > 0" @click="openSupplementDialog()"
+            v-tooltip="supplementTooltip"
+            class="px-1 py-1 rounded-md transition-all"
+            :class="supplementButtonClass" >
+            <Megaphone />
           </button>
           <!-- 移除所有无效Mod -->
           <button v-if="invalidModsToRemove.length > 0" @click="removeInvalidMod" 
@@ -250,11 +245,12 @@ import { ISSUE_TITLE_MAP, ISSUE_TYPE } from '../utils/constants';
 import ModItem from './utils/ModItem.vue';
 import TagsSearch from './common/TagsSearch/TagsSearch.vue';
 import DependencyGraph from './utils/DependencyGraph.vue'
-import { Download, Flag, GitPullRequestCreate, Megaphone, MegaphoneOff, MessageSquarePlus, SearchAlert, Trash2 } from 'lucide-vue-next';
+import { Download, Flag, Megaphone, MegaphoneOff, SearchAlert, Trash2 } from 'lucide-vue-next';
 import { useContextMenuStore } from '../stores/contextMenuStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useGuideStore } from '../stores/guideStore';
 import { useProfileStore } from '../stores/profileStore';
+import { useSupplementStore } from '../stores/supplementStore';
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -270,6 +266,7 @@ const modStore = useModStore()
 const searchStore = useSearchStore()
 const menuStore = useContextMenuStore()
 const profileStore = useProfileStore()
+const supplementStore = useSupplementStore()
 const toast = useToast();
 const vListRef = ref(null)  // 虚拟列表引用, 用于滚动到选中项
 const listKey = ref(0)
@@ -414,16 +411,25 @@ const missingDependencies = computed(() => {
   if (!issuesSummary.value.stats[ISSUE_TYPE.ERROR_MISSING_DEPENDENCY]?.length) return []
   return modStore.getIssusTargetIds(props.modelValue, ISSUE_TYPE.ERROR_MISSING_DEPENDENCY)
 })
-// 提取真正需要被添加的、去重后的依赖项列表
-const inactiveDependenciesToAdd = computed(() => {
-  // 仅当当前列表真的有依赖报错时，才去执行精准提取（性能优化）
-  if (!issuesSummary.value.stats[ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY]?.length) return []
-  return modStore.getMissingLocalDependencies(props.modelValue)
+const supplementSummary = computed(() => {
+  if (props.listId !== 'active') return { groups: [], count: 0, requiredCount: 0, optionalCount: 0, urgency: 'none' }
+  return supplementStore.getSuggestionSummary(props.modelValue)
 })
-// 提取真正需要被添加的、去重后的语言包项列表
-const inactiveLanguageModsToAdd = computed(() => {
-  if (!issuesSummary.value.stats[ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK]?.length) return []
-  return modStore.getMissingLanguagePacks(props.modelValue)
+const supplementButtonClass = computed(() => {
+  if (supplementSummary.value.urgency === 'danger') {
+    return 'bg-accent-danger/80 text-text-main/60 hover:bg-accent-danger hover:text-text-main'
+  }
+  return 'bg-accent-warn/80 text-text-main/60 hover:bg-accent-warn hover:text-text-main'
+})
+const supplementTooltip = computed(() => {
+  if (supplementSummary.value.count === 0) return '当前没有可补充项'
+  const groupLines = supplementSummary.value.groups
+    .map(group => `• ${group.title}: ${group.count} 项`)
+    .join('\n')
+  const urgencyLine = supplementSummary.value.requiredCount > 0
+    ? `!!必需项 ${supplementSummary.value.requiredCount} 个!!`
+    : `^^可选项 ${supplementSummary.value.optionalCount} 个^^`
+  return `${urgencyLine}\n发现 ${supplementSummary.value.count} 个补缺建议\n${groupLines}\n\n__[[(点击打开补缺选择窗口)]]__`
 })
 // 提取需要被移除的无效 Mod 列表（这个其实是一一对应的，为了模板整洁也包装一下）
 const invalidModsToRemove = computed(() => {
@@ -918,6 +924,13 @@ const finishDragSession = ({ suppressDrop = false } = {}) => {
   isDragging.value = false
   modStore.isDraggingMod = false
 }
+const openSupplementDialog = async () => {
+  if (props.listId !== 'active') return
+  await supplementStore.openForActiveList({
+    activeIds: props.modelValue,
+    message: '你可以按组多选、全选后启用选中项。未确认前不会修改当前序列。',
+  })
+}
 const dispatchSyntheticDragEnd = () => {
   if (typeof document === 'undefined') return
   document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
@@ -1061,28 +1074,6 @@ const updateChildren = async (e) => {
   isSortAsc.value=!isSortAsc.value
 }
 
-// 添加缺失的依赖项
-const addInactiveMods = async (missingIds) => {
-  if (missingIds.length === 0) return
-  const nextIds = [...props.modelValue, ...missingIds]
-  await modStore.runListHistoryTransaction({
-    type: 'batch-add-list-items',
-    label: `向 ${props.title} 添加 ${missingIds.length} 项`,
-    trackedModIds: missingIds
-  }, async () => {
-    modStore.removeIdsOnAllList(missingIds)
-    modStore.setListIds(props.listId, nextIds)
-    modStore.takeModListByIds(missingIds).forEach(mod => {
-      mod.last_moved_time = Date.now()
-      mod.last_active_time = Date.now()
-    })
-  })
-  await nextTick()
-  // 通过翻转排序两次，实现软重绘
-  isSortAsc.value=!isSortAsc.value
-  await nextTick()
-  isSortAsc.value=!isSortAsc.value
-}
 // 移除无效的mod
 const removeInvalidMod = async () => {
   const invalidMods = invalidModsToRemove.value

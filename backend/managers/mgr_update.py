@@ -6,7 +6,7 @@ import sys
 import os
 import subprocess
 from dataclasses import asdict, dataclass
-from typing import Optional, List
+from typing import Dict, Optional, List
 from abc import ABC, abstractmethod
 import zipfile
 from packaging import version

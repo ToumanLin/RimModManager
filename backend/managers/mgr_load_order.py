@@ -2,6 +2,7 @@ import os
 import shutil
 import glob
 import datetime
+import hashlib
 from pathlib import Path
 from typing import Any
 from backend.database.dao import ModDAO
@@ -329,9 +330,11 @@ class LoadOrderManager:
             'warnings': parsed_result.get('warnings', []),
             'errors': parsed_result.get('errors', []),
             'import_check': import_check,
+            'source_path': source_path,
+            'version_token': self._build_version_token(source_path, parsed_result.get('active_mods', []), modify_time=modify_time),
         }
 
-    def _build_export_entries(self, active_ids, use_raw_ids: bool = False):
+    def _build_export_entries(self, active_ids):
         # 导出前统一生成结构化条目，避免两个导出分支重复查库和补名。
         normalized_ids = []
         for package_id in active_ids or []:
@@ -340,19 +343,62 @@ class LoadOrderManager:
                 normalized_ids.append(normalized)
 
         entries = self._enrich_mod_entries(self._build_mod_entries(normalized_ids))
-        if not use_raw_ids:
-            for entry in entries:
-                entry["package_id_raw"] = entry["package_id"]
+        for entry in entries:
+            # 游戏原生读写与本工具内部持久化一律使用规范化小写包名。
+            entry["package_id_raw"] = entry["package_id"]
         return entries
 
-    def export_share_code(self, active_ids, list_name: str | None = None, use_raw_ids: bool = False) -> str:
+    def _build_active_ids_hash(self, active_ids: list[str] | None = None) -> str:
+        normalized_ids = [normalize_package_id(package_id) for package_id in (active_ids or [])]
+        normalized_ids = [package_id for package_id in normalized_ids if package_id]
+        joined = "\n".join(normalized_ids)
+        return hashlib.sha1(joined.encode("utf-8")).hexdigest()
+
+    def _build_version_token(self, file_path: str | None, active_ids: list[str] | None = None, modify_time: int | None = None):
+        normalized_path = str(file_path or "").strip()
+        if not normalized_path:
+            return {
+                "path": "",
+                "mtime_ms": int(modify_time or 0),
+                "size": 0,
+                "active_hash": self._build_active_ids_hash(active_ids),
+            }
+        file_size = 0
+        file_mtime = int(modify_time or 0)
+        if os.path.exists(normalized_path):
+            try:
+                stat = os.stat(normalized_path)
+                file_size = int(stat.st_size)
+                if not file_mtime:
+                    file_mtime = int(stat.st_mtime * 1000)
+            except OSError:
+                file_size = 0
+        return {
+            "path": normalized_path,
+            "mtime_ms": file_mtime,
+            "size": file_size,
+            "active_hash": self._build_active_ids_hash(active_ids),
+        }
+
+    def get_current_version_token(self, mods_config_file_path: str | None = None):
+        read_result = self.read_active_mods(mods_config_file_path)
+        return read_result.get("version_token", {})
+
+    def is_version_token_stale(self, base_version_token: dict | None = None, mods_config_file_path: str | None = None):
+        expected = dict(base_version_token or {})
+        current = self.get_current_version_token(mods_config_file_path)
+        if not expected:
+            return False, current
+        return current != expected, current
+
+    def export_share_code(self, active_ids, list_name: str | None = None) -> str:
         """
         导出分享码。
 
         这里仍复用 manager 的元数据补全过程，让分享码尽量携带名称和工坊 ID，
         但真正的编码规则交给 `backend.load_order.share_code`。
         """
-        entries = self._build_export_entries(active_ids, use_raw_ids=use_raw_ids)
+        entries = self._build_export_entries(active_ids)
         if not entries:
             raise ValueError("当前没有可生成分享码的模组")
 
@@ -470,6 +516,7 @@ class LoadOrderManager:
                 'workshop_ids': [],
                 'warnings': [],
                 'errors': [],
+                'version_token': self._build_version_token(mods_config_file_path, []),
             }
         modify_time = int(os.path.getmtime(mods_config_file_path)*1000)
         try:
@@ -495,9 +542,10 @@ class LoadOrderManager:
                 "warnings": [],
                 "errors": [str(e)],
                 'import_check': {"summary": {}, "items": []},
+                'version_token': self._build_version_token(mods_config_file_path, [], modify_time=modify_time),
             }
 
-    def save_active_mods(self, active_ids, target_path=None, trigger_dialog=False, is_dirty=True, use_raw_ids=False, export_format: str = EXPORT_FORMAT_MODSCONFIG, list_name: str | None = None):
+    def save_active_mods(self, active_ids, target_path=None, trigger_dialog=False, is_dirty=True, export_format: str = EXPORT_FORMAT_MODSCONFIG, list_name: str | None = None):
         """
         保存加载顺序。
         :param active_ids: Mod ID 列表
@@ -510,8 +558,8 @@ class LoadOrderManager:
         if export_format not in {EXPORT_FORMAT_MODSCONFIG, EXPORT_FORMAT_MODLIST, EXPORT_FORMAT_RML}:
             raise ValueError(f"不支持的导出格式: {export_format}")
         # 先统一整理一份可导出的结构化条目，避免不同导出分支重复查库补名。
-        entries = self._build_export_entries(active_ids, use_raw_ids=use_raw_ids)
-        final_raw_ids = [entry.get("package_id_raw") or entry.get("package_id") for entry in entries]
+        entries = self._build_export_entries(active_ids)
+        final_ids = [entry.get("package_id") or "" for entry in entries]
         default_name = self._default_export_name(export_format)
         # 1. 确定最终写入路径
         write_path = self.context.mods_config_file if export_format == EXPORT_FORMAT_MODSCONFIG else ''
@@ -579,9 +627,9 @@ class LoadOrderManager:
                 # 清空旧列表
                 active_node.clear()
                 # ModsConfig.xml 仍保持游戏原生结构，只更新 activeMods 节点。
-                for mod_id in final_raw_ids:
+                for mod_id in final_ids:
                     li = etree.SubElement(active_node, "li")
-                    li.text = mod_id # 注意：写入时可能需要恢复原始大小写，但RimWorld通常不敏感
+                    li.text = mod_id
                 # 4. 格式化写入
                 tree.write(write_path, pretty_print=True, xml_declaration=True, encoding="utf-8")
                 # 同步一份最近备份，改用 RML 格式，方便后续完整恢复和识别。

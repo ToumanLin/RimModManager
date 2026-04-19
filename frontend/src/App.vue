@@ -230,6 +230,9 @@
     <!-- 确认弹窗 -->
     <Confirm />
 
+    <!-- 补充建议弹窗 -->
+    <SupplementSelectionDialog />
+
     <!-- 更新弹窗 -->
     <UpdateModal />
 
@@ -278,6 +281,7 @@ import WorkspaceOverlay from './components/workspace/WorkspaceOverlay.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import GuideCenter from './components/GuideCenter.vue'
 import TextureOptModal from './components/TextureOptModal.vue'
+import SupplementSelectionDialog from './components/SupplementSelectionDialog.vue'
 
 const updateModal = ref(null);
 

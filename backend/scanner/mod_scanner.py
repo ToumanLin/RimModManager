@@ -30,6 +30,7 @@ from backend.scanner.analyzer import ModAnalyzer
 from backend.scanner.parser_dlc import DLCParser
 from backend.managers.mgr_files import FileManager
 from backend.settings import TOOL_MODS_DIR, settings
+from backend.utils.constants import normalize_language_codes
 from backend.utils.logger import logger # 引入日志
 from backend.utils.event_bus import EventBus # 引入事件总线
 
@@ -533,7 +534,7 @@ class ModScanner:
         # DLC 注入翻译
         if is_dlc_dir and dlc_parser:
             dlc_parser.enrich_data(mod_data, mod_path)
-            mod_data['supported_languages'] = list(dlc_parser.translations.keys())
+            mod_data['supported_languages'] = normalize_language_codes(dlc_parser.translations.keys())
             
         # 路径与来源分析
         workshop_id = self._resolve_workshop_id(mod_path)
@@ -593,7 +594,9 @@ class ModScanner:
             
         mod_data.update({
             'path_hash': path_hash,
-            'supported_languages': analysis_info['supported_languages'] if not is_dlc_dir else mod_data.get('supported_languages', []),
+            'supported_languages': normalize_language_codes(
+                analysis_info['supported_languages'] if not is_dlc_dir else mod_data.get('supported_languages', [])
+            ),
             'file_stats': analysis_info['file_stats'],
             'mod_type': analysis_info['mod_type'],
             'path': mod_path,
