@@ -56,6 +56,24 @@ def _looks_like_workshop_value(value: str) -> bool:
     return False
 
 
+def _detect_json_export_format(text: str) -> str | None:
+    stripped = str(text or "").lstrip()
+    if not stripped.startswith(("{", "[")):
+        return None
+
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+
+    if isinstance(data, dict):
+        if any(key in data for key in ("mods", "active_mods", "activeMods", "mod_list", "modList")):
+            return FORMAT_RIMSORT_JSON
+        if any(key in data for key in ("package_ids", "modlist", "workshop_ids", "mod_names")):
+            return FORMAT_RMM_JSON
+    return FORMAT_RMM_JSON if isinstance(data, list) else None
+
+
 def detect_load_order_format(file_path: str | Path) -> str:
     """
     根据文件名、扩展名和内容探测导入格式。
@@ -67,15 +85,18 @@ def detect_load_order_format(file_path: str | Path) -> str:
     path = Path(file_path)
     suffix = path.suffix.lower()
     file_name = path.name.lower()
+    text = _read_text(path)
 
     if suffix == ".json":
-        data = json.loads(_read_text(path) or "null")
-        if isinstance(data, dict):
-            if any(key in data for key in ("mods", "active_mods", "activeMods", "mod_list", "modList")):
-                return FORMAT_RIMSORT_JSON
-            if any(key in data for key in ("package_ids", "modlist", "workshop_ids", "mod_names")):
-                return FORMAT_RMM_JSON
+        json_format = _detect_json_export_format(text)
+        if json_format:
+            return json_format
         return FORMAT_RMM_JSON
+
+    # RimSort 某些导出会把 JSON 内容写进带 .xml 的路径里，不能只靠后缀判断。
+    json_format = _detect_json_export_format(text)
+    if json_format:
+        return json_format
 
     root = _parse_xml_root(path)
     if root is not None:
@@ -87,14 +108,16 @@ def detect_load_order_format(file_path: str | Path) -> str:
             file_name == "modsconfig.xml" and root.find(".//activeMods") is not None
         ):
             return FORMAT_MODSCONFIG
-        if tag_name == "savedmodlist" or root.find(".//meta/modSteamIds") is not None or suffix == ".rml":
+        if tag_name == "savegame" or suffix == ".rws":
+            return FORMAT_SAVEGAME
+        if tag_name == "savedmodlist" or root.find("./meta/gameVersion") is not None or suffix == ".rml":
             return FORMAT_RML
-        if tag_name == "savegame" or root.find(".//meta/modIds") is not None:
+        if root.find(".//meta/modIds") is not None:
             return FORMAT_SAVEGAME
         return FORMAT_RIMPY_XML
 
     if suffix in {".txt", ".list", ".xml", ".rws", ".rml"}:
-        lines = _non_comment_lines(_read_text(path))
+        lines = _non_comment_lines(text)
         if lines and all(_looks_like_workshop_value(line) for line in lines[:10]):
             return FORMAT_WORKSHOP_IDS
         return FORMAT_PLAIN_TEXT

@@ -3447,13 +3447,7 @@ class API:
         for wid, candidates in installed_candidates.items():
             best_pid = min(
                 candidates.items(),
-                key=lambda item: (
-                    -item[1]['count'],
-                    item[1]['disabled_rank'],
-                    item[1]['store_rank'],
-                    item[1]['path_len'],
-                    item[0]
-                )
+                key=lambda item: ( -item[1]['count'], item[1]['disabled_rank'], item[1]['store_rank'], item[1]['path_len'], item[0] )
             )[0]
             resolved_map[wid] = best_pid
 

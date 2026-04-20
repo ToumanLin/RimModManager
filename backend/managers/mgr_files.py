@@ -369,16 +369,21 @@ class FileManager:
         # 获取当前活动窗口
         if len(webview.windows) > 0:
             window = webview.windows[0]
-            # 调用原生对话框
-            # allow_multiple=False: 单选
-            result = window.create_file_dialog(
-                webview.FileDialog.FOLDER, 
-                directory=path, 
-                allow_multiple=False
-            )
-            # result 返回的是一个列表 (因为可能多选)，或者 None (取消)
-            if result and len(result) > 0:
-                return result[0]
+            try:
+                # 调用原生对话框
+                # allow_multiple=False: 单选
+                result = window.create_file_dialog(
+                    webview.FileDialog.FOLDER, 
+                    directory=path, 
+                    allow_multiple=False
+                )
+                # 在 pywebview 环境里，取消选择应直接返回，不要再额外弹 Tk 对话框。
+                if result and len(result) > 0:
+                    return result[0]
+                return None
+            except Exception as e:
+                logger.warning(f"Webview folder dialog failed: {e}")
+                return None
         return FileManager._run_tk_dialog(
             lambda filedialog: filedialog.askdirectory(initialdir=path or os.getcwd()) or None
         )
@@ -409,14 +414,20 @@ class FileManager:
         
         if len(webview.windows) > 0:
             window = webview.windows[0]
-            result = window.create_file_dialog(
-                webview.FileDialog.OPEN, 
-                directory=path, 
-                allow_multiple=False,
-                file_types=file_types
-            )
-            if result and len(result) > 0:
-                return result[0]
+            try:
+                result = window.create_file_dialog(
+                    webview.FileDialog.OPEN, 
+                    directory=path, 
+                    allow_multiple=False,
+                    file_types=file_types
+                )
+                # 在 pywebview 环境里，取消选择应直接返回，不要再额外弹 Tk 对话框。
+                if result and len(result) > 0:
+                    return result[0]
+                return None
+            except Exception as e:
+                logger.warning(f"Webview open dialog failed: {e}")
+                return None
         tk_file_types = FileManager._parse_dialog_file_types(file_types)
         return FileManager._run_tk_dialog(
             lambda filedialog: filedialog.askopenfilename(
@@ -441,18 +452,24 @@ class FileManager:
         
         if len(webview.windows) > 0:
             window = webview.windows[0]
-            # pywebview 的 create_file_dialog 参数：
-            # dialog_type, directory, allow_multiple, save_filename, file_types
-            result = window.create_file_dialog(
-                webview.FileDialog.SAVE, 
-                directory=path, 
-                save_filename=default_filename, # 设置默认文件名
-                allow_multiple=False,
-                file_types=file_types
-            )
-            logger.info(f"用户选择保存路径: {result}")
-            if result and len(result) > 0:
-                return result[0]
+            try:
+                # pywebview 的 create_file_dialog 参数：
+                # dialog_type, directory, allow_multiple, save_filename, file_types
+                result = window.create_file_dialog(
+                    webview.FileDialog.SAVE, 
+                    directory=path, 
+                    save_filename=default_filename, # 设置默认文件名
+                    allow_multiple=False,
+                    file_types=file_types
+                )
+                logger.info(f"用户选择保存路径: {result}")
+                # 在 pywebview 环境里，取消选择应直接返回，不要再额外弹 Tk 对话框。
+                if result and len(result) > 0:
+                    return result[0]
+                return None
+            except Exception as e:
+                logger.warning(f"Webview save dialog failed: {e}")
+                return None
 
         tk_file_types = FileManager._parse_dialog_file_types(file_types)
         return FileManager._run_tk_dialog(

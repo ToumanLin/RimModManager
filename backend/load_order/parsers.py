@@ -63,6 +63,20 @@ def _extract_workshop_id(value: str) -> str:
     return match.group(1) if match else ""
 
 
+def _parse_rimsort_clipboard_line(value: str):
+    line = str(value or "").strip()
+    match = re.match(r"^(?P<name>.+?)\s+\[(?P<package_id>[\w.\-]+)\]\[(?P<url>.+)\]\s*$", line)
+    if not match:
+        return None
+    package_id = normalize_package_id(match.group("package_id"))
+    if not package_id:
+        return None
+    name = match.group("name").strip()
+    url = match.group("url").strip()
+    workshop_id = "" if url.lower() == "no url specified" else _extract_workshop_id(url)
+    return package_id, name, workshop_id
+
+
 def _parse_list_node(root: ET.Element, *xpaths: str) -> list[str]:
     for xpath in xpaths:
         node = root.find(xpath)
@@ -388,6 +402,20 @@ def _parse_plain_text(path: Path) -> ParsedLoadOrderData:
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or line.startswith("//"):
+            continue
+
+        # RimSort 剪贴板导出头部说明；属于格式噪音，不应进入警告。
+        if line.startswith("Created with RimSort "):
+            continue
+        if line.startswith("RimWorld game version this list was created for:"):
+            continue
+        if line.startswith("Total # of mods:"):
+            continue
+
+        rimsort_entry = _parse_rimsort_clipboard_line(line)
+        if rimsort_entry is not None:
+            package_id, name, workshop_id = rimsort_entry
+            _append_mod_entry(package_ids, mod_names, workshop_ids, package_id, name, workshop_id)
             continue
 
         if "#" in line:
