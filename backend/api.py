@@ -982,9 +982,10 @@ class API:
                     if os.path.exists(cfg.self_mods_path):
                         paths_to_scan.append(cfg.self_mods_path)
                     # 4. Workshop Mods (公共工坊目录)
-                    # Profile 禁用了 Workshop (use_workshop_mods=False)，则不再扫描
-                    if os.path.exists(cfg.workshop_mods_path) and \
-                        (self.active_context.use_workshop_mods or self.active_context.profile_id=='default'):
+                    # 注意：库存扫描始终同步所有已配置域。
+                    # use_workshop_mods / use_self_mods 只影响后续运行态冲突分析与链接部署，
+                    # 不能影响数据库事实同步，否则工作区三库和缺失/更新状态会陈旧。
+                    if os.path.exists(cfg.workshop_mods_path):
                         paths_to_scan.append(cfg.workshop_mods_path)
                     # 5. Tool Mods (工具模组目录)
                     if os.path.exists(str(TOOL_MODS_DIR)) and cfg.enable_tool_mods:

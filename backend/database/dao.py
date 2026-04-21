@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
 import operator
@@ -174,6 +175,43 @@ class _ProfilePathScope:
             return 4
         return 9
 
+    def domain_for_path(self, path: str | None) -> str:
+        """
+        将一个物理路径归类到运行时域。
+
+        这里比 `classify_asset()` 更底层，专门服务于冲突检测 / 部署分析。
+        它只看路径归属，不关心数据库里的 `store` 字段，避免历史脏数据把运行时判定带偏。
+        """
+        normalized_path = self._normalize_asset_path(path)
+        if self.dlc_root and normalized_path.startswith(self.dlc_root):
+            return "dlc"
+        if self.local_root and normalized_path.startswith(self.local_root):
+            return "local"
+        if self.self_root and normalized_path.startswith(self.self_root):
+            return "self"
+        if self.workshop_root and normalized_path.startswith(self.workshop_root):
+            return "workshop"
+        if self.tool_root and normalized_path.startswith(self.tool_root):
+            return "tool"
+        return "unknown"
+
+    def includes_runtime_path(self, path: str | None) -> bool:
+        """
+        判断一个路径是否属于“当前 Profile 运行时会参与仲裁的域”。
+
+        库存扫描会把所有域都写入数据库，但当前环境冲突/部署只应该看启用域。
+        """
+        domain = self.domain_for_path(path)
+        if domain in {"dlc", "local"}:
+            return True
+        if domain == "self":
+            return self.use_self_mods
+        if domain == "workshop":
+            return self.use_workshop_mods
+        if domain == "tool":
+            return self.use_tool_mods
+        return False
+
     def classify_asset(self, asset: dict[str, Any]) -> str:
         """
         将资产归入工作区三域视图。
@@ -343,6 +381,118 @@ class ModDAO:
             _normalize_language_fields(asset)
             result[scope.classify_asset(asset)].append(asset)
         return result
+
+    @staticmethod
+    def get_profile_conflict_analysis(
+        context: ProfileContext | None,
+        assets: Sequence[dict[str, Any]] | None = None,
+    ):
+        """
+        生成当前 Profile 的运行态分析结果。
+
+        这里的职责是统一回答三件事：
+        1. 当前启用域内哪些重复属于“同目录硬冲突”
+        2. 当前启用域内哪些重复只是“跨目录共存/遮蔽”
+        3. 当前 Profile 最终应该部署哪些链接
+
+        这样扫描、部署和后续可能的“切换 Profile 后即时重算”都能共用同一套规则。
+        """
+        empty_result = {"hard_conflicts": [], "coexistences": [], "deploy_paths": []}
+        if not context:
+            return empty_result
+
+        scope = _ProfilePathScope.from_context(context)
+        active_assets: list[dict[str, Any]] = []
+
+        if assets is None:
+            conditions = scope.build_visibility_conditions()
+            if not conditions:
+                return empty_result
+            combined_condition = reduce(operator.or_, conditions)
+            active_condition = (ModAsset.disabled == False) | (ModAsset.disabled.is_null())  # type: ignore
+            query = (
+                ModAsset.select()
+                .where(combined_condition & active_condition)
+                .dicts()
+            )
+            active_assets = [dict(asset) for asset in query]
+        else:
+            for asset in assets:
+                asset_dict = dict(asset)
+                if asset_dict.get("disabled"):
+                    continue
+                if not scope.includes_runtime_path(asset_dict.get("path")):
+                    continue
+                active_assets.append(asset_dict)
+
+        grouped_assets: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for asset in active_assets:
+            path = str(asset.get("path") or "").strip()
+            if not path or not scope.includes_runtime_path(path):
+                continue
+            package_id = normalize_package_id(asset.get("package_id"))
+            if not package_id:
+                continue
+            _normalize_language_fields(asset)
+            grouped_assets[package_id].append(asset)
+
+        hard_conflicts: list[dict[str, Any]] = []
+        coexistences: list[dict[str, Any]] = []
+        deploy_buckets: dict[str, list[str]] = {"self": [], "workshop": [], "tool": []}
+
+        for package_id in sorted(grouped_assets.keys()):
+            group = sorted(
+                grouped_assets[package_id],
+                key=lambda asset: (
+                    scope.priority_for_path(asset.get("path")),
+                    os.path.dirname(str(asset.get("path") or "")).lower(),
+                    str(asset.get("path") or "").lower(),
+                ),
+            )
+            by_parent: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            for asset in group:
+                by_parent[os.path.dirname(str(asset.get("path") or "")).lower()].append(asset)
+
+            group_has_hard_conflict = False
+            for same_dir_items in by_parent.values():
+                if len(same_dir_items) > 1:
+                    group_has_hard_conflict = True
+                    hard_conflicts.append({
+                        "package_id": package_id,
+                        "items": same_dir_items,
+                        "type": "same_directory",
+                    })
+
+            if group_has_hard_conflict:
+                # 同目录硬冲突仍然全部部署，让用户在冲突弹窗里自行决策。
+                for asset in group:
+                    conflict_domain = scope.domain_for_path(asset.get("path"))
+                    if conflict_domain in deploy_buckets:
+                        deploy_buckets[conflict_domain].append(str(asset["path"]))
+                continue
+
+            if len(group) > 1:
+                coexistences.append({
+                    "package_id": package_id,
+                    "items": group,
+                    "type": "different_directory",
+                })
+
+            winner = group[0]
+            winner_domain = scope.domain_for_path(winner.get("path"))
+            if winner_domain in deploy_buckets:
+                deploy_buckets[winner_domain].append(str(winner["path"]))
+
+        # 按部署优先级合并后做一次去重，避免异常数据导致重复链接请求。
+        deploy_paths = list(dict.fromkeys(
+            deploy_buckets["self"] + deploy_buckets["workshop"] + deploy_buckets["tool"]
+        ))
+
+        return {
+            "hard_conflicts": hard_conflicts,
+            "coexistences": coexistences,
+            "deploy_paths": deploy_paths,
+        }
 
     @staticmethod
     def get_all_mods_with_user_data(ignore_missing: bool = False):
