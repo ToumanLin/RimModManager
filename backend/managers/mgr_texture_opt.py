@@ -425,9 +425,7 @@ class TextureOptimizationManager:
         options: dict[str, Any] | None = None,
         task_id: str | None = None,
         cancel_event: threading.Event | None = None,
-        use_cache: bool = True,
     ) -> dict[str, Any]:
-        del use_cache
         mod_paths = self._normalize_mod_paths(mod_paths)
         if not mod_paths:
             raise TextureOptError("没有可分析的 Mod 路径")
@@ -435,7 +433,12 @@ class TextureOptimizationManager:
         analysis_task_id = task_id or uuid.uuid4().hex
         merged_options = self._build_options(options)
         tool_status = self.get_backend_status(merged_options)
-        summary, mods = self._scan_mods(mod_paths, merged_options, cancel_event, analysis_task_id=analysis_task_id)
+        summary, mods = self._scan_mods(
+            mod_paths,
+            merged_options,
+            cancel_event,
+            analysis_task_id=analysis_task_id,
+        )
         elapsed_ms = max(0, current_ms() - int(self._analysis_started_at.get(analysis_task_id, current_ms())))
         self._emit_analysis_progress(
             analysis_task_id,
@@ -524,7 +527,7 @@ class TextureOptimizationManager:
             entries = scan_result["entries"]
             mod_name = scan_result["mod_name"]
             actionable_entries = [entry for entry in entries if bool(entry.get("needs_action"))]
-            skipped += sum(1 for entry in entries if not bool(entry.get("needs_action")))
+            skipped += self._count_skipped_entries(entries, options)
             final_mods_by_path[mod_path] = dict(scan_result["stat"])
             final_summary, final_mods = self._compose_progress_snapshot(task.mod_paths, final_mods_by_path)
 
@@ -566,8 +569,7 @@ class TextureOptimizationManager:
                     raise
 
             optimized += len(actionable_entries)
-            refreshed_result = self._scan_single_mod(mod_path, options)
-            refreshed_stat = dict(refreshed_result["stat"])
+            refreshed_stat = self._refresh_mod_stat_after_generate(scan_result, options)
             final_mods_by_path[mod_path] = refreshed_stat
             final_summary, final_mods = self._compose_progress_snapshot(task.mod_paths, final_mods_by_path)
 
@@ -698,7 +700,12 @@ class TextureOptimizationManager:
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="TextureScan") as executor:
             future_map = {
-                executor.submit(self._scan_single_mod, mod_path, options): index
+                executor.submit(
+                    self._scan_single_mod,
+                    mod_path,
+                    options,
+                    cancel_event=cancel_event,
+                ): index
                 for index, mod_path in enumerate(mod_paths)
             }
             completed = 0
@@ -727,115 +734,189 @@ class TextureOptimizationManager:
         rows.sort(key=lambda item: (-int(item["combined_total_bytes"]), item["mod_name"].lower()))
         return summary, rows
 
-    def _scan_single_mod(self, mod_path: str, options: dict[str, Any]) -> dict[str, Any]:
-        entries: list[dict[str, Any]] = []
+    def _scan_single_mod(
+        self,
+        mod_path: str,
+        options: dict[str, Any],
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> dict[str, Any]:
+        if cancel_event and cancel_event.is_set():
+            raise TextureOptCancelled("贴图扫描任务已取消")
+        base_index = self._get_or_build_mod_base_index(mod_path, cancel_event=cancel_event)
+        if cancel_event and cancel_event.is_set():
+            raise TextureOptCancelled("贴图扫描任务已取消")
+        return self._project_mod_index(base_index, options)
+
+    def _get_or_build_mod_base_index(
+        self,
+        mod_path: str,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> dict[str, Any]:
+        mod_name = Path(mod_path).name
+        base_entries: list[dict[str, Any]] = []
+
+        # 扫描阶段只生成配置无关的基础条目，后续配置切换只做重投影。
+        for texture_root in self._iter_texture_root_dirs(mod_path):
+            if cancel_event and cancel_event.is_set():
+                raise TextureOptCancelled("贴图扫描任务已取消")
+            for current_root, _dirs, files in os.walk(texture_root):
+                if cancel_event and cancel_event.is_set():
+                    raise TextureOptCancelled("贴图扫描任务已取消")
+                current_path = Path(current_root)
+
+                for name in files:
+                    if cancel_event and cancel_event.is_set():
+                        raise TextureOptCancelled("贴图扫描任务已取消")
+                    if Path(name).suffix.lower() not in SOURCE_IMAGE_EXTENSIONS:
+                        continue
+                    source = current_path / name
+                    try:
+                        source_stat = source.stat()
+                    except OSError:
+                        continue
+
+                    rel_path = self._to_rel_path(str(source), mod_path)
+                    output_path = source.with_suffix(".dds")
+                    output_rel_path = self._to_rel_path(str(output_path), mod_path)
+                    entry = {
+                        "mod_path": mod_path,
+                        "mod_name": mod_name,
+                        "rel_path": rel_path,
+                        "source_path": str(source),
+                        "output_path": str(output_path),
+                        "output_rel_path": output_rel_path,
+                        "source_readable": False,
+                        "width": 0,
+                        "height": 0,
+                        "has_alpha": False,
+                        "source_size": int(source_stat.st_size),
+                        "source_vram": 0,
+                        "supported_scale_percents": (),
+                        "engine_unsupported": False,
+                        "engine_unsupported_reason": "",
+                    }
+
+                    try:
+                        capability = self._get_source_capability(source)
+                    except Exception as exc:
+                        entry["engine_unsupported"] = True
+                        entry["engine_unsupported_reason"] = f"PNG 文件无法解析: {exc}"
+                        base_entries.append(entry)
+                        continue
+
+                    entry.update(
+                        {
+                            "source_readable": True,
+                            "width": int(capability.get("width", 0) or 0),
+                            "height": int(capability.get("height", 0) or 0),
+                            "has_alpha": bool(capability.get("has_alpha")),
+                            "source_size": int(capability.get("source_size", 0) or 0),
+                            "source_vram": int(capability.get("source_vram", 0) or 0),
+                            "supported_scale_percents": tuple(capability.get("supported_scale_percents", ())),
+                            "engine_unsupported": bool(capability.get("engine_unsupported")),
+                            "engine_unsupported_reason": str(capability.get("engine_unsupported_reason") or ""),
+                        }
+                    )
+                    base_entries.append(entry)
+
+        base_index = {
+            "mod_path": mod_path,
+            "mod_name": mod_name,
+            "entries": base_entries,
+        }
+        return base_index
+
+    def _project_mod_index(self, base_index: dict[str, Any], options: dict[str, Any]) -> dict[str, Any]:
+        mod_path = str(base_index.get("mod_path") or "")
+        mod_name = str(base_index.get("mod_name") or Path(mod_path).name)
         output_stats = self._collect_output_stats(mod_path)
         process_mode = str(options.get("process_mode", "scaled_only_overwrite"))
         preferred_scale = self._get_scale_factor_percent(options)
-        scale_buckets = self._iter_scale_step_candidates(options)
         min_output_size = self._get_scale_target_size(options)
-        mod_name = Path(mod_path).name
+        generate_mipmaps = bool(options.get("generate_mipmaps", True))
+        scale_candidates = set(self._iter_scale_step_candidates(options))
+        entries: list[dict[str, Any]] = []
 
-        for source_path in self._iter_texture_source_images(mod_path):
-            source = Path(source_path)
-            rel_path = self._to_rel_path(str(source), mod_path)
-            output_path = source.with_suffix(".dds")
-            output_rel = self._to_rel_path(str(output_path), mod_path)
+        for source_entry in base_index.get("entries", []):
+            entry = dict(source_entry)
+            output_rel = str(entry.get("output_rel_path") or "")
             output_info = output_stats.get(output_rel) or {}
+            entry["output_exists"] = bool(output_info)
+            entry["output_size"] = int(output_info.get("size", 0))
+            entry["dds_vram"] = 0
+            entry["small_skipped"] = False
+            entry["needs_action"] = False
+            entry["plan_kind"] = "keep_original"
+            entry["plan_label"] = "原尺寸"
+            entry["scale_percent"] = None
 
-            entry = {
-                "mod_path": mod_path,
-                "mod_name": mod_name,
-                "rel_path": rel_path,
-                "source_path": str(source),
-                "output_path": str(output_path),
-                "output_rel_path": output_rel,
-                "output_exists": bool(output_info),
-                "output_size": int(output_info.get("size", 0)),
-                "source_readable": False,
-                "width": 0,
-                "height": 0,
-                "has_alpha": False,
-                "source_size": 0,
-                "source_vram": 0,
-                "dds_vram": 0,
-                "small_skipped": False,
-                "engine_unsupported": False,
-                "engine_unsupported_reason": "",
-                "processable": False,
-                "current_output": False,
-                "needs_generate": False,
-                "needs_regenerate": False,
-                "needs_action": False,
-                "plan_kind": "keep_original",
-                "plan_label": "原尺寸",
-                "scale_percent": None,
-            }
-
-            try:
-                image_info = self._inspect_source_image(source, precise_alpha=False)
-                source_stat = source.stat()
-            except Exception as exc:
-                try:
-                    source_stat = source.stat()
-                    entry["source_size"] = int(source_stat.st_size)
-                except OSError:
-                    pass
-                entry["engine_unsupported"] = True
-                entry["engine_unsupported_reason"] = f"PNG 文件无法解析: {exc}"
+            if not bool(entry.get("source_readable")):
                 entries.append(entry)
                 continue
 
-            width = int(image_info.get("width", 0) or 0)
-            height = int(image_info.get("height", 0) or 0)
-            has_alpha = bool(image_info.get("has_alpha"))
-            source_size = int(source_stat.st_size)
-            source_vram = width * height * 4
+            width = int(entry.get("width", 0) or 0)
+            height = int(entry.get("height", 0) or 0)
+            has_alpha = bool(entry.get("has_alpha"))
             oversize_or_small = self._is_outside_recommended_source_range(width, height, options)
-            scale_percent = None if oversize_or_small else self._pick_scale_step_percent(width, height, scale_buckets, min_output_size)
-            can_scale = scale_percent is not None
-
-            if can_scale:
-                dds_vram = self._estimate_dds_vram(width, height, has_alpha, scale_percent, generate_mipmaps=bool(options.get("generate_mipmaps", True)))
-                plan_kind = "scaled" if scale_percent == preferred_scale else "fallback"
-                plan_label = f"{scale_percent}%"
-            else:
-                dds_vram = self._estimate_dds_vram(width, height, has_alpha, None, generate_mipmaps=bool(options.get("generate_mipmaps", True)))
-                plan_kind = "keep_original"
-                plan_label = "原尺寸"
-
-            entry.update(
-                {
-                    "source_readable": True,
-                    "width": width,
-                    "height": height,
-                    "has_alpha": has_alpha,
-                    "source_size": source_size,
-                    "source_vram": source_vram,
-                    "dds_vram": dds_vram,
-                    "small_skipped": oversize_or_small,
-                    "engine_unsupported": bool(self._get_todds_unsupported_reason(source, image_info)),
-                    "engine_unsupported_reason": self._get_todds_unsupported_reason(source, image_info),
-                    "processable": not bool(self._get_todds_unsupported_reason(source, image_info)),
-                    "plan_kind": plan_kind,
-                    "plan_label": plan_label,
-                    "scale_percent": scale_percent,
-                }
+            supported_scales = tuple(
+                int(scale)
+                for scale in entry.get("supported_scale_percents", ())
+                if int(scale) in scale_candidates
+            )
+            scale_percent = None if oversize_or_small else self._pick_scale_step_percent_from_supported(
+                width,
+                height,
+                supported_scales,
+                min_output_size,
             )
 
-            if entry["engine_unsupported"]:
-                entries.append(entry)
-                continue
+            entry["small_skipped"] = oversize_or_small
+            entry["scale_percent"] = scale_percent
+            if scale_percent is None:
+                entry["dds_vram"] = self._estimate_dds_vram(
+                    width,
+                    height,
+                    has_alpha,
+                    None,
+                    generate_mipmaps=generate_mipmaps,
+                )
+            else:
+                entry["dds_vram"] = self._estimate_dds_vram(
+                    width,
+                    height,
+                    has_alpha,
+                    scale_percent,
+                    generate_mipmaps=generate_mipmaps,
+                )
+                entry["plan_kind"] = "scaled" if scale_percent == preferred_scale else "fallback"
+                entry["plan_label"] = f"{scale_percent}%"
 
-            entry["current_output"] = bool(entry["output_exists"])
-            needs_action = self._entry_needs_action(entry, process_mode)
-            entry["needs_action"] = needs_action
-            entry["needs_generate"] = needs_action and not entry["output_exists"]
-            entry["needs_regenerate"] = needs_action and entry["output_exists"]
+            if not bool(entry.get("engine_unsupported")):
+                entry["needs_action"] = self._entry_needs_action(entry, process_mode)
             entries.append(entry)
 
         stat = self._build_mod_stat(mod_path, mod_name, entries, output_stats)
         return {"mod_path": mod_path, "mod_name": mod_name, "entries": entries, "stat": stat}
+
+    def _refresh_mod_stat_after_generate(self, scan_result: dict[str, Any], options: dict[str, Any]) -> dict[str, Any]:
+        # 生成完成后只重读 DDS 输出状态，避免再次扫描和解析全部 PNG。
+        mod_path = str(scan_result.get("mod_path") or "")
+        mod_name = str(scan_result.get("mod_name") or Path(mod_path).name)
+        refreshed_entries = [dict(entry) for entry in scan_result.get("entries", [])]
+        output_stats = self._collect_output_stats(mod_path)
+        process_mode = str(options.get("process_mode", "scaled_only_overwrite"))
+
+        for entry in refreshed_entries:
+            output_rel = str(entry.get("output_rel_path") or "")
+            output_info = output_stats.get(output_rel) or {}
+            output_exists = bool(output_info)
+            entry["output_exists"] = output_exists
+            entry["output_size"] = int(output_info.get("size", 0))
+            entry["needs_action"] = self._entry_needs_action(entry, process_mode)
+
+        return self._build_mod_stat(mod_path, mod_name, refreshed_entries, output_stats)
 
     @staticmethod
     def _entry_needs_action(entry: dict[str, Any], process_mode: str) -> bool:
@@ -846,6 +927,24 @@ class TextureOptimizationManager:
         if process_mode == "scaled_only_overwrite":
             return scale_percent is not None
         return True
+
+    @staticmethod
+    def _count_skipped_entries(entries: list[dict[str, Any]], options: dict[str, Any]) -> int:
+        process_mode = str(options.get("process_mode", "scaled_only_overwrite"))
+        skipped = 0
+        for entry in entries:
+            if not bool(entry.get("source_readable")):
+                skipped += 1
+                continue
+            if bool(entry.get("engine_unsupported")):
+                skipped += 1
+                continue
+            if process_mode == "all_skip_existing" and bool(entry.get("output_exists")):
+                skipped += 1
+                continue
+            if process_mode == "scaled_only_overwrite" and entry.get("scale_percent") is None:
+                skipped += 1
+        return skipped
 
     def _build_encode_batches(self, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
         grouped: dict[tuple[bool, int | None], dict[str, Any]] = {}
@@ -885,8 +984,6 @@ class TextureOptimizationManager:
         stat = TextureOptimizationManager._create_empty_stat(mod_path=mod_path, mod_name=mod_name)
         stat["output_total_count"] = len(output_stats)
         stat["output_total_bytes"] = sum(int(item.get("size", 0)) for item in output_stats.values())
-        stat["managed_output_count"] = stat["output_total_count"]
-        stat["managed_output_bytes"] = stat["output_total_bytes"]
         scale_buckets: dict[tuple[str, str], int] = {}
 
         for entry in entries:
@@ -906,6 +1003,7 @@ class TextureOptimizationManager:
                 if len(stat["engine_unsupported_preview"]) < 8:
                     stat["engine_unsupported_preview"].append(
                         {
+                            "mod_name": mod_name,
                             "rel_path": str(entry.get("rel_path") or ""),
                             "reason": str(entry.get("engine_unsupported_reason") or ""),
                         }
@@ -929,21 +1027,66 @@ class TextureOptimizationManager:
             if bool(entry.get("output_exists")):
                 stat["current_output_count"] += 1
                 stat["current_output_bytes"] += int(entry.get("output_size", 0))
-            if bool(entry.get("needs_generate")):
+            if bool(entry.get("needs_action")):
                 stat["generate_required_count"] += 1
-                stat["action_required_count"] += 1
-            if bool(entry.get("needs_regenerate")):
-                stat["regenerate_required_count"] += 1
-                stat["action_required_count"] += 1
-                stat["stale_output_count"] += 1
-                stat["stale_output_bytes"] += int(entry.get("output_size", 0))
-            if not bool(entry.get("output_exists")) and not bool(entry.get("needs_generate")) and not bool(entry.get("needs_regenerate")):
-                stat["missing_output_count"] += 1
 
+        stat["projection_basis"] = [
+            {
+                "rel_path": str(entry.get("rel_path") or ""),
+                "source_size": int(entry.get("source_size", 0) or 0),
+                "source_vram": int(entry.get("source_vram", 0) or 0),
+                "output_exists": bool(entry.get("output_exists")),
+                "output_size": int(entry.get("output_size", 0) or 0),
+                "width": int(entry.get("width", 0) or 0),
+                "height": int(entry.get("height", 0) or 0),
+                "has_alpha": bool(entry.get("has_alpha")),
+                "source_readable": bool(entry.get("source_readable")),
+                "engine_unsupported": bool(entry.get("engine_unsupported")),
+                "engine_unsupported_reason": str(entry.get("engine_unsupported_reason") or ""),
+                "supported_scale_percents": [int(scale) for scale in entry.get("supported_scale_percents", ())],
+            }
+            for entry in entries
+        ]
         stat["scale_breakdown"] = TextureOptimizationManager._finalize_scale_breakdown(scale_buckets)
         stat["combined_total_bytes"] = int(stat["source_total_bytes"]) + int(stat["output_total_bytes"])
         stat["vram_saving_bytes_est"] = int(stat["source_vram_bytes_est"]) - int(stat["output_vram_bytes_est"])
         return stat
+
+    def _get_source_capability(self, source: Path) -> dict[str, Any]:
+        try:
+            source_stat = source.stat()
+        except OSError as exc:
+            raise TextureOptError(f"无法读取源图文件: {exc}") from exc
+
+        image_info = self._inspect_source_image(source, precise_alpha=False)
+        width = int(image_info.get("width", 0) or 0)
+        height = int(image_info.get("height", 0) or 0)
+        has_alpha = bool(image_info.get("has_alpha"))
+        source_size = int(source_stat.st_size)
+        source_vram = width * height * 4
+        supported_scale_percents = self._collect_supported_scale_percents(width, height)
+        capability = {
+            "path": str(source),
+            "width": width,
+            "height": height,
+            "has_alpha": has_alpha,
+            "source_size": source_size,
+            "source_vram": source_vram,
+            "supported_scale_percents": supported_scale_percents,
+            "engine_unsupported": bool(self._get_todds_unsupported_reason(source, image_info)),
+            "engine_unsupported_reason": self._get_todds_unsupported_reason(source, image_info),
+        }
+        return capability
+
+    @staticmethod
+    def _collect_supported_scale_percents(width: int, height: int) -> tuple[int, ...]:
+        supported: list[int] = []
+        for scale_percent in SCALE_STEP_SEQUENCE:
+            numerator, denominator = SCALE_STEP_RATIONALS[scale_percent]
+            required_divisor = (4 * denominator) // TextureOptimizationManager._gcd(numerator, 4 * denominator)
+            if (width % required_divisor) == 0 and (height % required_divisor) == 0:
+                supported.append(scale_percent)
+        return tuple(supported)
 
     @staticmethod
     def _get_scale_factor_percent(options: dict[str, Any]) -> int | None:
@@ -967,15 +1110,17 @@ class TextureOptimizationManager:
         return SCALE_STEP_SEQUENCE[start_index:]
 
     @staticmethod
-    def _pick_scale_step_percent(w: int, h: int, scale_candidates: tuple[int, ...], min_output_size: int) -> int | None:
+    def _pick_scale_step_percent_from_supported(
+        width: int,
+        height: int,
+        scale_candidates: tuple[int, ...],
+        min_output_size: int,
+    ) -> int | None:
         for scale_percent in scale_candidates:
-            numerator, denominator = SCALE_STEP_RATIONALS[scale_percent]
-            required_divisor = (4 * denominator) // TextureOptimizationManager._gcd(numerator, 4 * denominator)
-            if (w % required_divisor) != 0 or (h % required_divisor) != 0:
+            numerator, denominator = SCALE_STEP_RATIONALS[int(scale_percent)]
+            if (min(width, height) * numerator) < (min_output_size * denominator):
                 continue
-            if (min(w, h) * numerator) < (min_output_size * denominator):
-                continue
-            return scale_percent
+            return int(scale_percent)
         return None
 
     @staticmethod
@@ -1118,21 +1263,13 @@ class TextureOptimizationManager:
         return ""
 
     @staticmethod
-    def _iter_texture_source_images(mod_path: str):
-        for texture_root in TextureOptimizationManager._iter_texture_root_dirs(mod_path):
-            for current_root, _dirs, files in os.walk(texture_root):
-                for name in files:
-                    if Path(name).suffix.lower() in SOURCE_IMAGE_EXTENSIONS:
-                        yield str(Path(current_root) / name)
-
-    @staticmethod
     def _iter_texture_output_paths(mod_path: str):
         for texture_root in TextureOptimizationManager._iter_texture_root_dirs(mod_path):
             for current_root, _dirs, files in os.walk(texture_root):
                 for name in files:
                     lower_name = name.lower()
                     path = Path(current_root) / name
-                    if lower_name.endswith(".dds") or lower_name.endswith(".dds.zstd"):
+                    if lower_name.endswith(".dds"):
                         yield path
 
     @staticmethod
@@ -1159,10 +1296,7 @@ class TextureOptimizationManager:
 
     @staticmethod
     def _resolve_output_source(path: Path) -> Path:
-        name_lower = path.name.lower()
-        if name_lower.endswith(".dds.zstd"):
-            stem = path.name[:-9]
-        elif path.suffix.lower() == ".dds":
+        if path.suffix.lower() == ".dds":
             stem = path.stem
         else:
             return path
@@ -1281,34 +1415,18 @@ class TextureOptimizationManager:
             "source_total_bytes": 0,
             "output_total_count": 0,
             "output_total_bytes": 0,
-            "managed_output_count": 0,
-            "managed_output_bytes": 0,
-            "external_output_count": 0,
-            "external_output_bytes": 0,
             "current_output_count": 0,
             "current_output_bytes": 0,
-            "stale_output_count": 0,
-            "stale_output_bytes": 0,
-            "missing_output_count": 0,
             "generate_required_count": 0,
-            "regenerate_required_count": 0,
-            "action_required_count": 0,
             "skip_small_count": 0,
-            "skip_mask_count": 0,
             "unsupported_source_count": 0,
             "unreadable_source_count": 0,
-            "blocked_source_count": 0,
-            "orphan_output_count": 0,
-            "orphan_output_bytes": 0,
-            "managed_orphan_output_count": 0,
-            "managed_orphan_output_bytes": 0,
-            "external_orphan_output_count": 0,
-            "external_orphan_output_bytes": 0,
             "scaled_count": 0,
             "fallback_scaled_count": 0,
             "keep_original_count": 0,
             "combined_total_bytes": 0,
             "scale_breakdown": [],
+            "projection_basis": [],
             "engine_unsupported_preview": [],
             "source_vram_bytes_est": 0,
             "output_vram_bytes_est": 0,
@@ -1351,7 +1469,7 @@ class TextureOptimizationManager:
             target_scale_buckets[current_key] = int(target_scale_buckets.get(current_key, 0)) + int(item.get("count", 0))
 
         for key, value in source.items():
-            if key in {"mod_path", "mod_name", "scale_breakdown", "engine_unsupported_preview"}:
+            if key in {"mod_path", "mod_name", "scale_breakdown", "projection_basis", "engine_unsupported_preview"}:
                 continue
             if key == "mod_count":
                 continue

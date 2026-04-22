@@ -199,7 +199,7 @@ export const useAppStore = defineStore('app', () => {
       texture_tools_path: "",       // 贴图工具目录
       process_mode: 'scaled_only_overwrite',
       generate_mipmaps: true,       // 是否生成远近层级
-      scale_factor: 0.5,            // 压缩强度
+      scale_factor: 0.5,            // 缩放比例
       max_size: 128,                // 最低清晰度
       skip_small_textures: true,    // 超出建议范围时不参与缩放
       min_dimension: 128,           // 最短边低于该值时不参与缩放

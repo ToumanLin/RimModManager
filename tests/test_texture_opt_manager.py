@@ -100,9 +100,7 @@ class TestTextureOptimizationManager(unittest.TestCase):
     def test_clean_generated_managed_only_deletes_manifest_outputs(self):
         source = self._write_png("Textures/source.png")
         managed_dds = source.with_suffix(".dds")
-        external_zstd = source.with_name("source.dds.zstd")
         managed_dds.write_bytes(b"dds")
-        external_zstd.write_bytes(b"zstd")
 
         self.manager._write_manifest(
             str(self.mod_root),
@@ -120,7 +118,6 @@ class TestTextureOptimizationManager(unittest.TestCase):
 
         self.assertEqual(result["orphan_deleted"], 1)
         self.assertFalse(managed_dds.exists())
-        self.assertTrue(external_zstd.exists())
         self.assertTrue(result["refresh_after_analyze"])
 
     def test_clean_generated_with_source_deletes_external_outputs_and_refreshes_snapshot(self):
@@ -260,18 +257,14 @@ class TestTextureOptimizationManager(unittest.TestCase):
         all_overwrite = self.manager._build_options({**self.options, "process_mode": "all_overwrite"})
 
         self.assertEqual(skip_existing["process_mode"], "all_skip_existing")
-        self.assertFalse(skip_existing["overwrite_existing"])
         self.assertEqual(all_overwrite["process_mode"], "all_overwrite")
-        self.assertTrue(all_overwrite["overwrite_existing"])
 
     def test_iter_texture_output_paths_only_returns_dds_outputs(self):
         self._write_png("Textures/source.png")
         (self.mod_root / "Textures" / "a.dds").write_bytes(b"a")
-        (self.mod_root / "Textures" / "b.dds.zstd").write_bytes(b"b")
-        (self.mod_root / "Textures" / "c.zstd").write_bytes(b"c")
 
         found = sorted(path.name for path in self.manager._iter_texture_output_paths(str(self.mod_root)))
-        self.assertEqual(found, ["a.dds", "b.dds.zstd"])
+        self.assertEqual(found, ["a.dds"])
 
     def test_scan_snapshot_tracks_external_orphan_dds_separately(self):
         self._write_png("Textures/source.png")
@@ -625,10 +618,11 @@ class TestTextureOptimizationManager(unittest.TestCase):
             status="running",
         )
 
-        with patch.object(ToddsEncoder, "encode_mod", side_effect=AssertionError("should skip existing dds")):
+        with patch.object(ToddsEncoder, "encode_batch", side_effect=AssertionError("should skip existing dds")):
             result = self.manager._optimize(task)
 
         self.assertEqual(result["optimized"], 0)
+        self.assertEqual(result["skipped"], 1)
         self.assertEqual(result["failed"], 0)
 
     def test_scale_strategy_falls_back_to_original_size_for_incompatible_dimensions(self):
@@ -745,19 +739,16 @@ class TestTextureOptimizationManager(unittest.TestCase):
     def test_scaled_only_process_mode_skips_keep_original_jobs(self):
         scaled = self._write_png("Textures/scaled.png", size=(256, 256))
         fallback = self._write_png("Textures/fallback.png", size=(136, 136))
-        snapshot = self.manager._scan_single_mod_snapshot(
+        scan_result = self.manager._scan_single_mod(
             str(self.mod_root),
             {**self.options, "process_mode": "scaled_only_overwrite"},
         )
-        batches = self.manager._build_encode_batches(
-            snapshot["entries"],
-            {**self.options, "process_mode": "scaled_only_overwrite"},
-            overwrite_requested=True,
-        )
+        batches = self.manager._build_encode_batches(scan_result["entries"])
 
         self.assertEqual(len(batches), 1)
         self.assertEqual(batches[0]["source_paths"], [str(scaled)])
         self.assertNotIn(str(fallback), batches[0]["source_paths"])
+        self.assertEqual(self.manager._count_skipped_entries(scan_result["entries"], {**self.options, "process_mode": "scaled_only_overwrite"}), 1)
 
     def test_should_skip_texture_matches_old_script_dimension_window(self):
         self.assertTrue(self.manager._should_skip_texture({"width": 127, "height": 256}, self.options))

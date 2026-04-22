@@ -3723,7 +3723,7 @@ class API:
             return ApiResponse.error(str(e))
 
     @log_api_call
-    def texture_analyze_mods(self, package_ids: List[str], options: dict|None = None, force_refresh: bool = False):
+    def texture_analyze_mods(self, package_ids: List[str], options: dict|None = None):
         """
         开始分析选中模组的贴图（多线程异步预热）
         """
@@ -3747,10 +3747,18 @@ class API:
                         options,
                         task_id=task_id,
                         cancel_event=cancel_event,
-                        use_cache=not bool(force_refresh),
                     )
                 except TextureOptCancelled:
                     logger.info("后台贴图分析任务已取消")
+                    self.texture_mgr._emit_analysis_progress(
+                        task_id,
+                        status="cancelled",
+                        progress=0,
+                        message="贴图扫描任务已取消",
+                        processed_mods=0,
+                        total_mods=len(paths),
+                        summary=self.texture_mgr._create_empty_stat(include_mod_count=True, mod_count=len(paths)),
+                    )
                 except Exception as e:
                     logger.error(f"后台贴图分析任务执行失败: {e}", exc_info=True)
                 finally:

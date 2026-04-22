@@ -22,10 +22,8 @@ export const useTextureStore = defineStore('texture', () => {
     current_output_bytes: 0,
     generate_required_count: 0,
     skip_small_count: 0,
-    skip_mask_count: 0,
     unsupported_source_count: 0,
     unreadable_source_count: 0,
-    blocked_source_count: 0,
     scaled_count: 0,
     fallback_scaled_count: 0,
     keep_original_count: 0,
@@ -37,6 +35,7 @@ export const useTextureStore = defineStore('texture', () => {
     output_bytes_share_pct: 0,
     combined_bytes_share_pct: 0,
     scale_breakdown: [],
+    projection_basis: [],
     engine_unsupported_preview: [],
     mod_count: 0,
   })
@@ -68,10 +67,8 @@ export const useTextureStore = defineStore('texture', () => {
       current_output_bytes: currentOutputBytes,
       generate_required_count: toInt(raw.generate_required_count ?? raw.pending_count ?? base.generate_required_count),
       skip_small_count: toInt(raw.skip_small_count ?? raw.skipped_small_count ?? base.skip_small_count),
-      skip_mask_count: toInt(raw.skip_mask_count ?? raw.skipped_mask_count ?? base.skip_mask_count),
       unsupported_source_count: toInt(raw.unsupported_source_count ?? raw.unsupported_count ?? base.unsupported_source_count),
       unreadable_source_count: toInt(raw.unreadable_source_count ?? base.unreadable_source_count),
-      blocked_source_count: toInt(raw.blocked_source_count ?? raw.blocked_count ?? base.blocked_source_count),
       scaled_count: toInt(raw.scaled_count ?? base.scaled_count),
       fallback_scaled_count: toInt(raw.fallback_scaled_count ?? base.fallback_scaled_count),
       keep_original_count: toInt(raw.keep_original_count ?? base.keep_original_count),
@@ -86,6 +83,7 @@ export const useTextureStore = defineStore('texture', () => {
       output_bytes_share_pct: Number(raw.output_bytes_share_pct ?? base.output_bytes_share_pct) || 0,
       combined_bytes_share_pct: Number(raw.combined_bytes_share_pct ?? base.combined_bytes_share_pct) || 0,
       scale_breakdown: Array.isArray(raw.scale_breakdown) ? raw.scale_breakdown : [],
+      projection_basis: Array.isArray(raw.projection_basis) ? raw.projection_basis : [],
       engine_unsupported_preview: Array.isArray(raw.engine_unsupported_preview) ? raw.engine_unsupported_preview : [],
     }
 
@@ -324,9 +322,9 @@ export const useTextureStore = defineStore('texture', () => {
     isAnalyzing.value = true
     lastTargetPackageIds.value = [...packageIds]
     currentOptimizationTaskId.value = ''
-    modsData.value =[] // 清空旧数据
+    modsData.value = []
     try {
-      const res = await window.pywebview.api.texture_analyze_mods(packageIds, appStore.settings.texture_opt, true)
+      const res = await window.pywebview.api.texture_analyze_mods(packageIds, appStore.settings.texture_opt)
       if (appStore.checkResult(res, "启动贴图分析", false)) {
         bindTaskId(res.data, 'analyze')
         applyReturnedTaskState(res.data)

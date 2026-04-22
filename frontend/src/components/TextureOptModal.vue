@@ -43,10 +43,7 @@
                 <div class="min-w-0 text-text-dim">
                   超范围 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.skip_small_count || 0 }}</span>
                 </div>
-                <div class="min-w-0 text-accent-special/80">
-                  忽略 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.skip_mask_count || 0 }}</span>
-                </div>
-                <div class="min-w-0 flex items-center gap-4">
+                <div class="min-w-0 flex items-center gap-4 col-span-2">
                   <span class="shrink-0 text-accent-tip/80">
                     缩放 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.scaled_count || 0 }}</span>
                   </span>
@@ -244,7 +241,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
-import { useDebounceFn, useNow } from '@vueuse/core'
+import { useNow } from '@vueuse/core'
 import { Ban, BrushCleaning, CheckCircle2, Cpu, Images, Inbox, Loader2, Rocket, ScanSearch, Search, X } from 'lucide-vue-next'
 import { useAppStore } from '../stores/appStore'
 import { useTextureStore } from '../stores/textureStore'
@@ -340,7 +337,6 @@ const getRowSizeDependencies = (item) => [
   textureStore.viewMode,
   String(item?.mod_name || ''),
   Number(item?.generate_required_count || 0),
-  Number(item?.skip_mask_count || 0),
   Number(item?.unsupported_source_count || 0),
   JSON.stringify(item?.scale_breakdown || []),
   Number(item?.source_total_count || 0),
@@ -405,12 +401,6 @@ const showFinishedProgress = computed(() => {
   return ['success', 'failed', 'cancelled'].includes(status)
 })
 
-const debouncedAnalyze = useDebounceFn(() => {
-  if (textureStore.modsData.length > 0 && !isBusy.value) {
-    handleAnalyze()
-  }
-}, 400)
-
 const closeModal = () => {
   appStore.uiState.showTextureOptModal = false
 }
@@ -418,7 +408,6 @@ const closeModal = () => {
 const saveConfig = async () => {
   await appStore.saveSetting('texture_opt', config.value)
   await textureStore.checkToolStatus()
-  debouncedAnalyze()
 }
 
 const getTargetIds = () => {

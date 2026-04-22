@@ -3,7 +3,6 @@
     <div class="flex min-w-0 items-center justify-between gap-4">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
         <span class="truncate text-sm font-bold text-text-main">{{ mod.mod_name }}</span>
-        <span v-if="mod.skip_mask_count > 0" v-tooltip="'生成时需要忽略的贴图如法线贴图、遮罩贴图等'" tabindex="0" class="shrink-0 cursor-help rounded border border-accent-special/20 bg-accent-special/10 px-1.5 py-0.5 text-xs font-bold text-accent-special">忽略 {{ mod.skip_mask_count }}</span>
         <span v-if="mod.unsupported_source_count > 0" v-tooltip="unsupportedTooltip"
           class="shrink-0 rounded border border-accent-warning/20 bg-accent-warning/10 px-1.5 py-0.5 text-xs font-bold text-accent-warning">
           无效 PNG {{ mod.unsupported_source_count }}
@@ -100,8 +99,8 @@ const scaleTags = computed(() => {
         return {
           kind,
           label,
-          text: `保守处理 ${count}`,
-          tooltip: '这些图片不会再继续强压，会按更稳妥的方式处理。',
+          text: `回退${label} (${count})`,
+          tooltip: `这些图片不适合当前比例，会自动回退到 ${label} 处理。`,
           className: 'border-accent-secondary/20 bg-accent-secondary/10 text-accent-secondary',
         }
       }
@@ -109,15 +108,15 @@ const scaleTags = computed(() => {
         return {
           kind,
           label,
-          text: `已压缩 ${count}`,
-          tooltip: '这些图片会按当前设置压缩。',
+          text: `当前${label} (${count})`,
+          tooltip: `这些图片会按 ${label} 缩放生成。`,
           className: 'border-accent-tip/20 bg-accent-tip/10 text-accent-tip',
         }
       }
       return {
         kind,
         label,
-        text: `保持原样 ${count}`,
+        text: `不缩放 (${count})`,
         tooltip: '这些图片会保留原来的大小。',
         className: 'border-text-main/10 bg-text-main/5 text-text-dim',
       }
