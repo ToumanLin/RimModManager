@@ -124,6 +124,15 @@ export const useProfileStore = defineStore('profile', () => {
     }
   }
 
+  // 创建环境桌面快捷方式
+  const createDesktopShortcut = async (profileId) => {
+    const res = await window.pywebview.api.profile_create_desktop_shortcut(profileId)
+    if (appStore.checkResult(res, '创建环境桌面快捷方式', true)) {
+      return res.data
+    }
+    return null
+  }
+
   // 扫描孤立配置
   const scanOrphans = async () => {
     const res = await window.pywebview.api.profiles_scan_orphaned()
@@ -144,7 +153,7 @@ export const useProfileStore = defineStore('profile', () => {
 
   return {
     profiles, currentProfileId, orphanedProfiles, currentProfile, isLoading, activeContext,
-    fetchProfiles, createProfile, switchProfile, updateProfile, deleteProfile,
+    fetchProfiles, createProfile, switchProfile, updateProfile, deleteProfile, createDesktopShortcut,
     scanOrphans, importOrphan
   }
 })

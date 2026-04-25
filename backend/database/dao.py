@@ -145,7 +145,7 @@ class _ProfilePathScope:
             conditions.append(ModAsset.path.startswith(self.local_root))
         if self.dlc_root:
             conditions.append(ModAsset.path.startswith(self.dlc_root))
-        if self.use_workshop_mods and self.workshop_root:
+        if self.use_workshop_mods and self.workshop_root and not settings.config.prefer_steam_launch:
             conditions.append(ModAsset.path.startswith(self.workshop_root))
         if self.use_self_mods and self.self_root:
             conditions.append(ModAsset.path.startswith(self.self_root))

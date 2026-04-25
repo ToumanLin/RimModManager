@@ -335,7 +335,7 @@ class ProfileManager:
         profile = GameProfile.get_or_none(GameProfile.id == profile_id)
         if not profile: return []
         # 获取当前 Profile 的 EXE 路径
-        args = [GameManager.detect_executable(profile.game_install_path)]
+        args = [GameManager.detect_executable(profile.game_install_path) or '']
         # 核心：注入数据隔离参数（非默认环境）
         if profile.user_data_path and profile_id != 'default':
             # 必须使用绝对路径，并处理可能的空格（Popen 会自动处理列表项的空格）

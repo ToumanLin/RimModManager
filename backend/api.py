@@ -66,7 +66,7 @@ from backend.managers.mgr_files import FileManager, file_mgr, PathChecker
 from backend.managers.mgr_game_logs import GameLogManager, LogCondenser
 from backend.managers.mgr_sorter import OrderSorter
 from backend.managers.mgr_download import DownloadManager, TaskStatus
-from backend.managers.mgr_steam import SteamManager
+from backend.managers.mgr_steam import RIMWORLD_APP_ID, SteamManager
 from backend.managers.mgr_sub_browser import SubBrowserManager
 from backend.ai.service import AIManager
 from backend.managers.mgr_workshop_db import WorkshopDBManager
@@ -245,6 +245,9 @@ class API:
         # 每次启动 API 时，强制检查并修复 SteamCMD 的软链接！
         if settings.config.self_mods_path and settings.config.steamcmd_mods_path:
             FileManager.sync_steamcmd_root_link()
+        # 打包版每次启动都校验 Browser mode 快捷方式，缺失或过期就自动修复。
+        if self._runtime_mode == "desktop" and os.name == "nt":
+            self._ensure_browser_mode_shortcut()
         
         # 执行升级检查
         self._handle_app_version_upgrade()
@@ -313,6 +316,21 @@ class API:
         self.sorter = OrderSorter(self.active_context)
         # 启动新的实时监视器
         if self.game_log_mgr: self.game_log_mgr.start_realtime_monitor()
+
+    def _ensure_browser_mode_shortcut(self):
+        """仅在打包桌面模式下校验 Browser mode 快捷方式。"""
+        try:
+            import sys
+            if not getattr(sys, 'frozen', False):
+                return
+
+            result = FileManager.ensure_browser_mode_shortcut(sys.executable)
+            action = "已修复" if result.get('changed') else "已校验"
+            shortcut_path = result.get('shortcut', {}).get('shortcut_path', '')
+            logger.info(f"Browser mode 快捷方式{action}: {shortcut_path}")
+        except Exception as e:
+            # 快捷方式自修复失败不应阻塞主程序启动，只记录日志即可。
+            logger.warning(f"Browser mode 快捷方式校验失败: {e}", exc_info=True)
 
     def _resolve_load_order_scope(self, profile_id: str | None = None):
         """
@@ -1763,6 +1781,48 @@ class API:
         except Exception as e:
             logger.error(f"Launch Game Error: {e}", exc_info=True)
             return ApiResponse.error(f"启动游戏时出错: {e}")
+
+    @log_api_call
+    def profile_create_desktop_shortcut(self, profile_id: str):
+        """为指定环境创建桌面快捷方式。"""
+        try:
+            if not profile_id:
+                return ApiResponse.error("未指定 Profile ID")
+
+            profile = self.profile_mgr.get_profile(profile_id)
+            check_install = PathChecker.check_install_path(profile.game_install_path)
+            check_data = PathChecker.check_normal_path(profile.user_data_path)
+            if not check_install.get('pass') or not check_data.get('pass'):
+                msg = f"{check_install.get('msg', '')}\n{check_data.get('msg', '')}".strip()
+                return ApiResponse.error(msg or "环境路径无效，无法创建快捷方式")
+
+            steam_path_valid = bool(
+                settings.config.prefer_steam_launch
+                and settings.config.steam_path
+                and PathChecker.check_steam_path(settings.config.steam_path).get('pass', False)
+            )
+            shortcut = self.file_mgr.create_profile_desktop_shortcut(
+                profile=profile,
+                extra_args=self.profile_mgr.get_launch_args_only(profile_id),
+                prefer_steam_launch=steam_path_valid,
+                steam_exe_path=self.steam_mgr.steam_exe,
+                steam_app_id=RIMWORLD_APP_ID,
+            )
+            launch_mode = "Steam" if steam_path_valid else "游戏本体"
+            return ApiResponse.success(
+                data={
+                    "profile_id": profile_id,
+                    "shortcut_path": shortcut.get("shortcut_path"),
+                    "target_path": shortcut.get("target_path"),
+                    "arguments": shortcut.get("arguments", ""),
+                    "launch_mode": launch_mode,
+                    "steam_path_valid": steam_path_valid,
+                },
+                message=f"已在桌面创建环境快捷方式（{launch_mode}）",
+            )
+        except Exception as e:
+            logger.error(f"Create Profile Shortcut Error: {e}", exc_info=True)
+            return ApiResponse.error(f"创建环境快捷方式时出错: {e}")
     
 
     # =========================================================================
