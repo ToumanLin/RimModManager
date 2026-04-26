@@ -118,8 +118,27 @@
           <div class=" flex items-center justify-end gap-3 border-t border-text-main/5 bg-text-main/1"
             :class="isMini ? 'px-2 py-1' : 'px-4 py-2'">
             
+            <template v-if="Array.isArray(confirmStore.state.actionButtons) && confirmStore.state.actionButtons.length > 0">
+              <button
+                v-for="action in confirmStore.state.actionButtons"
+                :key="action.value"
+                @click="confirmStore.chooseAction(action.value)"
+                class="rounded-lg text-xs font-bold transition-all duration-200"
+                :class="[
+                  isMini ? 'px-2 py-1' : 'px-4 py-1.5',
+                  action.kind === 'primary'
+                    ? `${theme.btnBg} text-black shadow-lg`
+                    : action.kind === 'danger'
+                      ? 'bg-accent-danger/90 text-black shadow-lg shadow-accent-danger/20'
+                      : 'text-text-dim hover:text-text-main hover:bg-text-main/10 border border-transparent hover:border-text-main/5'
+                ]"
+              >
+                {{ action.label }}
+              </button>
+            </template>
+            
             <!-- Cancel Button -->
-            <button v-if="confirmStore.state.mode !== 'alert'" 
+            <button v-else-if="confirmStore.state.mode !== 'alert'" 
               @click="handleCancel"
               class=" rounded-lg text-xs font-bold text-text-dim hover:text-text-main hover:bg-text-main/10 border border-transparent hover:border-text-main/5 transition-all duration-200"
               :class="isMini ? 'px-2 py-1' : 'px-4 py-1.5'">
@@ -127,7 +146,7 @@
             </button>
             
             <!-- Confirm Button (流光按钮) -->
-            <button 
+            <button v-if="!confirmStore.state.actionButtons?.length"
               @click="handleConfirm"
               class="relative overflow-hidden  rounded-lg text-xs font-bold text-black shadow-lg transition-transform active:scale-95 group/btn"
               :class="[theme.btnBg, isMini ? 'px-3 py-1' : 'px-6 py-1.5']"

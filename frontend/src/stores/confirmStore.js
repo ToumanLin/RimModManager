@@ -23,6 +23,7 @@ export const useConfirmStore = defineStore('confirm', () => {
     trashOptionText: '移入回收站',
     forceOptionText: '强制删除',
     deleteOptionsHint: '',
+    actionButtons: [],
   })
 
   // Promise 控制器
@@ -47,6 +48,7 @@ export const useConfirmStore = defineStore('confirm', () => {
     state.trashOptionText = '移入回收站'
     state.forceOptionText = '强制删除'
     state.deleteOptionsHint = ''
+    state.actionButtons = []
     
     // 2. 合并配置
     Object.assign(state, {
@@ -79,15 +81,27 @@ export const useConfirmStore = defineStore('confirm', () => {
     if (state.mode === 'prompt') {
       // 验证逻辑
       if (state.validation && !state.validation(state.inputValue)) {
-        // 可以加一个抖动动画逻辑，这里简化处理
         return
       }
       resolvePromise && resolvePromise(state.inputValue)
     } else if (state.showDeleteOptions) {
       resolvePromise && resolvePromise({ confirmed: true, force: !!state.forceDelete })
+    } else if (Array.isArray(state.actionButtons) && state.actionButtons.length > 0) {
+      resolvePromise && resolvePromise(state.actionButtons[0]?.value ?? true)
     } else {
       resolvePromise && resolvePromise(true)
     }
+    isVisible.value = false
+  }
+
+  const chooseAction = (value) => {
+    resolvePromise && resolvePromise(value)
+    isVisible.value = false
+  }
+
+  const closeSilently = () => {
+    // 仅关闭弹窗，不注入确认/取消结果。
+    // 用于“后台等待流程已自动完成，只需把弹窗收起来”的场景。
     isVisible.value = false
   }
 
@@ -129,7 +143,7 @@ export const useConfirmStore = defineStore('confirm', () => {
 
   return { 
     isVisible, state, 
-    open, confirm, cancel,
+    open, confirm, cancel, chooseAction, closeSilently,
     alert, confirmAction, confirmDeleteAction, prompt, popover
   }
 })

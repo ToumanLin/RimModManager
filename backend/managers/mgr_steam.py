@@ -1,4 +1,5 @@
 # backend/managers/mgr_steam.py
+import json
 import os
 import re
 import sys
@@ -10,8 +11,9 @@ import time
 import shutil
 import importlib.util
 import uuid
+import struct
 from dateutil import parser
-from typing import cast
+from typing import Any, cast
 from json_repair import repair_json
 from pathlib import Path
 
@@ -35,6 +37,7 @@ from backend.managers.mgr_network import network_mgr
 from backend.utils.event_bus import EventBus
 from backend.managers.mgr_download import TaskStatus
 from backend.managers.mgr_steamcmd_core import SteamCMDController
+from backend.managers.mgr_game import GameManager
 from backend.utils.tools import extract_zip
 
 # RimWorld App ID
@@ -46,13 +49,53 @@ RIMWORLD_APP_ID = "294100"
 def run_steam_worker(action: str, payload: str):
     """
     独立进程运行的 Steam API 代理。
-    支持处理单个 ID 或以逗号分隔的批量 ID。
+    支持两类场景：
+    1. 订阅/取消订阅：payload 为单个 ID 或逗号分隔的批量 ID。
+    2. 状态探测：action=probe_status，只短暂附着到 Steam 读取一次状态。
     """
     try:
         # 在这里才导入库，确保主进程干净
         from steamworks.steamworks import STEAMWORKS
     except ImportError:
         logger.error("ERROR: steamworks-py not found in bundle")
+        return
+
+    if action == "probe_status":
+        # 探测模式只短暂附着到 Steam，拿到状态后立即退出。
+        result = {
+            "available": True,
+            "running": False,
+            "logged_in": False,
+            "ready": False,
+            "detail": "",
+        }
+        steam = None
+        try:
+            steam = STEAMWORKS()
+            if not steam:
+                result["detail"] = "steamworks_not_loaded"
+                print(f"STEAM_STATUS_JSON:{json.dumps(result, ensure_ascii=False)}")
+                return
+            result["running"] = bool(steam.IsSteamRunning())
+            if not result["running"]:
+                result["detail"] = "steamworks_not_running"
+            else:
+                steam.initialize()
+                logged_on = True
+                if getattr(steam, "Users", None) and hasattr(steam.Users, "LoggedOn"):
+                    logged_on = bool(steam.Users.LoggedOn())
+                result["logged_in"] = logged_on
+                result["ready"] = bool(result["running"] and result["logged_in"])
+                result["detail"] = "steamworks_ready" if result["ready"] else "steamworks_not_logged_in"
+        except Exception as e:
+            result["detail"] = f"steamworks_probe_failed: {e}"
+        finally:
+            try:
+                if steam.loaded():
+                    steam.unload()
+            except Exception:
+                pass
+        print(f"STEAM_STATUS_JSON:{json.dumps(result, ensure_ascii=False)}")
         return
 
     # 这里的 cwd 已经被主进程设置为了 tools/steam_agent
@@ -154,7 +197,6 @@ class SteamManager:
         self._cached_cmd_map = None
         self._last_cmd_log_mtime = 0
         self._last_cmd_acf_mtime = 0
-        
         # 准备环境 (只复制 DLL 和 txt，不再生成 py 脚本)
         self._ensure_agent_environment()
 
@@ -322,6 +364,152 @@ class SteamManager:
         except Exception as e:
             logger.error(f"Check steam process failed: {e}")
             return False
+
+    def _read_windows_active_process_status(self) -> dict:
+        """
+        读取 Steam ActiveProcess 注册表状态。
+        ActiveUser 非 0 时，可作为 Windows 下“客户端已登录”的兜底依据。
+        """
+        result = {
+            "pid": 0,
+            "active_user": 0,
+            "running": False,
+            "logged_in": False,
+        }
+        if platform.system() != "Windows":
+            return result
+
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam\ActiveProcess")
+            pid, _ = winreg.QueryValueEx(key, "pid")
+            active_user, _ = winreg.QueryValueEx(key, "ActiveUser")
+            result["pid"] = int(pid or 0)
+            result["active_user"] = int(active_user or 0)
+            result["running"] = result["pid"] > 0
+            result["logged_in"] = result["active_user"] > 0
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.debug(f"Read Steam ActiveProcess failed: {e}")
+        return result
+
+    def _probe_steamworks_status(self, timeout_seconds: float = 8.0) -> dict:
+        """
+        使用短命 worker 子进程探测 Steamworks 状态。
+        主进程不直接加载 Steamworks，避免被 Steam 识别为挂载中的游戏进程。
+        """
+        result = {
+            "available": False,
+            "running": False,
+            "logged_in": False,
+            "ready": False,
+            "detail": "",
+        }
+
+        try:
+            worker = self._run_steam_worker("probe_status", "_", timeout_seconds=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            result["detail"] = "steamworks_probe_timeout"
+            return result
+        except Exception as e:
+            result["detail"] = f"steamworks_probe_failed: {e}"
+            return result
+
+        stdout_text = str(worker.stdout or "")
+        for line in reversed(stdout_text.splitlines()):
+            marker = "STEAM_STATUS_JSON:"
+            if line.startswith(marker):
+                try:
+                    payload = json.loads(line[len(marker):].strip())
+                    if isinstance(payload, dict):
+                        result.update(payload)
+                        return result
+                except Exception as e:
+                    result["detail"] = f"steamworks_probe_parse_failed: {e}"
+                    return result
+
+        stderr_text = str(worker.stderr or "").strip()
+        if worker.returncode != 0:
+            result["detail"] = f"steamworks_probe_exit_{worker.returncode}"
+            if stderr_text:
+                result["detail"] += f": {stderr_text}"
+            return result
+
+        result["detail"] = "steamworks_probe_no_result"
+        return result
+
+    def _run_steam_worker(self, action: str, payload: str, timeout_seconds: float = 20.0):
+        """
+        统一拉起短命 Steam worker。
+        这样可以复用子进程启动细节，避免订阅/退订与状态探测各自重复拼命令。
+        """
+        current_exe = sys.executable
+        is_frozen = getattr(sys, 'frozen', False)
+        cmd = [current_exe]
+        if not is_frozen:
+            cmd.append(str(BASE_RESOURCE_DIR / "main.py"))
+        cmd.extend(["--steam-worker", str(action), str(payload)])
+
+        current_env = os.environ.copy()
+        current_env["_PYI_SPLASH_IPC"] = "0"
+        startupinfo = None
+        if platform.system() == "Windows":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+        return subprocess.run(
+            cmd,
+            cwd=self.agent_dir,
+            capture_output=True,
+            text=True,
+            startupinfo=startupinfo,
+            encoding='utf-8',
+            env=current_env,
+            timeout=max(1.0, float(timeout_seconds or 0)),
+        )
+
+    def get_steam_client_status(self) -> dict:
+        """
+        返回 Steam 客户端状态。
+        优先使用 Steamworks API 判断“已登录/可用”，Windows 下再用 ActiveProcess 注册表兜底。
+        """
+        process_running = self.is_steam_running()
+        status = {
+            "running": process_running,
+            "logged_in": False,
+            "ready": False,
+            "source": "process",
+            "detail": "process_only",
+            "pid": 0,
+            "active_user": 0,
+        }
+
+        registry_status = self._read_windows_active_process_status()
+        if registry_status:
+            status["pid"] = int(registry_status.get("pid", 0) or 0)
+            status["active_user"] = int(registry_status.get("active_user", 0) or 0)
+
+        # 只有进程层面看起来 Steam 确实活着时，才值得再拉起一次短命 worker 去探测 Steamworks。
+        # 这样能避免 Steam 明明没开时仍然多余地创建子进程。
+        if bool(process_running or registry_status.get("running")):
+            steamworks_status = self._probe_steamworks_status()
+            if steamworks_status.get("available"):
+                status["running"] = bool(steamworks_status.get("running"))
+                status["logged_in"] = bool(steamworks_status.get("logged_in"))
+                status["ready"] = bool(steamworks_status.get("ready"))
+                status["source"] = "steamworks"
+                status["detail"] = str(steamworks_status.get("detail") or "steamworks")
+                if status["ready"] or status["detail"] in {"steamworks_not_running", "steamworks_not_logged_in"}:
+                    return status
+
+        if platform.system() == "Windows":
+            status["running"] = bool(process_running or registry_status.get("running"))
+            status["logged_in"] = bool(registry_status.get("logged_in"))
+            status["ready"] = bool(status["running"] and status["logged_in"])
+            status["source"] = "registry_fallback"
+            status["detail"] = "active_process_ready" if status["ready"] else "active_process_not_ready"
+
+        return status
 
     def start_steam(self) -> bool:
         """尝试启动 Steam 客户端"""
@@ -494,28 +682,11 @@ class SteamManager:
         # 2. 分块处理 (避免命令行超长)
         BATCH_SIZE = 50
         all_success = True
-        current_exe = sys.executable
-        is_frozen = getattr(sys, 'frozen', False)
         for i in range(0, len(id_list), BATCH_SIZE):
             batch = id_list[i : i + BATCH_SIZE]
             payload = ",".join(batch)
-            cmd = [current_exe]
-            if not is_frozen:
-                cmd.append(str(BASE_RESOURCE_DIR / "main.py"))
-            cmd.extend(["--steam-worker", action, payload])
             try:
-                current_env = os.environ.copy()
-                # 对 PyInstaller 子进程显式禁用 splash，避免 worker 闪出启动屏。
-                current_env["_PYI_SPLASH_IPC"] = "0"
-                # 统一使用隐藏窗口启动
-                si = None
-                if platform.system() == "Windows":
-                    si = subprocess.STARTUPINFO()
-                    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                result = subprocess.run(
-                    cmd, cwd=self.agent_dir, capture_output=True, 
-                    text=True, startupinfo=si, encoding='utf-8', env=current_env
-                )
+                result = self._run_steam_worker(action, payload, timeout_seconds=20.0)
                 if "SUCCESS" not in result.stdout:
                     logger.error(f"Steam Agent Error: {result.stdout}")
                     all_success = False
@@ -778,6 +949,468 @@ class SteamManager:
         # 启动
         subprocess.Popen(cmd)
         logger.debug(f"通过 Steam 命令启动 RimWorld: {cmd}")
+
+    def _steam64_to_account_id(self, steam64_id: str | int | None) -> str:
+        """将 Steam64 ID 转成 userdata 目录使用的 account id（32 位）。"""
+        try:
+            value = int(str(steam64_id or '').strip())
+            account_id = value - 76561197960265728
+            return str(account_id) if account_id >= 0 else ''
+        except Exception:
+            return ''
+
+    def _get_userdata_root(self) -> Path:
+        steam_dir = Path(str(self.steam_dir or '').strip())
+        if not steam_dir:
+            raise FileNotFoundError("未配置 Steam 安装目录")
+        return steam_dir / "userdata"
+
+    def _load_loginusers_map(self) -> dict[str, dict[str, Any]]:
+        """
+        读取 loginusers.vdf，整理出 account id -> 用户信息映射。
+        这里优先为 shortcuts.vdf 写入选出最合理的目标 Steam 用户。
+        """
+        loginusers_path = Path(str(self.steam_dir or '').strip()) / "config" / "loginusers.vdf"
+        if not loginusers_path.exists():
+            return {}
+
+        try:
+            import vdf
+
+            with open(loginusers_path, 'r', encoding='utf-8', errors='ignore') as f:
+                payload = vdf.load(f) or {}
+        except Exception as e:
+            logger.warning(f"读取 loginusers.vdf 失败: {e}")
+            return {}
+
+        users_map = payload.get("users") if isinstance(payload, dict) else {}
+        if not isinstance(users_map, dict):
+            return {}
+
+        result: dict[str, dict[str, Any]] = {}
+        for steam64_id, raw_info in users_map.items():
+            account_id = self._steam64_to_account_id(steam64_id)
+            if not account_id:
+                continue
+            info = raw_info if isinstance(raw_info, dict) else {}
+            result[account_id] = {
+                "steam64_id": str(steam64_id),
+                "account_id": account_id,
+                "account_name": str(info.get("AccountName") or '').strip(),
+                "persona_name": str(info.get("PersonaName") or '').strip(),
+                "most_recent": str(info.get("MostRecent") or '0').strip() == '1',
+                "timestamp": int(str(info.get("Timestamp") or '0').strip() or 0),
+            }
+        return result
+
+    def resolve_shortcuts_user(self) -> dict[str, Any]:
+        """
+        为 shortcuts.vdf 选出目标 Steam 用户。
+        选择顺序：
+        1. 当前已登录的 ActiveUser
+        2. loginusers.vdf 中标记 MostRecent 的用户
+        3. 本地唯一 userdata 用户
+        4. loginusers.vdf 中时间最新的用户
+        """
+        userdata_root = self._get_userdata_root()
+        if not userdata_root.exists():
+            raise FileNotFoundError(f"未找到 Steam userdata 目录: {userdata_root}")
+
+        user_dirs = sorted(
+            item.name for item in userdata_root.iterdir()
+            if item.is_dir() and item.name.isdigit()
+        )
+        if not user_dirs:
+            raise FileNotFoundError("未找到任何 Steam 用户数据目录")
+
+        loginusers_map = self._load_loginusers_map()
+        active_status = self._read_windows_active_process_status()
+        active_user = str(int(active_status.get("active_user") or 0)) if int(active_status.get("active_user") or 0) > 0 else ""
+
+        selected_user = ""
+        source = ""
+        if active_user and active_user in user_dirs:
+            selected_user = active_user
+            source = "active_process"
+        else:
+            recent_users = [
+                user_id for user_id in user_dirs
+                if bool((loginusers_map.get(user_id) or {}).get("most_recent"))
+            ]
+            if recent_users:
+                selected_user = recent_users[0]
+                source = "loginusers_recent"
+            elif len(user_dirs) == 1:
+                selected_user = user_dirs[0]
+                source = "single_userdata"
+            else:
+                sorted_candidates = sorted(
+                    user_dirs,
+                    key=lambda user_id: int((loginusers_map.get(user_id) or {}).get("timestamp") or 0),
+                    reverse=True,
+                )
+                selected_user = sorted_candidates[0]
+                source = "loginusers_timestamp"
+
+        user_info = loginusers_map.get(selected_user, {})
+        persona_name = str(user_info.get("persona_name") or '').strip()
+        account_name = str(user_info.get("account_name") or '').strip()
+        display_name = persona_name or account_name or selected_user
+        if persona_name and account_name and persona_name != account_name:
+            display_name = f"{persona_name} ({account_name})"
+
+        shortcuts_path = userdata_root / selected_user / "config" / "shortcuts.vdf"
+        return {
+            "user_id": selected_user,
+            "display_name": display_name,
+            "source": source,
+            "shortcuts_path": str(shortcuts_path),
+        }
+
+    @staticmethod
+    def _normalize_shortcuts_payload(shortcuts: dict | None) -> dict[str, Any]:
+        payload = shortcuts if isinstance(shortcuts, dict) else {}
+        container = payload.get("shortcuts")
+        if isinstance(container, list):
+            payload["shortcuts"] = {
+                str(index): item for index, item in enumerate(container)
+                if isinstance(item, dict)
+            }
+        elif not isinstance(container, dict):
+            payload["shortcuts"] = {}
+        return payload
+
+    @staticmethod
+    def _get_shortcut_field(entry: dict[str, Any], field_name: str, default: Any = ""):
+        for key, value in entry.items():
+            if str(key).strip().lower() == str(field_name).strip().lower():
+                return value
+        return default
+
+    @staticmethod
+    def _normalize_shortcut_path_value(value: Any) -> str:
+        text = str(value or '').strip().strip('"')
+        return os.path.normcase(os.path.normpath(text)) if text else ''
+
+    def _load_shortcuts_file(self, shortcuts_path: str) -> dict[str, Any]:
+        try:
+            import vdf
+
+            if os.path.exists(shortcuts_path):
+                with open(shortcuts_path, 'rb') as f:
+                    return self._normalize_shortcuts_payload(vdf.binary_load(f))
+        except Exception as e:
+            logger.warning(f"读取 shortcuts.vdf 失败，将使用空结构继续: {e}")
+        return {"shortcuts": {}}
+
+    def _save_shortcuts_file(self, shortcuts_path: str, payload: dict[str, Any]):
+        import vdf
+
+        target_path = Path(shortcuts_path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        backup_path = target_path.with_suffix(".vdf.rmm.bak")
+        had_original = target_path.exists()
+
+        if had_original:
+            shutil.copy2(target_path, backup_path)
+
+        try:
+            with open(target_path, 'wb') as f:
+                vdf.binary_dump(self._normalize_shortcuts_payload(payload), f)
+        except Exception:
+            if had_original and backup_path.exists():
+                shutil.copy2(backup_path, target_path)
+            elif target_path.exists():
+                target_path.unlink(missing_ok=True)
+            raise
+
+    def _build_managed_shortcut_entry(self, profile: Any, game_exe: str, game_dir: str, launch_options: str, existing_entry: dict[str, Any] | None = None) -> dict[str, Any]:
+        """
+        构造管理器维护的非 Steam 游戏条目。
+        关键点：
+        1. `ShortcutPath` 不再写真实文件路径，而是写内部标记，方便后续幂等更新；
+        2. 已存在的 `appid` 与 `tags` 会尽量保留，避免 Steam 重新生成后桌面协议变化。
+        """
+        profile_name = str(getattr(profile, 'name', None) or getattr(profile, 'id', 'Profile')).strip()
+        marker = f"rmm://profile/{getattr(profile, 'id', '')}"
+        existing = existing_entry or {}
+        entry = {
+            # Steam 当前 shortcuts.vdf 主流字段名以 AppName/Exe/StartDir 为准；
+            # 这里按官方文档和现有客户端实际写回格式保持一致，避免因字段名漂移导致客户端不回写 appid。
+            "AppName": f"RimWorld [{profile_name}]",
+            "Exe": f'"{game_exe}"',
+            "StartDir": f'"{game_dir}"',
+            "icon": game_exe,
+            "ShortcutPath": marker,
+            "LaunchOptions": str(launch_options or ''),
+            "IsHidden": 0,
+            "AllowDesktopConfig": 1,
+            "AllowOverlay": 1,
+            "OpenVR": 0,
+            "Devkit": 0,
+            "DevkitGameID": "",
+            "DevkitOverrideAppID": 0,
+            "LastPlayTime": self._get_shortcut_field(existing, "LastPlayTime", 0),
+            "FlatpakAppID": "",
+            "SortAs": self._get_shortcut_field(existing, "SortAs", ""),
+            "tags": self._get_shortcut_field(existing, "tags", {}) or {},
+        }
+        existing_appid = self._get_shortcut_field(existing, "appid", None)
+        if existing_appid not in (None, ""):
+            entry["appid"] = existing_appid
+        return entry
+
+    def _find_managed_shortcut_entry(self, shortcuts: dict[str, Any], profile: Any, game_exe: str) -> tuple[str | None, dict[str, Any] | None]:
+        container = self._normalize_shortcuts_payload(shortcuts).get("shortcuts", {})
+        if not isinstance(container, dict):
+            return None, None
+
+        marker = f"rmm://profile/{getattr(profile, 'id', '')}"
+        expected_name = f"RimWorld [{str(getattr(profile, 'name', None) or getattr(profile, 'id', 'Profile')).strip()}]"
+        normalized_exe = self._normalize_shortcut_path_value(game_exe)
+
+        for key, entry in container.items():
+            if not isinstance(entry, dict):
+                continue
+            if str(self._get_shortcut_field(entry, "ShortcutPath", "")).strip() == marker:
+                return str(key), entry
+
+        for key, entry in container.items():
+            if not isinstance(entry, dict):
+                continue
+            entry_name = str(self._get_shortcut_field(entry, "appname", "")).strip()
+            entry_exe = self._normalize_shortcut_path_value(self._get_shortcut_field(entry, "exe", ""))
+            if entry_name == expected_name and entry_exe == normalized_exe:
+                return str(key), entry
+
+        return None, None
+
+    @staticmethod
+    def _allocate_shortcut_index(shortcuts: dict[str, Any]) -> str:
+        container = shortcuts.get("shortcuts", {})
+        next_index = 0
+        while str(next_index) in container:
+            next_index += 1
+        return str(next_index)
+
+    @staticmethod
+    def _shortcut_entry_to_launch_url(entry: dict[str, Any] | None) -> str:
+        """
+        将 shortcuts.vdf 中已有的非 Steam `appid` 转成 `steam://rungameid/...`。
+        这里只在条目已拥有稳定 appid 时返回 URL；首次注册的新条目通常要等 Steam 重载后才会写回该值。
+        """
+        if not isinstance(entry, dict):
+            return ""
+
+        raw_appid = SteamManager._get_shortcut_field(entry, "appid", None)
+        if raw_appid in (None, ""):
+            return ""
+
+        try:
+            signed_appid = int(str(raw_appid).strip())
+            unsigned_appid = struct.unpack("<I", struct.pack("<i", signed_appid))[0]
+            rungameid = (unsigned_appid << 32) | 0x02000000
+            return f"steam://rungameid/{rungameid}"
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _appid_to_rungameid(appid: int | str | None) -> str:
+        """将 Steam shortcut appid 转成 `steam://rungameid/...`。"""
+        if appid in (None, ""):
+            return ""
+        try:
+            raw_value = int(str(appid).strip())
+            # Steam 日志中的 sanitize app id 是无符号 32 位整数；
+            # shortcuts.vdf 旧格式里也可能出现有符号整数。
+            # 这里统一折叠到 32 位无符号空间，兼容两种来源。
+            unsigned_appid = raw_value & 0xFFFFFFFF
+            rungameid = (unsigned_appid << 32) | 0x02000000
+            return f"steam://rungameid/{rungameid}"
+        except Exception:
+            return ""
+
+    def _get_console_log_path(self) -> str:
+        steam_dir = str(self.steam_dir or '').strip()
+        if not steam_dir:
+            return ""
+        return str(Path(steam_dir) / "logs" / "console_log.txt")
+
+    def get_shortcut_log_probe(self, profile: Any, extra_args: list[str] | None = None) -> dict[str, Any]:
+        """
+        生成本次非 Steam 快捷方式 ID 解析所需的探针信息。
+        由于 Steam 当前不会稳定把 shortcut appid 回写到 shortcuts.vdf，
+        这里改为从 console_log.txt 中匹配本次 sanitize 记录。
+        """
+        game_dir = os.path.abspath(str(getattr(profile, 'game_install_path', '') or '').strip())
+        game_exe = GameManager.detect_executable(game_dir)
+        if not game_exe:
+            raise FileNotFoundError(f"在安装目录下找不到游戏可执行文件: {game_dir}")
+
+        launch_args = [str(item or '').strip() for item in (extra_args or []) if str(item or '').strip()]
+        launch_options = subprocess.list2cmdline(launch_args) if launch_args else ""
+        log_path = self._get_console_log_path()
+        start_size = 0
+        if log_path and os.path.exists(log_path):
+            try:
+                start_size = os.path.getsize(log_path)
+            except OSError:
+                start_size = 0
+
+        return {
+            "profile_id": str(getattr(profile, 'id', '') or '').strip(),
+            "exe": os.path.abspath(game_exe),
+            "launch_options": launch_options,
+            "log_path": log_path,
+            "log_start_offset": int(start_size),
+            "registered_at_ms": int(time.time() * 1000),
+        }
+
+    def resolve_shortcut_launch_url_from_log_probe(self, probe: dict[str, Any]) -> dict[str, Any]:
+        """
+        从 Steam console_log.txt 中解析本次新注册 shortcut 的 appid。
+        依据当前 Steam 实测行为：
+        - Steam 会在日志里输出 sanitize shortcut app id ...
+        - 但不会稳定地把 appid 回写进 shortcuts.vdf
+        """
+        log_path = str((probe or {}).get("log_path") or '').strip()
+        exe_path = os.path.normcase(os.path.normpath(str((probe or {}).get("exe") or '').strip()))
+        start_offset = int((probe or {}).get("log_start_offset") or 0)
+        if not log_path or not os.path.exists(log_path):
+            return {
+                "ready": False,
+                "appid": None,
+                "launch_url": "",
+                "source": "console_log_missing",
+            }
+
+        latest_appid = None
+        try:
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                if start_offset > 0:
+                    try:
+                        f.seek(start_offset)
+                    except OSError:
+                        pass
+
+                for raw_line in f:
+                    line = str(raw_line or '').strip()
+                    if 'sanitize shortcut app id' not in line.lower():
+                        continue
+                    match = re.search(r'sanitize shortcut app id "([^"]+)": replacing \d+ with (\d+)', line, flags=re.I)
+                    if not match:
+                        continue
+                    candidate_exe = os.path.normcase(os.path.normpath(str(match.group(1) or '').strip()))
+                    if candidate_exe != exe_path:
+                        continue
+                    latest_appid = int(match.group(2))
+        except Exception as e:
+            logger.debug(f"读取 Steam console_log 失败: {e}")
+            return {
+                "ready": False,
+                "appid": None,
+                "launch_url": "",
+                "source": "console_log_read_failed",
+            }
+
+        launch_url = self._appid_to_rungameid(latest_appid)
+        return {
+            "ready": bool(launch_url),
+            "appid": latest_appid,
+            "launch_url": launch_url,
+            "source": "console_log",
+        }
+
+    def register_profile_non_steam_shortcut(self, profile: Any, extra_args: list[str] | None = None) -> dict[str, Any]:
+        """
+        将指定环境登记为 Steam 非 Steam 游戏条目。
+        注意：
+        1. 该流程只负责维护 shortcuts.vdf；
+        2. 首次创建条目时，Steam 往往要在下次读取后才会补全稳定 appid，因此桌面 `.url` 可能需要二次创建。
+        """
+        if platform.system() != "Windows":
+            raise OSError("Steam 非 Steam 快捷方式仅支持 Windows")
+        if self.is_steam_running():
+            raise RuntimeError("Steam 正在运行，修改 shortcuts.vdf 可能在退出时被覆盖，请先完全退出 Steam。")
+
+        game_dir = os.path.abspath(str(getattr(profile, 'game_install_path', '') or '').strip())
+        game_exe = GameManager.detect_executable(game_dir)
+        if not game_exe:
+            raise FileNotFoundError(f"在安装目录下找不到游戏可执行文件: {game_dir}")
+
+        launch_args = [str(item or '').strip() for item in (extra_args or []) if str(item or '').strip()]
+        launch_options = subprocess.list2cmdline(launch_args) if launch_args else ""
+        user_target = self.resolve_shortcuts_user()
+        shortcuts_path = str(user_target["shortcuts_path"])
+        shortcuts = self._load_shortcuts_file(shortcuts_path)
+        entry_index, existing_entry = self._find_managed_shortcut_entry(shortcuts, profile, game_exe)
+        is_new_entry = existing_entry is None
+        if entry_index is None:
+            entry_index = self._allocate_shortcut_index(shortcuts)
+
+        new_entry = self._build_managed_shortcut_entry(
+            profile=profile,
+            game_exe=os.path.abspath(game_exe),
+            game_dir=game_dir,
+            launch_options=launch_options,
+            existing_entry=existing_entry,
+        )
+        shortcuts["shortcuts"][entry_index] = new_entry
+        self._save_shortcuts_file(shortcuts_path, shortcuts)
+        logger.info(
+            "已写入 Steam 非 Steam 环境条目: profile=%s, user=%s, index=%s, shortcuts=%s",
+            getattr(profile, 'id', ''),
+            user_target["user_id"],
+            entry_index,
+            shortcuts_path,
+        )
+
+        log_probe = self.get_shortcut_log_probe(profile, extra_args=extra_args)
+        return {
+            "user_id": user_target["user_id"],
+            "user_display_name": user_target["display_name"],
+            "shortcuts_vdf_path": shortcuts_path,
+            "entry_index": entry_index,
+            "entry_name": str(self._get_shortcut_field(new_entry, "AppName", "")).strip(),
+            "is_new_entry": is_new_entry,
+            "launch_url": "",
+            "log_probe": log_probe,
+            "requires_restart": True,
+        }
+
+    def get_registered_profile_non_steam_shortcut(self, profile: Any, log_probe: dict[str, Any] | None = None) -> dict[str, Any]:
+        """
+        读取管理器维护的非 Steam 条目当前状态。
+        该方法不会写文件，主要供“Steam 启动后轮询是否已生成稳定 shortcut id”使用。
+        """
+        if platform.system() != "Windows":
+            raise OSError("Steam 非 Steam 快捷方式仅支持 Windows")
+
+        game_dir = os.path.abspath(str(getattr(profile, 'game_install_path', '') or '').strip())
+        game_exe = GameManager.detect_executable(game_dir)
+        if not game_exe:
+            raise FileNotFoundError(f"在安装目录下找不到游戏可执行文件: {game_dir}")
+
+        user_target = self.resolve_shortcuts_user()
+        shortcuts_path = str(user_target["shortcuts_path"])
+        shortcuts = self._load_shortcuts_file(shortcuts_path)
+        entry_index, entry = self._find_managed_shortcut_entry(shortcuts, profile, game_exe)
+        log_status = self.resolve_shortcut_launch_url_from_log_probe(log_probe or {})
+        launch_url = str(log_status.get("launch_url") or '').strip()
+
+        return {
+            "user_id": user_target["user_id"],
+            "user_display_name": user_target["display_name"],
+            "shortcuts_vdf_path": shortcuts_path,
+            "entry_index": entry_index,
+            "entry_name": str(self._get_shortcut_field(entry or {}, "AppName", "") or self._get_shortcut_field(entry or {}, "appname", "")).strip(),
+            "launch_url": launch_url,
+            "appid": log_status.get("appid"),
+            "exists": bool(entry),
+            "ready": bool(log_status.get("ready")),
+            "source": log_status.get("source"),
+            "log_probe": log_probe or {},
+        }
     
     
     # =========================================================

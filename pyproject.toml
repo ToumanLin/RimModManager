@@ -26,5 +26,6 @@ dependencies = [
     "requests>=2.32.5",
     "send2trash>=2.0.0",
     "setuptools<70.0.0",
+    "steam-vdf>=0.1.10",
     "steamworkspy>=0.0.2",
 ]

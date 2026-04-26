@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import configparser
 import re
 import shutil
 import tempfile
@@ -19,7 +20,7 @@ import requests
 import urllib.parse
 import webview # 引入 webview 库
 from backend.managers.mgr_game import GameManager
-from backend.settings import GALLERY_CACHE_DIR, THUMBNAIL_CACHE_DIR
+from backend.settings import GALLERY_CACHE_DIR, THUMBNAIL_CACHE_DIR, settings
 from backend.utils.event_bus import EventBus
 from backend.utils.logger import logger
 from backend.utils.delete_ops import delete_path as delete_fs_path
@@ -513,6 +514,15 @@ class FileManager:
         return path
 
     @staticmethod
+    def _normalize_url_shortcut_path(shortcut_path: str) -> str:
+        path = os.path.abspath(str(shortcut_path or '').strip())
+        if not path:
+            raise ValueError("快捷方式路径不能为空")
+        if not path.lower().endswith('.url'):
+            path = f"{path}.url"
+        return path
+
+    @staticmethod
     def _normalize_shortcut_compare_value(key: str, value: Any) -> str:
         text = str(value or '').strip()
         if key in {'shortcut_path', 'target_path', 'working_directory'}:
@@ -749,8 +759,9 @@ $result | ConvertTo-Json -Compress
         if not shortcut_dir:
             raise FileNotFoundError("无法解析桌面目录")
 
-        # 快捷方式是否走 Steam 只取决于全局偏好和 Steam 路径是否有效，
-        # 不再绑定环境自身的 is_steam 标记，避免配置语义混淆。
+        # 这里仅负责“官方稳定路径”那种 Steam 快捷方式：
+        # 目标仍然是 Steam.exe，参数是 -applaunch 294100 + 环境启动参数。
+        # 是否使用这条分支由上层根据当前环境策略决定，这里只做纯命令拼装。
         use_steam_launch = bool(prefer_steam_launch)
         target_path = os.path.abspath(game_exe)
         working_directory = game_install_path
@@ -796,6 +807,111 @@ $result | ConvertTo-Json -Compress
             steam_app_id=steam_app_id,
         )
         return FileManager.create_windows_shortcut(**spec)
+
+    @staticmethod
+    def build_profile_url_shortcut_spec(
+        profile: Any,
+        launch_url: str,
+        destination_dir: str | None = None,
+        icon_location: str = '',
+    ) -> Dict[str, str]:
+        """
+        生成 Steam 协议 `.url` 快捷方式定义。
+        该格式适合 `steam://rungameid/...` 这类协议启动，不必再额外包一层 bat 或 cmd。
+        """
+        if platform.system() != 'Windows':
+            raise OSError("环境快捷方式仅支持 Windows")
+
+        profile_name = FileManager.sanitize_filename(getattr(profile, 'name', None) or getattr(profile, 'id', 'Profile'))
+        shortcut_dir = destination_dir or FileManager.get_windows_special_folder('Desktop')
+        if not shortcut_dir:
+            raise FileNotFoundError("无法解析桌面目录")
+
+        return {
+            "shortcut_path": os.path.join(shortcut_dir, f"RimWorld [{profile_name}].url"),
+            "url": str(launch_url or '').strip(),
+            "icon_location": str(icon_location or '').strip(),
+        }
+
+    @staticmethod
+    def create_windows_url_shortcut(
+        shortcut_path: str,
+        url: str,
+        icon_location: str = '',
+    ) -> Dict[str, Any]:
+        """
+        创建或覆盖 Windows `.url` InternetShortcut。
+        这里直接写标准 ini 格式，稳定且无需依赖 COM。
+        """
+        if platform.system() != 'Windows':
+            raise OSError("快捷方式创建仅支持 Windows")
+
+        normalized_shortcut = FileManager._normalize_url_shortcut_path(shortcut_path)
+        normalized_url = str(url or '').strip()
+        if not normalized_url:
+            raise ValueError("快捷方式 URL 不能为空")
+
+        shortcut_dir = os.path.dirname(normalized_shortcut)
+        if shortcut_dir:
+            os.makedirs(shortcut_dir, exist_ok=True)
+
+        config = configparser.ConfigParser()
+        config.optionxform = str
+        config["InternetShortcut"] = {"URL": normalized_url}
+        if str(icon_location or '').strip():
+            config["InternetShortcut"]["IconFile"] = str(icon_location).strip()
+            config["InternetShortcut"]["IconIndex"] = "0"
+
+        with open(normalized_shortcut, 'w', encoding='utf-8') as f:
+            config.write(f, space_around_delimiters=False)
+
+        return {
+            "shortcut_path": normalized_shortcut,
+            "url": normalized_url,
+            "icon_location": str(icon_location or '').strip(),
+        }
+
+    @staticmethod
+    def create_profile_desktop_url_shortcut(
+        profile: Any,
+        launch_url: str,
+        icon_location: str = '',
+    ) -> Dict[str, Any]:
+        """为指定环境创建基于 Steam 协议的 `.url` 桌面快捷方式。"""
+        spec = FileManager.build_profile_url_shortcut_spec(
+            profile=profile,
+            launch_url=launch_url,
+            icon_location=icon_location,
+        )
+        return FileManager.create_windows_url_shortcut(**spec)
+
+    @staticmethod
+    def remove_existing_shortcut_variants(shortcut_path: str):
+        """
+        删除同名但不同后缀的旧快捷方式，避免 `.lnk` / `.url` 并存让用户误点旧入口。
+        """
+        base_path = Path(os.path.abspath(str(shortcut_path or '').strip()))
+        if not base_path.name:
+            return
+
+        for suffix in ('.lnk', '.url'):
+            candidate = base_path.with_suffix(suffix)
+            if candidate == base_path:
+                continue
+            try:
+                candidate.unlink(missing_ok=True)
+            except Exception as e:
+                logger.debug(f"清理旧快捷方式失败: {candidate} - {e}")
+
+    @staticmethod
+    def sync_managed_links(local_mods_path: str, deploy_paths: list[str]):
+        """
+        将本地 Mods 目录中的管理器链接收敛到 deploy_paths。
+        这里复用既有同步逻辑，避免手写删除规则误伤 Self/Tool 链接。
+        """
+        if settings.config.link_deployment_mode_full:
+            return FileManager.sync_links_full(local_mods_path, deploy_paths)
+        return FileManager.sync_links(local_mods_path, deploy_paths)
     
     @staticmethod
     def localize_workshop_mods(query, local_root: str, folder_name_type: str = 'workshop_id'):

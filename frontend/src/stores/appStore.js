@@ -14,6 +14,7 @@ import { useWorkspaceStore } from './workspaceStore'
 import { useTaskStore } from './taskStore'
 import { isBrowserRuntime, openManagedSubBrowserUrl } from '../runtime/runtimeBridge'
 import { normalizeInstallSource, normalizeInstallSources } from '../utils/modIdentity'
+import { checkResult as sharedCheckResult } from '../utils/tools'
 
 export const useAppStore = defineStore('app', () => {
   const toast = createToastInterface()
@@ -109,7 +110,6 @@ export const useAppStore = defineStore('app', () => {
     // --- 路径 (Paths) ---
     home_path: '',
     steam_path: '',
-    prefer_steam_launch: true,           // 是否优先通过 Steam 启动游戏
     steamcmd_mods_path: '',
     workshop_mods_path: '',
     self_mods_path: '',
@@ -304,6 +304,12 @@ export const useAppStore = defineStore('app', () => {
     // 默认 14px，用户调大到 16px，所有使用 rem 的组件都会等比例变大
     document.documentElement.style.fontSize = `${newSize}px`;
   }, { immediate: true });
+  watch(() => settings.value.debug_mode, (enabled) => {
+    // 让通用 checkResult 感知当前调试开关，避免 appStore 再维护一份重复实现。
+    if (typeof window !== 'undefined') {
+      window.__RMM_DEBUG_MODE__ = !!enabled
+    }
+  }, { immediate: true });
   // 像素值缩放函数
   const scalePx = (basePx, defaultFontSize = 16) => {
     if (!settings.value.ui.font_size) return basePx;
@@ -323,17 +329,10 @@ export const useAppStore = defineStore('app', () => {
       else window.addEventListener('pywebviewready', () => resolve(), { once: true })
     })
   }
-  // 通用结果检查
-  const checkResult = (res, workname, showSuccess = false) => {
-    if (settings.value.debug_mode) console.log('checkResult', workname, res)
-    if (res.status === 'success') {
-      if(showSuccess) toast.success(`${workname}成功`, {timeout: 1000})
-      return true;
-    }
-    if (res.status === 'warning') toast.warning(`${workname}注意: \n${res.message}`)
-    else toast.error(`${workname}失败: \n${res.message}`)
-    return false
-  }
+  // 统一复用 utils/tools.js 中的通用实现，避免 appStore 再维护一份重复逻辑。
+  const checkResult = (res, workname, showSuccess = false) => (
+    sharedCheckResult(res, workname, showSuccess, { debugMode: settings.value.debug_mode })
+  )
 
   const recoverFromSuspendedState = async () => {
     if (suspendRecoveryPromise) return suspendRecoveryPromise
@@ -802,8 +801,9 @@ export const useAppStore = defineStore('app', () => {
       if (!res) return
     }
     if (!window.pywebview) return
-    // 直接启动游戏
-    const gameRes = await window.pywebview.api.game_launch(profile_id)
+    let gameRes = await window.pywebview.api.game_launch(profile_id)
+    gameRes = await resolveGameLaunchWarning(gameRes, profile_id)
+    if (!gameRes) return
     if (checkResult(gameRes, "启动游戏程序")) {
       toast.success(gameRes.message)
     }
@@ -967,6 +967,104 @@ export const useAppStore = defineStore('app', () => {
     ))
   }
 
+  const WAIT_STEAM_EXIT_ACTION = 'wait_steam_exit'
+  const sleep = (ms) => new Promise(resolve => window.setTimeout(resolve, ms))
+
+  const buildDirectLaunchSteamRunningMessage = () => (
+    '当前环境配置为直接启动游戏本体，且已将创意工坊模组链接部署到本地模组目录。\n'
+    + '检测到 Steam 已在运行，如果现在继续启动游戏，Steam 会接管本次启动，游戏内将同时出现两套创意工坊模组。\n'
+    + '默认会优先加载本地目录中的那一套，一般不会影响实际游戏，但界面显示和后续管理会变得混乱。\n'
+    + '请手动退出 Steam，或先删掉这批额外生成的 Workshop 链接后再运行。\n'
+    + '当前窗口会保持等待，Steam 完全退出后将自动启动游戏。'
+  )
+
+  const showSteamNotReadyHint = (res) => {
+    const statusHint = res?.data?.steam_status?.user_hint
+    if (res?.data?.action === 'steam_not_ready' && statusHint?.message) {
+      toast.warning(`${statusHint.title || 'Steam 未就绪'}\n${statusHint.message}`, { timeout: 6000 })
+    }
+  }
+
+  const resolveGameLaunchWarning = async (gameRes, requestedProfileId = null) => {
+    if (gameRes?.status !== 'warning' || gameRes?.data?.action !== 'confirm_direct_launch') {
+      return gameRes
+    }
+
+    const profileStore = useProfileStore()
+    const targetProfileId = gameRes?.data?.profile_id || requestedProfileId || profileStore.currentProfileId
+    if (gameRes?.data?.requires_fallback_confirm) {
+      const confirmStore = useConfirmStore()
+      const ok = await confirmStore.confirmAction(
+        'Steam 启动不可用',
+        gameRes?.message || '当前环境无法按 Steam 方式启动。\n是否改为按游戏本体直接启动？',
+        { type: 'warning', confirmText: '直接启动', cancelText: '取消' }
+      )
+      if (!ok) return null
+    }
+
+    if (gameRes?.data?.steam_running) {
+      return await waitSteamExitAndLaunch(targetProfileId, buildDirectLaunchSteamRunningMessage())
+    }
+    return window.pywebview.api.game_launch_resolve_warning(targetProfileId, 'continue')
+  }
+
+  const waitSteamExitAndLaunch = async (targetProfileId, waitingMessage) => {
+    const confirmStore = useConfirmStore()
+    let stopPolling = false
+    let autoLaunchResult = null
+    let autoResolved = false
+
+    const choicePromise = confirmStore.open({
+      title: 'Steam 已在运行',
+      message: waitingMessage,
+      mode: 'confirm',
+      type: 'warning',
+      actionButtons: [
+        { label: '继续运行', value: 'continue', kind: 'primary' },
+        { label: '删链运行', value: 'clear_workshop', kind: 'danger' },
+        { label: '取消', value: 'cancel', kind: 'secondary' },
+      ],
+    })
+
+    const pollingPromise = (async () => {
+      while (!stopPolling && confirmStore.isVisible) {
+        try {
+          // 等待 Steam 退出时只检测进程，避免 Steamworks/登录态在退出瞬间干扰判断。
+          const statusRes = await window.pywebview.api.steam_process_status()
+          const isRunning = !!statusRes?.data?.running
+          if (statusRes?.status === 'success' && !isRunning) {
+            const launchRes = await window.pywebview.api.game_launch_resolve_warning(targetProfileId, WAIT_STEAM_EXIT_ACTION)
+            if (
+              launchRes?.status === 'warning'
+              && launchRes?.data?.action === WAIT_STEAM_EXIT_ACTION
+              && launchRes?.data?.steam_running
+            ) {
+              // Steam 仍未完全退出，继续等待下一轮轮询。
+            } else {
+              autoLaunchResult = launchRes
+              autoResolved = true
+              stopPolling = true
+              confirmStore.closeSilently()
+              return
+            }
+          }
+        } catch (e) {
+          console.error('轮询 Steam 进程状态失败:', e)
+        }
+        await sleep(1000)
+      }
+    })()
+
+    const choice = await choicePromise
+
+    stopPolling = true
+    await pollingPromise
+
+    if (autoResolved) return autoLaunchResult
+    if (!choice || choice === 'cancel') return null
+    return window.pywebview.api.game_launch_resolve_warning(targetProfileId, choice)
+  }
+
   // 后端弹窗
   const _backendPopup = (event) => {
     const confirmStore = useConfirmStore()
@@ -1126,26 +1224,9 @@ export const useAppStore = defineStore('app', () => {
       toast.success(`订阅 ${workshop_ids.length} 个创意工坊项目成功，正在下载中...`)
       return true
     }
-    else if (res.data && res.data.action === "need_start_steam") {
-      const confirmStore = useConfirmStore()
-      const ok = await confirmStore.confirmAction(
-        'Steam 未运行', 
-        '调用官方 API 订阅模组需要启动 Steam 客户端。\n是否现在启动 Steam？', 
-        { type: 'warning', confirmText: '立即启动 Steam' }
-      )
-      if (ok) {
-        const launchRes = await window.pywebview.api.steam_launch_client()
-        if (checkResult(launchRes, "启动 Steam 客户端")) {
-          // 因为 Steam 启动并登录账号通常需要 10-30 秒，建议提示用户等待后再操作
-          toast.info("Steam 正在启动...\n请在登录完毕后，再次点击订阅按钮！", { timeout: 8000 })
-        } else {
-          toast.error(launchRes.message)
-        }
-      }
-      return false
-    } 
     // 其它常规报错
     else {
+      showSteamNotReadyHint(res)
       toast.error(`订阅失败: ${res.message}`)
       return false
     }
@@ -1162,26 +1243,9 @@ export const useAppStore = defineStore('app', () => {
       toast.success(`已发送取消订阅请求`)
       return true
     }
-    else if (res.data && res.data.action === "need_start_steam") {
-      const confirmStore = useConfirmStore()
-      const ok = await confirmStore.confirmAction(
-        'Steam 未运行', 
-        '调用官方 API 取消订阅需要启动 Steam 客户端。\n是否现在启动 Steam？', 
-        { type: 'warning', confirmText: '立即启动 Steam' }
-      )
-      
-      if (ok) {
-        const launchRes = await window.pywebview.api.steam_launch_client()
-        if (launchRes.status === 'success') {
-          toast.info("Steam 正在启动...\n请在登录完毕后，再次执行取消订阅操作！", { timeout: 8000 })
-        } else {
-          toast.error(launchRes.message)
-        }
-      }
-      return false
-    } 
     // 其它常规报错
     else {
+      showSteamNotReadyHint(res)
       toast.error(`取消订阅失败: ${res.message}`)
       return false
     }

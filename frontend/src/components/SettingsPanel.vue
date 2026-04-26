@@ -103,7 +103,7 @@
                   </div>
                   <CommonTagInput label="游戏启动参数" v-model="formData.run_commands" :allTags="RUN_COMMAND_TAGS" placeholder="请输入一个完整指令后回车确认……" description="注意不要使用 [[-savedatafolder]] 指令，多环境管理已经默认使用此指令，无需手动配置。" />
                   <div class="p-3 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-1 gap-2">
-                    <CommonSwitch class="-mx-1.5" label="优先使用Steam启动游戏" v-model="formData.prefer_steam_launch" mini description="开启后将优先使用Steam启动Steam版游戏。该设置所有环境通用" />
+                    <CommonSwitch class="-mx-1.5" label="优先使用Steam启动游戏" v-model="formData.prefer_steam_launch" mini description="开启后将优先使用Steam启动Steam版游戏。开启后，会先确保 Steam 运行，再启动当前环境绑定的游戏本体。" />
                     <CommonPathInput :class="{' pointer-events-none opacity-50':!formData.prefer_steam_launch}" label="Steam程序路径" 
                       :check="formData.check_info?.steam_path"
                       :description="'Steam程序路径即Steam.exe所在的目录，默认路径一般位于：\nC:/Program Files (x86)/Steam'" 

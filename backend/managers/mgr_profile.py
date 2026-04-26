@@ -23,6 +23,7 @@ class ProfileContext:
     game_version: str
     game_install_path: str
     user_data_path: str
+    prefer_steam_launch: bool
     use_workshop_mods: bool
     use_self_mods: bool
     inactive_mods_order: list = field(default_factory=list)
@@ -95,6 +96,7 @@ class ProfileManager:
         'description',
         'game_install_path', 
         'user_data_path', 
+        'prefer_steam_launch',
         'use_workshop_mods', 
         'use_self_mods', 
         'run_commands',
@@ -120,6 +122,7 @@ class ProfileManager:
                     user_data_path='',
                     game_version='',
                     is_steam=False,
+                    prefer_steam_launch=True,
                     use_workshop_mods=True, # 默认非Steam版不加载工坊
                     use_self_mods=False,    # 默认不加载 Self Mod
                     run_commands=[]
@@ -165,6 +168,7 @@ class ProfileManager:
                 user_data_path=data_dir,
                 game_install_path=data.get('game_install_path'),
                 game_version=GameManager.get_game_version(data.get('game_install_path')),
+                prefer_steam_launch=bool(data.get('prefer_steam_launch', False)),
                 use_workshop_mods=data.get('use_workshop_mods', False),
                 use_self_mods=data.get('use_self_mods', False), # 默认不加载 Self Mod
                 is_steam=isSteam,
@@ -268,6 +272,7 @@ class ProfileManager:
             game_version=profile.game_version,
             game_install_path=profile.game_install_path,
             user_data_path=profile.user_data_path,
+            prefer_steam_launch=bool(getattr(profile, 'prefer_steam_launch', False)),
             use_workshop_mods=profile.use_workshop_mods,
             use_self_mods=profile.use_self_mods,
             inactive_mods_order=list(profile.inactive_mods_order or []),

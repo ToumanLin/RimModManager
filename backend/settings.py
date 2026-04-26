@@ -173,7 +173,6 @@ class AppConfig:
     # game_version: str = ""               # RimWorld 版本
     current_profile_id: str = "default"   # 当前激活的环境ID
     # run_commands: List[str] = field(default_factory=list)   # 启动时运行的命令
-    prefer_steam_launch: bool = True         # 是否通过 Steam 启动游戏
     enable_tool_mods: bool = False           # 是否启用 ToolMods 目录下的伴生模组
     link_deployment_mode_full: bool = False # 链接部署模式: true=完全重建, false=增量部署
     
@@ -237,6 +236,7 @@ class SettingsManager:
     def __init__(self):
         if self._initialized: return
         self._ensure_config_dir()
+        self._legacy_prefer_steam_launch = None
         # self.config: AppConfig = self._load() # 加载配置
         
         # 1. 先初始化一个空的配置对象，防止加载过程中访问 self.config 崩溃
@@ -295,6 +295,8 @@ class SettingsManager:
                 data = repair_json(content, return_objects=True)
                 
             if isinstance(data, dict):
+                if 'prefer_steam_launch' in data:
+                    self._legacy_prefer_steam_launch = bool(data.get('prefer_steam_launch'))
                 # 使用递归更新现有的 self.config
                 self._recursive_update(self.config, data)
                 self._normalize_config()

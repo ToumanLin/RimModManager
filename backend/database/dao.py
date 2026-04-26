@@ -134,7 +134,7 @@ class _ProfilePathScope:
             use_tool_mods=bool(settings.config.enable_tool_mods),
         )
 
-    def build_visibility_conditions(self) -> list[Any]:
+    def build_visibility_conditions(self, include_workshop: bool = True) -> list[Any]:
         """
         生成当前 Profile 下“哪些路径应被视为可见资产”的查询条件。
 
@@ -145,7 +145,7 @@ class _ProfilePathScope:
             conditions.append(ModAsset.path.startswith(self.local_root))
         if self.dlc_root:
             conditions.append(ModAsset.path.startswith(self.dlc_root))
-        if self.use_workshop_mods and self.workshop_root and not settings.config.prefer_steam_launch:
+        if self.use_workshop_mods and self.workshop_root and include_workshop:
             conditions.append(ModAsset.path.startswith(self.workshop_root))
         if self.use_self_mods and self.self_root:
             conditions.append(ModAsset.path.startswith(self.self_root))
@@ -387,6 +387,7 @@ class ModDAO:
     def get_profile_conflict_analysis(
         context: ProfileContext | None,
         assets: Sequence[dict[str, Any]] | None = None,
+        include_workshop: bool = True,
     ):
         """
         生成当前 Profile 的运行态分析结果。
@@ -406,7 +407,7 @@ class ModDAO:
         active_assets: list[dict[str, Any]] = []
 
         if assets is None:
-            conditions = scope.build_visibility_conditions()
+            conditions = scope.build_visibility_conditions(include_workshop=include_workshop)
             if not conditions:
                 return empty_result
             combined_condition = reduce(operator.or_, conditions)
