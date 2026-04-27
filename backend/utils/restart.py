@@ -134,15 +134,7 @@ def launch_new_application():
     }
 
     if os.name == 'nt':
-        creationflags = 0
-        creationflags |= getattr(subprocess, "DETACHED_PROCESS", 0)
-        creationflags |= getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        popen_kwargs["creationflags"] = creationflags
-
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = 0
-        popen_kwargs["startupinfo"] = startupinfo
+        popen_kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0)
 
     logger.info(f"正在静默拉起新实例: {command[0]}")
     subprocess.Popen(command, **popen_kwargs)
