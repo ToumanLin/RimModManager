@@ -399,14 +399,9 @@ export const useRuleStore = defineStore('rules', () => {
   const updateCommunity = async () => {
     isLoading.value = true
     try {
-        // 调用 API
-        const res = await window.pywebview.api.update_community_rule()
-        if (appStore.checkResult(res, '更新社区库')) {
-          const task_id = res.data.task_id
-          const filePath = await appStore.waitForDownload(task_id)
-          // 重新获取规则数据 (此时后端内存已是最新)
-          await fetchRules() 
-        }
+        await appStore.updateExternalDB('community_rules')
+        // 重新获取规则数据，确保规则面板立即显示最新缓存。
+        await fetchRules()
     } catch (error) {
         toast.error("更新社区库失败: " + error.message)
     } finally {

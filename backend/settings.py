@@ -1,6 +1,7 @@
 # backend/settings.py
 
 import json
+import math
 import os
 from dataclasses import dataclass, asdict, field, fields, is_dataclass
 from pathlib import Path
@@ -206,6 +207,19 @@ class AppConfig:
     enable_auto_update_check: bool = True  # 自动检查更新开关
     ignored_update_version: str = ""       # 跳过的版本号
     last_update_check_time: float = 0      # 上次检查时间（用于限流）
+    # 以下三类检查都只负责“发现问题并提醒”，真正更新仍需用户确认后手动触发。
+    enable_auto_tool_check: bool = True
+    tool_check_interval_days: int = 3
+    last_tool_check_time: float = 0
+    
+    enable_auto_external_data_update_check: bool = True
+    external_data_update_check_interval_days: int = 1
+    last_external_data_update_check_time: float = 0
+    
+    enable_auto_steamcmd_mod_update_check: bool = True
+    steamcmd_mod_update_check_interval_days: int = 1
+    last_steamcmd_mod_update_check_time: float = 0
+    
     last_version: str = ""                 # 之前的版本号(用于判断是否更新过了)
     last_run_time: float = 0               # 上次运行时间（用于判断Mod是否存在变动）
     run_count: int = 0                     # 运行次数（用于判断是否需要重新扫描）
@@ -295,6 +309,17 @@ class SettingsManager:
                 data = repair_json(content, return_objects=True)
                 
             if isinstance(data, dict):
+                legacy_interval_key_map = {
+                    "tool_check_interval_hours": "tool_check_interval_days",
+                    "external_data_update_check_interval_hours": "external_data_update_check_interval_days",
+                    "steamcmd_mod_update_check_interval_hours": "steamcmd_mod_update_check_interval_days",
+                }
+                for legacy_key, new_key in legacy_interval_key_map.items():
+                    if new_key not in data and legacy_key in data:
+                        try:
+                            data[new_key] = max(1, math.ceil(float(data.get(legacy_key) or 0) / 24))
+                        except Exception:
+                            data[new_key] = getattr(self.config, new_key)
                 if 'prefer_steam_launch' in data:
                     self._legacy_prefer_steam_launch = bool(data.get('prefer_steam_launch'))
                 # 使用递归更新现有的 self.config
@@ -328,17 +353,20 @@ class SettingsManager:
             new_path = str(base_path / "steamapps" / "workshop" / "content" / "294100")
             self.config.steamcmd_mods_path = new_path
             
-    def get_default_community_paths(self):
-        """获取默认的社区路径"""
-        default_paths = {
-            # "self_mods_path": str(),
-            "steamcmd_mods_path": str(TOOLS_DIR / "steamcmd"),
+    def get_default_external_paths(self):
+        """获取“外部依赖”页相关路径的默认值。"""
+        return {
+            # 目录型外部工具统一在这里给出默认位置。
+            # SteamCMD 的工坊内容目录仍由 `_sync_derived_paths()` 负责衍生，不在这里直接暴露。
+            "steamcmd_path": str(TOOLS_DIR / "steamcmd"),
+            "texture_opt": {
+                "texture_tools_path": str(TOOLS_DIR / "texture_tools"),
+            },
             "community_workshop_db_path": str(COMMUNITY_WORKSHOP_DB_PATH),
             "community_instead_db_path": str(COMMUNITY_INSTEAD_DB_PATH),
             "community_rules_path": str(COMMUNITY_RULES_PATH),
             "user_rules_path": str(USER_RULES_PATH),
         }
-        return default_paths
         
     
     def get(self, key: str) -> Any:

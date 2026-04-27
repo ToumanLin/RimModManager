@@ -225,6 +225,15 @@ export const useAppStore = defineStore('app', () => {
     enable_auto_update_check: true,  // 自动检查更新开关
     ignored_update_version: '',       // 跳过的版本号
     last_update_check_time: 0,      // 上次检查时间（用于限流）
+    enable_auto_tool_check: true,
+    tool_check_interval_days: 3,
+    last_tool_check_time: 0,
+    enable_auto_external_data_update_check: true,
+    external_data_update_check_interval_days: 1,
+    last_external_data_update_check_time: 0,
+    enable_auto_steamcmd_mod_update_check: true,
+    steamcmd_mod_update_check_interval_days: 1,
+    last_steamcmd_mod_update_check_time: 0,
 
   })
 
@@ -347,6 +356,31 @@ export const useAppStore = defineStore('app', () => {
     sharedCheckResult(res, workname, showSuccess, { debugMode: settings.value.debug_mode })
   )
 
+  const isTimedCheckDue = (enabled, lastCheckTime, intervalDays, fallbackDays = 1) => {
+    if (!enabled) return false
+    const last = Number(lastCheckTime || 0)
+    const interval = Math.max(1, Number(intervalDays || fallbackDays)) * 24 * 60 * 60 * 1000
+    const duration = Date.now() - last
+    return !last || duration > interval || duration < 0
+  }
+
+  const formatDateTime = (timestamp) => {
+    const value = Number(timestamp || 0)
+    if (!value) return '未知'
+    try {
+      return new Date(value).toLocaleString('zh-CN')
+    } catch {
+      return '未知'
+    }
+  }
+
+  const escapeHtml = (value = '') => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
   const recoverFromSuspendedState = async () => {
     if (suspendRecoveryPromise) return suspendRecoveryPromise
 
@@ -381,6 +415,206 @@ export const useAppStore = defineStore('app', () => {
     })()
 
     return suspendRecoveryPromise
+  }
+
+  const installToolIssues = async (issues = []) => {
+    if (!window.pywebview || !Array.isArray(issues) || issues.length === 0) return false
+    let started = false
+    const hasSteamCmdIssue = issues.some(item => item?.tool_id === 'steamcmd')
+    const hasToddsIssue = issues.some(item => item?.tool_id === 'todds')
+
+    if (hasSteamCmdIssue) {
+      const res = await window.pywebview.api.steam_tools_install()
+      if (checkResult(res, '处理 SteamCMD 环境')) {
+        started = true
+        if (Array.isArray(res.data?.pending_tasks) && res.data.pending_tasks.length > 0) {
+          toast.info('SteamCMD 相关任务已启动，请留意底部状态栏。')
+        }
+      }
+    }
+
+    if (hasToddsIssue) {
+      const res = await window.pywebview.api.texture_prepare_download(settings.value.texture_opt)
+      if (checkResult(res, '处理 todds 环境')) {
+        started = true
+        if (!res.data?.already_ready) {
+          toast.info('todds 下载任务已启动，请留意底部状态栏。')
+        }
+      }
+    }
+    return started
+  }
+
+  const persistMaintenanceCheckedAt = (settingKey, data, shouldPersist = null) => {
+    const checkedAt = Number(data?.checked_at || 0)
+    if (!settingKey || !checkedAt) return
+    if (typeof shouldPersist === 'function' && !shouldPersist(data)) return
+    settings.value[settingKey] = checkedAt
+  }
+
+  const fetchMaintenanceData = async ({
+    apiName,
+    workName,
+    manual = true,
+    lastCheckKey = '',
+    shouldPersistCheckedAt = null,
+  } = {}) => {
+    if (!window.pywebview) return null
+    const caller = window.pywebview.api?.[apiName]
+    if (typeof caller !== 'function') return null
+
+    const res = await caller()
+    if (manual ? !checkResult(res, workName) : res?.status !== 'success') {
+      return null
+    }
+
+    const data = res.data || {}
+    persistMaintenanceCheckedAt(lastCheckKey, data, shouldPersistCheckedAt)
+    return data
+  }
+
+  const checkToolMaintenance = async ({ manual = true, prompt = true } = {}) => {
+    const data = await fetchMaintenanceData({
+      apiName: 'maintenance_check_tools',
+      workName: '检查工具环境',
+      manual,
+      lastCheckKey: 'last_tool_check_time',
+    })
+    if (!data) return null
+
+    const issues = Array.isArray(data.issues) ? data.issues : []
+    if (!prompt) return data
+    if (issues.length === 0) {
+      if (manual) toast.success('工具环境检查完成，当前均已就绪。')
+      return data
+    }
+
+    const confirmStore = useConfirmStore()
+    const html = issues.map(item => (
+      `<li><b>${escapeHtml(item.name || item.tool_id || '工具')}</b>：${escapeHtml(item.message || '需要处理')}</li>`
+    )).join('')
+    const ok = await confirmStore.confirmAction(
+      '工具环境需要处理',
+      `以下工具当前未就绪：<ul style="margin:8px 0 0 18px;list-style:disc;">${html}</ul>是否立即处理？`,
+      { confirmText: '立即处理', cancelText: '稍后再说', type: 'warning', isHtml: true }
+    )
+    if (ok) {
+      await installToolIssues(issues)
+    }
+    return data
+  }
+
+  const checkExternalDataUpdates = async ({ manual = true, prompt = true } = {}) => {
+    const data = await fetchMaintenanceData({
+      apiName: 'maintenance_check_external_data',
+      workName: '检查外部库更新',
+      manual,
+      lastCheckKey: 'last_external_data_update_check_time',
+      // 整轮远端状态都没拿到时，不要把失败记录成一次成功检查。
+      shouldPersistCheckedAt: (payload) => {
+        const items = Array.isArray(payload?.items) ? payload.items : []
+        const failed = Array.isArray(payload?.failed) ? payload.failed : []
+        return items.length === 0 || failed.length < items.length
+      },
+    })
+    if (!data) return null
+
+    const updates = Array.isArray(data.updates) ? data.updates : []
+    const failed = Array.isArray(data.failed) ? data.failed : []
+    if (!prompt) return data
+    if (failed.length > 0 && updates.length === 0) {
+      const summary = failed.slice(0, 3).map(item => item.name || item.data_type || '外部库').join('、')
+      const remain = failed.length > 3 ? ` 等 ${failed.length} 项` : ''
+      toast.warning(`外部库检查未完成：${summary}${remain} 检查失败，请稍后重试或检查网络环境。`, { timeout: 4500 })
+      return data
+    }
+    if (updates.length === 0) {
+      if (manual) toast.success('外部库检查完成，当前均已是最新。')
+      return data
+    }
+
+    const confirmStore = useConfirmStore()
+    const html = updates.map(item => {
+      const localVersion = item.local_version ? `本地版本: ${escapeHtml(item.local_version)}` : `本地时间: ${escapeHtml(formatDateTime(item.local_mtime))}`
+      const remoteVersion = item.remote_version ? `远端签名: ${escapeHtml(item.remote_version)}` : `远端时间: ${escapeHtml(formatDateTime(item.remote_updated_at))}`
+      return `<li><b>${escapeHtml(item.name || item.data_type || '外部库')}</b><br/>${localVersion}<br/>${remoteVersion}</li>`
+    }).join('')
+    const failedHtml = failed.length > 0
+      ? `<p style="margin:0 0 8px 0;color:#f59e0b;">另有 ${failed.length} 项外部库暂时检查失败，本次只展示已成功获取到远端状态的更新项。</p>`
+      : ''
+    const ok = await confirmStore.confirmAction(
+      '发现外部库更新',
+      `${failedHtml}以下外部库文件检测到更新：<ul style="margin:8px 0 0 18px;list-style:disc;">${html}</ul>是否现在开始更新？`,
+      { confirmText: '立即更新', cancelText: '稍后再说', type: 'warning', isHtml: true }
+    )
+    if (!ok) return data
+
+    for (const item of updates) {
+      // 顺序执行，避免同时刷新同一批缓存时互相打断。
+      await updateExternalDB(item.data_type)
+    }
+    return data
+  }
+
+  const checkSteamcmdModUpdates = async ({ manual = true, prompt = true } = {}) => {
+    const data = await fetchMaintenanceData({
+      apiName: 'maintenance_check_steamcmd_mod_updates',
+      workName: '检查 SteamCMD 模组更新',
+      manual,
+      lastCheckKey: 'last_steamcmd_mod_update_check_time',
+    })
+    if (!data) return null
+
+    const updates = Array.isArray(data.updates) ? data.updates : []
+    if (!prompt) return data
+    if (updates.length === 0) {
+      if (manual) toast.success('SteamCMD 模组检查完成，当前均已是最新。')
+      return data
+    }
+
+    const confirmStore = useConfirmStore()
+    const previewHtml = updates.slice(0, 8).map(item => (
+      `<li><b>${escapeHtml(item.title || item.workshop_id || '未知模组')}</b>（${escapeHtml(item.workshop_id || '')}）</li>`
+    )).join('')
+    const remainText = updates.length > 8 ? `<p style="margin-top:8px;">其余 ${updates.length - 8} 项将在确认后一起更新。</p>` : ''
+    const ok = await confirmStore.confirmAction(
+      '发现 SteamCMD 模组更新',
+      `检测到 ${updates.length} 个通过 SteamCMD 管理的工坊模组有新版本：<ul style="margin:8px 0 0 18px;list-style:disc;">${previewHtml}</ul>${remainText}`,
+      { confirmText: '立即更新', cancelText: '稍后再说', type: 'warning', isHtml: true }
+    )
+    if (ok) {
+      await downloadWorkshopItems(updates.map(item => item.workshop_id).filter(Boolean))
+    }
+    return data
+  }
+
+  const runScheduledMaintenanceChecks = async () => {
+    if (isTimedCheckDue(
+      settings.value.enable_auto_tool_check,
+      settings.value.last_tool_check_time,
+      settings.value.tool_check_interval_days,
+      3
+    )) {
+      await checkToolMaintenance({ manual: false, prompt: true })
+    }
+
+    if (isTimedCheckDue(
+      settings.value.enable_auto_external_data_update_check,
+      settings.value.last_external_data_update_check_time,
+      settings.value.external_data_update_check_interval_days,
+      1
+    )) {
+      await checkExternalDataUpdates({ manual: false, prompt: true })
+    }
+
+    if (isTimedCheckDue(
+      settings.value.enable_auto_steamcmd_mod_update_check,
+      settings.value.last_steamcmd_mod_update_check_time,
+      settings.value.steamcmd_mod_update_check_interval_days,
+      1
+    )) {
+      await checkSteamcmdModUpdates({ manual: false, prompt: true })
+    }
   }
 
   // === Actions ===
@@ -440,8 +674,8 @@ export const useAppStore = defineStore('app', () => {
         const modStore = useModStore()
         modStore.scanMods(null, scanForce)
       }
-      // 检查 Steam 工具
-      checkSteamTools()
+      // 非软件更新类检查改为“仅提示不自动执行”，并分别遵循各自的时间间隔。
+      await runScheduledMaintenanceChecks()
       
     } catch (e) {
       console.error("初始化失败:", e)
@@ -856,10 +1090,10 @@ export const useAppStore = defineStore('app', () => {
       return res.data.paths
     }
   }
-  const getDefaultCommunityPaths = async () => {
+  const getDefaultExternalPaths = async () => {
     if(!window.pywebview) return
-    const res = await window.pywebview.api.get_default_community_paths()
-    if (checkResult(res, "获取默认社区路径",true) && res.data.paths) {
+    const res = await window.pywebview.api.get_default_external_paths()
+    if (checkResult(res, "获取默认外部路径",true) && res.data.paths) {
       return res.data.paths
     }
   }
@@ -1139,14 +1373,8 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // === Steam客户端交互 ===
-  // 检查Steam工具
-  const checkSteamTools = async () => {
-    if (!window.pywebview) return
-    const res = await window.pywebview.api.check_steam_tools()
-    if (checkResult(res, "检查Steam工具")) {
-      
-    }
-  }
+  // 兼容旧调用名：手动检查工具环境并按需弹窗。
+  const checkSteamTools = async () => checkToolMaintenance({ manual: true, prompt: true })
   // 下载创意工坊项目
   const downloadWorkshopItems = async (workshop_ids) => {
     if (!window.pywebview) return
@@ -1520,11 +1748,16 @@ export const useAppStore = defineStore('app', () => {
   // 更新外置数据库
   const updateExternalDB = async (type) => {
     try {
+      const workNameMap = {
+        community_rules: '更新社区规则库',
+        workshop_db: '更新社区工坊数据库',
+        instead_db: '更新替代 Mod 数据库',
+      }
       // 调用 API
       const res = await window.pywebview.api.update_external_db(type)
-      if (checkResult(res, `更新外置数据库 ${type}`)) {
+      if (checkResult(res, workNameMap[type] || `更新外置数据库 ${type}`)) {
         const task_id = res.data.task_id
-        const filePath = await waitForDownload(task_id)
+        await waitForDownload(task_id)
         // 重新获取数据
         await refreshData() 
       }
@@ -1549,11 +1782,12 @@ export const useAppStore = defineStore('app', () => {
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode, exitSleepMode,
     getThumbUrl, getLocalUrl, getRemoteUrl,
     // 游戏相关
-    checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultCommunityPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
+  checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultExternalPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl,
     startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds, openSteamWorkshopById,
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, repairDatabase, restartApplication, showChangelog, setSidebarTab, cancelTextureTask, cancelTaskByProgress, supportsTaskCancellation, canCancelTask, isTaskCancelPending,
     
-    checkSteamTools, openSteamWorkshopUrl, unsubscribeWorkshopIds, subscribeWorkshopIds, subscribeInstallSources, downloadInstallSources, openInstallSource, checkUpdate, updateExternalDB,
+    checkSteamTools, checkToolMaintenance, checkExternalDataUpdates, checkSteamcmdModUpdates, runScheduledMaintenanceChecks,
+    openSteamWorkshopUrl, unsubscribeWorkshopIds, subscribeWorkshopIds, subscribeInstallSources, downloadInstallSources, openInstallSource, checkUpdate, updateExternalDB,
     // AI处理
     getAiConfig, saveAIConfig, getAiProviders, getAiModels, useAI, chatWithAI, startAiBatchTask, setCurrentAiBatchTask, clearCurrentAiBatchResults,
     fetchPrompts, savePrompt, deletePrompt, resetPrompts,

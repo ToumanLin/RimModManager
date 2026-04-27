@@ -76,6 +76,7 @@ from backend.managers.mgr_game_monitor import GameMonitor
 from backend.managers.mgr_profile import ProfileContext, ProfileManager
 from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.managers.mgr_github import GithubManager
+from backend.managers.mgr_maintenance import MaintenanceManager
 from backend.managers.mgr_texture_opt import TextureOptCancelled, TextureOptimizationManager
 from backend.load_order.language_pack_ownership import resolve_language_pack_ownership_for_mods
 from backend.browser_runtime import build_sub_browser_target_url
@@ -248,6 +249,12 @@ class API:
         self.browser_window = SubBrowserManager(self)
         self.update_mgr = UpdateManager()
         self.texture_mgr = TextureOptimizationManager()
+        self.maintenance_mgr = MaintenanceManager(
+            self.steam_mgr,
+            self.texture_mgr,
+            self.workshop_db_mgr,
+            rule_mgr_provider=lambda: self.sorter.rule_mgr if self.sorter else None,
+        )
         
         # 每次启动 API 时，强制检查并修复 SteamCMD 的软链接！
         if settings.config.self_mods_path and settings.config.steamcmd_mods_path:
@@ -1023,9 +1030,9 @@ class API:
         return ApiResponse.warning("仅检测到部分路径，请手动设置！",{"paths": result})
 
     @log_api_call
-    def get_default_community_paths(self):
-        """获取默认的社区路径"""
-        default_paths = settings.get_default_community_paths()
+    def get_default_external_paths(self):
+        """获取外部依赖页相关路径的默认值。"""
+        default_paths = settings.get_default_external_paths()
         return ApiResponse.success({"paths": default_paths})
 
     @log_api_call
@@ -2195,7 +2202,7 @@ class API:
 
             if not launch_url:
                 return ApiResponse.warning(
-                    "Steam 已启动，但在限定时间内仍未生成可用的快捷方式 ID。可稍后重试，或检查 Steam 自定义游戏列表后再生成桌面快捷方式。",
+                    "Steam 已启动，但在限定时间内仍未生成可用的快捷方式 ID。可稍后重试，或检查 Steam 自定义游戏列表手动生成桌面快捷方式。",
                     data={
                         **shortcut_status,
                         "timeout_seconds": timeout_seconds,
@@ -2250,6 +2257,8 @@ class API:
                 res = PathChecker.check_steam_path(path)
             elif path_type == "steamcmd_path":
                 res = PathChecker.check_steamcmd_path(path)
+            elif path_type == "texture_tools_path":
+                res = PathChecker.check_texture_tools_path(path)
             else:
                 res = PathChecker.check_normal_path(path)
                 
@@ -2709,47 +2718,8 @@ class API:
     
     @log_api_call
     def update_community_rule(self):
-        """
-        更新社区规则库
-        """
-        try:
-            # 1. 路径准备
-            # 注意：settings.config.community_rules_path 是完整文件路径 (例如 .../rules/community.json)
-            full_path = settings.config.community_rules_path
-            file_folder = os.path.dirname(full_path)
-            file_name = os.path.basename(full_path)
-            url = settings.config.community_rules_url
-            
-            if not os.path.exists(file_folder):
-                os.makedirs(file_folder, exist_ok=True)
-
-            logger.info(f"Start updating community rules from: {url}")
-            # 定义回调函数：下载完了自动加载规则
-            def on_rules_ready(task):
-                if not self.sorter or not self.sorter.rule_mgr:
-                    EventBus.send_toast("规则引擎未初始化，无法加载社区规则库", type="warning")
-                else:
-                    logger.info("Rules ready, reloading...")
-                    self.sorter.rule_mgr.load_all()
-                    EventBus.send_toast("社区规则库更新完毕！", type="success")
-            
-            def on_rules_error(task):
-                logger.error(f"Rules download failed: {task.error_msg}", exc_info=True)
-                EventBus.send_toast("社区规则库更新失败！", type="error")
-
-            task_id = self.download_mgr.add_task(
-                url=url, 
-                dest_dir=file_folder, 
-                filename=file_name,
-                on_complete=on_rules_ready,
-                on_error=on_rules_error
-            )
-
-            return ApiResponse.success(data={"task_id": task_id}, message="社区规则库开始更新")
-            
-        except Exception as e:
-            logger.error(f"Update community rules failed: {e}", exc_info=True)
-            return ApiResponse.error(f"系统错误: {str(e)}")
+        """兼容旧入口：统一转发到外置数据更新管线。"""
+        return self.update_external_db("community_rules")
 
     
     # =========================================================================
@@ -2975,6 +2945,48 @@ class API:
         """跳过当前版本"""
         settings.set('ignored_update_version', version_str)
         return ApiResponse.success()
+
+    @log_api_call
+    def maintenance_check_tools(self):
+        """检查外部工具环境状态，不自动下载。"""
+        try:
+            checked = self.maintenance_mgr.check_tools()
+            checked_at = int(checked.get("checked_at") or current_ms())
+            settings.set("last_tool_check_time", checked_at)
+            return ApiResponse.success(checked)
+        except Exception as e:
+            logger.error("Check tools maintenance failed: %s", e, exc_info=True)
+            return ApiResponse.error(f"检查工具环境失败: {e}")
+
+    @log_api_call
+    def maintenance_check_external_data(self):
+        """检查社区规则/数据库等外部文件是否需要更新。"""
+        try:
+            checked = self.maintenance_mgr.check_external_data()
+            checked_at = int(checked.get("checked_at") or current_ms())
+            items = checked.get("items") if isinstance(checked, dict) else []
+            failed = checked.get("failed") if isinstance(checked, dict) else []
+            items = items if isinstance(items, list) else []
+            failed = failed if isinstance(failed, list) else []
+            # 整轮远端状态都没拿到时，不刷新“上次成功检查时间”，避免自动检查被失败结果错误限流。
+            if not items or len(failed) < len(items):
+                settings.set("last_external_data_update_check_time", checked_at)
+            return ApiResponse.success(checked)
+        except Exception as e:
+            logger.error("Check external data maintenance failed: %s", e, exc_info=True)
+            return ApiResponse.error(f"检查外部库更新失败: {e}")
+
+    @log_api_call
+    def maintenance_check_steamcmd_mod_updates(self):
+        """仅检查 SteamCMD 管理目录中的工坊模组更新。"""
+        try:
+            checked = self.maintenance_mgr.check_steamcmd_mod_updates()
+            checked_at = int(checked.get("checked_at") or current_ms())
+            settings.set("last_steamcmd_mod_update_check_time", checked_at)
+            return ApiResponse.success(checked)
+        except Exception as e:
+            logger.error("Check SteamCMD mod updates failed: %s", e, exc_info=True)
+            return ApiResponse.error(f"检查 SteamCMD 模组更新失败: {e}")
     
     
     # =========================================================================
@@ -2984,21 +2996,23 @@ class API:
     @log_api_call
     def check_steam_tools(self):
         """
-        前端初始化时调用，检查工具是否就绪。
-        如果有缺失，自动触发下载任务。
+        兼容旧接口：仅返回 SteamCMD 当前状态，不再自动触发下载。
         """
-        # 1. 检查缺失文件并添加下载任务
-        tasks = self.steam_mgr.ensure_tools(self.download_mgr)
-        
-        # 2. 如果有新任务，注册一个回调来处理下载后的解压/部署
-        if tasks:
-            # 需要一个简单的方法来监控这些任务的完成
-            # 这里简化处理：启动一个后台线程轮询这些任务状态
-            threading.Thread(target=self._monitor_setup_tasks, args=(tasks,), daemon=True).start()
-            
         return ApiResponse.success({
             "steamcmd_ready": self.steam_mgr.steamcmd_ready,
-            "pending_tasks": tasks
+            "pending_tasks": [],
+            "status": self.maintenance_mgr.check_tools(),
+        })
+
+    @log_api_call
+    def steam_tools_install(self):
+        """用户确认后调用：按需下载并初始化 SteamCMD。"""
+        tasks = self.steam_mgr.ensure_tools(self.download_mgr)
+        if tasks:
+            threading.Thread(target=self._monitor_setup_tasks, args=(tasks,), daemon=True).start()
+        return ApiResponse.success({
+            "steamcmd_ready": self.steam_mgr.steamcmd_ready,
+            "pending_tasks": tasks,
         })
 
     def _monitor_setup_tasks(self, tasks):
@@ -3535,6 +3549,26 @@ class API:
             return ApiResponse.success(message=msg)
         else:
             return ApiResponse.error(msg)
+
+    def _reload_community_rules(self):
+        """外部规则文件更新后，立即把内存中的规则缓存切到新版本。"""
+        if not self.sorter or not self.sorter.rule_mgr:
+            EventBus.send_toast("规则引擎未初始化，无法立即重载社区规则库。", type="warning")
+            return
+        logger.info("Community rules ready, reloading...")
+        self.sorter.rule_mgr.load_all()
+
+    def _reload_workshop_database(self):
+        """工坊数据库更新后，同时刷新依赖规则缓存，避免前端继续读旧关联关系。"""
+        logger.info("Workshop database ready, reloading...")
+        self.workshop_db_mgr.load_all_cache()
+        if self.sorter and self.sorter.rule_mgr:
+            self.sorter.rule_mgr.build_workshop_rules()
+
+    def _reload_instead_database(self):
+        """替代库更新后只需重建外置缓存。"""
+        logger.info("Instead database ready, reloading...")
+        self.workshop_db_mgr.rebuild_instead_cache()
     
     
     # ==========================================
@@ -3543,52 +3577,79 @@ class API:
     @log_api_call
     def update_external_db(self, data_type: str):
         """
-        更新外置数据（例如工坊数据库和替代数据库）
+        更新外置数据。
+
+        这里统一承接三类外部库文件：
+        1. 社区规则库
+        2. 社区工坊数据库
+        3. 替代 Mod 数据库
         """
         try:
-            if data_type == "workshop_db":
-                # 1. 路径准备
-                # 注意：settings.config.community_workshop_db_path 是完整文件路径 (例如 .../steamDB.json)
-                full_path = settings.config.community_workshop_db_path
-                file_folder = os.path.dirname(full_path)
-                file_name = os.path.basename(full_path)
-                url = settings.config.community_workshop_db_url
-            elif data_type == "instead_db":
-                # 1. 路径准备
-                # 注意：settings.config.community_instead_db_path 是完整文件路径 (例如 .../replacements.json)
-                full_path = settings.config.community_instead_db_path
-                file_folder = os.path.dirname(full_path)
-                file_name = os.path.basename(full_path)
-                url = settings.config.community_instead_db_url
-            else:
+            dataset_specs = {
+                "community_rules": {
+                    "path": settings.config.community_rules_path,
+                    "url": settings.config.community_rules_url,
+                    "success_message": "社区规则库更新完毕！",
+                    "error_message": "社区规则库更新失败！",
+                    "start_message": "社区规则库开始更新",
+                    "reload": self._reload_community_rules,
+                },
+                "workshop_db": {
+                    "path": settings.config.community_workshop_db_path,
+                    "url": settings.config.community_workshop_db_url,
+                    "success_message": "社区工坊数据库更新完毕！",
+                    "error_message": "社区工坊数据库更新失败！",
+                    "start_message": "社区工坊数据库开始更新",
+                    "reload": self._reload_workshop_database,
+                },
+                "instead_db": {
+                    "path": settings.config.community_instead_db_path,
+                    "url": settings.config.community_instead_db_url,
+                    "success_message": "替代 Mod 数据库更新完毕！",
+                    "error_message": "替代 Mod 数据库更新失败！",
+                    "start_message": "替代 Mod 数据库开始更新",
+                    "reload": self._reload_instead_database,
+                },
+            }
+            spec = dataset_specs.get(data_type)
+            if not spec:
                 return ApiResponse.error(f"无效的数据库类型 {data_type}")
-            
+
+            full_path = str(spec["path"] or "")
+            url = str(spec["url"] or "")
+            if not full_path or not url:
+                return ApiResponse.error("更新地址或目标路径未配置")
+
+            file_folder = os.path.dirname(full_path)
+            file_name = os.path.basename(full_path)
             if not os.path.exists(file_folder):
                 os.makedirs(file_folder, exist_ok=True)
-            logger.info(f"Start updating community {data_type} from: {url}")
-            # 定义回调函数
+
+            logger.info("Start updating external dataset %s from: %s", data_type, url)
+
             def on_db_ready(task):
-                logger.info(f"{data_type} ready, reloading...")
-                self.workshop_db_mgr.load_all_cache()
-                # 当 workshop_db 更新完毕时，通知规则系统重建关联缓存
-                if data_type == "workshop_db" and self.sorter:
-                    self.sorter.rule_mgr.build_workshop_rules()
-                self.workshop_db_mgr.load_all_cache()
-                # self.sorter.rule_mgr.load_all()
-                EventBus.send_toast(f"社区 {data_type} 数据库更新完毕！", type="success")
+                try:
+                    reload_fn = spec.get("reload")
+                    if callable(reload_fn):
+                        reload_fn()
+                    EventBus.send_toast(str(spec["success_message"]), type="success")
+                except Exception as reload_error:
+                    logger.error("External dataset reload failed: %s", reload_error, exc_info=True)
+                    EventBus.send_toast(f"{spec['success_message']} 但重载失败，请稍后手动刷新。", type="warning")
+
             def on_db_error(task):
-                logger.error(f"{data_type} download failed: {task.error_msg}", exc_info=True)
-                EventBus.send_toast(f"社区 {data_type} 数据库更新失败！", type="error")
+                logger.error("%s download failed: %s", data_type, getattr(task, "error_msg", ""), exc_info=True)
+                EventBus.send_toast(str(spec["error_message"]), type="error")
+
             task_id = self.download_mgr.add_task(
-                url=url, 
-                dest_dir=file_folder, 
+                url=url,
+                dest_dir=file_folder,
                 filename=file_name,
                 on_complete=on_db_ready,
                 on_error=on_db_error
             )
 
-            return ApiResponse.success(data={"task_id": task_id}, message=f"社区 {data_type} 数据库开始更新")
-            
+            return ApiResponse.success(data={"task_id": task_id}, message=str(spec["start_message"]))
         except Exception as e:
             logger.error(f"Update community {data_type} failed: {e}", exc_info=True)
             return ApiResponse.error(f"系统错误: {str(e)}")

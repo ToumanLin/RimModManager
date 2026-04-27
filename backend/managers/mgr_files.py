@@ -1628,6 +1628,25 @@ class PathChecker:
         if exe_path.exists():
             return cls._format_res(True, data=path_str, msg=f"SteamCMD 客户端：{exe_path}")
         return cls._format_res(False, msg="路径下未找到 steamcmd.exe", msg_type="warn")
+
+    @classmethod
+    def check_texture_tools_path(cls, path_str: str) -> Dict:
+        """
+        检查贴图工具目录是否有效。
+        这里统一按“目录中是否存在 todds.exe”判断，和 SteamCMD 的目录检查风格保持一致。
+        """
+        if not path_str:
+            return cls._format_res(False, msg="未指定贴图工具目录")
+        path = Path(path_str)
+        if not path.exists():
+            return cls._format_res(False, msg="贴图工具目录不存在")
+        if not path.is_dir():
+            return cls._format_res(False, msg="贴图工具路径必须是目录")
+
+        exe_path = path / "todds.exe"
+        if exe_path.exists():
+            return cls._format_res(True, data=path_str, msg=f"贴图工具：{exe_path}")
+        return cls._format_res(False, msg="目录下未找到 todds.exe，可在外部工具检查中下载安装", msg_type="warn")
         
     @classmethod
     def paths_check(cls, paths_data: Dict[str, str]) -> Dict:
@@ -1651,11 +1670,13 @@ class PathChecker:
                 results["steam_path"] = cls.check_steam_path(paths_data["steam_path"])
             if "steamcmd_path" in paths_data:
                 results["steamcmd_path"] = cls.check_steamcmd_path(paths_data["steamcmd_path"])
+            if "texture_tools_path" in paths_data:
+                results["texture_tools_path"] = cls.check_texture_tools_path(paths_data["texture_tools_path"])
             if "user_data_path" in paths_data:
                 results["user_data_path"] = cls.check_user_data_path(paths_data["user_data_path"])
             # 5. 其他路径
             for key, path in paths_data.items():
-                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path", "steamcmd_path", "user_data_path"]: continue
+                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path", "steamcmd_path", "texture_tools_path", "user_data_path"]: continue
                 results[key] = cls.check_normal_path(path)
 
             return results
