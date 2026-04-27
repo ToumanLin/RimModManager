@@ -76,7 +76,8 @@ def run_steam_worker(action: str, payload: str):
                 result["detail"] = "steamworks_not_loaded"
                 print(f"STEAM_STATUS_JSON:{json.dumps(result, ensure_ascii=False)}")
                 return
-            result["running"] = bool(steam.IsSteamRunning())
+            # IsSteamRunning 不是类里显式定义的方法，而是运行时动态 setattr(self, method_name, f) 挂上去的 ctypes 函数。
+            result["running"] = bool(steam.IsSteamRunning())  # type: ignore
             if not result["running"]:
                 result["detail"] = "steamworks_not_running"
             else:
@@ -91,7 +92,7 @@ def run_steam_worker(action: str, payload: str):
             result["detail"] = f"steamworks_probe_failed: {e}"
         finally:
             try:
-                if steam.loaded():
+                if steam and steam.loaded():
                     steam.unload()
             except Exception:
                 pass

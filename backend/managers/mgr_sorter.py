@@ -632,6 +632,7 @@ class OrderSorter:
             strategy = self.DEFAULT_SORT_STRATEGY
         logger.info(f"Starting sort for {len(active_ids)} mods with strategy={strategy}...")
         all_mods_data = ModDAO.get_profile_mods(self.context)
+        # all_mods_data = ModDAO.get_profile_mods(self.context or None)
         mod_map = {m['package_id'].lower(): m for m in all_mods_data}
         self.mod_map = mod_map
         current_assets_ids = list(mod_map.keys())

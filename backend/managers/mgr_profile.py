@@ -13,7 +13,7 @@ from backend.managers.mgr_files import PathChecker
 from backend.managers.mgr_game import GameManager
 from backend.settings import BACKUP_DIR, settings, DATA_DIR
 from backend.utils.logger import logger 
-from backend.utils.delete_ops import delete_path as delete_fs_path
+from backend.utils.tools import delete_fs_path
 
 
 # @dataclass

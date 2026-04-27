@@ -1,25 +1,25 @@
-import hashlib
+
 import os
-from pathlib import Path
 import re
+import uuid
 import shutil
+import hashlib
 import tempfile
 import threading
 import subprocess
 import platform
-import time
-import uuid
-from typing import Any, Dict
-from urllib.parse import quote
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image
+from pathlib import Path
+from typing import Any, Dict
 import requests
 import urllib.parse
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import webview # 引入 webview 库
 from backend.managers.mgr_game import GameManager
 from backend.settings import GALLERY_CACHE_DIR, THUMBNAIL_CACHE_DIR, settings
 from backend.utils.event_bus import EventBus
 from backend.utils.logger import logger
+from backend.utils.tools import delete_fs_path
 from backend.utils.shortcuts import (
     create_shortcut,
     format_shortcut_arguments,
@@ -28,7 +28,6 @@ from backend.utils.shortcuts import (
     get_shortcut_suffix,
     remove_shortcut_variants,
 )
-from backend.utils.delete_ops import delete_path as delete_fs_path
 
 
 class LocalAssetHandler(SimpleHTTPRequestHandler):
@@ -199,10 +198,9 @@ class FileManager:
         将本地绝对路径转换为前端可访问的 HTTP URL
         例如: C:/Mod/Preview.png -> http://127.0.0.1:xxxxx/image?path=C%3A%2FMod%2FPreview.png
         """
-        if not local_path or not self._port:
-            return ""
+        if not local_path or not self._port: return ""
         # 对路径进行 URL 编码
-        safe_path = quote(local_path)
+        safe_path = urllib.parse.quote(local_path)
         return f"http://127.0.0.1:{self._port}/image?path={safe_path}"
 
     # =========================================================
@@ -211,8 +209,7 @@ class FileManager:
     def get_gallery_url(self, workshop_id, remote_url):
         """生成指向本地服务器的代理 URL"""
         if not remote_url: return ""
-        from urllib.parse import quote
-        safe_url = quote(remote_url)
+        safe_url = urllib.parse.quote(remote_url)
         return f"http://127.0.0.1:{self._port}/gallery?wid={workshop_id}&url={safe_url}"
     
     @staticmethod
@@ -1076,7 +1073,6 @@ class FileManager:
                 else:
                     os.symlink(src, dst)
             except Exception as e:
-                from backend.utils.logger import logger
                 logger.error(f"Failed to link {dst} -> {src}: {e}")
     
     # =========================================================
@@ -1091,7 +1087,6 @@ class FileManager:
         :param old_mods_path: 变更前的 mods_path，用于数据迁移
         :param move_old_data: 如果 mods_path 变了，是否把旧路径的数据搬过来
         """
-        from backend.settings import settings
         
         # 1. 获取最新配置
         # 实际物理存储路径 (Target)

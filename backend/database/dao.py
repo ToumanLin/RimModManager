@@ -24,14 +24,14 @@ from backend.managers.mgr_profile import ProfileContext
 from backend.scanner.analyzer import ModAnalyzer
 from backend.settings import TOOL_MODS_DIR, settings
 from backend.utils.constants import normalize_language_code, normalize_language_codes
-from backend.utils.delete_ops import delete_path as delete_fs_path
 from backend.utils.logger import logger
 from backend.utils.tools import (
     current_ms,
     is_hex_color,
     normalize_hex_color,
     normalize_package_id,
-    normalize_package_ids,
+    normalize_package_ids, 
+    delete_fs_path,
 )
 
 
@@ -385,7 +385,7 @@ class ModDAO:
 
     @staticmethod
     def get_profile_conflict_analysis(
-        context: ProfileContext | None,
+        context: ProfileContext | None = None,
         assets: Sequence[dict[str, Any]] | None = None,
         include_workshop: bool = True,
     ):
