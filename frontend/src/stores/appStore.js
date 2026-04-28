@@ -114,7 +114,7 @@ export const useAppStore = defineStore('app', () => {
     workshop_mods_path: '',
     self_mods_path: '',
     move_old_self_mods: false,
-    enable_tool_mods: true,  // 是否启用工具 Mod
+    enable_tool_mods: false,  // 是否启用工具 Mod
     link_deployment_mode_full: false,  // 链接部署模式: true=完全重建, false=增量部署
 
     user_rules_path: '',
@@ -269,6 +269,7 @@ export const useAppStore = defineStore('app', () => {
       : taskStore.getLatestTaskByType('ai-batch')
   ))
   const updateInstallPrompted = new Set()
+  const pendingModScanRequested = ref(false)
   // 这里只保留后端已实现“真实终止点”的任务类型，避免按钮可点但实际上无法取消。
   const cancellableTaskTypes = new Set([
     'scan',
@@ -372,6 +373,26 @@ export const useAppStore = defineStore('app', () => {
     } catch {
       return '未知'
     }
+  }
+
+  const requestModScan = async ({ forcedUpdate = false, specificPaths = null } = {}) => {
+    if (isScanRunning.value) {
+      pendingModScanRequested.value = true
+      return false
+    }
+
+    pendingModScanRequested.value = false
+    const modStore = useModStore()
+    await modStore.scanMods(specificPaths, forcedUpdate)
+    return true
+  }
+
+  const flushQueuedModScan = async () => {
+    if (!pendingModScanRequested.value || isScanRunning.value) return false
+    pendingModScanRequested.value = false
+    const modStore = useModStore()
+    await modStore.scanMods()
+    return true
   }
 
   const escapeHtml = (value = '') => String(value)
@@ -669,8 +690,6 @@ export const useAppStore = defineStore('app', () => {
       }
       // 界面渲染完毕后，根据设置决定是否启动后台扫描
       if (settings.value.enable_auto_scan !== false) {
-        console.log("自动扫描开始...")
-        toast.info("自动扫描开始...", {timeout: 1000})
         const modStore = useModStore()
         modStore.scanMods(null, scanForce)
       }
@@ -762,6 +781,11 @@ export const useAppStore = defineStore('app', () => {
       // 扫描完成后的逻辑主要涉及 Mod 数据更新
       const modStore = useModStore()
       await modStore.scanComplete(e.detail)
+      if (pendingModScanRequested.value) {
+        window.setTimeout(() => {
+          void flushQueuedModScan()
+        }, 0)
+      }
     })
 
     // 每完成一个 Chunk，将数据推入数组，供弹窗实时渲染
@@ -865,6 +889,24 @@ export const useAppStore = defineStore('app', () => {
       }
       if (task.type === 'steamcmd-download' && task.status === 'failed') {
         toast.error(`SteamCMD 下载失败: ${task.metrics?.error || task.message}`)
+      }
+      if (task.type === 'steam-subscribe' && task.status === 'success') {
+        void (async () => {
+          await requestModScan()
+          toast.success('Steam 订阅已完成')
+        })()
+      }
+      if (task.type === 'steam-unsubscribe' && task.status === 'success') {
+        void (async () => {
+          await requestModScan()
+          toast.success('Steam 取消订阅已完成')
+        })()
+      }
+      if (task.type === 'steam-subscribe' && task.status === 'failed') {
+        toast.error(`Steam 订阅失败: ${task.metrics?.error || task.message}`)
+      }
+      if (task.type === 'steam-unsubscribe' && task.status === 'failed') {
+        toast.error(`Steam 取消订阅失败: ${task.metrics?.error || task.message}`)
       }
       if (task.type === 'update' && task.status === 'success' && task.metrics?.ready_to_install) {
         if (updateState.info) updateState.info.local_status = 'ready'
@@ -1477,35 +1519,32 @@ export const useAppStore = defineStore('app', () => {
     if (!window.pywebview) return
     if (!workshop_ids || workshop_ids.length === 0) return
     const res = await window.pywebview.api.steam_subscribe(workshop_ids)
-    if (checkResult(res, `订阅 ${workshop_ids.length} 个创意工坊项目`)) {
-      toast.success(`订阅 ${workshop_ids.length} 个创意工坊项目成功，正在下载中...`)
+    if (res?.status === 'success') {
+      toast.info(`已发送 ${workshop_ids.length} 个创意工坊项目的订阅请求`, { timeout: 2500 })
       return true
     }
-    // 其它常规报错
-    else {
+    if (res?.status === 'warning') {
       showSteamNotReadyHint(res)
-      toast.error(`订阅失败: ${res.message}`)
       return false
     }
+    toast.error(`订阅失败: ${res?.message || '未知错误'}`)
+    return false
   }
   // 取消订阅模组
   const unsubscribeWorkshopIds = async (workshop_ids) => {
     if (!window.pywebview) return false
     if (!workshop_ids || workshop_ids.length === 0) return
-    // const modStore = useModStore()
-    // const workshop_ids = modStore.takeModListByIds(mod_ids).filter(m => m.workshop_id).map(m => m.workshop_id)
     const res = await window.pywebview.api.steam_unsubscribe(workshop_ids)
-    if (checkResult(res, `取消订阅 ${workshop_ids.length} 个创意工坊项目`,true)) {
-      // if(delete_file) workshop_ids.forEach(id => deletePath(modStore.takeModById(id).path))
-      toast.success(`已发送取消订阅请求`)
+    if (res?.status === 'success') {
+      toast.info(`已发送 ${workshop_ids.length} 个创意工坊项目的取消订阅请求`, { timeout: 2500 })
       return true
     }
-    // 其它常规报错
-    else {
+    if (res?.status === 'warning') {
       showSteamNotReadyHint(res)
-      toast.error(`取消订阅失败: ${res.message}`)
       return false
     }
+    toast.error(`取消订阅失败: ${res?.message || '未知错误'}`)
+    return false
   }
   // 获取订阅合集列表
   const getCollectionItems = async (collection_id) => {
@@ -1785,6 +1824,7 @@ export const useAppStore = defineStore('app', () => {
     appVersion, buildMode, uiState, settings, isLoading, isDownloading, isScanRunning, updateState,
     aiState, aiBatchResults, aiBatchResultCount, currentAiBatchTask, currentAiBatchTaskId, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, upgradeContext,
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode, exitSleepMode,
+    requestModScan,
     getThumbUrl, getLocalUrl, getRemoteUrl,
     // 游戏相关
   checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultExternalPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl,

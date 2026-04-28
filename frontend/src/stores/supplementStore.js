@@ -5,6 +5,7 @@ import { useConfirmStore } from './confirmStore'
 import { useAppStore } from './appStore'
 import { useModStore } from './modStore'
 import { useProfileStore } from './profileStore'
+import { ISSUE_TYPE } from '../utils/constants'
 import { dedupeNormalizedPackageIds, mapUniqueDisplayNames, normalizePackageId, normalizeWorkshopId, pushUnique } from '../utils/modIdentity'
 import { getVersionInfo as getVersionInfoByVersions, normalizeVersion } from '../utils/versioning'
 
@@ -94,11 +95,15 @@ const getResolvedLanguagePackOwnerIds = (mod) => (
       .filter(Boolean)
   )]
 )
-const hasHighConfidenceLanguagePackOwners = (mod) => (
-  String(mod?.language_pack_owner_result?.summary_confidence || '').trim().toLowerCase() === 'high'
-)
+const canUseLanguagePackForSupplement = (mod) => {
+  const confidence = String(mod?.language_pack_owner_result?.summary_confidence || '').trim().toLowerCase()
+  return confidence === 'high' || confidence === 'medium'
+}
 const isLanguagePackDeclaredForCurrentLanguage = (mod, targetLanguage) => (
   (mod?.supported_languages || []).includes(String(targetLanguage || '').trim())
+)
+const isIssueIgnored = (mod, issueType = '') => (
+  !!issueType && Array.isArray(mod?.ignored_issues) && mod.ignored_issues.includes(issueType)
 )
 
 const listOwnerNames = (owners = [], modStore) => (
@@ -189,7 +194,7 @@ export const useSupplementStore = defineStore('supplement', () => {
     }
     for (const mod of modStore.allModsMap.values()) {
       if (!mod || mod.isMissing || !mod.path || !isLanguagePackMod(mod)) continue
-      if (!hasHighConfidenceLanguagePackOwners(mod)) continue
+      if (!canUseLanguagePackForSupplement(mod)) continue
       const relatedTargets = new Set(getResolvedLanguagePackOwnerIds(mod))
       const supportsCurrentLanguage = isLanguagePackDeclaredForCurrentLanguage(mod, currentLanguage.value)
       relatedTargets.forEach(targetId => {
@@ -295,7 +300,8 @@ export const useSupplementStore = defineStore('supplement', () => {
 
     ownerIds.forEach(ownerId => {
       const owner = modStore.takeModById(ownerId)
-      if (!owner || isLanguagePackMod(owner)) return
+      if (!owner) return
+      if (isIssueIgnored(owner, ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY)) return
       ;(owner.rules?.dependencies || []).forEach(rule => {
         const targetId = normalizePackageId(rule?.target_id)
         if (!targetId) return
@@ -392,11 +398,20 @@ export const useSupplementStore = defineStore('supplement', () => {
 
     ownerIds.forEach(ownerId => {
       const owner = modStore.takeModById(ownerId)
-      if (!owner || isLanguagePackMod(owner)) return
+      if (!owner) return
+      if (isIssueIgnored(owner, ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK)) return
       const supportedLanguages = owner.supported_languages || []
       if (supportedLanguages.length === 0) return
       if (supportedLanguages.includes(currentLanguage.value)) return
-      const strictCandidates = (ctx.strictTargetMap.get(normalizePackageId(ownerId)) || [])
+      const allStrictCandidates = (ctx.strictTargetMap.get(normalizePackageId(ownerId)) || [])
+      const allFallbackCandidates = (ctx.fallbackTargetMap.get(normalizePackageId(ownerId)) || [])
+      const hasSatisfiedCandidate = [...allStrictCandidates, ...allFallbackCandidates].some(candidate => {
+        const candidateId = normalizePackageId(candidate?.package_id)
+        return !!candidateId && satisfiedSet.has(candidateId)
+      })
+      if (hasSatisfiedCandidate) return
+
+      const strictCandidates = allStrictCandidates
         .filter(candidate => {
           const candidateId = normalizePackageId(candidate?.package_id)
           return !!candidateId
@@ -405,7 +420,7 @@ export const useSupplementStore = defineStore('supplement', () => {
             && !satisfiedSet.has(candidateId)
             && !trailSet.has(candidateId)
         })
-      const fallbackCandidates = (ctx.fallbackTargetMap.get(normalizePackageId(ownerId)) || [])
+      const fallbackCandidates = allFallbackCandidates
         .filter(candidate => {
           const candidateId = normalizePackageId(candidate?.package_id)
           return !!candidateId

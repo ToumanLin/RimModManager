@@ -66,15 +66,11 @@
         <div class="sticky top-0 z-30 px-2 py-1 text-sm font-bold bg-accent-highlight/50 backdrop-blur-2xl text-text-main rounded-t-lg flex items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <span>语言包所属</span>
-            <label v-tooltip="'默认分析所属来自后端统一判定。用户指定所属始终可编辑；开启覆盖后，用户指定所属将替代默认分析所属，关闭时则并入默认分析所属。'" class="text-text-dim cursor-help italic underline hover:text-text-main">?</label>
+            <label v-tooltip="'默认分析所属来自后端统一判定。用户可以指定所属，右侧按钮切换覆盖或并入模式，开启覆盖后，用户指定所属将替代默认分析所属，关闭时则并入默认分析所属。'" class="text-text-dim cursor-help italic underline hover:text-text-main">?</label>
           </div>
           <label class="flex items-center gap-2 cursor-pointer select-none">
             <div class="relative">
-              <input
-                type="checkbox"
-                class="sr-only peer"
-                :checked="isLanguagePackOwnerReplaceEnabled"
-                :disabled="!canToggleLanguagePackOwnerOverride"
+              <input type="checkbox" class="sr-only peer" :checked="isLanguagePackOwnerReplaceEnabled" :disabled="!canToggleLanguagePackOwnerOverride"
                 @change="toggleLanguagePackOwnerOverrideMode($event.target.checked)"
               >
               <div class="w-9 h-5 bg-text-main/10 rounded-full transition-all after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-text-main after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-text-main peer-checked:bg-accent-special peer-disabled:opacity-40"></div>
@@ -103,7 +99,6 @@
           <div class="w-1 h-1 rounded-full bg-accent-special shadow-[0_0_8px_var(--color-accent-special)]"></div>
           <span class="text-accent-special">用户指定所属 ({{ languagePackOwnerOverrideRows.length }})</span>
           <div class="flex-1 h-px border-b border-accent-special/30"></div>
-          <span class="text-[0.65rem] text-text-dim/70" v-if="!canToggleLanguagePackOwnerOverride">列表为空时仅保留并入模式</span>
         </div>
         <div class="px-2 min-h-15 relative">
           <div class="absolute top-0 left-0 h-full w-full bg-accent-special/20 blur-lg select-none pointer-events-none"></div>

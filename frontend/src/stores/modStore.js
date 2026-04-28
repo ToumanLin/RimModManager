@@ -798,9 +798,28 @@ export const useModStore = defineStore('mods', () => {
     }
   }
   // 扫描完成事件处理
-  const scanComplete = async (detail) => {
-    coexistenceList.value = Array.isArray(detail.coexistences) ? detail.coexistences : []
-    conflictList.value = Array.isArray(detail.conflicts) ? detail.conflicts : []
+  const scanComplete = async (detail = {}) => {
+    coexistenceList.value = Array.isArray(detail?.coexistences) ? detail.coexistences : []
+    conflictList.value = Array.isArray(detail?.conflicts) ? detail.conflicts : []
+
+    if (detail?.status === 'cancelled') {
+      toast.info(detail.message || '扫描已取消')
+      console.log("扫描已取消:", detail)
+      return
+    }
+
+    if (detail?.status && detail.status !== 'success') {
+      toast.error(`扫描异常: \n${detail.message || '未知错误'}`)
+      console.error("扫描完成事件异常:", detail)
+      return
+    }
+
+    const stats = detail?.stats || {}
+    const added = Number(stats.added || 0)
+    const updated = Number(stats.updated || 0)
+    const removed = Number(stats.removed || 0)
+    const skipped = Number(stats.skipped || 0)
+    const total = Number(detail?.total ?? (added + updated + skipped))
 
     let totalCount = 0
     if (coexistenceList.value.length > 0) {
@@ -818,7 +837,7 @@ export const useModStore = defineStore('mods', () => {
       // 注意：有冲突时暂不提示 "扫描完成" 的 Toast，以免遮挡，或者提示 Warning
       toast.warning(`扫描完成，发现 ${totalCount} 个包名重复冲突需要处理！`, {timeout: 10000})
     } else {
-      toast.success(`扫描完成，共计扫描${detail.total}个模组，新增${detail.stats.added}个，\n更新${detail.stats.updated}个，删除${detail.stats.removed}个，已知${detail.stats.skipped}个。`,{position: "top-center",timeout: 5000})
+      toast.success(`扫描完成，共计扫描${total}个模组，新增${added}个，\n更新${updated}个，删除${removed}个，已知${skipped}个。`,{position: "top-center",timeout: 5000})
     }
     // 扫描结束后，主动拉取一次最新数据刷新界面
     console.log("扫描统计:", detail)
