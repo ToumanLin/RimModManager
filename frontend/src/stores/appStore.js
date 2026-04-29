@@ -1702,6 +1702,51 @@ export const useAppStore = defineStore('app', () => {
     return checkResult(res, "恢复默认提示词", true) ? res.data : false
   }
 
+  // --- 统一软件数据导入导出 ---
+  const getDataBundleSchema = async () => {
+    if (!window.pywebview) return null
+    const res = await window.pywebview.api.data_bundle_get_schema()
+    return checkResult(res, '获取数据导入导出配置') ? res.data : null
+  }
+  const inspectDataBundle = async (bundlePath) => {
+    if (!window.pywebview || !bundlePath) return null
+    const res = await window.pywebview.api.data_bundle_inspect(bundlePath)
+    return checkResult(res, '读取数据包摘要') ? res.data : null
+  }
+  const exportDataBundle = async (payload = {}) => {
+    if (!window.pywebview) return false
+    const res = await window.pywebview.api.data_bundle_export(payload)
+    return checkResult(res, '导出软件数据', true) ? res.data : false
+  }
+  const importDataBundle = async (bundlePath, payload = {}) => {
+    if (!window.pywebview || !bundlePath) return false
+    isLoading.value = true
+    try {
+      const res = await window.pywebview.api.data_bundle_import(bundlePath, payload)
+      if (!checkResult(res, '导入软件数据', true)) return false
+
+      const profileStore = useProfileStore()
+      const workspaceStore = useWorkspaceStore()
+      Object.assign(settings.value, res.data?.settings || {})
+      profileStore.activeContext = res.data?.active_context || profileStore.activeContext
+
+      await refreshData()
+      await Promise.all([
+        profileStore.fetchProfiles(),
+        workspaceStore.fetchGithubRepos(),
+        workspaceStore.fetchSavedCollections(),
+      ])
+
+      const warnings = res.data?.result?.warnings || []
+      if (warnings.length > 0) {
+        toast.warning(warnings.join('\n'), { timeout: 8000 })
+      }
+      return res.data
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   // === 更新相关函数 ===
   // 检查更新
   const checkUpdate = async (manual = true) => {
@@ -1836,5 +1881,6 @@ export const useAppStore = defineStore('app', () => {
     // AI处理
     getAiConfig, saveAIConfig, getAiProviders, getAiModels, useAI, chatWithAI, startAiBatchTask, setCurrentAiBatchTask, clearCurrentAiBatchResults,
     fetchPrompts, savePrompt, deletePrompt, resetPrompts,
+    getDataBundleSchema, inspectDataBundle, exportDataBundle, importDataBundle,
   }
 })
