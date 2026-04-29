@@ -842,9 +842,6 @@ export const useModStore = defineStore('mods', () => {
     // 扫描结束后，主动拉取一次最新数据刷新界面
     console.log("扫描统计:", detail)
     await appStore.refreshData()
-    const { useMissingInstallStore } = await import('./missingInstallStore')
-    const missingInstallStore = useMissingInstallStore()
-    await missingInstallStore.notifyAfterScan(activeIds.value)
     // 状态注入
     if (coexistenceList.value.length > 0){
       // 处理可共存Mod，标记为 is_coexistence = true

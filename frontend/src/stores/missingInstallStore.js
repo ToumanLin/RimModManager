@@ -17,7 +17,6 @@ import {
 import { ISSUE_TYPE } from '../utils/constants'
 import { DEFAULT_TOOL_PACKAGE_IDS, isBuiltinManagedPackageId } from '../utils/packageScope'
 import { useAppStore } from './appStore'
-import { useConfirmStore } from './confirmStore'
 import { useModStore } from './modStore'
 import { useProfileStore } from './profileStore'
 import { useWorkspaceStore } from './workspaceStore'
@@ -58,7 +57,6 @@ const buildChoiceId = (source = {}, fallbackType = 'original') => {
 export const useMissingInstallStore = defineStore('missingInstall', () => {
   const toast = createToastInterface()
   const appStore = useAppStore()
-  const confirmStore = useConfirmStore()
   const modStore = useModStore()
   const profileStore = useProfileStore()
   const workspaceStore = useWorkspaceStore()
@@ -614,21 +612,6 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
     return !!result
   }
 
-  const notifyAfterScan = async (activeIds = modStore.activeIds) => {
-    const analysis = await buildAnalysis(activeIds)
-    if ((analysis.summary.missingTotal || 0) === 0) return false
-    if ((analysis.summary.actionableTotal || 0) > 0) {
-      await openForActiveList(activeIds)
-      return true
-    }
-    await confirmStore.alert(
-      '扫描后发现未知项',
-      `当前列表里有 ${analysis.summary.unknownTotal} 项暂时找不到可用来源。你可以检查一下这些项是否已经取消订阅、被删除，或本来就没有可用来源。`,
-      { type: 'warning', confirmText: '知道了' }
-    )
-    return true
-  }
-
   const openSource = (target) => {
     const source = target?.kind ? target : getSelectedSource(target)
     if (!source) return
@@ -649,7 +632,6 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
     getSelectedSource,
     openForActiveList,
     ensureResolvedBeforeAction,
-    notifyAfterScan,
     close,
     toggleRow,
     setChoice,
