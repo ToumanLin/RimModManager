@@ -435,6 +435,22 @@
                   <div class="grid grid-cols-2 gap-4">
                     <CommonSwitch class="col-span-2" label="调试模式" v-model="formData.debug_mode" description="开启调试模式后重启软件将会出现开发者工具窗口，可查看问题详情。" />
                     <CommonSwitch class="col-span-2" label="浏览器模式启动" v-model="formData.browser_mode" description="默认仍使用内置 WebView。开启后，无启动参数时将改为在本机浏览器中启动；关闭浏览器主页面后程序会自动退出。" />
+                    <div class="col-span-2 p-4 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-2 gap-3">
+                      <div class="col-span-2">
+                        <h4 class="text-sm font-bold text-text-main">静默模式</h4>
+                        <p class="mt-1 text-xs leading-relaxed text-text-dim/80">
+                          游戏运行时可切到更轻量的界面，减少资源占用，并可直接查看游戏日志。
+                        </p>
+                      </div>
+                      <CommonSwitch class="col-span-1" label="自动进入静默模式" v-model="formData.auto_enter_silent_mode" description="开启后，检测到 RimWorld 运行时会自动切换到静默模式；关闭后仅保留手动进入能力。" />
+                      <CommonSelect class="col-span-1" label="静默模式默认页面" v-model="formData.silent_mode_default_view"
+                        :options="[
+                          { label: '静默主页', value: 'home' },
+                          { label: '游戏日志', value: 'logs' }
+                        ]"
+                        description="控制自动进入静默模式时，默认先显示主页还是直接进入日志页。"
+                      />
+                    </div>
                     <CommonSwitch class="col-span-1" label="自动检查更新" v-model="formData.enable_auto_update_check" description="关闭后，需要手动点击检查更新按钮才能更新 RimModManager。" />
                     <!-- 手动检查按钮 -->
                     <div class="flex items-center justify-between p-3 input-glass">

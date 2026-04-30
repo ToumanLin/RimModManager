@@ -128,6 +128,8 @@ export const useAppStore = defineStore('app', () => {
     
     current_profile_id: 'default',
     browser_mode: false,
+    auto_enter_silent_mode: true,
+    silent_mode_default_view: 'home',
     asset_port: 0,
 
     // --- 系统 ---

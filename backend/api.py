@@ -736,6 +736,20 @@ class API:
         if self.game_monitor:
             self.game_monitor.force_sleep()
         return ApiResponse.success()
+
+    @log_api_call
+    def monitor_open_silent_logs(self):
+        """静默模式下打开游戏日志页"""
+        if self.game_monitor:
+            self.game_monitor.open_idle_logs()
+        return ApiResponse.success()
+
+    @log_api_call
+    def monitor_open_silent_home(self):
+        """静默模式下返回主页"""
+        if self.game_monitor:
+            self.game_monitor.open_idle_home()
+        return ApiResponse.success()
     
     @log_api_call
     def monitor_frontend_ready(self):
