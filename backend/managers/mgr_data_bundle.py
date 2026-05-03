@@ -663,10 +663,10 @@ class DataBundleManager:
 
         resolved_install_path = self._resolve_game_install_path(profile_meta.get("game_version"))
         default_profile.name = str(profile_meta.get("name") or default_profile.name)
-        default_profile.description = profile_meta.get("description")
+        default_profile.description = profile_meta.get("description",'')
         default_profile.game_install_path = resolved_install_path
         default_profile.game_version = GameManager.get_game_version(resolved_install_path) if resolved_install_path else str(profile_meta.get("game_version") or "")
-        default_profile.prefer_steam_launch = bool(profile_meta.get("prefer_steam_launch", False))
+        default_profile.prefer_steam_launch = bool(profile_meta.get("prefer_steam_launch", True))
         default_profile.use_workshop_mods = True
         default_profile.use_self_mods = bool(profile_meta.get("use_self_mods", False))
         default_profile.run_commands = list(profile_meta.get("run_commands") or [])
@@ -700,7 +700,7 @@ class DataBundleManager:
                 user_data_path=str(target_root),
                 game_install_path=resolved_install_path,
                 game_version=game_version,
-                prefer_steam_launch=bool(profile_meta.get("prefer_steam_launch", False)),
+                prefer_steam_launch=bool(profile_meta.get("prefer_steam_launch", True)),
                 use_workshop_mods=bool(profile_meta.get("use_workshop_mods", False)),
                 use_self_mods=bool(profile_meta.get("use_self_mods", False)),
                 is_steam=bool(resolved_install_path and os.path.normpath(resolved_install_path).lower().find(os.path.join("steamapps", "common")) != -1),
