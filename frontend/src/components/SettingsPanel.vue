@@ -194,13 +194,19 @@
                     <CommonSwitch label="列表索引" v-model="formData.ui.show_list_index" description="控制列表中索引列的显示。" />
                     <CommonNumber label="拖动判定延迟" description="控制列表项拖动操作的判定延迟，单位是毫秒，默认值为 30 毫秒，为 0 时可能使点击操作出现抖动。" v-model="formData.ui.drag_delay" :step="10" :min="0" :max="500" />
                     <div class="col-span-2 p-2 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-2 gap-2">
-                      <CommonSwitch class="col-span-2" mini label="列表分组折叠" v-model="formData.ui.enable_active_section_collapse" description="仅在启用列表生效。名称或别名以 = 开头且以 = 结尾的纯标题模组会被识别为可折叠分组标题；折叠后拖动标题即整组拖动。^^可工坊订阅 [[分类排列标签合集]] 配合使用。^^" />
+                      <CommonSwitch class="col-span-2" mini label="列表分组折叠" v-model="formData.ui.enable_active_section_collapse" description="仅在启用列表生效。名称或别名满足 `=标题=` 或 `/*标题*/` 的纯标题模组会被识别为可折叠分组标题；折叠后拖动标题即整组拖动。^^可工坊订阅 [[分类排列标签合集]] 配合使用。^^" />
                       <CommonSwitch :disabled="!formData.ui.enable_active_section_collapse" label="默认折叠" v-model="formData.ui.default_collapse_active_sections" description="开启后，启用列表中的标题分组会在初始显示时默认折叠。" />
-                      <div class="flex items-center justify-between gap-1" :class="{'pointer-events-none opacity-50': !formData.ui.enable_active_section_collapse}">
+                      <div class="flex items-center gap-1" :class="{'pointer-events-none opacity-50': !formData.ui.enable_active_section_collapse}">
                         <button @click="appStore.openSteamWorkshopById('2138932352')"
                           class="px-2 py-1.5 bg-text-dim/15 hover:bg-text-dim/30 border border-text-dim/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
                           <span class="flex items-center gap-2">
                             访问<p class="text-accent-cool">分类排列标签合集</p>工坊页面
+                          </span>
+                        </button>
+                        <button @click="appStore.openSteamWorkshopById('3542535605')"
+                          class="px-2 py-1.5 bg-text-dim/15 hover:bg-text-dim/30 border border-text-dim/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
+                          <span class="flex items-center gap-2">
+                            访问<p class="text-accent-cool">分类排序合集</p>工坊页面
                           </span>
                         </button>
                       </div>
@@ -879,6 +885,7 @@ const autoDetect = async () => {
   const paths = await appStore.autoDetectPaths(false)
   if (paths) Object.assign(formData.value, paths)
 }
+// 重置外部依赖路径为默认值
 const resetToDefaultExternalPaths = async () => {
   const paths = await appStore.getDefaultExternalPaths()
   if (!paths) return

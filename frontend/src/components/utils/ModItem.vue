@@ -178,6 +178,7 @@
 
 <script setup>
 import { computed, h, nextTick, watch  } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
 import { MOD_SIGN_COLOR_MAP, ISSUE_TYPE, MOD_TYPE_MAP, ISSUE_TITLE_MAP, MOD_TYPE_ICON_MAP, SOURCE_TYPE_MAP, IconSteam, IconSelf } from '../../utils/constants'
 import { useAppStore } from '../../stores/appStore'
 import { useModStore } from '../../stores/modStore'
@@ -185,7 +186,8 @@ import { useGroupStore } from '../../stores/groupStore'
 import { useRuleStore } from '../../stores/ruleStore'
 import { useContextMenuStore } from '../../stores/contextMenuStore'
 import { useConfirmStore } from '../../stores/confirmStore'
-import { hexToRgba, hexToRgb } from '../../utils/color'
+import { DEFAULT_ACCENT_HEX, hexToRgba, hexToRgb, normalizeHexColor } from '../../utils/color'
+import { isSectionHeaderTitle } from '../../utils/common'
 import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Download, Eraser, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight, LockOpen } from 'lucide-vue-next';
 
 
@@ -218,6 +220,9 @@ const groupStore = useGroupStore()
 const menuStore = useContextMenuStore()
 const ruleStore = useRuleStore()
 const confirmStore = useConfirmStore()
+const queueSetModsColor = useDebounceFn((modIds, color) => {
+  modStore.setModsColor(modIds, color)
+}, 120)
 
 // 使用 computed 缓存，只有当 id 变化时才重新获取对象
 // 极大地减少了父组件重绘时的计算量
@@ -226,10 +231,7 @@ const modGroups = computed(() => groupStore.takeGroupsByModId(props.item_id))
 // const modIcon = computed(() => modStore.getIconUrl(props.id))
 const displayName = computed(() => modData.value?.alias_name ? modData.value.alias_name : (modData.value?.name ? modData.value.name : props.item_id))
 // ModItem 自己也需要识别“哪些选中项属于标题分组”，这样右键菜单才能按批量分组操作显示。
-const isSectionHeaderName = (value) => {
-  const name = String(value ?? '').trim()
-  return name.length >= 2 && name.startsWith('=') && name.endsWith('=')
-}
+const isSectionHeaderName = (value) => isSectionHeaderTitle(value)
 const isSectionHeaderId = (id) => {
   if (!props.sectionFeatureEnabled) return false
   const mod = modStore.takeModById(id)
@@ -423,6 +425,10 @@ const handleContextMenu = async (event) => {
   modStore.lastSelectedMod=modStore.takeModById(props.item_id)  // 记录最后选中的模组
   // 获取统计信息
   const stats = modStore.selectedStats
+  const selectedColor = typeof stats.color === 'string' && stats.color !== 'mixed'
+    ? stats.color
+    : (modData.value?.sign_color || null)
+  const pickerColor = normalizeHexColor(selectedColor, DEFAULT_ACCENT_HEX)
   // 通用菜单
   const commnMenuItems = [
     { label: '标签管理'+ selectedCountStr , icon: Tag, disabled: !modStore.allModTags?.length, children: [{type: 'grid', columns: 5, label: '批量分配标签',
@@ -437,8 +443,13 @@ const handleContextMenu = async (event) => {
     },
     { label: '标记颜色'+ selectedCountStr, icon: Palette, children: [{ type: 'grid', columns: 5, label: '批量设置颜色',
         children:[...Object.entries(MOD_SIGN_COLOR_MAP).map(([c, name]) => ({ tooltip: name, color: c, 
-            active: modData.value.sign_color === c, action: () => modStore.setModsColor(selectedIds, c)
-          })), { icon: X, color: 'transparent', tooltip: '清除', action: () => modStore.setModsColor(selectedIds, null) }
+            active: stats.color === c, action: () => modStore.setModsColor(selectedIds, c)
+          })), {
+            type: 'color-picker',
+            tooltip: stats.color === 'mixed' ? '为当前多选项设置统一自定义颜色' : '自定义颜色',
+            color: pickerColor,
+            action: (color) => queueSetModsColor(selectedIds, normalizeHexColor(color, DEFAULT_ACCENT_HEX))
+          }, { icon: X, color: 'transparent', tooltip: '清除', action: () => modStore.setModsColor(selectedIds, null) }
         ]
       }]
     },

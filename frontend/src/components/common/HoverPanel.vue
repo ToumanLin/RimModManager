@@ -27,8 +27,8 @@
       <div v-if="hoverStore.type === 'preview'" 
         class="relative flex flex-col h-full overflow-visible select-none"
         :style="{ 
-          '--accent-rgb': hexToRgb(hoverStore.data.sign_color || '#a1a1aa'),
-          '--accent': hoverStore.data.sign_color || '#a1a1aa'
+          '--accent-rgb': hexToRgb(hoverStore.data.sign_color || DEFAULT_ACCENT_HEX),
+          '--accent': hoverStore.data.sign_color || DEFAULT_ACCENT_HEX
         }">
         
         <!-- 悬浮装饰：分组标签 (破格设计，浮在卡片上方) -->
@@ -148,7 +148,7 @@ import { useHoverStore } from '../../stores/hoverStore'
 import { useAppStore } from '../../stores/appStore'
 import { useModStore } from '../../stores/modStore'
 import { useGroupStore } from '../../stores/groupStore';
-import { hexToRgbComponents } from '../../utils/color'
+import { DEFAULT_ACCENT_HEX, hexToRgbComponents } from '../../utils/color'
 
 const appStore = useAppStore()
 const hoverStore = useHoverStore()

@@ -1,7 +1,11 @@
 import importlib
+import json
 import sys
+import tempfile
+import threading
 import types
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -51,11 +55,12 @@ class DummyDB:
 
 
 class TestRuleManagerDynamicWeights(unittest.TestCase):
-    def _make_manager(self, matched_rules=None):
+    def _make_manager(self, matched_rules=None, mock_save=True):
         manager = RuleManager.__new__(RuleManager)
         manager.context = SimpleNamespace(game_version="1.5.4100")
         manager.builtin_rules = {}
         manager.community_rules = {}
+        manager.community_rules_update_time = 0
         manager.user_mod_rules = {}
         manager.user_dynamic_rules = []
         manager.workshop_rules_cache = {}
@@ -70,9 +75,24 @@ class TestRuleManagerDynamicWeights(unittest.TestCase):
             "excluded_workshop_mods": [],
             "rule_source_priority": RULE_SOURCES,
         }
+        manager._save_lock = threading.Lock()
+        manager.build_workshop_rules = Mock()
         manager.get_matching_dynamic_rules = Mock(return_value=matched_rules or [])
-        manager.save_user_rules = Mock()
+        if mock_save:
+            manager.save_user_rules = Mock()
         return manager
+
+    def _patch_rule_paths(self, user_rules_path: Path, community_rules_path: Path):
+        original_user_rules_path = mgr_rules_module.settings.config.user_rules_path
+        original_community_rules_path = mgr_rules_module.settings.config.community_rules_path
+        mgr_rules_module.settings.config.user_rules_path = str(user_rules_path)
+        mgr_rules_module.settings.config.community_rules_path = str(community_rules_path)
+
+        def restore():
+            mgr_rules_module.settings.config.user_rules_path = original_user_rules_path
+            mgr_rules_module.settings.config.community_rules_path = original_community_rules_path
+
+        self.addCleanup(restore)
 
     def test_dynamic_weight_set_is_clamped_to_minimum_one(self):
         manager = self._make_manager([
@@ -118,6 +138,38 @@ class TestRuleManagerDynamicWeights(unittest.TestCase):
         self.assertEqual(manager.user_dynamic_rules[0]["action"]["value"], 1)
         manager.save_user_rules.assert_called_once()
 
+    def test_save_user_rules_uses_configured_path_and_writes_meta(self):
+        manager = self._make_manager([], mock_save=False)
+        manager.user_mod_rules = {"mod.test": {"loadAfter": {"core.test": {"comment": "test"}}}}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            user_rules_path = Path(temp_dir) / "custom" / "user_rules.json"
+            community_rules_path = Path(temp_dir) / "communityRules.json"
+            community_rules_path.write_text("{}", encoding="utf-8")
+            self._patch_rule_paths(user_rules_path, community_rules_path)
+
+            success = manager.save_user_rules()
+
+            self.assertTrue(success)
+            payload = json.loads(user_rules_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["mod_rules"], manager.user_mod_rules)
+            self.assertEqual(payload["meta"]["schema_version"], 1)
+            self.assertEqual(payload["meta"]["written_by"], mgr_rules_module.__version__)
+            self.assertIsInstance(payload["meta"]["updated_at"], int)
+
+    def test_save_user_rules_propagates_write_failures(self):
+        manager = self._make_manager([], mock_save=False)
+        manager._write_json_atomic = Mock(side_effect=RuntimeError("boom"))
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            user_rules_path = Path(temp_dir) / "user_rules.json"
+            community_rules_path = Path(temp_dir) / "communityRules.json"
+            community_rules_path.write_text("{}", encoding="utf-8")
+            self._patch_rule_paths(user_rules_path, community_rules_path)
+
+            with self.assertRaises(RuntimeError):
+                manager.save_user_rules()
+
     def test_import_bundle_sanitizes_dynamic_rule_values_and_reports_warnings(self):
         manager = self._make_manager([])
         fake_models_module = types.ModuleType("backend.database.models")
@@ -153,6 +205,56 @@ class TestRuleManagerDynamicWeights(unittest.TestCase):
 
         self.assertEqual(manager.user_dynamic_rules[0]["action"]["value"], 1)
         self.assertTrue(result["warnings"])
+
+    def test_load_all_allows_community_rules_without_timestamp_and_still_loads_user_rules(self):
+        manager = self._make_manager([], mock_save=False)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            user_rules_path = Path(temp_dir) / "user_rules.json"
+            community_rules_path = Path(temp_dir) / "communityRules.json"
+            user_rules_path.write_text(json.dumps({
+                "mod_rules": {"mod.test": {"loadAfter": {"core.test": {"comment": "ok"}}}},
+                "dynamic_rules": [],
+                "settings": {"dynamic_rules_enabled": False},
+            }, ensure_ascii=False), encoding="utf-8")
+            community_rules_path.write_text(json.dumps({
+                "community.mod": {"loadAfter": {"core.test": {"comment": "community"}}}
+            }, ensure_ascii=False), encoding="utf-8")
+            self._patch_rule_paths(user_rules_path, community_rules_path)
+
+            manager.load_all()
+
+            self.assertIn("mod.test", manager.user_mod_rules)
+            self.assertIn("community.mod", manager.community_rules)
+            self.assertEqual(manager.community_rules_update_time, 0)
+            self.assertFalse(manager.settings["dynamic_rules_enabled"])
+            manager.build_workshop_rules.assert_called_once()
+
+    def test_load_all_clears_stale_rules_when_switched_to_missing_user_rules_path(self):
+        manager = self._make_manager([], mock_save=False)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            first_user_rules_path = Path(temp_dir) / "user_rules_a.json"
+            second_user_rules_path = Path(temp_dir) / "user_rules_b.json"
+            community_rules_path = Path(temp_dir) / "communityRules.json"
+            community_rules_path.write_text("{}", encoding="utf-8")
+            first_user_rules_path.write_text(json.dumps({
+                "mod_rules": {"mod.test": {"loadAfter": {"core.test": {"comment": "ok"}}}},
+                "dynamic_rules": [{"rule_id": "dyn_1", "enabled": True}],
+                "settings": {"dynamic_rules_enabled": False},
+            }, ensure_ascii=False), encoding="utf-8")
+
+            self._patch_rule_paths(first_user_rules_path, community_rules_path)
+            manager.load_all()
+            self.assertIn("mod.test", manager.user_mod_rules)
+            self.assertEqual(len(manager.user_dynamic_rules), 1)
+
+            mgr_rules_module.settings.config.user_rules_path = str(second_user_rules_path)
+            manager.load_all()
+
+            self.assertEqual(manager.user_mod_rules, {})
+            self.assertEqual(manager.user_dynamic_rules, [])
+            self.assertTrue(manager.settings["dynamic_rules_enabled"])
 
     def test_match_mod_condition_uses_mod_type_fallback(self):
         manager = self._make_manager([])

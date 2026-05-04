@@ -16,7 +16,9 @@
       </div>
       
       <div class="flex flex-wrap gap-[4px]">
-        <button v-for="(subItem, idx) in item.children" :key="idx" @click.stop="handleClick(subItem)"
+        <template v-for="(subItem, idx) in item.children" :key="idx">
+          <ContextMenuColorPickerItem v-if="subItem.type === 'color-picker'" :item="subItem" :picker-container="itemRef || 'body'" />
+          <button v-else @click.stop="handleClick(subItem)"
           v-tooltip="subItem.tooltip || subItem.label || ''"
           class="relative flex items-center justify-center transition-all duration-200 active:scale-95 border group/btn select-none overflow-hidden"
           :class="[
@@ -53,12 +55,13 @@
             <span v-if="subItem.label" :class="{'ml-[5px]': subItem.icon}" class="truncate max-w-[80px]"
               :style="{'color': subItem.color || 'currentColor'}">
               {{ subItem.label }}
-             </span>
+            </span>
           </template>
           
           <!-- 颜色块模式下的特殊图标 (比如清除颜色的 X) -->
-          <component v-else-if="subItem.icon" :is="subItem.icon" class="w-[16px] h-[16px] text-text-main/50 group-hover/btn:text-text-main" />
-        </button>
+            <component v-else-if="subItem.icon" :is="subItem.icon" class="w-[16px] h-[16px] text-text-main/50 group-hover/btn:text-text-main" />
+          </button>
+        </template>
       </div>
     </div>
 
@@ -99,6 +102,7 @@
 <script setup>
 import { ref, computed, nextTick } from 'vue'
 import { useWindowSize } from '@vueuse/core'
+import ContextMenuColorPickerItem from './ContextMenuColorPickerItem.vue'
 
 const props = defineProps({
   item: { type: Object, required: true }

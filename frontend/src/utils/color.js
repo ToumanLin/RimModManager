@@ -1,6 +1,7 @@
 const FALLBACK_RGB = 'rgb(0, 0, 0)'
 const FALLBACK_RGB_COMPONENTS = '0, 0, 0'
 const FALLBACK_HEX = '#000000'
+export const DEFAULT_ACCENT_HEX = '#a1a1aa'
 
 const clampByte = (value) => Math.max(0, Math.min(255, Number(value) || 0))
 
@@ -28,6 +29,22 @@ const parseHexChannels = (hex) => {
     parseInt(cleanHex.slice(2, 4), 16),
     parseInt(cleanHex.slice(4, 6), 16),
   ]
+}
+
+/**
+ * 统一规范化十六进制颜色：
+ * 1. 接受 `#rgb` 和 `#rrggbb`
+ * 2. 输出统一的小写 `#rrggbb`
+ * 3. 非法输入回退到调用方指定的默认值
+ */
+export const normalizeHexColor = (hex, fallback = FALLBACK_HEX) => {
+  const normalizedHex = typeof hex === 'string' ? hex.trim().toLowerCase() : ''
+  if (!normalizedHex) return fallback
+
+  const channels = parseHexChannels(normalizedHex)
+  if (!channels) return fallback
+
+  return `#${channels.map(channel => clampByte(channel).toString(16).padStart(2, '0')).join('')}`
 }
 
 const parseRgbChannels = (rgb) => {

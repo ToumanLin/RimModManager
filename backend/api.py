@@ -1179,11 +1179,18 @@ class API:
                 # 如果修改了某些会影响环境的全局路径（如 steamcmd_path）
                 if 'steamcmd_path' in global_data or 'workshop_mods_path' in global_data:
                     env_changed = True
+                rule_paths_changed = 'user_rules_path' in global_data or 'community_rules_path' in global_data
+            else:
+                rule_paths_changed = False
             if env_changed:
                 logger.info("检测到核心路径变动，正在重新装配执行引擎...")
                 # 重新调用 bootstrap，这会生成新的 ProfileContext 并重建所有 Manager
                 self._bootstrap_context(pid)
-            
+            elif rule_paths_changed and self.sorter and self.sorter.rule_mgr:
+                # 规则文件路径切换后必须立即重载，否则本次会话仍会持有旧文件内容。
+                logger.info("检测到规则文件路径变动，正在重载规则缓存...")
+                self.sorter.rule_mgr.load_all()
+             
             return ApiResponse.success({
                 "settings": asdict(settings.config),
                 "active_context": self.active_context # 这里的 serialize_data 会自动调用 to_dict
