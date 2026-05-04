@@ -258,7 +258,7 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useModStore } from '../stores/modStore'
 import { useDebounceFn } from '@vueuse/core'
-import { getTailwindColorHex, hexToRgba } from '../utils/colorDeal'
+import { getTailwindColorHex, hexToRgba } from '../utils/color'
 import { useOrderStore } from '../stores/orderStore'
 import { useAppStore } from '../stores/appStore'
 import { Download, Flag, Link, X } from 'lucide-vue-next'

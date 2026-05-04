@@ -78,7 +78,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useAppStore } from '../stores/appStore'
-import { shakeComponent } from '../utils/uiHelper'
+import { shakeComponent } from '../utils/domEffects'
 import CommonSwitch from './common/input/CommonSwitch.vue'
 import { Bug, CircleFadingPlus, Dna, Zap } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'

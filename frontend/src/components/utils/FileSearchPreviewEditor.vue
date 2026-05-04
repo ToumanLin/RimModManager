@@ -27,8 +27,8 @@ import { xml } from '@codemirror/lang-xml'
 import { csharp } from '@replit/codemirror-lang-csharp'
 import { EditorSelection, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
 import { Decoration, EditorView } from '@codemirror/view'
-import { getTailwindColorRgba } from '../../utils/colorDeal'
-import { buildSearchRegExp } from '../../utils/searchText'
+import { getTailwindColorRgba } from '../../utils/color'
+import { buildSearchRegExp } from '../../utils/text'
 
 const props = defineProps({
   filePath: {

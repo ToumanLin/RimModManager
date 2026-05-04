@@ -206,7 +206,7 @@
 import {  ref, computed, onMounted, onUnmounted, nextTick, onActivated, onDeactivated, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import { useAppStore } from '../../stores/appStore'
-import { formatFileSize } from '../../utils/uiHelper'
+import { formatFileSize } from '../../utils/format'
 import { Copy } from 'lucide-vue-next'
 
 const props = defineProps({

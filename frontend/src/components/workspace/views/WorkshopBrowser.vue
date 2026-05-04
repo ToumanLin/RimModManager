@@ -284,7 +284,7 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css' // 确保引入 CSS
 import { Search, Globe, X, Cpu, Calendar, CloudDownload, Download, Link, Flag, FlagOff, Network, User, Image, Layers, UserRound, Fingerprint } from 'lucide-vue-next'
 import { useAppStore } from '../../../stores/appStore'
 import { useToast } from 'vue-toastification'
-import { parseUnityRichText } from '../../../utils/unityTextParser'
+import { parseUnityRichText } from '../../../utils/text'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import MiniModCard from '../components/MiniModCard.vue'
 

@@ -129,7 +129,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
-import { parseUnityRichText } from '../../utils/unityTextParser'
+import { parseUnityRichText } from '../../utils/text'
 import { useContextMenuStore } from '../../stores/contextMenuStore'
 import { useAppStore } from '../../stores/appStore'
 

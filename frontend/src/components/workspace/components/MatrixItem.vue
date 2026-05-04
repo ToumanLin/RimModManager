@@ -131,7 +131,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { Folder, CloudDownload, Disc } from 'lucide-vue-next'
-import { formatFileSize } from '../../../utils/uiHelper'
+import { formatFileSize } from '../../../utils/format'
 import { useAppStore } from '../../../stores/appStore'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import { SOURCE_TYPE_MAP } from '../../../utils/constants'

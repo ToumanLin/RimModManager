@@ -126,7 +126,7 @@ import { useModStore } from '../stores/modStore'
 import { useAppStore } from '../stores/appStore'
 import { useProfileStore } from '../stores/profileStore'
 import { useTaskStore } from '../stores/taskStore'
-import { formatDate } from '../utils/uiHelper'
+import { formatDate } from '../utils/format'
 
 const modStore = useModStore()
 const appStore = useAppStore()

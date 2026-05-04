@@ -195,7 +195,7 @@ import CommonPathInput from './common/input/CommonPathInput.vue'
 import CommonSwitch from './common/input/CommonSwitch.vue'
 import CommonTagInput from './common/input/CommonTagInput.vue'
 import { RUN_COMMAND_TAGS } from '../utils/constants'
-import { formatDate } from '../utils/uiHelper'
+import { formatDate } from '../utils/format'
 
 const toast = createToastInterface()
 const profileStore = useProfileStore()

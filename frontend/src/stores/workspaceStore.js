@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { useAppStore } from './appStore'
-import { checkResult } from '../utils/tools'
+import { checkResult } from '../utils/feedback'
 import { createToastInterface } from 'vue-toastification'
 import { useConfirmStore } from './confirmStore'
 import { SOURCE_TYPE_MAP } from '../utils/constants'

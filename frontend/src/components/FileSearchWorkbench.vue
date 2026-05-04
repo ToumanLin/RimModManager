@@ -275,7 +275,7 @@ import FileSearchPreviewEditor from './utils/FileSearchPreviewEditor.vue'
 import { FILE_SEARCH_EXCLUDE_OPTIONS, FILE_SEARCH_SCOPE_OPTIONS, useFileSearchStore, } from '../stores/fileSearchStore'
 import { useContextMenuStore } from '../stores/contextMenuStore'
 import { useAppStore } from '../stores/appStore'
-import { buildSearchRegExp, escapeHtml } from '../utils/searchText'
+import { buildSearchRegExp, escapeHtml } from '../utils/text'
 
 const appStore = useAppStore()
 const fileSearchStore = useFileSearchStore()

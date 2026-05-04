@@ -559,9 +559,9 @@ import { MOD_SIGN_COLOR_MAP, MOD_TYPE_MAP, SOURCE_TYPE_MAP, MOD_TYPE_ICON_MAP } 
 import { useModStore } from '../stores/modStore'
 import { useAppStore } from '../stores/appStore'
 import { useGroupStore } from '../stores/groupStore'
-import { parseUnityRichText } from '../utils/unityTextParser'
-import { hexToRgba, hexToRgb } from '../utils/colorDeal'
-import { formatFileSize } from '../utils/uiHelper'
+import { parseUnityRichText } from '../utils/text'
+import { hexToRgba, hexToRgb } from '../utils/color'
+import { formatFileSize } from '../utils/format'
 import ImageCloud from './utils/ImageCloud.vue';
 import LampEffect from './utils/LampEffect.vue';
 import LuxBreatheIcon from './utils/LuxBreatheIcon.vue'

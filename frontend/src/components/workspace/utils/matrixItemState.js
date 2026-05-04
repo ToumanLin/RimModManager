@@ -1,9 +1,4 @@
-const normalizeWorkshopId = (value) => {
-  const workshopId = String(value || '').trim()
-  return workshopId && workshopId !== 'undefined' && workshopId !== 'null' && workshopId !== 'None'
-    ? workshopId
-    : ''
-}
+import { normalizeWorkshopId } from '../../../utils/modIdentity'
 
 export const MATRIX_FILTER_STATE_OPTIONS = [
   { label: '显示所有', value: 'default' },

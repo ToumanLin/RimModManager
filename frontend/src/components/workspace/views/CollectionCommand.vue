@@ -177,8 +177,8 @@ import { useModStore } from '../../../stores/modStore'
 import { useConfirmStore } from '../../../stores/confirmStore'
 import { normalizePackageId } from '../../../utils/modIdentity'
 import { isOfficialPackageId } from '../../../utils/packageScope'
-import { formatDate } from '../../../utils/uiHelper'
-import { cleanRichText } from '../../../utils/unityTextParser'
+import { formatDate } from '../../../utils/format'
+import { cleanRichText } from '../../../utils/text'
 
 const toast = useToast()
 const wsStore = useWorkspaceStore()

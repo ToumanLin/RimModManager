@@ -104,7 +104,7 @@ import { useModStore } from '../../../stores/modStore'
 import { useProfileStore } from '../../../stores/profileStore'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import { IconSteam, SOURCE_TYPE_MAP } from '../../../utils/constants'
-import { formatFileSize } from '../../../utils/uiHelper'
+import { formatFileSize } from '../../../utils/format'
 import { getMatrixItemState, getMatrixReplacementTargets, matchesMatrixFilter, MATRIX_FILTER_STATE_OPTIONS } from '../utils/matrixItemState'
 import CommonSwitch from '../../common/input/CommonSwitch.vue'
 

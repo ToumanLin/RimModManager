@@ -9,13 +9,13 @@ import { useOrderStore } from './orderStore'
 import { useRuleStore } from './ruleStore'
 import { useConfirmStore } from './confirmStore'
 import { useProfileStore } from './profileStore'
-import { cleanRichText } from '../utils/unityTextParser'
+import { cleanRichText } from '../utils/text'
 import { useTextureStore } from './textureStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { useTaskStore } from './taskStore'
 import { isBrowserRuntime, openManagedSubBrowserUrl } from '../runtime/runtimeBridge'
 import { normalizeInstallSource, normalizeInstallSources } from '../utils/modIdentity'
-import { checkResult as sharedCheckResult } from '../utils/tools'
+import { checkResult as sharedCheckResult } from '../utils/feedback'
 
 export const useAppStore = defineStore('app', () => {
   const toast = createToastInterface()
@@ -359,7 +359,7 @@ export const useAppStore = defineStore('app', () => {
       else window.addEventListener('pywebviewready', () => resolve(), { once: true })
     })
   }
-  // 统一复用 utils/tools.js 中的通用实现，避免 appStore 再维护一份重复逻辑。
+  // 统一复用 utils/feedback.js 中的通用实现，避免 appStore 再维护一份重复逻辑。
   const checkResult = (res, workname, showSuccess = false) => (
     sharedCheckResult(res, workname, showSuccess, { debugMode: settings.value.debug_mode })
   )

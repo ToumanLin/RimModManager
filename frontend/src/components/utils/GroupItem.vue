@@ -135,6 +135,7 @@ import { useModStore } from '../../stores/modStore';
 import { useGroupStore } from '../../stores/groupStore';
 import { useAppStore } from '../../stores/appStore';
 import { createToastInterface } from 'vue-toastification';
+import { hexToRgbComponents } from '../../utils/color'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -381,24 +382,8 @@ const handleInputBlur = () => {
   isEditingName.value = false
 }
 
-// 颜色格式转换
-const hexToRgb = (hex) => {
-  if (!hex || typeof hex !== 'string') return `0, 0, 0`; // 返回纯组件字符串
-  let cleanHex = hex.replace('#', '');
-  if (cleanHex.length === 3) {
-    cleanHex = cleanHex.split('').map(char => char + char).join('');
-  }
-  // 确保是六位
-  if (cleanHex.length !== 6) {
-    console.error(`Invalid hex color: ${hex}`);
-    return `0, 0, 0`;
-  }
-  // 提取 R, G, B 分量，并从十六进制转换为十进制
-  const r = parseInt(cleanHex.substring(0, 2), 16);
-  const g = parseInt(cleanHex.substring(2, 4), 16);
-  const b = parseInt(cleanHex.substring(4, 6), 16);
-  return `${r}, ${g}, ${b}`;
-};
+// 颜色格式转换统一复用公共 util，避免分组卡片和其它组件各维护一份。
+const hexToRgb = hexToRgbComponents
 
 </script>
 

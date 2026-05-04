@@ -671,7 +671,7 @@
 import { ref, watch, onMounted, nextTick, h, computed } from 'vue'
 import { FolderTree, AppWindow, Globe, Cpu, Terminal, Search, Component, Settings, Drama, Download, LoaderCircle, X } from 'lucide-vue-next'
 import { createToastInterface } from 'vue-toastification'
-import { flashComponent, shakeComponent } from '../utils/uiHelper'
+import { flashComponent, shakeComponent } from '../utils/domEffects'
 import { VueDraggable } from 'vue-draggable-plus'
 import { color } from 'motion-v'
 
