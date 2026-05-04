@@ -640,14 +640,13 @@ class FileManager:
 
         if use_steam_launch:
             resolved_steam_exe = os.path.abspath(str(steam_exe_path or '').strip()) if str(steam_exe_path or '').strip() else ''
-            if not resolved_steam_exe or not os.path.isfile(resolved_steam_exe):
-                raise FileNotFoundError("未找到 Steam.exe，无法为该环境创建 Steam 启动快捷方式")
-            target_path = resolved_steam_exe
-            working_directory = str(Path(resolved_steam_exe).parent)
-            # Steam 启动参数必须保持与当前环境运行逻辑一致。
-            arguments = format_shortcut_arguments(["-applaunch", str(steam_app_id), *launch_args])
-            # 使用游戏图标更直观，点击目标仍然是 Steam.exe。
-            icon_location = os.path.abspath(game_exe)
+            if resolved_steam_exe and os.path.isfile(resolved_steam_exe):
+                target_path = resolved_steam_exe
+                working_directory = str(Path(resolved_steam_exe).parent)
+                # Steam 启动参数必须保持与当前环境运行逻辑一致。
+                arguments = format_shortcut_arguments(["-applaunch", str(steam_app_id), *launch_args])
+                # 使用游戏图标更直观，点击目标仍然是 Steam.exe。
+                icon_location = os.path.abspath(game_exe)
 
         return {
             "shortcut_path": shortcut_path,
@@ -1350,20 +1349,36 @@ class PathChecker:
     @classmethod
     def check_user_data_path(cls, path_str:str) -> Dict:
         if not path_str: return cls._format_res(False, msg="用户数据路径不能为空")
+        normalized_path = os.path.normpath(os.path.abspath(path_str))
         # 哪怕目录不存在，只要父目录存在且有写入权限，我们就认为合法（因为我们可以创建它）
-        parent_dir = os.path.dirname(path_str)
+        parent_dir = os.path.dirname(normalized_path)
         if parent_dir and not os.path.exists(parent_dir):
             return cls._format_res(False, msg=f"父目录不存在: {parent_dir}")
         if parent_dir and not os.access(parent_dir, os.W_OK):
             return cls._format_res(False, msg="目录无写入权限，请以管理员身份运行或更换路径")
-        # 检查是否有Config目录和Saves目录，不存在则警告
-        config_dir = os.path.join(path_str, "Config")
-        saves_dir = os.path.join(path_str, "Saves")
+
+        config_dir = os.path.join(normalized_path, "Config")
+        mods_config_file = os.path.join(config_dir, "ModsConfig.xml")
+
+        if not os.path.exists(normalized_path):
+            return cls._format_res(
+                True,
+                msg=f"用户数据目录 {normalized_path} 当前不存在，但父目录可写；保存或激活环境时会自动创建目录结构。",
+                msg_type="warn",
+            )
         if not os.path.exists(config_dir):
-            return cls._format_res(True, msg=f"用户数据路径 {path_str} 下无 Config 目录（自定义环境可忽视此警告，程序会自动生成）", msg_type="warn")
-        if not os.path.exists(saves_dir):
-            return cls._format_res(True, msg=f"用户数据路径 {path_str} 下无 Saves 目录（自定义环境可忽视此警告，程序会自动生成）", msg_type="warn")
-        
+            return cls._format_res(
+                True,
+                msg=f"用户数据路径 {normalized_path} 下无 Config 目录；程序会在保存或激活环境时自动生成。",
+                msg_type="warn",
+            )
+        if not os.path.exists(mods_config_file):
+            return cls._format_res(
+                True,
+                msg=f"用户数据路径 {normalized_path} 下未检测到 Config/ModsConfig.xml；路径仍可使用，游戏首次写入配置后会自动生成。",
+                msg_type="warn",
+            )
+
         return cls._format_res(True, msg="校验通过")
     
     @classmethod

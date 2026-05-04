@@ -26,7 +26,7 @@ export const useProfileStore = defineStore('profile', () => {
     user_data_path: '',
     game_version: '',
     prefer_steam_launch: true,
-    use_workshop_mods: false,
+    use_workshop_mods: true,
     use_self_mods: false,
     run_commands: [],
 

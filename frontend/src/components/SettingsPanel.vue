@@ -849,6 +849,9 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
           ...JSON.parse(JSON.stringify(profileStore.activeContext))
         }
       }
+      if (profileStore.activeContext && profileStore.activeContext.is_healthy === false) {
+        await autoDetect()
+      }
       // 检测所有路径是否有效
       await checkPaths()
       await loadDataBundleSchema()

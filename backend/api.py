@@ -1962,7 +1962,6 @@ class API:
         try:
             if not profile_id: profile_id = self.profile_mgr.current_profile.id
             if not profile_id: return ApiResponse.error("未指定 Profile ID")
-            msg=''
             profile = self.profile_mgr.get_profile(profile_id)
             extra_args = self.profile_mgr.get_launch_args_only(profile_id)
             prefer_steam_launch = bool(getattr(profile, 'prefer_steam_launch', True))
@@ -1985,54 +1984,29 @@ class API:
                 profile.is_steam,
             )
 
-            if prefer_steam_launch:
-                if not steam_path_valid:
-                    return self._build_direct_launch_confirmation(
-                        profile_id=profile_id,
-                        steam_running=steam_running,
-                        reason="steam_path_invalid",
-                        message="未检测到有效的 Steam 程序路径。当前环境无法按 Steam 方式启动，可改为游戏本体直接启动。",
-                        requires_fallback_confirm=True,
-                    )
-                if profile_id == 'default':
-                    self.steam_mgr.launch_via_steam_cmd(extra_args=extra_args)
-                    msg='通过 Steam 启动游戏'
-                else:
-                    ok, steam_status, ready_message = self._ensure_steam_ready(timeout_seconds=45)
-                    if not ok:
-                        return self._build_direct_launch_confirmation(
-                            profile_id=profile_id,
-                            steam_running=bool((steam_status or {}).get("running")),
-                            reason="steam_not_ready",
-                            message=f"{ready_message} 当前环境无法按 Steam 方式启动，可改为游戏本体直接启动。",
-                            requires_fallback_confirm=True,
-                            steam_status=steam_status,
-                        )
-                    self._launch_profile_with_runtime_links(
-                        profile_id,
-                        profile.game_install_path,
-                        extra_args,
-                        include_workshop=False,
-                    )
-                    msg='通过 Steam 挂载方式启动游戏'
-            else:
-                if steam_running:
-                    return self._build_direct_launch_confirmation(
-                        profile_id=profile_id,
-                        steam_running=True,
-                        reason="steam_running_conflict",
-                        message="检测到 Steam 已在运行，当前环境若继续以游戏本体直启，Steam 可能会接管本次启动并同时加载工坊内容。",
-                        steam_status=steam_status,
-                    )
-                self._launch_profile_with_runtime_links(
-                    profile_id,
-                    profile.game_install_path,
-                    extra_args,
-                    include_workshop=True,
+            if prefer_steam_launch and steam_path_valid:
+                # Steam 启动前仍需先收敛本地 Mods 目录，保留 Self/Tool 链接并移除额外的 Workshop 链接。
+                self._sync_runtime_links_for_profile(profile_id, include_workshop=False)
+                self.steam_mgr.launch_via_steam_cmd(extra_args=extra_args)
+                return ApiResponse.success(message="通过 Steam 启动游戏成功，祝你游玩愉快！")
+
+            if steam_running:
+                return self._build_direct_launch_confirmation(
+                    profile_id=profile_id,
+                    steam_running=True,
+                    reason="steam_running_conflict",
+                    message="检测到 Steam 已在运行，当前环境若继续以游戏本体直启，Steam 可能会接管本次启动并同时加载工坊内容。",
+                    steam_status=steam_status,
                 )
-                return ApiResponse.success(message="直接启动游戏成功，祝你游玩愉快！")
-            
-            return ApiResponse.success(message=f"{msg}成功，祝你游玩愉快！")
+            self._launch_profile_with_runtime_links(
+                profile_id,
+                profile.game_install_path,
+                extra_args,
+                include_workshop=True,
+            )
+            if prefer_steam_launch and not steam_path_valid:
+                return ApiResponse.warning(message="未检测到有效的 Steam 程序路径，已自动切换为游戏本体直接启动。")
+            return ApiResponse.success(message="直接启动游戏成功，祝你游玩愉快！")
         except Exception as e:
             logger.error(f"Launch Game Error: {e}", exc_info=True)
             return ApiResponse.error(f"启动游戏时出错: {e}")
@@ -2280,9 +2254,8 @@ class API:
                 settings.config.steam_path
                 and PathChecker.check_steam_path(settings.config.steam_path).get('pass', False)
             )
-            if prefer_steam_launch and not steam_path_valid:
-                return ApiResponse.warning("当前环境设置为优先使用 Steam 启动，但未检测到有效的 Steam 程序路径，无法创建 Steam 快捷方式。")
-            if prefer_steam_launch:
+            effective_steam_shortcut = bool(prefer_steam_launch and steam_path_valid)
+            if effective_steam_shortcut:
                 extra_args = self.profile_mgr.get_launch_args_only(profile_id)
                 if same_install_as_default:
                     shortcut = self.file_mgr.create_profile_desktop_shortcut(
@@ -2335,7 +2308,11 @@ class API:
                     "steam_path_valid": steam_path_valid,
                     "shortcut_kind": shortcut.get("shortcut_kind", "lnk"),
                 },
-                message=f"已在桌面创建环境快捷方式（{launch_mode}）",
+                message=(
+                    f"当前未检测到有效 Steam 路径，已回退为环境快捷方式（{launch_mode}）"
+                    if prefer_steam_launch and not steam_path_valid
+                    else f"已在桌面创建环境快捷方式（{launch_mode}）"
+                ),
             )
         except Exception as e:
             logger.error(f"Create Profile Shortcut Error: {e}", exc_info=True)

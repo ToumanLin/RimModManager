@@ -137,7 +137,7 @@ const vListRef = ref(null)
 const lastPlayedTime = computed(() => profileStore.currentProfile?.last_played_time || 0)
 const use_workshop_mods = computed({
   get() {
-    return profileStore.currentProfile?.use_workshop_mods || false
+    return profileStore.currentProfile?.use_workshop_mods || true
   },
   set(val) {
     profileStore.updateProfile(profileStore.currentProfileId, { use_workshop_mods: val })

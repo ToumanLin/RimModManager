@@ -7,8 +7,8 @@ class GameManager:
     """
     游戏管理：路径检测、启动游戏
     """
-
-    def auto_detect_paths(self):
+    @classmethod
+    def auto_detect_paths(cls):
         """
         尝试自动检测 RimWorld 的关键路径。
         返回字典: {
@@ -28,17 +28,17 @@ class GameManager:
         }
         
         # 1. 检测 Config 路径 (各平台固定)
-        paths['user_data_path'] = self._detect_userdata_path()
+        paths['user_data_path'] = cls._detect_userdata_path()
         paths['game_config_path'] = os.path.join(paths['user_data_path'], 'Config') if paths['user_data_path'] else ''
 
         # 2. 检测 安装路径 (主要针对 Windows Steam)
-        install_loc = self._detect_steam_install_path()
+        install_loc = cls._detect_steam_install_path()
         
         # 3. 检测 安装路径
         if install_loc and os.path.exists(install_loc):
             paths['game_install_path'] = ''
             # 检测 可执行文件是否存在(多平台)
-            if self.detect_executable(install_loc):
+            if cls.detect_executable(install_loc):
                 paths['game_install_path'] = install_loc
             
             # 推导 Local Mods
@@ -54,7 +54,7 @@ class GameManager:
                 paths['workshop_mods_path'] = workshop_base
 
         # 如果所有路径都为空，返回 None
-        if not any(paths.values()): return None
+        if not any(paths.values()): return {}
         
         return paths
     
@@ -80,13 +80,14 @@ class GameManager:
             if os.path.isfile(p):
                 return p
         return None
-
-    def launch_game(self, game_install_path, custom_args: list = []):
+    
+    @classmethod
+    def launch_game(cls, game_install_path, custom_args: list = []):
         """
         启动 RimWorld。
         :param custom_args: 启动参数列表，例如 ['-savedatafolder=D:/Profile1']
         """
-        target_exe = self.detect_executable(game_install_path)
+        target_exe = cls.detect_executable(game_install_path)
         if not target_exe:
             raise Exception(f"在安装目录下找不到可执行文件")
         system_name = platform.system()
@@ -130,8 +131,8 @@ class GameManager:
         return ""
 
     # --- 内部辅助方法 ---
-
-    def _detect_userdata_path(self):
+    @staticmethod
+    def _detect_userdata_path():
         """检测 Config 文件夹位置"""
         #  (%USERPROFILE%\Appdata\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios)
         if platform.system() == 'Windows':
@@ -154,11 +155,11 @@ class GameManager:
             if os.path.exists(path):
                 return path
         return ''
-
-    def _detect_steam_install_path(self):
+    
+    @staticmethod
+    def _detect_steam_install_path():
         """通过 Windows 注册表查找 Steam 安装路径"""
-        if platform.system() != 'Windows':
-            return None
+        if platform.system() != 'Windows': return None
             
         # 常见注册表位置
         keys = [
