@@ -243,6 +243,7 @@
 ├── ·[tests]
 │   ├──  __init__.py
 │   ├──  analyze_language_packs.py
+│   ├──  test_ai_service_helpers.py
 │   ├──  test_download_manager.py
 │   ├──  test_file_search.py
 │   ├──  test_github_manager.py

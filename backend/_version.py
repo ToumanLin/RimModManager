@@ -1,11 +1,38 @@
 # backend/_version.py
-__version__ = "0.19.23"  # 主版本.次版本.补丁
+__version__ = "0.20.2"  # 主版本.次版本.补丁
 __db_version__ = "5"
 __build__ = "dev"      # dev, alpha, beta, stable, release
 
 # 结构化更新日志：按版本从新到旧排列
 # type 支持: "feature" (新增), "fix" (修复), "optimize" (优化), "breaking" (重大变更)
 APP_CHANGELOG = [
+    {
+        "version": "0.20.2",
+        "date": "2026-05-05",
+        "changes": [
+            { "type": "optimize", "text": "优化列表项删除后的状态同步机制，确保界面交互实时刷新。" },
+            { "type": "optimize", "text": "统一底层工具函数库，提升对象深拷贝性能与系统运行兼容性。" },
+            { "type": "fix", "text": "完善数据初始化流程，增强维护模式下的错误拦截与自动重试逻辑。" },
+            { "type": "feature", "text": "默认启用创意工坊模组支持，并允许自定义用户数据存储路径。" },
+            { "type": "optimize", "text": "优化用户数据目录的自动补齐与检测逻辑，提升数据管理稳定性。" },
+            { "type": "feature", "text": "规则文件支持路径变动自动重载，并引入原子化写入机制防止数据损坏。" },
+            { "type": "feature", "text": "模组详情页新增自定义颜色选择器，并扩展了分组标题的识别格式。" },
+            { "type": "optimize", "text": "重构 UI 交互细节与工具函数体系，提升界面响应速度与文本处理效率。" }
+        ]
+    },
+    {
+        "version": "0.20.0",
+        "date": "2026-05-03",
+        "changes": [
+            { "type": "feature", "text": "全新上线文件内容搜索工作台，支持正则表达式、流式结果展示及多语言代码高亮。" },
+            { "type": "feature", "text": "集成高性能搜索引擎，支持自动环境探测、静默安装及异步任务管理。" },
+            { "type": "feature", "text": "增强文本读取能力，支持多编码自动识别与系统默认程序关联打开。" },
+            { "type": "optimize", "text": "调整导航布局，新增搜索入口，并将游戏日志设为日志查看器的默认展示项。" },
+            { "type": "breaking", "text": "调整默认启动策略，全局优先使用 Steam 模式启动。" },
+            { "type": "feature", "text": "增强启动兼容性，当 Steam 路径无效时支持自动回退至直接启动模式。" },
+            { "type": "feature", "text": "模组管理新增别名支持，便于清晰区分原始标识符与自定义显示名称。" }
+        ]
+    },
     {
         "version": "0.19.23",
         "date": "2026-04-30",
