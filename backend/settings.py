@@ -4,10 +4,11 @@ import json
 import os
 import shutil
 import threading
+from datetime import datetime
 from dataclasses import dataclass, asdict, field, fields, is_dataclass
 from pathlib import Path
 import sys
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from backend.utils.constants import normalize_language_code
 
 
@@ -311,15 +312,33 @@ class SettingsManager:
             raise ValueError("Config root is not an object")
         return data
 
-    def _is_raw_config_sane(self, data: Dict[str, Any]) -> bool:
-        expected_keys = {f.name for f in fields(AppConfig)}
-        present_keys = expected_keys.intersection(data.keys())
-        if len(present_keys) < 8:
-            return False
-        for nested_key in ("ui", "network", "ai", "texture_opt"):
-            if nested_key in data and not isinstance(data.get(nested_key), dict):
-                return False
-        return True
+    def _extract_compatible_config_values(self, raw_dict: Dict[str, Any], target_obj) -> Dict[str, Any]:
+        """
+        从原始配置中提取“当前版本仍然可识别”的字段。
+        设计原因：
+        1. 更新后字段结构可能变化，不能因为少数字段异常就整份判死刑。
+        2. 只要还能识别出一部分字段，就优先保留用户数据，其余部分交给默认值补齐。
+        """
+        compatible: Dict[str, Any] = {}
+        target_fields = {f.name: f for f in fields(target_obj)}
+
+        for key, value in raw_dict.items():
+            if key not in target_fields:
+                continue
+
+            current_attr = getattr(target_obj, key)
+            if is_dataclass(current_attr):
+                # 嵌套配置块必须仍是对象；若被写坏成字符串/数组，则忽略该块并保留默认值。
+                if not isinstance(value, dict):
+                    continue
+                nested_compatible = self._extract_compatible_config_values(value, current_attr)
+                if nested_compatible:
+                    compatible[key] = nested_compatible
+                continue
+
+            compatible[key] = value
+
+        return compatible
 
     def _is_config_valid(self) -> bool:
         return all([
@@ -329,61 +348,112 @@ class SettingsManager:
             str(self.config.current_profile_id or "").strip(),
         ])
 
-    def _restore_update_backup(self) -> bool:
-        if not CONFIG_UPDATE_BACKUP_PATH.exists():
-            return False
-        try:
-            shutil.copy2(CONFIG_UPDATE_BACKUP_PATH, CONFIG_PATH)
-            return True
-        except Exception as e:
-            print(f"Restore config backup error: {e}")
-            return False
+    def _merge_config_dicts(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        递归合并两个配置片段。
+        base 一般来自备份，override 一般来自当前配置，因此 override 优先级更高。
+        """
+        merged = dict(base)
+        for key, value in override.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key] = self._merge_config_dicts(merged[key], value)
+                continue
+            merged[key] = value
+        return merged
 
-    def _cleanup_update_backup(self):
-        if CONFIG_UPDATE_BACKUP_PATH.exists():
-            try:
-                CONFIG_UPDATE_BACKUP_PATH.unlink()
-            except Exception as e:
-                print(f"Cleanup config backup error: {e}")
-
-    def _load_config_from_file(self, path: Path) -> bool:
-        data = self._load_raw_config(path)
-        if not self._is_raw_config_sane(data):
-            raise ValueError("Config content failed sanity check")
-
-        self.config = AppConfig()
+    def _parse_config_fragment(self, data: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[bool]]:
+        """
+        从原始 JSON 对象中提取当前版本仍可识别的配置片段。
+        这里故意采用“宽进严出”策略：
+        1. 只要还能识别出一部分字段，就把它们留下；
+        2. 识别不到的字段直接忽略，不因为局部损坏把整份配置判死刑。
+        """
+        compatible = self._extract_compatible_config_values(data, AppConfig())
+        legacy_prefer_steam_launch = None
         if 'prefer_steam_launch' in data:
-            self._legacy_prefer_steam_launch = bool(data.get('prefer_steam_launch'))
+            legacy_prefer_steam_launch = bool(data.get('prefer_steam_launch'))
 
+        if compatible or legacy_prefer_steam_launch is not None:
+            return compatible, legacy_prefer_steam_launch
+        return None, None
+
+    def _read_config_fragment(self, path: Path, source_name: str) -> Tuple[Optional[Dict[str, Any]], Optional[bool]]:
+        """
+        尝试宽松读取一个配置源。
+        返回值：
+        1. 兼容字段片段，用于后续恢复；
+        2. 旧版 prefer_steam_launch 兼容值（若存在）。
+        """
+        if not path.exists():
+            return None, None
+
+        try:
+            data = self._load_raw_config(path)
+        except Exception as e:
+            print(f"Config read error [{source_name}]: {e}")
+            return None, None
+
+        compatible, legacy_prefer_steam_launch = self._parse_config_fragment(data)
+        if compatible or legacy_prefer_steam_launch is not None:
+            return compatible, legacy_prefer_steam_launch
+
+        print(f"Config parse warning [{source_name}]: no compatible fields found")
+        return None, None
+
+    def _apply_config_fragment(self, data: Dict[str, Any], legacy_prefer_steam_launch: Optional[bool] = None):
+        """
+        将“已筛选过的兼容字段”应用到默认配置骨架上。
+        实现原理：
+        - 先构建完整默认值；
+        - 再把仍可识别的用户字段覆盖进去；
+        - 最后统一做归一化与衍生路径同步。
+        """
+        self.config = AppConfig()
+        if legacy_prefer_steam_launch is not None:
+            self._legacy_prefer_steam_launch = legacy_prefer_steam_launch
         self._recursive_update(self.config, data)
         self._normalize_config()
         self._sync_derived_paths()
         if not self._is_config_valid():
             raise ValueError("Config validation failed after normalization")
-        return True
 
     def _load_to_config(self):
         """
         将磁盘配置加载到现有的 self.config 中
         """
-        if not CONFIG_PATH.exists() and CONFIG_UPDATE_BACKUP_PATH.exists():
-            self._restore_update_backup()
-        if not CONFIG_PATH.exists():
+        current_fragment, current_legacy_prefer = self._read_config_fragment(CONFIG_PATH, "current")
+        backup_fragment, backup_legacy_prefer = self._read_config_fragment(CONFIG_UPDATE_BACKUP_PATH, "update-backup")
+
+        if current_fragment is None and current_legacy_prefer is None and \
+           backup_fragment is None and backup_legacy_prefer is None:
             self._normalize_config()
             self._sync_derived_paths()
             return
+
         try:
-            self._load_config_from_file(CONFIG_PATH)
-            self._cleanup_update_backup()
+            effective_fragment = current_fragment or {}
+            effective_legacy_prefer = current_legacy_prefer
+            recovered_from_backup = False
+
+            if backup_fragment is not None or backup_legacy_prefer is not None:
+                # 只要更新备份还在，就把它当作“缺失字段补丁源”参与合并：
+                # 1. 当前配置完全损坏/丢失时，可直接由备份兜底；
+                # 2. 当前配置只能解析出一部分字段时，可从备份补齐剩余可识别字段；
+                # 3. 当前配置中已经成功读取出的值始终优先，避免旧备份反向覆盖用户最新设置。
+                merged_fragment = self._merge_config_dicts(backup_fragment or {}, effective_fragment)
+                recovered_from_backup = merged_fragment != effective_fragment
+                effective_fragment = merged_fragment
+                if effective_legacy_prefer is None:
+                    effective_legacy_prefer = backup_legacy_prefer
+                    recovered_from_backup = recovered_from_backup or backup_legacy_prefer is not None
+
+            self._apply_config_fragment(effective_fragment, effective_legacy_prefer)
+
+            # 只有备份确实补进了缺失字段时才回写，避免“备份一直存在时每次启动都重写配置”。
+            if recovered_from_backup:
+                self.save()
         except Exception as e:
             print(f"Config load error: {e}")
-            if self._restore_update_backup():
-                try:
-                    self._load_config_from_file(CONFIG_PATH)
-                    self._cleanup_update_backup()
-                    return
-                except Exception as restore_error:
-                    print(f"Config restore error: {restore_error}")
             self.config = AppConfig()
             self._normalize_config()
             self._sync_derived_paths()
@@ -545,7 +615,12 @@ def backup_config_for_update() -> bool:
     if not CONFIG_PATH.exists():
         return False
     try:
+        config_backup_dir = BACKUP_DIR / "config"
+        config_backup_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(CONFIG_PATH, CONFIG_UPDATE_BACKUP_PATH)
+        # 除了“更新中途可直接回滚”的固定备份，再保留一份时间戳快照，避免后续排查时只剩最后一次状态。
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        shutil.copy2(CONFIG_PATH, config_backup_dir / f"config-update-{timestamp}.json")
         return True
     except Exception as e:
         print(f"Backup config for update error: {e}")
