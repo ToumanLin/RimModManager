@@ -234,6 +234,8 @@ class API:
         self._github_subs_refresh_lock = threading.Lock()
         self._github_subs_refresh_running = False
         self._github_subs_refresh_started_at = 0
+        # 桌面模式首屏阶段只允许触发一次后台预热，避免 loaded / ready 多次回调时重复导入大缓存文件。
+        self._startup_warmup_started = False
         # 2. 实例化各个管理器
         self.workshop_db_mgr = WorkshopDBManager()
         self.game_mgr = GameManager()
@@ -617,12 +619,54 @@ class API:
             settings.set("load_order_export_last_path", normalized_dir)
 
     def _on_app_loaded(self):
-        """主窗口加载完毕回调"""
+        """
+        主窗口加载完毕回调。
+
+        设计原则：
+        1. `loaded` 说明 WebView 页面已经完成首轮加载，可以开始做“不会影响 splash 关闭”的后台预热；
+        2. 这里不再承担“必须完成后才能显示窗口”的职责，避免把桌面模式首屏与社区库重建、监视器启动强绑定；
+        3. 所有重活都改为后台线程执行，失败时只记录日志并给前端发送提示，不再阻塞首屏。
+        """
         self._bind_native_drag_drop()
-        # 确保只启动一次
-        if not self.game_monitor.running:
-            logger.info("UI已就绪，启动游戏监视器...")
-            self.game_monitor.start()
+        self._start_startup_warmup()
+
+    def _start_startup_warmup(self):
+        """
+        启动阶段后台预热。
+
+        为什么挂在这里：
+        - `API.__init__` 发生在主窗口创建前，适合做“没有就无法启动”的准备；
+        - 社区工坊库 / 替代库缓存重建属于“有则更好”的能力，不应拖住桌面首屏；
+        - 因此把它后移到窗口完成首轮加载后再后台执行，用户至少能先看到主界面。
+        """
+        if self._startup_warmup_started:
+            return
+
+        self._startup_warmup_started = True
+
+        def background_warmup():
+            startup_messages: list[str] = []
+            try:
+                if not self.workshop_db_mgr.cache_loaded:
+                    logger.info("启动后台预热：开始加载社区工坊缓存与替代规则缓存")
+                    self.workshop_db_mgr.load_all_cache()
+                    if self.sorter and self.sorter.rule_mgr:
+                        # 工坊缓存会影响依赖/替代规则判断，因此缓存热加载完成后要同步重建规则镜像。
+                        self.sorter.rule_mgr.build_workshop_rules()
+                    startup_messages.append("社区规则缓存已在后台完成预热。")
+            except Exception as e:
+                logger.error(f"启动后台预热失败: {e}", exc_info=True)
+                startup_messages.append("社区缓存预热失败，首屏已继续打开；部分依赖/替代提示可能稍后才恢复。")
+            finally:
+                if startup_messages:
+                    self._upgrade_context["messages"].extend(startup_messages)
+                    EventBus.send_toast("\n".join(startup_messages), type="warning" if any("失败" in item for item in startup_messages) else "info")
+
+        threading.Thread(
+            target=background_warmup,
+            name="rmm-startup-warmup",
+            daemon=True,
+        ).start()
 
     def _normalize_native_drop_selector(self, selector: str | None = None) -> str:
         """把前端传入的 id / selector 统一成 pywebview 可直接查询的 CSS 选择器。"""

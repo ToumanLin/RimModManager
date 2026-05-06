@@ -11,14 +11,25 @@ from backend.database.models import SystemInfo
 
 class WorkshopDBManager:
     def __init__(self):
-        # 启动时连接缓存库
+        # 启动时只建立外置缓存库连接，不在构造阶段执行大文件导入。
+        # 原因：
+        # 1. 社区工坊库和替代库可能是数十 MB 的 JSON / GZip 文件；
+        # 2. 在桌面模式里，这段重活发生在主窗口创建之前，会直接拖慢甚至阻塞 splash 关闭；
+        # 3. 浏览器模式能正常启动而桌面模式卡在 PyInstaller 启动画面，正说明首屏前同步重活过多是高风险点。
+        # 因此这里改成“轻初始化 + 后台预热”，把首屏可见性放在第一优先级。
         init_ext_db()
-        self.load_all_cache()
+        self._cache_loaded = False
         
     def load_all_cache(self):
         """加载所有缓存"""
         self.rebuild_workshop_cache()
         self.rebuild_instead_cache()
+        self._cache_loaded = True
+
+    @property
+    def cache_loaded(self) -> bool:
+        """暴露当前缓存是否完成预热，方便启动链路做一次性守护。"""
+        return bool(self._cache_loaded)
         
 
     def rebuild_workshop_cache(self):
