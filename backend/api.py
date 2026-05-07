@@ -825,6 +825,7 @@ class API:
             "runtime_mode": self._runtime_mode,
             "settings": asdict(settings.config), # 转为字典发给前端
             "asset_port": self.file_mgr.get_port(),
+            "remote_image_cache": self.file_mgr.get_remote_cache_stats(),
             "context_healthy": False, 
             "health_report": {},
             "all_mods": [],  # 返回过滤后的列表
@@ -1237,11 +1238,27 @@ class API:
             return ApiResponse.success({
                 "settings": asdict(settings.config),
                 "active_context": self.active_context # 这里的 serialize_data 会自动调用 to_dict
+                ,
+                "remote_image_cache": self.file_mgr.get_remote_cache_stats(),
             }, message="配置保存成功")
             
         except Exception as e:
             logger.error(f"Save all settings failed: {str(e)}", exc_info=True)
             return ApiResponse.error(f"保存所有设置失败：{str(e)}")
+
+    @log_api_call
+    def get_remote_image_cache_stats(self):
+        """获取网络图片缓存统计。"""
+        return ApiResponse.success(self.file_mgr.get_remote_cache_stats())
+
+    @log_api_call
+    def clear_remote_image_cache(self):
+        """清空网络图片缓存。"""
+        cleared_stats = self.file_mgr.clear_remote_cache()
+        return ApiResponse.success({
+            "cleared": cleared_stats,
+            "current": self.file_mgr.get_remote_cache_stats(),
+        }, message="网络图片缓存已清空")
 
     @log_api_call
     def data_bundle_get_schema(self):
@@ -2008,6 +2025,8 @@ class API:
             profile = self.profile_mgr.get_profile(profile_id)
             extra_args = self.profile_mgr.get_launch_args_only(profile_id)
             prefer_steam_launch = bool(getattr(profile, 'prefer_steam_launch', True))
+            if prefer_steam_launch and not settings.config.steam_path:
+                settings.config.steam_path = self.steam_mgr.get_steam_path() or ''
             steam_path_valid = bool(
                 settings.config.steam_path
                 and PathChecker.check_steam_path(settings.config.steam_path).get('pass', False)
@@ -2032,7 +2051,10 @@ class API:
                 self._sync_runtime_links_for_profile(profile_id, include_workshop=False)
                 self.steam_mgr.launch_via_steam_cmd(extra_args=extra_args)
                 return ApiResponse.success(message="通过 Steam 启动游戏成功，祝你游玩愉快！")
-
+            if prefer_steam_launch and not steam_path_valid:
+                if profile.is_steam and profile.id == 'default':
+                    os.startfile(f"steam://run/{RIMWORLD_APP_ID}")
+                    return ApiResponse.warning(message="未找到 Steam.exe，请检查 Steam 安装路径是否正确，已回退到 URL 协议启动，如果仍然失败，可关闭“优先Steam启动”选项。")
             if steam_running:
                 return self._build_direct_launch_confirmation(
                     profile_id=profile_id,
@@ -3915,8 +3937,12 @@ class API:
         workshop_local_data = self.steam_mgr.workshop_merged_data()
         # steamcmd_merged_data 内部解析的是 管理器目录下的 ACF/LOG (SteamCMD专用)
         manager_local_data = self.steam_mgr.steamcmd_merged_data()
-        # 2. 收集所有需要查询的工坊 ID (去重)
-        all_wids = set(workshop_local_data.keys()) | set(manager_local_data.keys())
+        # 2. 只收集当前仍安装在本地的项目，避免把历史日志项也带去做在线查询。
+        all_wids = {
+            str(item.get("workshop_id") or "").strip()
+            for item in list(workshop_local_data.values()) + list(manager_local_data.values())
+            if item.get("is_installed") and str(item.get("workshop_id") or "").strip().isdigit()
+        }
         if not all_wids: return ApiResponse.success({"updates": []})
         # 3. 一次性从缓存/网络获取所有涉及 ID 的云端最新时间
         online_details, ids_to_fetch = SteamWebAPI.fetch_item_details(list(all_wids))
@@ -4163,8 +4189,20 @@ class API:
         }
         
         # 6. 后台触发在线比对，标记可更新状态
-        # 获取所有涉及的 WID
-        all_wids = list({str(wid) for wid in list(ws_map.keys()) + list(mg_map.keys()) if wid})
+        # 这里只预热当前真实安装在本地的项目，避免把历史日志中的 SteamCMD 条目也带去查在线缓存。
+        all_wids = list({
+            str(item.get("workshop_id") or "").strip()
+            for item in list(ws_map.values()) + list(mg_map.values())
+            if item.get("is_installed") and str(item.get("workshop_id") or "").strip().isdigit()
+        })
+        logger.debug(
+            "工作区在线预热：workshop 总数 %s / 已安装 %s，steamcmd 总数 %s / 已安装 %s，实际预热 %s",
+            len(ws_map),
+            sum(1 for item in ws_map.values() if item.get("is_installed")),
+            len(mg_map),
+            sum(1 for item in mg_map.values() if item.get("is_installed")),
+            len(all_wids),
+        )
         if all_wids:
             import threading
             threading.Thread(target=self._bg_check_online_updates, args=(all_wids,), daemon=True).start()
@@ -4198,15 +4236,28 @@ class API:
         """
         第二阶段：异步网络请求，通过 EventBus 分批推送最新状态
         """
+        normalized_ids = []
+        seen_ids = set()
+        for workshop_id in workshop_ids or []:
+            normalized_id = str(workshop_id or "").strip()
+            if not normalized_id or not normalized_id.isdigit() or normalized_id in seen_ids:
+                continue
+            seen_ids.add(normalized_id)
+            normalized_ids.append(normalized_id)
+
+        logger.debug("工作区强制在线刷新：收到 %s 个请求 ID，规范化后 %s 个", len(workshop_ids or []), len(normalized_ids))
+        if not normalized_ids:
+            return ApiResponse.success(message="没有可刷新的工坊项目")
+
         def worker():
             from backend.managers.mgr_steam_api import SteamWebAPI
             from backend.utils.event_bus import EventBus
             
             # 100 个一组分批请求，防止 URL 过长或单次请求过久
-            for i in range(0, len(workshop_ids), 100):
-                batch = workshop_ids[i:i+100]
+            for i in range(0, len(normalized_ids), 100):
+                batch = normalized_ids[i:i+100]
                 # 这里调用真实的联网请求
-                online_data = SteamWebAPI.fetch_item_details(batch, force_refresh=True)
+                online_data, _ = SteamWebAPI.fetch_item_details(batch, force_refresh=True)
                 
                 # 每完成一批，立即推送
                 EventBus.emit('workspace-online-update', online_data)
@@ -4241,6 +4292,17 @@ class API:
                     item['time_updated'] = online_info[wid].get('time_updated', item.get('time_updated'))
 
         return ApiResponse.success(data)
+
+    @log_api_call
+    def workshop_search_online(self, query: str, cursor: str = "*", page_size: int = 25, sort: str = "relevance"):
+        """使用 Steam Web API 在线搜索工坊条目。"""
+        try:
+            data = SteamWebAPI.search_workshop_online(query, cursor=cursor, page_size=page_size, sort=sort)
+            return ApiResponse.success(data)
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"在线工坊搜索失败: {exc}")
 
     @log_api_call
     def workshop_get_details(self, workshop_id: str):

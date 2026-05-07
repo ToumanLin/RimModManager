@@ -147,7 +147,7 @@
                 </h3>
                 <div class="space-y-6">
                   <div class="grid grid-cols-2 gap-4 aria-disabled:pointer-events-none aria-disabled:opacity-50" :aria-disabled="true">
-                    <CommonSelect label="界面语言" v-model="formData.language" :options="[{label:'简体中文', value:'zh-cn'}, {label:'English', value:'en'}]" />
+                    <CommonSelect label="界面语言" v-model="formData.language" :options="[{label:'简体中文', value:'zh-CN'}, {label:'English', value:'en'}]" />
                     <CommonSelect label="配色方案" v-model="formData.theme" :options="[{label:'自动同步系统', value:'system'}, {label:'黑曜石', value:'dark'}]" />
                   </div>
                   <!-- <div class="grid grid-cols-2 gap-4">
@@ -165,8 +165,7 @@
                       <span class="col-span-2 ml-2 mt-2 text-sm font-bold tracking-wide">主页布局
                         <label v-tooltip="'可拖动切换布局顺序'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                       </span>
-                      <VueDraggable class="col-span-2 flex gap-1" 
-                        ref="el" v-model="formData.ui.main_layout" :animation="150">
+                      <VueDraggable class="col-span-2 flex gap-1" ref="el" v-model="formData.ui.main_layout" :animation="150">
                         <div v-for="item, index in formData.ui.main_layout" class="flex items-center ">
                           <CommonSwitch class="flex-1 cursor-move" :key="item.id" :label="appStore.MAIN_LAYOUT_MAPS[item.id].label" v-model="item.visible" :description="appStore.MAIN_LAYOUT_MAPS[item.id].desc" />
                         </div>
@@ -333,7 +332,7 @@
                       <CommonInput class="col-span-3" label="用户名" v-model="formData.network.proxy.username" />
                       <CommonInput class="col-span-3" label="密码" v-model="formData.network.proxy.password" is-password />
                       <div class="col-span-6">
-                          <CommonTagInput label="不走代理的域名" v-model="formData.network.proxy.bypass_list" />
+                        <CommonTagInput label="不走代理的域名" v-model="formData.network.proxy.bypass_list" />
                       </div>
 
                       <div class="col-span-6 grid grid-cols-2 gap-3">
@@ -342,9 +341,30 @@
                       </div>
                     </div>
                   </div>
-                  
                   <CommonKVEditor label="自定义 Hosts 映射" v-model="formData.network.hosts" />
                   <CommonSwitch label="将自定义 Hosts 写入系统 hosts 文件" v-model="formData.network.write_to_system_hosts" description="注意：这将直接修改系统 hosts 文件，可能需要管理员权限。" />
+                
+                  <div class="p-4 rounded-2xl bg-text-main/2 border border-text-main/5 space-y-4">
+                    <div class="text-xs ">
+                      <h4 class="text-sm font-bold text-text-main">Steamworks Web API</h4>
+                      <p class="mt-1 leading-relaxed text-text-dim/80">
+                        仅用于在线搜索创意工坊模组，该 Key 仅保存在本地配置，不会上传到任何服务器，如有顾虑可以不用填写。
+                      </p>
+                      <span class="text-accent-warn">注意！“API 密钥（API Key）相当于你的 Steam 账号后门钥匙”。可以读取账号公开数据/库存信息 以及 管理与监听交易报价。</span>
+                      <p>任何人一旦获取了此 Key，就可以在不触发 Steam 令牌的情况下，暗中取消玩家的真实交易，并替换为发给骗子的假交易。绝对不要将 API 密钥分享给任何人或任何未经验证的第三方网站。</p>
+                    </div>
+                    <div class="flex items-end gap-2">
+                      <CommonInput class="flex-1" label="Steam Web API Key" v-model="formData.steam_web_api_key" is-password placeholder="填写后可启用在线搜索" description="在线搜索需要填写该 Key，否则将无法使用该功能。" />
+                    
+                      <button @click="openUrlOnSteam('https://steamcommunity.com/dev/apikey')"
+                        class="px-2 py-2 m-0.5 bg-text-dim/15 hover:bg-text-dim/30 border border-text-dim/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
+                        <span class="flex items-center gap-2">
+                          访问<p class="text-accent-cool">API Key</p>获取页面
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
                 </div>
               </section>
 
@@ -485,6 +505,24 @@
                     </div>
                     <CommonSelect label="日志等级" v-model="formData.log_level" :options="[{label:'DEBUG', value:'DEBUG'},{label:'INFO', value:'INFO'},{label:'WARNING', value:'WARNING'}]" />
                     <CommonNumber label="日志保留天数" v-model="formData.log_retention_days" :step="1" :min="0" :max="365" />
+                  </div>
+                  <div class="p-4 rounded-2xl bg-text-main/2 border border-text-main/5">
+                    <div class="flex items-center justify-between gap-4">
+                      <div class="min-w-0">
+                        <h4 class="text-sm font-bold text-text-main">网络图片缓存</h4>
+                        <p class="mt-1 text-xs leading-relaxed text-text-dim/80">
+                          远程封面图、截图和富文本图片会先写入本地缓存，再由前端通过本地资源服务读取。
+                        </p>
+                        <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-text-dim/85">
+                          <span>已缓存 {{ appStore.remoteImageCache.file_count }} 张</span>
+                          <span>占用 {{ formatFileSize(appStore.remoteImageCache.total_bytes) }}</span>
+                        </div>
+                      </div>
+                      <button @click="handleClearRemoteImageCache" :disabled="appStore.isLoading"
+                        class="shrink-0 px-4 py-1.5 bg-text-main/5 hover:bg-text-main/10 border border-text-main/10 rounded-lg text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50">
+                        清理缓存图片
+                      </button>
+                    </div>
                   </div>
                   <div class="p-4 rounded-2xl bg-accent-primary/5 border border-accent-primary/20">
                     <div class="flex items-center justify-between gap-4">
@@ -656,6 +694,7 @@ import CommonSelect from './common/input/CommonSelect.vue'
 import CommonTagInput from './common/input/CommonTagInput.vue'
 import CommonKVEditor from './common/input/CommonKVEditor.vue'
 import { RUN_COMMAND_TAGS } from '../utils/constants'
+import { formatFileSize } from '../utils/format'
 import { useRuleStore } from '../stores/ruleStore'
 import { useAppStore } from '../stores/appStore'
 import { useConfirmStore } from '../stores/confirmStore'
@@ -821,6 +860,7 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
       // 检测所有路径是否有效
       await checkPaths()
       await loadDataBundleSchema()
+      await appStore.refreshRemoteImageCacheStats()
       // 如果 AI 已启用，且面板刚打开，加载初始的厂商和模型列表
       if (formData.value.ai) {
         await loadAiProviders()
@@ -983,6 +1023,10 @@ const fetchAiModels = async () => {
   }
 }
 
+const openUrlOnSteam = (url) => {
+  window.open('steam://openurl/'+url, '_blank')
+}
+
 // 更新外部数据库
 const updateExternalDB = async (dbType) => {
   downloadState.value[dbType] = true
@@ -1000,6 +1044,20 @@ const handleCheckExternalData = async () => {
 
 const handleCheckSteamcmdMods = async () => {
   await appStore.checkSteamcmdModUpdates({ manual: true, prompt: true })
+}
+
+const handleClearRemoteImageCache = async () => {
+  const ok = await confirmStore.confirmAction(
+    '确认清理网络图片缓存',
+    '这会删除当前已缓存的远程图片文件。后续再次显示这些图片时，会按需重新下载。',
+    { type: 'warning', confirmText: '立即清理', cancelText: '取消' }
+  )
+  if (!ok) return
+  const cleared = await appStore.clearRemoteImageCache()
+  if (!cleared) return
+  const clearedCount = Number(cleared?.cleared?.file_count || 0)
+  const clearedBytes = formatFileSize(cleared?.cleared?.total_bytes || 0)
+  toast.success(`已清理 ${clearedCount} 张缓存图片，释放 ${clearedBytes}`)
 }
 
 const handleExportDataBundle = async () => {

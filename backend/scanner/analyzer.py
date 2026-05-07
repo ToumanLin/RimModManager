@@ -40,7 +40,7 @@ class ModAnalyzer:
         :param mod_path: Mod 根目录绝对路径
         返回: {
             'mod_type': 'XML'|'Assembly'|'LanguagePack'|'Texture'|'Audio'|'Mixed'|'Unknown',
-            'supported_languages': ['zh-cn', 'en'],
+            'supported_languages': ['zh-CN', 'en'],
             'file_stats': {'code_dll': 0, 'game_xml': 0, 'patch_xml': 0, 'lang_xml': 0, 'image': 0, 'audio': 0},
             'has_defs': False
             'has_assemblies': False,

@@ -53,12 +53,24 @@ def _merge_manifest_with_online(manifest: dict[str, Any] | None, online: dict[st
         "name": manifest.get("name"),
         "title": online.get("title") or manifest.get("name"),
         "author": manifest.get("author"),
+        "author_steam_id": online.get("author_steam_id"),
         "game_versions": manifest.get("game_versions") or [],
         "dependencies_mods": manifest.get("dependencies_mods") or {},
+        "short_description": online.get("short_description"),
         "description": online.get("description"),
         "preview_url": online.get("preview_url"),
+        "tags": online.get("tags") or [],
+        "children": online.get("children") or [],
         "screenshots": online.get("screenshots") or [],
+        "time_created": int(online.get("time_created") or 0),
         "time_updated": int(online.get("time_updated") or 0),
+        "subscriptions": int(online.get("subscriptions") or 0),
+        "favorited": int(online.get("favorited") or 0),
+        "lifetime_subscriptions": int(online.get("lifetime_subscriptions") or 0),
+        "lifetime_favorited": int(online.get("lifetime_favorited") or 0),
+        "views": int(online.get("views") or 0),
+        "summary_last_sync_time": int(online.get("summary_last_sync_time") or 0),
+        "detail_last_sync_time": int(online.get("detail_last_sync_time") or 0),
         "last_sync_time": int(online.get("last_sync_time") or 0),
     }
 
@@ -86,10 +98,22 @@ def _get_online_cache_map(workshop_ids: list[str]) -> dict[str, dict[str, Any]]:
         WorkshopOnlineCache.select(
             WorkshopOnlineCache.workshop_id,
             WorkshopOnlineCache.title,
+            WorkshopOnlineCache.short_description,
             WorkshopOnlineCache.description,
+            WorkshopOnlineCache.author_steam_id,
             WorkshopOnlineCache.preview_url,
+            WorkshopOnlineCache.tags,
+            WorkshopOnlineCache.children,
             WorkshopOnlineCache.screenshots,
+            WorkshopOnlineCache.time_created,
             WorkshopOnlineCache.time_updated,
+            WorkshopOnlineCache.subscriptions,
+            WorkshopOnlineCache.favorited,
+            WorkshopOnlineCache.lifetime_subscriptions,
+            WorkshopOnlineCache.lifetime_favorited,
+            WorkshopOnlineCache.views,
+            WorkshopOnlineCache.summary_last_sync_time,
+            WorkshopOnlineCache.detail_last_sync_time,
             WorkshopOnlineCache.last_sync_time,
         )
         .where(WorkshopOnlineCache.workshop_id.in_(normalized_ids))
@@ -188,6 +212,7 @@ def _build_workshop_summary_items(manifests: list[dict[str, Any]]) -> list[dict[
         {
             "workshop_id": str(item.get("workshop_id") or ""),
             "name": item.get("title") or item.get("name"),
+            "title": item.get("title") or item.get("name"),
             "preview_url": item.get("preview_url"),
         }
         for item in _merge_manifest_rows(manifests)

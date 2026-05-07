@@ -660,7 +660,7 @@ const formattedDescription = computed(() => {
   if (!selectedMod.value?.description) return '该Mod未提供描述。'
   // console.log(parseUnityRichText(selectedMod.value.description, false))
   // 第二个参数 false 表示不移除图片，如果想移除则传 true
-  return parseUnityRichText(selectedMod.value.description, false)
+  return parseUnityRichText( selectedMod.value.description, false, (url) => appStore.getRemoteUrl(url))
 })
 // 辅助计算：是否有依赖项或冲突项
 const hasDependencies = computed(() => {

@@ -159,7 +159,7 @@
 </template>
 
 <script setup>
-import { ref, onBeforeUnmount, onMounted } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { Github, RefreshCw, Trash2, Link, CloudDownload, Activity } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
@@ -171,10 +171,6 @@ const workspaceStore = useWorkspaceStore()
 const newRepoUrl = ref('')
 const isParsing = ref(false)
 const isChecking = ref(false)
-
-onMounted(() => {
-  workspaceStore.fetchGithubRepos()
-})
 
 onBeforeUnmount(() => {
   workspaceStore.stopGithubTimelinePolling()

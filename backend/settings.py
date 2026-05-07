@@ -204,6 +204,7 @@ class AppConfig:
     community_rules_url: str = "https://github.com/RimSort/Community-Rules-Database/blob/main/communityRules.json"
     community_rules_path: str = str(COMMUNITY_RULES_PATH)
     user_rules_path: str = str(USER_RULES_PATH)
+    steam_web_api_key: str = ""  # Steamworks Web API 鉴权密钥，仅供需要受限接口的后端请求使用
     
     # --- 开发与调试设置 ---
     browser_mode: bool = False            # 是否默认使用浏览器模式启动
@@ -233,7 +234,7 @@ class AppConfig:
     run_count: int = 0                     # 运行次数（用于判断是否需要重新扫描）
     
     # --- 界面设置 ---
-    language: str = "zh-cn"     # 默认语言
+    language: str = "zh-CN"     # 默认语言
     window_width: int = 1400
     window_height: int = 900
     completed_guides: Dict[str, str] = field(default_factory=dict) # 存储已完成的引导, e.g. {"main_v1.0": "done"}
@@ -466,7 +467,7 @@ class SettingsManager:
         self.config.steamcmd_path = str(self.config.steamcmd_path or "").strip() or str(TOOLS_DIR / "steamcmd")
         self.config.self_mods_path = str(self.config.self_mods_path or "").strip() or str(MODS_DIR)
         self.config.ripgrep_path = str(self.config.ripgrep_path or "").strip() or str(TOOLS_DIR / "ripgrep")
-        self.config.language = normalize_language_code(self.config.language, default="zh-cn") or "zh-cn"
+        self.config.language = normalize_language_code(self.config.language, default="zh-CN") or "zh-CN"
         valid_modes = {"default", "remember", "custom"}
         if str(self.config.load_order_import_dir_mode or "").strip().lower() not in valid_modes:
             self.config.load_order_import_dir_mode = "default"

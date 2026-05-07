@@ -73,10 +73,22 @@ class WorkshopOnlineCache(ExtBaseModel):
 
     workshop_id = CharField(primary_key=True)
     title = CharField(null=True)
+    short_description = TextField(null=True)
     description = TextField(null=True)
+    author_steam_id = CharField(null=True)
     preview_url = CharField(null=True)
+    tags = UTF8JSONField(default=list)
+    children = UTF8JSONField(default=list)
     screenshots = UTF8JSONField(default=list)
+    time_created = BigIntegerField(default=0)
     time_updated = BigIntegerField(default=0)
+    subscriptions = IntegerField(default=0)
+    favorited = IntegerField(default=0)
+    lifetime_subscriptions = IntegerField(default=0)
+    lifetime_favorited = IntegerField(default=0)
+    views = IntegerField(default=0)
+    summary_last_sync_time = BigIntegerField(default=0)
+    detail_last_sync_time = BigIntegerField(default=0)
     last_sync_time = BigIntegerField(default=0)
 
 

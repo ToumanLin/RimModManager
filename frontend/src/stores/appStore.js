@@ -56,6 +56,10 @@ export const useAppStore = defineStore('app', () => {
     isLoading: false,
     chatHistory: [],
   })
+  const remoteImageCache = reactive({
+    file_count: 0,
+    total_bytes: 0,
+  })
   const aiBatchSessions = ref(new Map())
   const currentAiBatchTaskId = ref('')
   const cancelPendingTaskIds = ref(new Set())
@@ -133,7 +137,7 @@ export const useAppStore = defineStore('app', () => {
     asset_port: 0,
 
     // --- 系统 ---
-    language: 'zh-cn',
+    language: 'zh-CN',
     window_width: 1400,
     window_height: 900,
     completed_guides: [],
@@ -196,6 +200,7 @@ export const useAppStore = defineStore('app', () => {
       max_tokens: 5000,
       max_concurrency: 3,     // 最大并发请求数（避免被API封锁）
     },
+    steam_web_api_key: '',
 
     // --- 贴图优化 ---
     texture_opt: {
@@ -373,6 +378,83 @@ export const useAppStore = defineStore('app', () => {
       return new Date(value).toLocaleString('zh-CN')
     } catch {
       return '未知'
+    }
+  }
+
+  const syncRemoteImageCache = (cacheStats = {}) => {
+    // 统一整理后端返回的缓存统计，避免各入口分别处理默认值。
+    remoteImageCache.file_count = Number(cacheStats?.file_count || 0)
+    remoteImageCache.total_bytes = Number(cacheStats?.total_bytes || 0)
+  }
+
+  const applyInitialPayload = (payload, { isInit = false, historyLabel = '刷新磁盘状态' } = {}) => {
+    if (!payload) return false
+
+    if (isInit && payload.settings) {
+      settings.value = payload.settings
+      settings.value.asset_port = payload.asset_port || 0
+      upgradeContext.value = payload.upgrade_context
+    } else {
+      Object.assign(settings.value, payload.settings)
+    }
+
+    syncRemoteImageCache(payload.remote_image_cache)
+    if (payload.is_first_db_init && payload.context_healthy && (!payload.all_mods || payload.all_mods?.length === 0)) {
+      toast.warning("数据库正在进行首次初始化，此过程可能需要您等待一段时间，请您耐心等候。",{position: "top-center",timeout: 10000})
+    }
+
+    appVersion.value = payload.app_version || 'Unknown'
+    buildMode.value = payload.build_mode || ''
+
+    const profileStore = useProfileStore()
+    profileStore.fetchProfiles()
+    if (payload.active_context) {
+      profileStore.activeContext = payload.active_context
+      if (!profileStore.activeContext.is_healthy) {
+        toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
+        uiState.showSettingsPanel = true
+        return false
+      }
+    }
+
+    const groupStore = useGroupStore()
+    groupStore.setGroups(payload.groups || [])
+
+    const modStore = useModStore()
+    const previousSnapshot = isInit ? null : modStore.captureListHistorySnapshot()
+    modStore.setMods(payload, { resetHistory: !!isInit })
+    if (previousSnapshot) {
+      modStore.recordListHistory({
+        before: previousSnapshot,
+        type: 'refresh-data',
+        label: historyLabel,
+      })
+    }
+
+    return true
+  }
+
+  // 扫描完成后只同步与模组相关的数据，避免再次触发整套工作区/集合/GitHub 初始化。
+  const refreshModsData = async (historyLabel = '扫描后同步模组数据') => {
+    if (!window.pywebview) return false
+    try {
+      const res = await window.pywebview.api.get_initial_data()
+      if (!checkResult(res, '同步模组数据')) return false
+      const applied = applyInitialPayload(res.data, { isInit: false, historyLabel })
+      if (!applied) return false
+
+      const ruleStore = useRuleStore()
+      ruleStore.fetchRules()
+      const orderStore = useOrderStore()
+      orderStore.getBackups(orderStore.backupProfileId || settings.value.current_profile_id || 'default')
+
+      const workspaceStore = useWorkspaceStore()
+      // 扫描只会改变本地三库模组事实，不需要顺带刷新 GitHub/合集列表。
+      void workspaceStore.refreshLoadedData({ librariesOnly: true })
+      return true
+    } catch (e) {
+      toast.error(`同步模组数据失败: \n${e.message}`)
+      return false
     }
   }
 
@@ -731,51 +813,11 @@ export const useAppStore = defineStore('app', () => {
       // 调用后端获取全量数据
       const res = await window.pywebview.api.get_initial_data()
       if (!checkResult(res, '刷新数据')) return false
-
-      if (isInit && res.data.settings) {
-        settings.value = res.data.settings
-        settings.value.asset_port = res.data.asset_port || 0
-        upgradeContext.value = res.data.upgrade_context
-      } else {
-        Object.assign(settings.value, res.data.settings)
-      }
-      if (res.data.is_first_db_init && res.data.context_healthy && (!res.data.all_mods || res.data.all_mods?.length === 0)) {
-        toast.warning("数据库正在进行首次初始化，此过程可能需要您等待一段时间，请您耐心等候。",{position: "top-center",timeout: 10000})
-      }
-      // 更新软件信息
-      appVersion.value = res.data.app_version || 'Unknown'  // 版本
-      buildMode.value = res.data.build_mode || ''           // 构建模式
-      const profileStore = useProfileStore()
-      profileStore.fetchProfiles()
-      if (res.data.active_context) {
-        profileStore.activeContext = res.data.active_context
-        // 触发健康哨兵拦截 (阻止初始化继续)
-        // 检查路径 (主要路径无效则打开设置)
-        if (!profileStore.activeContext.is_healthy) {
-          toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
-          uiState.showSettingsPanel = true
-          return false // 提早退出，不加载 Mod 列表
-        }
-      }
-      // 更新 Groups (防止分组内的 Mod 被删了但分组里还有 ID)
-      const groupStore = useGroupStore()
-      groupStore.setGroups(res.data.groups || [])
-      // 更新 Active列表 (防止外部修改 Active列表 导致的状态不一致)
-      const modStore = useModStore()
-      const previousSnapshot = isInit ? null : modStore.captureListHistorySnapshot()
-      modStore.setMods(res.data, { resetHistory: !!isInit })
-      if (previousSnapshot) {
-        modStore.recordListHistory({
-          before: previousSnapshot,
-          type: 'refresh-data',
-          label: historyLabel,
-        })
-      }
+      const applied = applyInitialPayload(res.data, { isInit, historyLabel })
+      if (!applied) return false
       // 刷新动态规则
       const ruleStore = useRuleStore()
       ruleStore.fetchRules()
-      const workspaceStore = useWorkspaceStore()
-      workspaceStore.initData()
       const orderStore = useOrderStore()
       // 备份列表优先保持用户当前正在查看的环境视图；无选择时再回退到当前环境。
       orderStore.getBackups(orderStore.backupProfileId || settings.value.current_profile_id || 'default')
@@ -970,6 +1012,7 @@ export const useAppStore = defineStore('app', () => {
         const profileStore = useProfileStore()
         // 更新本地 store
         Object.assign(settings.value, res.data.settings)
+        syncRemoteImageCache(res.data.remote_image_cache)
         profileStore.activeContext = res.data.active_context
 
         // 如果路径变了，可能需要重新扫描
@@ -1447,6 +1490,23 @@ export const useAppStore = defineStore('app', () => {
     return `${getAssetBaseUrl()}/remote?url=${safeUrl}`
   }
 
+  const refreshRemoteImageCacheStats = async () => {
+    if (!window.pywebview) return null
+    const res = await window.pywebview.api.get_remote_image_cache_stats()
+    if (!checkResult(res, '获取网络图片缓存统计')) return null
+    syncRemoteImageCache(res.data)
+    return res.data
+  }
+
+  const clearRemoteImageCache = async () => {
+    if (!window.pywebview) return false
+    const res = await window.pywebview.api.clear_remote_image_cache()
+    if (!checkResult(res, '清理网络图片缓存', true)) return false
+    // 清理接口会同时返回清理后的统计，前端直接复用即可。
+    syncRemoteImageCache(res.data?.current)
+    return res.data
+  }
+
   // === Steam客户端交互 ===
   // 兼容旧调用名：手动检查工具环境并按需弹窗。
   const checkSteamTools = async () => checkToolMaintenance({ manual: true, prompt: true })
@@ -1895,10 +1955,11 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     appVersion, buildMode, uiState, settings, isLoading, isDownloading, isScanRunning, updateState,
-    aiState, aiBatchResults, aiBatchResultCount, currentAiBatchTask, currentAiBatchTaskId, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, upgradeContext,
+    aiState, aiBatchResults, aiBatchResultCount, currentAiBatchTask, currentAiBatchTaskId, remoteImageCache, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, upgradeContext,
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode, exitSleepMode,
+    refreshModsData,
     requestModScan,
-    getThumbUrl, getLocalUrl, getRemoteUrl,
+    getThumbUrl, getLocalUrl, getRemoteUrl, refreshRemoteImageCacheStats, clearRemoteImageCache,
     // 游戏相关
   checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultExternalPaths, openPath, openFile, readTextFile, getFilePath, getFolderPath, deletePath, deletePaths, openUrl,
     startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds, openSteamWorkshopById,

@@ -901,9 +901,9 @@ export const useModStore = defineStore('mods', () => {
     } else {
       toast.success(`扫描完成，共计扫描${total}个模组，新增${added}个，\n更新${updated}个，删除${removed}个，已知${skipped}个。`,{position: "top-center",timeout: 5000})
     }
-    // 扫描结束后，主动拉取一次最新数据刷新界面
+    // 扫描结束后只回填模组主数据，避免把工作区、GitHub、合集等页面也一起重刷。
     console.log("扫描统计:", detail)
-    await appStore.refreshData()
+    await appStore.refreshModsData()
     // 状态注入
     if (coexistenceList.value.length > 0){
       // 处理可共存Mod，标记为 is_coexistence = true
