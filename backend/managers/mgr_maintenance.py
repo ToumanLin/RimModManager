@@ -175,7 +175,7 @@ class MaintenanceManager:
             installed_ids.append(workshop_id)
 
         logger.debug(
-            "SteamCMD 更新检查：合并数据 %s 条，已安装 %s 条，在线校验 %s 条",
+            "SteamCMD 更新检查[self]：合并数据 %s 条，已安装 %s 条，实际检查 %s 条",
             len(manager_local_data),
             len(installed_ids),
             len(installed_ids),
@@ -188,7 +188,10 @@ class MaintenanceManager:
             }
 
         # 合并表同时包含 ACF 记录和日志历史，只对当前仍安装在本地的项目做在线更新检查。
-        online_details, _ = SteamWebAPI.fetch_item_details(installed_ids)
+        online_details, _ = SteamWebAPI.fetch_item_details(
+            installed_ids,
+            trace_label="maintenance_check_steamcmd_mod_updates:self",
+        )
         updates: list[dict[str, Any]] = []
         for local_item in manager_local_data.values():
             if not local_item.get("is_installed"):

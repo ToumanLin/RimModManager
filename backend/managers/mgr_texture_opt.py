@@ -287,7 +287,7 @@ class ToddsEncoder:
         else:
             command.extend(["-sc", str(int(scale_percent))])
 
-        timeout_seconds = max(300, int(self.options.get("encode_batch_timeout_seconds", 480) or 480))
+        timeout_seconds = max(300, int(self.options.get("encode_batch_timeout_seconds", 600) or 600))
         file_list = None
         try:
             with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="\n", delete=False, suffix=".txt") as handle:

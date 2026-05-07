@@ -325,6 +325,53 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return true
   }
 
+  const applyLifecycleUpdateState = (updates = []) => {
+    const normalizedUpdates = Array.isArray(updates) ? updates : []
+    const updateMap = new Map(
+      normalizedUpdates
+        .map(item => {
+          const wid = normalizeWorkshopId(item?.workshop_id)
+          return wid ? [wid, item] : null
+        })
+        .filter(Boolean)
+    )
+
+    const resetState = (modList) => {
+      modList.forEach(mod => {
+        mod.has_update = false
+        delete mod.update_info
+      })
+    }
+
+    const applyState = (modList, source) => {
+      modList.forEach(mod => {
+        const wid = normalizeWorkshopId(mod?.workshop_id)
+        if (!wid) return
+        const updateInfo = updateMap.get(wid)
+        if (!updateInfo || updateInfo.source !== source) return
+        mod.has_update = true
+        mod.update_info = updateInfo
+      })
+    }
+
+    resetState(librariesMods.workshop)
+    resetState(librariesMods.self)
+    applyState(librariesMods.workshop, 'workshop')
+    applyState(librariesMods.self, 'self')
+
+    console.log('[Workspace] 生命周期更新状态已合并:', normalizedUpdates.length, '条记录')
+  }
+
+  const refreshLifecycleUpdateStates = async () => {
+    if (!window.pywebview) return true
+    const res = await window.pywebview.api.lifecycle_check_updates()
+    if (checkResult(res, '检查库内模组更新状态')) {
+      applyLifecycleUpdateState(res.data?.updates || [])
+      return true
+    }
+    return false
+  }
+
   // 响应式计算 Mod 状态
   const activeChildrenWithStatus = computed(() => {
     return collections.activeChildren.map(child => {
@@ -382,30 +429,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (listenersReady.value) return
     listenersReady.value = true
 
-    // 【监听 A】: 三域列表的在线状态静默更新
+    // 【监听 A】: self 域在线状态静默更新
     // payload 格式: { "12345": { title: "...", time_updated: 17000000, preview_url: "..." }, ... }
     window.addEventListener('workspace-online-update', (e) => {
       const onlineMap = e.detail
-      console.log("[Workspace] 收到 Steam 在线状态批量推送:", Object.keys(onlineMap).length, "条记录")
-      // 定义合并逻辑：寻找对应 ID 的 Mod 并注入在线数据
+      console.log("[Workspace] 收到 Steam 在线状态批量推送[self]:", Object.keys(onlineMap).length, "条记录")
+      // 该事件当前只服务 self 预热，避免把 self 的在线时间误覆盖到 workshop 域。
       const mergeOnlineData = (modList) => {
         modList.forEach(mod => {
           const wid = String(mod.workshop_id)
           if (onlineMap[wid]) {
             const onlineInfo = onlineMap[wid]
-            // 将云端详情挂载到 mod 对象上
             mod.online_info = onlineInfo
-            // 实时计算更新标记 (核心逻辑)
-            // 获取本地的下载时间或安装时间
             const localTime = mod.steam_status?.time_downloaded || 
                               mod.steam_status?.installed_version_time || 0
-            // 如果云端更新时间 > 本地时间 + 1小时容差，标记为有更新
             mod.has_update = onlineInfo.time_updated > (localTime + 3600 * 1000)
           }
         })
       }
-      // 执行合并 (由于 librariesMods 是 reactive，修改内部对象会触发 Vue 重新渲染对应 DOM)
-      mergeOnlineData(librariesMods.workshop)
       mergeOnlineData(librariesMods.self)
     })
     // 【监听 B】: GitHub 在线状态静默更新
@@ -468,6 +509,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
         // 渲染完毕！如果后端在此接口中发现了需要触发的在线查询，
         // 后端会自己开启线程并发 `workspace-online-update` 事件。
+        await refreshLifecycleUpdateStates()
         loadState.librariesLoaded = true
         return true
       }
@@ -885,7 +927,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     librariesMods, isFetching, librariesSize, activeChildrenWithStatus,
     workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
     matrixFocusTarget, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
-    fetchLibrariesMods, doWorkshopSearch, fetchWorkshopDetails, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode,
+    fetchLibrariesMods, refreshLifecycleUpdateStates, doWorkshopSearch, fetchWorkshopDetails, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode,
     github, fetchGithubRepos, fetchGithubTimeline, startGithubTimelinePolling, stopGithubTimelinePolling, selectGithubRepo, clearActiveGithubRepo,
     getGithubOnlineVersion, githubRepoNeedsUpdate, ensureLibrariesLoaded, ensureGithubLoaded, ensureCollectionsLoaded, ensureWorkspaceTabLoaded, refreshLoadedData, openSteamWorkshopUrl, getInstallSourcesByPackageIdsMap, getWorkshopIdsByPackageIdsMap, resolvePackageIdsToWorkshopIds, goBackWorkshopDetail,
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection

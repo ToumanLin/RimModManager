@@ -241,6 +241,9 @@ class ModScanner:
                     ModDAO.batch_upsert_mods(mods_to_upsert)
                 if shadow_paths_map:
                     ModDAO.batch_update_shadow_paths(shadow_paths_map)
+                # 扫描完成后再基于本轮 self 域磁盘结果补齐 SteamCMD ACF，
+                # 让 ACF 记录集合与真实目录集合保持同步。
+                SteamManager().reconcile_steamcmd_acf(scan_mods=mods_to_upsert)
             except Exception as e:
                 # txn.rollback() # 万一出错，回滚所有改动
                 logger.error(f"批量入库失败: {e}", exc_info=True)

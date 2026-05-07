@@ -638,8 +638,7 @@ class API:
         - 社区工坊库 / 替代库缓存重建属于“有则更好”的能力，不应拖住桌面首屏；
         - 因此把它后移到窗口完成首轮加载后再后台执行，用户至少能先看到主界面。
         """
-        if self._startup_warmup_started:
-            return
+        if self._startup_warmup_started: return
 
         self._startup_warmup_started = True
 
@@ -3930,48 +3929,100 @@ class API:
     @log_api_call
     def lifecycle_check_updates(self):
         """
-        生命周期核心：精准识别【工坊目录】与【管理器目录】各自的更新状态
+        生命周期核心：同时检查 workshop 域与 self 域的已安装模组更新状态。
+
+        - workshop 域：优先使用 Steamworks 试验适配层读取 Steam 客户端本机状态；
+        - self 域：继续使用 Steam Web API 在线时间与本地安装时间做比对。
         """
-        # 1. 分别获取两个来源的本地状态 (来自 SteamManager 的解析结果)
-        # workshop_merged_data 内部解析的是 Steam 客户端的 ACF/LOG
         workshop_local_data = self.steam_mgr.workshop_merged_data()
-        # steamcmd_merged_data 内部解析的是 管理器目录下的 ACF/LOG (SteamCMD专用)
         manager_local_data = self.steam_mgr.steamcmd_merged_data()
-        # 2. 只收集当前仍安装在本地的项目，避免把历史日志项也带去做在线查询。
-        all_wids = {
+
+        workshop_installed_wids = {
             str(item.get("workshop_id") or "").strip()
-            for item in list(workshop_local_data.values()) + list(manager_local_data.values())
+            for item in workshop_local_data.values()
             if item.get("is_installed") and str(item.get("workshop_id") or "").strip().isdigit()
         }
-        if not all_wids: return ApiResponse.success({"updates": []})
-        # 3. 一次性从缓存/网络获取所有涉及 ID 的云端最新时间
-        online_details, ids_to_fetch = SteamWebAPI.fetch_item_details(list(all_wids))
+        self_installed_wids = {
+            str(item.get("workshop_id") or "").strip()
+            for item in manager_local_data.values()
+            if item.get("is_installed") and str(item.get("workshop_id") or "").strip().isdigit()
+        }
+
+        logger.debug(
+            "生命周期更新检查：workshop 合并数据 %s 条，已安装 %s 条；self 合并数据 %s 条，已安装 %s 条",
+            len(workshop_local_data),
+            len(workshop_installed_wids),
+            len(manager_local_data),
+            len(self_installed_wids),
+        )
+
         updates_available = []
-        # 4. 定义内部比对逻辑
-        def compare_and_add(local_item, source_label):
-            wid = local_item['workshop_id']
-            online_info = online_details.get(wid)
-            if not online_info: return
-            # 本地时间取：ACF 记录时间 或 日志下载时间
-            local_time = local_item.get('time_downloaded') or local_item.get('installed_version_time') or 0
-            online_time = online_info.get('time_updated', 0)
-            # 容差 1 小时。如果云端时间 > 本地时间，则标记
-            if online_time > local_time + 3600 * 1000:
+
+        if workshop_installed_wids:
+            steam_running = bool(self.steam_mgr.is_steam_running())
+            if not steam_running:
+                logger.debug(
+                    "生命周期更新检查[workshop]：Steam 未运行，跳过 Steamworks 检查（待检 %s 条）",
+                    len(workshop_installed_wids),
+                )
+            else:
+                workshop_state_result = self.steam_mgr.query_workshop_item_states(
+                    list(workshop_installed_wids),
+                    timeout_seconds=12.0,
+                )
+                workshop_states = workshop_state_result.get("states") if isinstance(workshop_state_result, dict) else {}
+                workshop_states = workshop_states if isinstance(workshop_states, dict) else {}
+                logger.debug(
+                    "生命周期更新检查[workshop]：Steamworks 可用 %s，ready %s，检查 %s 条，命中状态 %s 条，detail=%s",
+                    bool(workshop_state_result.get("available")) if isinstance(workshop_state_result, dict) else False,
+                    bool(workshop_state_result.get("ready")) if isinstance(workshop_state_result, dict) else False,
+                    len(workshop_installed_wids),
+                    len(workshop_states),
+                    str((workshop_state_result or {}).get("detail") or ""),
+                )
+                for local_item in workshop_local_data.values():
+                    if not local_item.get("is_installed"):
+                        continue
+                    wid = str(local_item.get("workshop_id") or "").strip()
+                    state_info = workshop_states.get(wid) or {}
+                    if not state_info or not state_info.get("needs_update"):
+                        continue
+                    updates_available.append({
+                        "workshop_id": wid,
+                        "title": wid,
+                        "source": "workshop",
+                        "local_time": int(local_item.get("time_downloaded") or local_item.get("installed_version_time") or 0),
+                        "online_time": int(local_item.get("latest_version_time") or 0),
+                        "preview_url": "",
+                    })
+
+        if self_installed_wids:
+            online_details, _ = SteamWebAPI.fetch_item_details(
+                list(self_installed_wids),
+                trace_label="lifecycle_check_updates:self",
+            )
+            for local_item in manager_local_data.values():
+                if not local_item.get('is_installed'):
+                    continue
+                wid = str(local_item.get('workshop_id') or '').strip()
+                online_info = online_details.get(wid)
+                if not online_info:
+                    continue
+                local_time = int(local_item.get('time_downloaded') or local_item.get('installed_version_time') or 0)
+                online_time = int(online_info.get('time_updated') or 0)
+                if online_time <= local_time + 3600 * 1000:
+                    continue
                 updates_available.append({
                     "workshop_id": wid,
-                    "title": online_info["title"],
-                    "source": source_label, # 告诉前端是 'workshop' 还是 'manager' 需更新
+                    "title": online_info.get("title") or wid,
+                    "source": "self",
                     "local_time": local_time,
                     "online_time": online_time,
-                    "preview_url": online_info["preview_url"]
+                    "preview_url": online_info.get("preview_url") or "",
                 })
-        # 5. 执行两次独立比对
-        for m in workshop_local_data.values():
-            if m.get('is_installed'):
-                compare_and_add(m, 'workshop')
-        for m in manager_local_data.values():
-            if m.get('is_installed'):
-                compare_and_add(m, 'self')
+        else:
+            logger.debug("生命周期更新检查[self]：没有可检查的已安装 self 模组")
+
         return ApiResponse.success({"updates": updates_available})
 
     @log_api_call
@@ -4188,15 +4239,14 @@ class API:
             "local": matrix['local']
         }
         
-        # 6. 后台触发在线比对，标记可更新状态
-        # 这里只预热当前真实安装在本地的项目，避免把历史日志中的 SteamCMD 条目也带去查在线缓存。
+        # 6. 后台触发在线比对，统一只针对 self / SteamCMD 域做在线状态预热与更新标记。
         all_wids = list({
             str(item.get("workshop_id") or "").strip()
-            for item in list(ws_map.values()) + list(mg_map.values())
+            for item in mg_map.values()
             if item.get("is_installed") and str(item.get("workshop_id") or "").strip().isdigit()
         })
         logger.debug(
-            "工作区在线预热：workshop 总数 %s / 已安装 %s，steamcmd 总数 %s / 已安装 %s，实际预热 %s",
+            "工作区在线预热[self]：workshop 总数 %s / 已安装 %s，steamcmd 总数 %s / 已安装 %s，实际预热 %s",
             len(ws_map),
             sum(1 for item in ws_map.values() if item.get("is_installed")),
             len(mg_map),
@@ -4211,7 +4261,16 @@ class API:
     
     def _bg_check_online_updates(self, all_wids: list):
         """后台静默检测，完成后通过 EventBus 推送"""
-        online_info, ids_to_fetch = SteamWebAPI.fetch_item_details(all_wids, only_cache=True)
+        online_info, ids_to_fetch = SteamWebAPI.fetch_item_details(
+            all_wids,
+            only_cache=True,
+            trace_label="workspace_preheat:self",
+        )
+        logger.debug(
+            "工作区在线预热[self]：缓存预热完成，命中 %s 条，待联网 %s 条（本阶段不发起在线请求）",
+            len(online_info),
+            len(ids_to_fetch),
+        )
         # 把算好的 online_info 推给前端，前端进行响应式合并
         from backend.utils.event_bus import EventBus
         EventBus.emit('workspace-online-update', online_info)
@@ -4257,7 +4316,11 @@ class API:
             for i in range(0, len(normalized_ids), 100):
                 batch = normalized_ids[i:i+100]
                 # 这里调用真实的联网请求
-                online_data, _ = SteamWebAPI.fetch_item_details(batch, force_refresh=True)
+                online_data, _ = SteamWebAPI.fetch_item_details(
+                    batch,
+                    force_refresh=True,
+                    trace_label="workspace_force_refresh:self",
+                )
                 
                 # 每完成一批，立即推送
                 EventBus.emit('workspace-online-update', online_data)

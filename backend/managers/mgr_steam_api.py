@@ -415,7 +415,14 @@ class SteamWebAPI:
         return related_ids
 
     @classmethod
-    def fetch_item_details(cls, workshop_ids: list, force_refresh=False, only_cache=False, cache_ttl_hours=None):
+    def fetch_item_details(
+        cls,
+        workshop_ids: list,
+        force_refresh=False,
+        only_cache=False,
+        cache_ttl_hours=None,
+        trace_label: str = "",
+    ):
         """
         获取 Mod 或合集详情，自带本地在线缓存拦截。
 
@@ -423,11 +430,15 @@ class SteamWebAPI:
         - 文件导入阶段只更新 `WorkshopManifest`；
         - TTL 刷新阶段只更新 `WorkshopOnlineCache` 中的在线字段。
         """
+        trace_prefix = f"[{trace_label}] " if str(trace_label or "").strip() else ""
+
         if not workshop_ids:
+            logger.debug(f"{trace_prefix}Steam 详情请求：输入为空，跳过")
             return {}, []
 
         normalized_ids = cls._normalize_workshop_ids(workshop_ids)
         if not normalized_ids:
+            logger.debug(f"{trace_prefix}Steam 详情请求：规范化后为空，跳过")
             return {}, []
 
         results: dict[str, dict] = {}
@@ -435,19 +446,28 @@ class SteamWebAPI:
 
         if not force_refresh:
             results, ids_to_fetch = cls._load_cached_online_details(normalized_ids, cache_ttl_ms)
-            logger.debug(f"从在线缓存中获取 {len(results)} 条数据")
+            logger.debug(
+                f"{trace_prefix}Steam 详情请求：总数 {len(normalized_ids)}，"
+                f"仅缓存 {only_cache}，强制刷新 {force_refresh}，"
+                f"缓存命中 {len(results)}，待在线获取 {len(ids_to_fetch)}"
+            )
         else:
             ids_to_fetch = normalized_ids
+            logger.debug(
+                f"{trace_prefix}Steam 详情请求：总数 {len(normalized_ids)}，"
+                f"仅缓存 {only_cache}，强制刷新 {force_refresh}，"
+                f"跳过缓存，待在线获取 {len(ids_to_fetch)}"
+            )
 
         if only_cache:
             return results, ids_to_fetch
 
         if ids_to_fetch:
-            logger.debug(f"需要从 Steam API 获取 {len(ids_to_fetch)} 条数据")
             current_time = int(time.time() * 1000)
             fetched_details = cls._request_published_file_details(ids_to_fetch)
             results.update(fetched_details)
             cls._save_online_details(fetched_details, current_time)
+            logger.debug(f"{trace_prefix}Steam 详情请求：在线拉取完成 {len(fetched_details)} 条，已写入缓存")
 
         return results, ids_to_fetch
 
