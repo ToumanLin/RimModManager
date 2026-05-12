@@ -47,10 +47,8 @@ def _append_mod_entry(
     """
 
     normalized_package_id = normalize_package_id(package_id)
-    if not normalized_package_id:
-        return
-    if normalized_package_id in package_ids:
-        return
+    if not normalized_package_id: return
+    if normalized_package_id in package_ids: return
 
     package_ids.append(normalized_package_id)
     mod_names.append(str(name or "").strip())
@@ -93,8 +91,7 @@ def _align_parallel_entry_lists(
 
 def _extract_workshop_id(value: str) -> str:
     line = str(value or "").strip()
-    if line.isdigit() and len(line) >= 7:
-        return line
+    if line.isdigit() and len(line) >= 7: return line
     match = re.search(r"id=(\d+)", line)
     return match.group(1) if match else ""
 
@@ -102,11 +99,9 @@ def _extract_workshop_id(value: str) -> str:
 def _parse_rimsort_clipboard_line(value: str):
     line = str(value or "").strip()
     match = re.match(r"^(?P<name>.+?)\s+\[(?P<package_id>[\w.\-]+)\]\[(?P<url>.+)\]\s*$", line)
-    if not match:
-        return None
+    if not match: return None
     package_id = normalize_package_id(match.group("package_id"))
-    if not package_id:
-        return None
+    if not package_id: return None
     name = match.group("name").strip()
     url = match.group("url").strip()
     workshop_id = "" if url.lower() == "no url specified" else _extract_workshop_id(url)

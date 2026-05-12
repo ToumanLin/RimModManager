@@ -149,8 +149,7 @@ class LoadOrderManager:
         这样后续更容易补测试。
         """
         valid_ids = [wid for wid in (self._normalize_workshop_id(wid) for wid in workshop_ids) if wid]
-        if not valid_ids:
-            return {}
+        if not valid_ids: return {}
         try:
             query = (
                 ModReplacement
@@ -186,8 +185,7 @@ class LoadOrderManager:
 
         导入检查、缺失安装判断都必须以这个集合为准，否则会把“数据库里存在但当前环境无效”的条目误判成已安装。
         """
-        if not self.context:
-            return []
+        if not self.context: return []
         return ModDAO.get_profile_mods(self.context)
 
     def _build_import_check(self, parsed: ParsedLoadOrderData):
@@ -197,8 +195,7 @@ class LoadOrderManager:
         注意这里依赖当前环境上下文，因为“缺失 / 替代 / 其它版本”都必须以
         “当前环境实际可见的安装项”为参考。
         """
-        if not self.context:
-            return {"summary": {}, "items": []}
+        if not self.context: return {"summary": {}, "items": []}
 
         try:
             installed_mods = self._get_visible_installed_mods()
@@ -443,8 +440,7 @@ class LoadOrderManager:
     def is_version_token_stale(self, base_version_token: dict | None = None, mods_config_file_path: str | None = None):
         expected = dict(base_version_token or {})
         current = self.get_current_version_token(mods_config_file_path)
-        if not expected:
-            return False, current
+        if not expected: return False, current
         return current != expected, current
 
     def export_share_code(self, active_ids, list_name: str | None = None) -> str:

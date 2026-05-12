@@ -372,10 +372,8 @@ class MaintenanceManager:
     @staticmethod
     def _parse_http_datetime_to_ms(value: Any) -> int:
         raw = str(value or "").strip()
-        if not raw:
-            return 0
+        if not raw: return 0
         try:
             parsed = datetime.strptime(raw, "%a, %d %b %Y %H:%M:%S %Z")
             return int(parsed.replace(tzinfo=timezone.utc).timestamp() * 1000)
-        except Exception:
-            return 0
+        except Exception: return 0

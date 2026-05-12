@@ -7,8 +7,7 @@ def _normalize_language_lookup_key(value: str) -> str:
     这里只做格式整理，不做映射。
     """
     normalized = str(value or "").strip().lower()
-    if not normalized:
-        return ""
+    if not normalized: return ""
 
     normalized = re.sub(r"\s*\(.*?\)\s*", "", normalized)
     normalized = normalized.replace("_", "-")
@@ -27,8 +26,7 @@ def _canonicalize_language_tag(normalized: str) -> str:
     - Script 首字母大写，如 `sr-Latn`
     """
     parts = [part for part in str(normalized or "").split("-") if part]
-    if not parts:
-        return ""
+    if not parts: return ""
 
     canonical_parts = [parts[0].lower()]
     for part in parts[1:]:
@@ -123,13 +121,11 @@ def _resolve_canonical_language_code(lookup_key: str) -> str:
     优先命中预置语言别名；命不中时，再按通用语言标记规则整理大小写。
     这样既能兼容旧配置，又不会把未知语言码粗暴压成全小写。
     """
-    if not lookup_key:
-        return ""
+    if not lookup_key: return ""
 
     compact_key = lookup_key.replace("-", "")
     matched = _LANGUAGE_CODE_LOOKUP.get(lookup_key) or _LANGUAGE_CODE_LOOKUP.get(compact_key)
-    if matched:
-        return matched
+    if matched: return matched
     return _canonicalize_language_tag(lookup_key)
 
 
@@ -138,8 +134,7 @@ def normalize_language_code(value, default: str = "") -> str:
     将各种语言写法统一成后端内部使用的标准语言码。
     """
     normalized = _normalize_language_lookup_key(value)
-    if normalized:
-        return _resolve_canonical_language_code(normalized)
+    if normalized: return _resolve_canonical_language_code(normalized)
 
     fallback = _normalize_language_lookup_key(default)
     return _resolve_canonical_language_code(fallback) if fallback else ""
@@ -172,8 +167,7 @@ def to_steam_webapi_language_code(value, default: str = "en") -> str:
         normalized_default = "en"
 
     normalized = normalize_language_code(value, default=normalized_default)
-    if not normalized:
-        return normalized_default
+    if not normalized: return normalized_default
     return normalized if normalized in STEAM_WEBAPI_LANGUAGE_CODES else normalized_default
 
 
@@ -183,8 +177,7 @@ def get_lang_by_code(code):
     如果找不到，默认返回 English。
     """
     normalized = normalize_language_code(code)
-    if not normalized:
-        return "English"
+    if not normalized: return "English"
     return _LANGUAGE_FOLDER_LOOKUP.get(normalized, "English")
 
 

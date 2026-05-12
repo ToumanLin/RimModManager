@@ -17,7 +17,7 @@ class AppUpgradeResult:
     messages: list[str] = field(default_factory=list)
 
 
-def run_app_upgrade_migrations(last_version: str, current_version: str, ai_mgr=None) -> AppUpgradeResult:
+def run_app_upgrade_migrations(last_version: str, current_version: str) -> AppUpgradeResult:
     """
     执行应用层升级迁移。
     设计原则：
@@ -32,8 +32,6 @@ def run_app_upgrade_migrations(last_version: str, current_version: str, ai_mgr=N
     if LooseVersion(last_version) < LooseVersion("0.17.10"):
         result.pending_actions.append("recommend_scan")
         result.messages.append("检测到核心解析引擎升级，建议执行全量扫描以获得更好的兼容性。")
-        if ai_mgr:
-            ai_mgr.reset_system_prompts()
         settings.set('community_workshop_db_path', str(COMMUNITY_WORKSHOP_DB_PATH))
         settings.set('community_instead_db_path', str(COMMUNITY_INSTEAD_DB_PATH))
 
@@ -56,24 +54,19 @@ def _migrate_legacy_default_profile_user_data_path():
     这里只针对默认环境做幂等修正，避免影响用户自行创建的其它隔离环境。
     """
     default_profile = GameProfile.get_or_none(GameProfile.id == 'default')
-    if not default_profile:
-        return
+    if not default_profile: return
 
     raw_path = str(default_profile.user_data_path or '').strip()
-    if not raw_path:
-        return
+    if not raw_path: return
 
     path_obj = Path(raw_path)
-    if path_obj.name.lower() != 'config':
-        return
+    if path_obj.name.lower() != 'config': return
 
     parent_path = path_obj.parent
-    if not parent_path:
-        return
+    if not parent_path: return
 
     # 仅在路径末段确实是 RimWorld 用户数据根目录时才执行修正，避免误伤其它名为 Config 的目录。
-    if parent_path.name.lower() != 'rimworld by ludeon studios':
-        return
+    if parent_path.name.lower() != 'rimworld by ludeon studios': return
 
     default_profile.user_data_path = str(parent_path)
     default_profile.save()

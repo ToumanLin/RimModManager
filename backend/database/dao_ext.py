@@ -91,8 +91,7 @@ def _normalize_workshop_ids(workshop_ids: list[str]) -> list[str]:
 def _get_online_cache_map(workshop_ids: list[str]) -> dict[str, dict[str, Any]]:
     """按 workshop_id 批量读取在线缓存，避免逐条查询。"""
     normalized_ids = _normalize_workshop_ids(workshop_ids)
-    if not normalized_ids:
-        return {}
+    if not normalized_ids: return {}
 
     rows = (
         WorkshopOnlineCache.select(
@@ -124,8 +123,7 @@ def _get_online_cache_map(workshop_ids: list[str]) -> dict[str, dict[str, Any]]:
 
 def _merge_manifest_rows(manifests: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """批量为 manifest 行补齐在线缓存字段，统一返回结构。"""
-    if not manifests:
-        return []
+    if not manifests: return []
     online_map = _get_online_cache_map([str(row.get("workshop_id") or "") for row in manifests])
     return [
         _merge_manifest_with_online(manifest, online_map.get(str(manifest.get("workshop_id") or "").strip()))
@@ -188,8 +186,7 @@ def _load_replacement_candidates_by_package_ids(normalized_package_ids: list[str
 def _load_workshop_meta_map(workshop_ids: list[str]) -> dict[str, dict[str, Any]]:
     """按 workshop_id 批量加载合并后的元数据，供 replacement 补全和详情查询复用。"""
     normalized_ids = _normalize_workshop_ids(workshop_ids)
-    if not normalized_ids:
-        return {}
+    if not normalized_ids: return {}
 
     manifests = (
         WorkshopManifest.select(
@@ -317,8 +314,7 @@ class WorkshopCacheDAO:
         """返回文件快照层记录，供依赖判断等稳定语义使用。"""
         _require_database_dependencies()
         normalized_id = normalize_cached_workshop_id(workshop_id)
-        if not normalized_id:
-            return None
+        if not normalized_id: return None
         return WorkshopManifest.get_or_none(WorkshopManifest.workshop_id == normalized_id)
 
     @staticmethod
@@ -326,8 +322,7 @@ class WorkshopCacheDAO:
         """批量返回文件快照层记录，供依赖判断和包名映射复用。"""
         _require_database_dependencies()
         normalized_ids = _normalize_workshop_ids(workshop_ids)
-        if not normalized_ids:
-            return {}
+        if not normalized_ids: return {}
         manifests = (
             WorkshopManifest.select()
             .where(WorkshopManifest.workshop_id.in_(normalized_ids))
@@ -339,12 +334,10 @@ class WorkshopCacheDAO:
         """返回按 workshop_id 合并后的元数据。"""
         _require_database_dependencies()
         normalized_id = normalize_cached_workshop_id(workshop_id)
-        if not normalized_id:
-            return None
+        if not normalized_id: return None
         manifest = WorkshopManifest.get_or_none(WorkshopManifest.workshop_id == normalized_id)
         online = WorkshopOnlineCache.get_or_none(WorkshopOnlineCache.workshop_id == normalized_id)
-        if not manifest and not online:
-            return None
+        if not manifest and not online: return None
         return _merge_manifest_with_online(
             model_to_dict(manifest) if manifest else None,
             model_to_dict(online) if online else None,
@@ -429,8 +422,7 @@ class WorkshopCacheDAO:
         _require_database_dependencies()
         normalized_id = str(workshop_id)
         meta = WorkshopCacheDAO.get_merged_meta_by_workshop_id(normalized_id)
-        if not meta:
-            return None
+        if not meta: return None
 
         replacement = ModReplacement.get_or_none(ModReplacement.old_workshop_id == normalized_id)
         same_author_mods = []
@@ -487,8 +479,7 @@ class WorkshopCacheDAO:
         """
         _require_database_dependencies()
         normalized_package_ids = normalize_package_ids(package_ids)
-        if not normalized_package_ids:
-            return {}
+        if not normalized_package_ids: return {}
 
         meta_map = _load_manifest_candidates_by_package_ids(normalized_package_ids)
         replacement_map = _load_replacement_candidates_by_package_ids(normalized_package_ids)
@@ -528,8 +519,7 @@ class WorkshopCacheDAO:
         """
         _require_database_dependencies()
         normalized_package_ids = normalize_package_ids(package_ids)
-        if not normalized_package_ids:
-            return {}
+        if not normalized_package_ids: return {}
 
         asset_map = _load_asset_source_candidates_by_package_ids(normalized_package_ids)
         meta_map = _load_manifest_candidates_by_package_ids(normalized_package_ids)
@@ -635,8 +625,7 @@ class WorkshopCacheDAO:
         """批量按 workshop_id 读取缓存详情，主要用于幽灵项和导入补全。"""
         _require_database_dependencies()
         normalized_ids = _normalize_workshop_ids(workshop_ids)
-        if not normalized_ids:
-            return {}
+        if not normalized_ids: return {}
 
         meta_map = _load_workshop_meta_map(normalized_ids)
         return {

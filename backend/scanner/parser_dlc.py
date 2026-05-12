@@ -54,8 +54,7 @@ class DLCParser:
         cached_trans = self._translate_cache.get(pkg_id)
         if cached_trans: return cached_trans
         
-        if mod_record.get('source') != 'dlc' and 'ludeon.rimworld' not in pkg_id:
-            return mod_record
+        if mod_record.get('source') != 'dlc' and 'ludeon.rimworld' not in pkg_id: return mod_record
 
         # 确定 DLC Key (Core, Royalty, Ideology...)
         def_key = None
@@ -139,8 +138,7 @@ class DLCParser:
         """
         检查所有 tar 文件，增量更新缓存。
         """
-        if not os.path.exists(self.languages_dir):
-            return {}
+        if not os.path.exists(self.languages_dir): return {}
 
         # 1. 读取旧缓存
         cache_data = {'translations': {}, 'meta': {}}

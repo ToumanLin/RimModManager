@@ -514,8 +514,7 @@ class SteamManager:
             "running": False,
             "logged_in": False,
         }
-        if platform.system() != "Windows":
-            return result
+        if platform.system() != "Windows": return result
 
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam\ActiveProcess")
@@ -687,8 +686,7 @@ class SteamManager:
                 status["ready"] = bool(steamworks_status.get("ready"))
                 status["source"] = "steamworks"
                 status["detail"] = str(steamworks_status.get("detail") or "steamworks")
-                if status["ready"] or status["detail"] in {"steamworks_not_running", "steamworks_not_logged_in"}:
-                    return status
+                if status["ready"] or status["detail"] in {"steamworks_not_running", "steamworks_not_logged_in"}: return status
 
         if platform.system() == "Windows":
             status["running"] = bool(process_running or registry_status.get("running"))
@@ -701,8 +699,7 @@ class SteamManager:
 
     def start_steam(self) -> bool:
         """尝试启动 Steam 客户端"""
-        if self.is_steam_running():
-            return True
+        if self.is_steam_running(): return True
             
         steam_exe = str(self.steam_exe) if self.steam_exe else None
         
@@ -1021,18 +1018,15 @@ class SteamManager:
         debug_show_console: bool,
         depth: int = 0,
     ) -> None:
-        if not retry_ids or self._is_steamcmd_task_cancelled(task_id):
-            return
-        if len(retry_ids) <= 1 or depth >= 2:
-            return
+        if not retry_ids or self._is_steamcmd_task_cancelled(task_id): return
+        if len(retry_ids) <= 1 or depth >= 2: return
         next_batch_size = 10 if depth == 0 else 1
         if len(retry_ids) <= next_batch_size:
             retry_batches = [retry_ids]
         else:
             retry_batches = [retry_ids[i:i + next_batch_size] for i in range(0, len(retry_ids), next_batch_size)]
         for batch in retry_batches:
-            if self._is_steamcmd_task_cancelled(task_id):
-                return
+            if self._is_steamcmd_task_cancelled(task_id): return
             before_completed = len(completed_ids)
             result = self._run_single_steamcmd_batch(
                 batch=batch,
@@ -1082,8 +1076,7 @@ class SteamManager:
         调试窗口模式下无法再从 stdout 管道读取 SteamCMD 输出，
         这里退而求其次改为消费 workshop_log.txt 的新增内容来驱动进度。
         """
-        if not workshop_log_path.exists():
-            return start_offset, current_item_idx, None, None
+        if not workshop_log_path.exists(): return start_offset, current_item_idx, None, None
 
         log_start_pattern = re.compile(r"Download item (\d+) requested by app")
         log_success_pattern = re.compile(r"Download item (\d+) result : OK")
@@ -1102,8 +1095,7 @@ class SteamManager:
             logger.debug(f"Read SteamCMD workshop log failed: {e}")
             return start_offset, current_item_idx, None, None
 
-        if not chunk:
-            return new_offset, current_item_idx, None, None
+        if not chunk: return new_offset, current_item_idx, None, None
 
         active_item_id: str | None = None
         batch_error: str | None = None
@@ -1416,8 +1408,7 @@ class SteamManager:
     def cancel_steamcmd_task(self, task_id: str) -> bool:
         """请求取消 SteamCMD 下载或初始化任务。"""
         normalized_task_id = str(task_id or "").strip()
-        if not normalized_task_id:
-            return False
+        if not normalized_task_id: return False
         with self._steamcmd_lock:
             process = self._steamcmd_processes.get(normalized_task_id)
             controller = self._steamcmd_controllers.get(normalized_task_id)
@@ -1439,8 +1430,7 @@ class SteamManager:
                 logger.debug(f"Cleanup SteamCMD task failed: task_id={task_id} error={e}")
 
     def _is_steamcmd_task_cancelled(self, task_id: str) -> bool:
-        with self._steamcmd_lock:
-            return task_id in self._steamcmd_cancelled
+        with self._steamcmd_lock: return task_id in self._steamcmd_cancelled
 
     def _terminate_steamcmd_process(self, task_id: str, process: subprocess.Popen | None = None) -> None:
         """统一终止 SteamCMD 进程树，避免不同调用点各自重复拼终止逻辑。"""
@@ -1448,8 +1438,7 @@ class SteamManager:
         with self._steamcmd_lock:
             if active_process is None:
                 active_process = self._steamcmd_processes.get(task_id)
-        if not active_process:
-            return
+        if not active_process: return
         try:
             if platform.system() == "Windows":
                 subprocess.run(
@@ -1535,8 +1524,7 @@ class SteamManager:
         这里优先为 shortcuts.vdf 写入选出最合理的目标 Steam 用户。
         """
         loginusers_path = Path(str(self.steam_dir or '').strip()) / "config" / "loginusers.vdf"
-        if not loginusers_path.exists():
-            return {}
+        if not loginusers_path.exists(): return {}
 
         try:
             import vdf
@@ -1548,8 +1536,7 @@ class SteamManager:
             return {}
 
         users_map = payload.get("users") if isinstance(payload, dict) else {}
-        if not isinstance(users_map, dict):
-            return {}
+        if not isinstance(users_map, dict): return {}
 
         result: dict[str, dict[str, Any]] = {}
         for steam64_id, raw_info in users_map.items():
@@ -1647,8 +1634,7 @@ class SteamManager:
     @staticmethod
     def _get_shortcut_field(entry: dict[str, Any], field_name: str, default: Any = ""):
         for key, value in entry.items():
-            if str(key).strip().lower() == str(field_name).strip().lower():
-                return value
+            if str(key).strip().lower() == str(field_name).strip().lower(): return value
         return default
 
     @staticmethod
@@ -1726,8 +1712,7 @@ class SteamManager:
 
     def _find_managed_shortcut_entry(self, shortcuts: dict[str, Any], profile: Any, game_exe: str) -> tuple[str | None, dict[str, Any] | None]:
         container = self._normalize_shortcuts_payload(shortcuts).get("shortcuts", {})
-        if not isinstance(container, dict):
-            return None, None
+        if not isinstance(container, dict): return None, None
 
         marker = f"rmm://profile/{getattr(profile, 'id', '')}"
         expected_name = f"RimWorld [{str(getattr(profile, 'name', None) or getattr(profile, 'id', 'Profile')).strip()}]"
@@ -1763,26 +1748,22 @@ class SteamManager:
         将 shortcuts.vdf 中已有的非 Steam `appid` 转成 `steam://rungameid/...`。
         这里只在条目已拥有稳定 appid 时返回 URL；首次注册的新条目通常要等 Steam 重载后才会写回该值。
         """
-        if not isinstance(entry, dict):
-            return ""
+        if not isinstance(entry, dict): return ""
 
         raw_appid = SteamManager._get_shortcut_field(entry, "appid", None)
-        if raw_appid in (None, ""):
-            return ""
+        if raw_appid in (None, ""): return ""
 
         try:
             signed_appid = int(str(raw_appid).strip())
             unsigned_appid = struct.unpack("<I", struct.pack("<i", signed_appid))[0]
             rungameid = (unsigned_appid << 32) | 0x02000000
             return f"steam://rungameid/{rungameid}"
-        except Exception:
-            return ""
+        except Exception: return ""
 
     @staticmethod
     def _appid_to_rungameid(appid: int | str | None) -> str:
         """将 Steam shortcut appid 转成 `steam://rungameid/...`。"""
-        if appid in (None, ""):
-            return ""
+        if appid in (None, ""): return ""
         try:
             raw_value = int(str(appid).strip())
             # Steam 日志中的 sanitize app id 是无符号 32 位整数；
@@ -1796,8 +1777,7 @@ class SteamManager:
 
     def _get_console_log_path(self) -> str:
         steam_dir = str(self.steam_dir or '').strip()
-        if not steam_dir:
-            return ""
+        if not steam_dir: return ""
         return str(Path(steam_dir) / "logs" / "console_log.txt")
 
     def get_shortcut_log_probe(self, profile: Any, extra_args: list[str] | None = None) -> dict[str, Any]:
@@ -1993,8 +1973,7 @@ class SteamManager:
             # 回退两级找到 workshop 目录
             workshop_root = os.path.dirname(os.path.dirname(ws_path))
             acf_file = os.path.join(workshop_root, f"appworkshop_{RIMWORLD_APP_ID}.acf")
-            if os.path.exists(acf_file):
-                return acf_file
+            if os.path.exists(acf_file): return acf_file
         except:
             pass
         return None
@@ -2149,8 +2128,7 @@ class SteamManager:
         with self._steamcmd_lock:
             for process in self._steamcmd_processes.values():
                 try:
-                    if process and process.poll() is None:
-                        return True
+                    if process and process.poll() is None: return True
                 except Exception:
                     continue
         return False
@@ -2196,8 +2174,7 @@ class SteamManager:
             with open(acf_path, 'r', encoding='utf-8', errors='ignore') as f:
                 payload = cast(dict[str, Any], vdf.load(f) or {})
             app_workshop = payload.get("AppWorkshop", {})
-            if isinstance(app_workshop, dict):
-                return cast(dict, app_workshop)
+            if isinstance(app_workshop, dict): return cast(dict, app_workshop)
         except Exception as e:
             logger.debug(f"[get_acf_json] vdf 解析失败，将回退到兼容解析: {e}")
         try:
@@ -2300,8 +2277,7 @@ class SteamManager:
         推断 Steam 客户端日志路径
         通常在 Steam 安装目录/logs/workshop_log.txt
         """
-        if use_steamcmd: 
-            return str(Path(self.steamcmd_dir) / "logs" / "workshop_log.txt")
+        if use_steamcmd: return str(Path(self.steamcmd_dir) / "logs" / "workshop_log.txt")
         
         # 确保有 Steam 安装目录
         if not self.steam_dir: return None
@@ -2313,8 +2289,7 @@ class SteamManager:
             # 如果反推失败，尝试默认路径 (Windows)
             if platform.system() == "Windows":
                 default_path = r"C:\Program Files (x86)\Steam\logs\workshop_log.txt"
-                if os.path.exists(default_path):
-                    return str(default_path)
+                if os.path.exists(default_path): return str(default_path)
         except Exception as e:
             logger.error(f"Failed to parse Steam log path: {e}")
             
@@ -2493,8 +2468,7 @@ class SteamManager:
         # 命中缓存，直接返回内存数据 (0 开销！)
         if self._cached_ws_map is not None and \
            log_mtime == self._last_ws_log_mtime and \
-           acf_mtime == self._last_ws_acf_mtime:
-            return self._cached_ws_map
+           acf_mtime == self._last_ws_acf_mtime: return self._cached_ws_map
         # 只有文件真变了，才去跑耗时的正则和 JSON 解析
         log_data = self.parse_workshop_log()
         acf_json = self.get_acf_json()
@@ -2520,8 +2494,7 @@ class SteamManager:
         # 命中缓存，直接返回内存数据 (0 开销！)
         if self._cached_cmd_map is not None and \
            log_mtime == self._last_cmd_log_mtime and \
-           acf_mtime == self._last_cmd_acf_mtime:
-            return self._cached_cmd_map
+           acf_mtime == self._last_cmd_acf_mtime: return self._cached_cmd_map
         if steamcmd_acf_path.exists():
             acf_json = self.get_acf_json(steamcmd_acf_path)
             acf_data = self.parse_acf_data(acf_json)

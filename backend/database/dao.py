@@ -76,8 +76,7 @@ def _ensure_user_data_rows(mod_ids: Iterable[str]) -> None:
     因此只要后续逻辑要写入这些关系，就必须先把父记录准备好。
     """
     stubs = [{"mod_id": mod_id} for mod_id in normalize_package_ids(list(mod_ids))]
-    if not stubs:
-        return
+    if not stubs: return
     UserModData.insert_many(stubs).on_conflict_ignore().execute()
 
 
@@ -88,8 +87,7 @@ def _mod_dir_exists(path: str) -> bool:
     这里不用简单的 os.path.exists(path)，而是检查 About.xml / About.xml.disabled，
     因为项目里“存在目录但已失去 Mod 结构”的情况也应视为失效。
     """
-    if not path:
-        return False
+    if not path: return False
     mod_path = Path(path)
     return ((mod_path / "About" / "About.xml").is_file() or (mod_path / "About" / "About.xml.disabled").is_file())
 
@@ -115,14 +113,12 @@ class _ProfilePathScope:
 
     @staticmethod
     def _normalize_root(path: str | None) -> str:
-        if not path:
-            return ""
+        if not path: return ""
         return os.path.normpath(path).lower() + os.sep
 
     @classmethod
     def from_context(cls, context: ProfileContext | None) -> "_ProfilePathScope":
-        if not context:
-            return cls()
+        if not context: return cls()
         return cls(
             local_root=cls._normalize_root(context.local_mods_path),
             dlc_root=cls._normalize_root(context.game_dlc_path),
@@ -307,13 +303,11 @@ class ModDAO:
         这个返回值是项目里“当前环境实际可见模组”的事实来源，
         AI、排序、导入检查、主界面都依赖它。
         """
-        if not context:
-            return []
+        if not context: return []
 
         scope = _ProfilePathScope.from_context(context)
         conditions = scope.build_visibility_conditions()
-        if not conditions:
-            return []
+        if not conditions: return []
 
         combined_condition = reduce(operator.or_, conditions)
         active_condition = (ModAsset.disabled == False) | (ModAsset.disabled.is_null())  # type: ignore
@@ -352,12 +346,10 @@ class ModDAO:
         但更容易和主列表的规则发生漂移。
         """
         normalized_package_id = normalize_package_id(package_id)
-        if not context or not normalized_package_id:
-            return None
+        if not context or not normalized_package_id: return None
 
         for mod in ModDAO.get_profile_mods(context):
-            if normalize_package_id(mod.get("package_id")) == normalized_package_id:
-                return mod
+            if normalize_package_id(mod.get("package_id")) == normalized_package_id: return mod
         return None
 
     @staticmethod
@@ -400,16 +392,14 @@ class ModDAO:
         这样扫描、部署和后续可能的“切换 Profile 后即时重算”都能共用同一套规则。
         """
         empty_result = {"hard_conflicts": [], "coexistences": [], "deploy_paths": []}
-        if not context:
-            return empty_result
+        if not context: return empty_result
 
         scope = _ProfilePathScope.from_context(context)
         active_assets: list[dict[str, Any]] = []
 
         if assets is None:
             conditions = scope.build_visibility_conditions(include_workshop=include_workshop)
-            if not conditions:
-                return empty_result
+            if not conditions: return empty_result
             combined_condition = reduce(operator.or_, conditions)
             active_condition = (ModAsset.disabled == False) | (ModAsset.disabled.is_null())  # type: ignore
             query = (
@@ -566,8 +556,7 @@ class ModDAO:
         扫描结果是“资产快照”，天然适合做 upsert。这里会先过滤掉模型上不存在的键，
         再按 path_hash 冲突进行保留式更新，避免 UI 临时字段污染数据库写入。
         """
-        if not mods_data_list:
-            return
+        if not mods_data_list: return
 
         valid_field_names = set(ModAsset._meta.fields.keys())  # type: ignore
         preserve_fields = [
@@ -594,8 +583,7 @@ class ModDAO:
         这里按“字段集合”分批，是为了避免不同 payload 的字段不一致时，
         把某些实例上未提供的字段也一起写回数据库。
         """
-        if not mods_data_list:
-            return
+        if not mods_data_list: return
 
         field_map = ModAsset._meta.fields  # type: ignore
         batches_by_signature: dict[tuple[str, ...], list[dict[str, Any]]] = {}
@@ -629,8 +617,7 @@ class ModDAO:
         扫描器会重新计算每个“最终保留条目”背后有哪些被禁用副本，
         这里仅负责把结果落库，不参与任何业务推断。
         """
-        if not shadow_paths_map:
-            return
+        if not shadow_paths_map: return
 
         model_instances = [
             ModAsset(path_hash=path_hash, shadow_paths=paths)
@@ -650,8 +637,7 @@ class ModDAO:
         默认值处理和冲突策略都只有一套实现。
         """
         normalized_package_id = normalize_package_id(package_id)
-        if not normalized_package_id or not data_dict:
-            return True
+        if not normalized_package_id or not data_dict: return True
 
         payload = {"mod_id": normalized_package_id, **data_dict}
         ModDAO.batch_upsert_user_data([payload])
@@ -666,8 +652,7 @@ class ModDAO:
         - 传了哪些字段，就更新哪些字段
         - 没传的字段，不在这次写入里被覆盖
         """
-        if not user_data_list:
-            return
+        if not user_data_list: return
 
         valid_field_names = set(UserModData._meta.fields.keys())  # type: ignore
         input_keys = set().union(*(data.keys() for data in user_data_list))
@@ -697,16 +682,14 @@ class ModDAO:
     def set_user_mods_type(mod_ids: List[str], new_type: str):
         """批量设置用户自定义 Mod 类型。"""
         normalized_ids = normalize_package_ids(mod_ids)
-        if not normalized_ids:
-            return
+        if not normalized_ids: return
         ModDAO.batch_upsert_user_data([{"mod_id": mod_id, "user_mod_type": new_type} for mod_id in normalized_ids])
 
     @staticmethod
     def set_mods_color(mod_ids: List[str], color_hex: str):
         """批量设置 UI 标记颜色。"""
         normalized_ids = normalize_package_ids(mod_ids)
-        if not normalized_ids:
-            return
+        if not normalized_ids: return
         if color_hex and not is_hex_color(color_hex):
             raise ValueError("Invalid color format. Use #RRGGBB.")
         ModDAO.batch_upsert_user_data([{"mod_id": mod_id, "sign_color": color_hex} for mod_id in normalized_ids])
@@ -721,8 +704,7 @@ class ModDAO:
         """
         normalized_ids = normalize_package_ids(mod_ids)
         cleaned_tags = [str(tag).strip() for tag in new_tags if str(tag).strip()]
-        if not normalized_ids or not cleaned_tags:
-            return
+        if not normalized_ids or not cleaned_tags: return
 
         with db.atomic():
             existing_records = UserModData.select().where(cast(Any, UserModData.mod_id).in_(normalized_ids))
@@ -743,8 +725,7 @@ class ModDAO:
         """从指定 Mod 中批量移除标签。"""
         normalized_ids = normalize_package_ids(mod_ids)
         remove_set = {str(tag).strip() for tag in remove_tags if str(tag).strip()}
-        if not normalized_ids or not remove_set:
-            return
+        if not normalized_ids or not remove_set: return
 
         with db.atomic():
             existing_records = UserModData.select().where(cast(Any, UserModData.mod_id).in_(normalized_ids))
@@ -776,8 +757,7 @@ class ModInterlockDAO:
     def link_mods(mod_ids: List[str]):
         """创建新的联锁序列，并把涉及的 Mod 从旧联锁中安全摘出。"""
         normalized_ids = normalize_package_ids(mod_ids)
-        if len(normalized_ids) < 2:
-            return {"status": "error", "msg": "联锁至少需要 2 个模组"}
+        if len(normalized_ids) < 2: return {"status": "error", "msg": "联锁至少需要 2 个模组"}
 
         with db.atomic():
             existing_mods = UserModData.select(UserModData.mod_id, UserModData.interlock_id).where(UserModData.mod_id << normalized_ids)  # type: ignore
@@ -804,8 +784,7 @@ class ModInterlockDAO:
     def unlink_mods(mod_ids: List[str]):
         """把指定 Mod 从其所属联锁中剥离。"""
         normalized_ids = normalize_package_ids(mod_ids)
-        if not normalized_ids:
-            return True
+        if not normalized_ids: return True
 
         with db.atomic():
             target_mods = UserModData.select(UserModData.mod_id, UserModData.interlock_id).where(UserModData.mod_id << normalized_ids)  # type: ignore
@@ -834,8 +813,7 @@ class ModInterlockDAO:
         让剩余仍然存在的 Mod 继续保持顺序。
         """
         interlock = ModInterlock.get_or_none(ModInterlock.id == interlock_id)
-        if not interlock:
-            return None
+        if not interlock: return None
 
         with db.atomic():
             existing_assets = ModAsset.select(ModAsset.package_id).where(
@@ -865,8 +843,7 @@ class ModInterlockDAO:
         - shadowed: 物理存在，但当前 Profile 中不可见
         """
         interlock = ModInterlock.get_or_none(ModInterlock.id == interlock_id)
-        if not interlock:
-            return []
+        if not interlock: return []
 
         all_assets = (
             ModAsset.select(ModAsset.package_id, ModAsset.path, ModAsset.disabled, ModAsset.workshop_id)
@@ -950,16 +927,14 @@ class ModMaintenanceDAO:
         如果物理删除失败，只记录错误，不回滚数据库，避免在损坏路径上反复死循环。
         """
         normalized_hashes = _normalize_path_hashes(path_hashes)
-        if not normalized_hashes:
-            return {"success_count": 0, "errors": []}
+        if not normalized_hashes: return {"success_count": 0, "errors": []}
 
         assets = list(
             ModAsset.select(ModAsset.path, ModAsset.path_hash, ModAsset.name)
             .where(ModAsset.path_hash.in_(normalized_hashes))  # type: ignore
             .dicts()
         )
-        if not assets:
-            return {"success_count": 0, "errors": ["未找到有效的模组记录"]}
+        if not assets: return {"success_count": 0, "errors": ["未找到有效的模组记录"]}
 
         target_paths = [asset["path"] for asset in assets if asset.get("path")]
         valid_hashes = [asset["path_hash"] for asset in assets]
@@ -987,12 +962,10 @@ class ModMaintenanceDAO:
     def add_shadow_path(keep_path_hash: str, shadow_path: str):
         """为最终保留的 Mod 记录被遮蔽副本路径。"""
         mod = ModAsset.get_or_none(ModAsset.path_hash == keep_path_hash)
-        if not mod:
-            return False
+        if not mod: return False
 
         current_paths = list(mod.shadow_paths or [])
-        if shadow_path in current_paths:
-            return True
+        if shadow_path in current_paths: return True
 
         current_paths.append(shadow_path)
         mod.shadow_paths = current_paths
@@ -1047,8 +1020,7 @@ class ModMaintenanceDAO:
                 deleted_mods.append(asset["path_hash"])
 
         total_invalid_mods = missing_mods + deleted_mods
-        if not total_invalid_mods:
-            return {"missing_mods": missing_mods, "deleted_mods": deleted_mods}
+        if not total_invalid_mods: return {"missing_mods": missing_mods, "deleted_mods": deleted_mods}
 
         with db.atomic():
             if delete:
@@ -1117,8 +1089,7 @@ class GroupDAO:
     def add_mods_to_group(group_id: str, mod_ids: List[str]):
         """向分组批量添加 Mod，并自动忽略重复关系。"""
         normalized_ids = normalize_package_ids(mod_ids)
-        if not normalized_ids:
-            return
+        if not normalized_ids: return
 
         with db.atomic():
             _ensure_user_data_rows(normalized_ids)
@@ -1137,8 +1108,7 @@ class GroupDAO:
     def remove_mods_from_group(group_id: str, mod_ids: List[str]):
         """从分组移除一批 Mod。"""
         normalized_ids = normalize_package_ids(mod_ids)
-        if not normalized_ids:
-            return 0
+        if not normalized_ids: return 0
         return GroupMod.delete().where(
             (GroupMod.group_id == group_id)
             & (cast(Any, GroupMod.mod_id).in_(normalized_ids))

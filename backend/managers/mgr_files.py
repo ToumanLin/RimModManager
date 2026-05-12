@@ -137,8 +137,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
         统一整理远程图片地址，确保白名单判断与缓存键都基于稳定格式。
         """
         normalized_url = str(remote_url or "").strip()
-        if not normalized_url:
-            return ""
+        if not normalized_url: return ""
         # 富文本中常见协议后带空格的脏链接，如 `https: //host/path`。
         normalized_url = re.sub(r'^(https?):\s*//', r'\1://', normalized_url, flags=re.IGNORECASE)
         # 去掉零宽字符，避免同一链接因隐藏字符产生不同缓存键。
@@ -179,10 +178,8 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
         current_time = time.time()
         with self._remote_failure_lock:
             last_failed_at = self._remote_failure_cache.get(remote_url)
-            if last_failed_at is None:
-                return False
-            if current_time - last_failed_at < self.REMOTE_FAILURE_COOLDOWN_SECONDS:
-                return True
+            if last_failed_at is None: return False
+            if current_time - last_failed_at < self.REMOTE_FAILURE_COOLDOWN_SECONDS: return True
             self._remote_failure_cache.pop(remote_url, None)
             return False
 
@@ -199,8 +196,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
         """
         url_hash = hashlib.md5(remote_url.encode('utf-8')).hexdigest()
         existing_candidates = sorted(Path(GALLERY_CACHE_DIR).glob(f"{url_hash}.*"))
-        if existing_candidates:
-            return str(existing_candidates[0])
+        if existing_candidates: return str(existing_candidates[0])
 
         guessed_ext = self._guess_remote_extension(remote_url, content_type="")
         return os.path.join(GALLERY_CACHE_DIR, f"{url_hash}{guessed_ext}")
@@ -210,8 +206,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
         normalized_content_type = str(content_type or "").split(";")[0].strip().lower()
         if normalized_content_type:
             guessed_from_type = mimetypes.guess_extension(normalized_content_type, strict=False)
-            if guessed_from_type:
-                return ".jpg" if guessed_from_type == ".jpe" else guessed_from_type
+            if guessed_from_type: return ".jpg" if guessed_from_type == ".jpe" else guessed_from_type
 
         parsed = urllib.parse.urlparse(remote_url)
         suffix = Path(parsed.path).suffix.lower()
@@ -228,8 +223,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
         if not self._is_allowed_remote_url(remote_url):
             logger.debug(f"Rejected remote image by safety policy: {remote_url}")
             return None
-        if self._is_remote_failure_cooled_down(remote_url):
-            return None
+        if self._is_remote_failure_cooled_down(remote_url): return None
 
         try:
             with build_retry_session(total=2, connect=2, read=2, allowed_methods=("GET", "HEAD")) as session:
@@ -438,8 +432,7 @@ class FileManager:
         如果不存在返回 None。
         """
         target_path = os.path.join(THUMBNAIL_CACHE_DIR, f"{package_id}.webp")
-        if os.path.exists(target_path):
-            return target_path
+        if os.path.exists(target_path): return target_path
         return None
 
     def ensure_thumbnail(self, package_id, original_path, max_size=64):
@@ -637,8 +630,7 @@ class FileManager:
                     allow_multiple=False
                 )
                 # 在 pywebview 环境里，取消选择应直接返回，不要再额外弹 Tk 对话框。
-                if result and len(result) > 0:
-                    return result[0]
+                if result and len(result) > 0: return result[0]
                 return None
             except Exception as e:
                 logger.warning(f"Webview folder dialog failed: {e}")
@@ -681,8 +673,7 @@ class FileManager:
                     file_types=file_types
                 )
                 # 在 pywebview 环境里，取消选择应直接返回，不要再额外弹 Tk 对话框。
-                if result and len(result) > 0:
-                    return result[0]
+                if result and len(result) > 0: return result[0]
                 return None
             except Exception as e:
                 logger.warning(f"Webview open dialog failed: {e}")
@@ -723,8 +714,7 @@ class FileManager:
                 )
                 logger.info(f"用户选择保存路径: {result}")
                 # 在 pywebview 环境里，取消选择应直接返回，不要再额外弹 Tk 对话框。
-                if result and len(result) > 0:
-                    return result[0]
+                if result and len(result) > 0: return result[0]
                 return None
             except Exception as e:
                 logger.warning(f"Webview save dialog failed: {e}")
@@ -1043,12 +1033,10 @@ class FileManager:
     def cancel_localize_task(task_id: str) -> bool:
         """请求取消本地化复制任务。"""
         normalized_task_id = str(task_id or '').strip()
-        if not normalized_task_id:
-            return False
+        if not normalized_task_id: return False
         with FileManager._localize_lock:
             cancel_event = FileManager._localize_cancel_events.get(normalized_task_id)
-        if not cancel_event:
-            return False
+        if not cancel_event: return False
         cancel_event.set()
         return True
     
@@ -1106,8 +1094,7 @@ class FileManager:
     @staticmethod
     def sanitize_filename(name):
         """清理文件名，确保路径合法"""
-        if not name:
-            return "Unknown_Mod"
+        if not name: return "Unknown_Mod"
         # 1. 替换 Windows/Linux 非法字符为下划线
         name = re.sub(r'[\\/:*?"<>|]', '_', str(name))
         # 2. 移除不可见字符
@@ -1199,8 +1186,7 @@ class FileManager:
     @staticmethod
     def sync_links_full(local_mods_path, workshop_mod_paths: list):
         """全量重建链接：删除所有旧链接后重新创建目标集合"""
-        if not local_mods_path or not os.path.exists(local_mods_path):
-            return False
+        if not local_mods_path or not os.path.exists(local_mods_path): return False
 
         # 1. 准备目标清单 (统一转小写进行防呆匹配)
         target_map = {}
@@ -1592,8 +1578,7 @@ class PathChecker:
         }
         """
         path = Path(path_str) / "ModsConfig.xml"
-        if path.exists():
-            return cls._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
+        if path.exists(): return cls._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
         return cls._format_res(False, msg="未找到 ModsConfig.xml", msg_type="warn")
 
     @classmethod
@@ -1628,8 +1613,7 @@ class PathChecker:
         """
         if not path_str: return cls._format_res(False, msg="未指定 Steam 路径")
         exe_path = Path(path_str) / "steam.exe"
-        if exe_path.exists():
-            return cls._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
+        if exe_path.exists(): return cls._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
         return cls._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
     
     @classmethod
@@ -1650,8 +1634,7 @@ class PathChecker:
         if result: return cls._format_res(False, msg="SteamCMD 路径不能包含中文")
         
         exe_path = Path(path_str) / "steamcmd.exe"
-        if exe_path.exists():
-            return cls._format_res(True, data=path_str, msg=f"SteamCMD 客户端：{exe_path}")
+        if exe_path.exists(): return cls._format_res(True, data=path_str, msg=f"SteamCMD 客户端：{exe_path}")
         return cls._format_res(False, msg="路径下未找到 steamcmd.exe", msg_type="warn")
 
     @classmethod

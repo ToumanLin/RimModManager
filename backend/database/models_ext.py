@@ -32,8 +32,7 @@ class UTF8JSONField(Field):
     def db_value(self, value):
         # 写入时统一转成 JSON 文本，并保留中文原文，
         # 便于日志排查和人工查看数据库内容。
-        if value is None:
-            return None
+        if value is None: return None
         # ensure_ascii=False 允许 JSON 序列化非 ASCII 字符（如中文、日文、特殊符号等）
         return json.dumps(value, ensure_ascii=False)
 

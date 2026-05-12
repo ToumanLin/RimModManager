@@ -385,8 +385,7 @@ class SettingsManager:
         1. 兼容字段片段，用于后续恢复；
         2. 旧版 prefer_steam_launch 兼容值（若存在）。
         """
-        if not path.exists():
-            return None, None
+        if not path.exists(): return None, None
 
         try:
             data = self._load_raw_config(path)
@@ -530,8 +529,7 @@ class SettingsManager:
         self._normalize_config()
         self._sync_derived_paths()
         after_state = asdict(self.config)
-        if after_state == before_state:
-            return
+        if after_state == before_state: return
         old_self_mods_path = before_state.get('self_mods_path', '')
         old_steamcmd_path = before_state.get('steamcmd_path', '')
         new_self_mods_path = after_state.get('self_mods_path', '')
@@ -582,8 +580,7 @@ class SettingsManager:
         self._normalize_config()
         self._sync_derived_paths()
         after_state = asdict(self.config)
-        if after_state == before_state:
-            return
+        if after_state == before_state: return
         old_self_mods_path = before_state.get('self_mods_path', '')
         old_steamcmd_path = before_state.get('steamcmd_path', '')
         new_self_mods_path = after_state.get('self_mods_path', '')
@@ -613,8 +610,7 @@ settings = SettingsManager()
 
 
 def backup_config_for_update() -> bool:
-    if not CONFIG_PATH.exists():
-        return False
+    if not CONFIG_PATH.exists(): return False
     try:
         config_backup_dir = BACKUP_DIR / "config"
         config_backup_dir.mkdir(parents=True, exist_ok=True)

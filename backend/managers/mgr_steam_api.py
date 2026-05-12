@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
 from backend.database.workshop_selection import normalize_cached_workshop_id
 from backend.database.dao_ext import ExtDAO
-from backend.database.models_ext import WorkshopOnlineCache, ext_db
+from backend.database.models_ext import WorkshopOnlineCache, ext_db, init_ext_db
 from backend.managers.mgr_network import build_retry_session, merge_headers, network_mgr
 from backend.settings import settings
 from backend.utils.constants import to_steam_webapi_language_code
@@ -99,8 +99,7 @@ class SteamWebAPI:
     @classmethod
     def _raise_for_steam_status(cls, response: requests.Response, request_label: str) -> None:
         """把 Steam HTTP 错误转换成更贴近调用场景的异常文本。"""
-        if response.status_code < 400:
-            return
+        if response.status_code < 400: return
         if response.status_code == 403:
             raise RuntimeError("Steam Web API Key 无效、权限不足，或当前网络/IP 未被 Steam 接受")
         if response.status_code == 429:
@@ -128,8 +127,7 @@ class SteamWebAPI:
         而不是保留 Steam 页面原始富文本。
         """
         text = str(value or "").strip()
-        if not text:
-            return ""
+        if not text: return ""
         text = re.sub(r"https:\s+//", "https://", text)
         text = re.sub(r"http:\s+//", "http://", text)
         text = re.sub(r"(https?://\S+\.(?:png|jpg|jpeg|gif|webp))", "", text, flags=re.IGNORECASE)
@@ -199,15 +197,13 @@ class SteamWebAPI:
     def _extract_preview_url(cls, item: dict[str, Any]) -> str:
         """优先使用主预览图，没有时再退回 previews 里的首张图片。"""
         preview_url = str(item.get("preview_url") or "").strip()
-        if preview_url:
-            return preview_url
+        if preview_url: return preview_url
         previews = item.get("previews") or []
         for preview in previews:
             if cls._safe_int(preview.get("preview_type")) != 0:
                 continue
             preview_url = str(preview.get("url") or "").strip()
-            if preview_url:
-                return preview_url
+            if preview_url: return preview_url
         return ""
 
     @classmethod
@@ -358,8 +354,7 @@ class SteamWebAPI:
     @classmethod
     def _upsert_online_cache_batch(cls, cache_batch: list[dict[str, object]]):
         """批量写入在线缓存，并只覆盖在线字段。"""
-        if not cache_batch:
-            return
+        if not cache_batch: return
         with ext_db.atomic():
             WorkshopOnlineCache.insert_many(cache_batch).on_conflict(
                 conflict_target=[WorkshopOnlineCache.workshop_id],
@@ -459,8 +454,7 @@ class SteamWebAPI:
                 f"跳过缓存，待在线获取 {len(ids_to_fetch)}"
             )
 
-        if only_cache:
-            return results, ids_to_fetch
+        if only_cache: return results, ids_to_fetch
 
         if ids_to_fetch:
             current_time = int(time.time() * 1000)
@@ -556,8 +550,7 @@ class SteamWebAPI:
         if not meta or not meta.get("description") or (current_time - int(meta.get("detail_last_sync_time") or meta.get("last_sync_time") or 0) > cls.CACHE_TTL_MS):
             cls.fetch_item_details([workshop_id], force_refresh=True)
             meta = ExtDAO.get_merged_meta_by_workshop_id(workshop_id)
-        if not meta:
-            return None
+        if not meta: return None
 
         screenshots = list(meta.get("screenshots") or [])
         if not screenshots:
@@ -569,8 +562,7 @@ class SteamWebAPI:
                 meta["screenshots"] = screenshots
 
         detail = ExtDAO.get_workshop_detail_extended(workshop_id)
-        if not detail or not detail.get("meta", {}):
-            return None
+        if not detail or not detail.get("meta", {}): return None
 
         related_ids = cls._collect_related_workshop_ids(detail)
         if related_ids:
@@ -642,15 +634,22 @@ class SteamWebAPI:
             logger.error(f"Scraper Fallback failed for {workshop_id}: {e}")
 
         return screenshots
+    
 if __name__ == "__main__":
+    init_ext_db()
     # 测试用例：解析合集
     collection_id = "3670074636"
     # children = SteamWebAPI.fetch_collection_children(collection_id)
     # print(f"合集 {collection_id} 包含 {len(children)} 个 Mod")
     #  # 测试用例：解析 Mod 详情
     mod_id = '3009527756'
-    details = SteamWebAPI.fetch_item_details([mod_id], True)
-    print(f"Mod {mod_id} 详情: {details}")
+    # details = SteamWebAPI.fetch_item_details([mod_id], True)
+    # print(f"Mod {mod_id} 详情: {details}")
     
     # screenshots = SteamWebAPI._fetch_screenshots_via_scraper(mod_id)
     # print(f"Mod 截图: {screenshots}")
+    
+    search_res = SteamWebAPI.search_workshop_online("Flora reskin")
+    print(f"搜索结果: {search_res}")
+    
+    
