@@ -8,8 +8,8 @@
       <div class="relative w-[75%] h-[80%] flex bg-bg-deep/95 border border-text-dim/20 rounded-4xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden animate-in zoom-in-95 duration-300">
         
         <!-- A. 装饰光效 -->
-        <div class="absolute -top-24 -left-24 w-64 h-64 bg-accent-primary/10 blur-[80px] rounded-full pointer-events-none"></div>
-        <div class="absolute -bottom-24 -right-24 w-64 h-64 bg-accent-special/10 blur-[80px] rounded-full pointer-events-none"></div>
+        <div class="absolute -top-24 -left-24 w-64 h-64 bg-accent-primary/10 blur-3xl rounded-full pointer-events-none"></div>
+        <div class="absolute -bottom-24 -right-24 w-64 h-64 bg-accent-special/10 blur-3xl rounded-full pointer-events-none"></div>
 
         <!-- B. 左侧导航栏 -->
         <aside class="w-45 border-r border-text-main/5 flex flex-col p-6 relative z-10">
@@ -19,12 +19,10 @@
 
           <!-- 动态 Glider 导航 -->
           <nav class="flex flex-col relative space-y-1" :style="{ '--total-tabs': tabs.length }">
-            <button v-for="(tab, index) in tabs" :key="tab.id"
-              @click="changeTab(tab.id)"
-              :data-tour="`settings-tab-${tab.id}`"
+            <button v-for="(tab, index) in tabs" :key="tab.id" :data-tour="`settings-tab-${tab.id}`"
               class="relative z-10 flex items-center gap-3 px-4 py-3 text-md font-bold transition-all duration-300 group"
               :class="currentTab === tab.id ? 'text-accent-primary' : 'text-text-dim hover:text-text-main/70'"
-            >
+              @click="changeTab(tab.id)" >
               <component :is="tab.icon" class="size-4" />
               <span>{{ tab.label }}</span>
             </button>
@@ -376,14 +374,14 @@
                     <span class="px-2 py-0.5 rounded bg-accent-special/20 text-accent-special text-xs font-black uppercase">实验性</span>
                   </h3>
 
-                  <button v-if="formData.ai.enabled" @click="appStore.uiState.showPromptManager = true"
+                  <button v-if="formData.ai.enabled" @click="appStore.uiState.showAIDefinitionManager = true"
                     class="px-4 py-1.5 rounded-lg bg-accent-special/10 hover:bg-accent-special/20 text-accent-special border border-accent-special/30 text-xs font-bold transition-colors flex items-center gap-2">
-                    <Drama class="size-4" /> 提示词管理
+                    <Drama class="size-4" /> AI 定义管理
                   </button>
                 </div>
                 <div class="space-y-6">
                   <div data-tour="settings-ai-enable">
-                    <CommonSwitch label="启用 AI 辅助" v-model="formData.ai.enabled" description="用于日志分析、概述模组等功能" />
+                    <CommonSwitch label="启用 AI 功能" v-model="formData.ai.enabled" description="用于日志分析、模组说明和 AI 助手对话等功能。" />
                   </div>
                   <div v-if="formData.ai.enabled" class="space-y-6 animate-in slide-in-from-top-2">
                       
@@ -391,30 +389,30 @@
                     <div data-tour="settings-ai-connection" class="p-4 rounded-xl bg-text-main/5 border border-text-main/10 space-y-5">
                       <div class="grid grid-cols-2 gap-3">
                         <!-- 厂商/协议选择 -->
-                        <CommonSelect label="接口协议标准" description="大部分中转站、以及国产模型一般用OpenAI协议即可"
+                        <CommonSelect label="接口协议" description="大多数中转服务和国产模型接口都可以选 OpenAI 兼容协议。"
                           v-model="formData.ai.provider" :options="currentAiProviders" @change="handleProviderChange"/>
                         <!-- 模型选择 (带刷新动作) -->
                         <div class="relative flex items-end gap-2">
                           <div class="flex-1">
                             <!-- 加上 editable 允许用户手输未被探测到的模型名 -->
-                            <CommonSelect label="选择模型"  editable v-model="formData.ai.model" :options="currentAiModels" 
-                              placeholder="下拉选择或手动输入模型名" @visible-change="(val) => val && fetchAiModels()"/>
+                            <CommonSelect label="模型" editable v-model="formData.ai.model" :options="currentAiModels" 
+                              placeholder="下拉选择或手动输入模型名称" @visible-change="(val) => val && fetchAiModels()"/>
                           </div>
                           <!-- 对于自定义模式，提供显式的刷新按钮让用户主动拉取 -->
-                          <button @click="fetchAiModels" v-tooltip="'重新从 Base URL 获取模型列表'" 
+                          <button @click="fetchAiModels(true)" v-tooltip="'重新获取模型列表'" 
                             class="h-9 px-3 bg-black/30 hover:bg-accent-special/20 text-accent-special border border-accent-special/30 rounded-lg flex items-center justify-center transition-colors">
-                            <svg class="size-4" :class="{'animate-spin': appStore.aiState.isLoading}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
+                            <svg class="size-4" :class="{'animate-spin': aiStore.isLoading}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
                           </button>
                         </div>
 
                         <!-- Base URL (自定义必填，官方高级选填) -->
                         <CommonInput label="Base URL" v-model="formData.ai.base_url" class="col-span-2" 
                           placeholder="例如: http://127.0.0.1:11434 或 https://api.deepseek.com/v1" 
-                          description="填写官方请求接口或代理服务器或本地服务(如 LM Studio/Ollama)的地址。"
+                          description="填写你要连接的接口地址，例如官方接口、中转服务或本地服务地址。"
                         />
                         <!-- API Key -->
                         <CommonInput label="API Key" v-model="formData.ai.api_key" is-password class="col-span-2" 
-                          placeholder="请求时需要的 API Key，本地部署通常留空。" 
+                          placeholder="接口需要时填写 API Key；本地部署通常可以留空。" 
                         />
                       </div>
 
@@ -423,31 +421,35 @@
                     <!-- 3. 测试与高级参数区 -->
                     <div data-tour="settings-ai-advanced" class="grid grid-cols-2 gap-4">
                       <CommonNumber label="最大 Token 限制" v-model="formData.ai.max_tokens" :step="100" :min="500" />
-                      <CommonNumber label="最大并发限制" v-model="formData.ai.max_concurrency" :step="1" :min="1" :max="100" description="同时处理的请求数，建议根据 API 限制设为 3-5 之间。" />
-                      <CommonNumber label="输出随机性" v-model="formData.ai.temperature" :step="0.1" :min="0" :max="2.0" description="值 (Temperature) 越高创造性越强，越低越严谨。推荐0.7左右。" />
+                      <CommonNumber label="最大并发数" v-model="formData.ai.max_concurrency" :step="1" :min="1" :max="100" description="同时发出的请求数量。大多数情况下设为 3 到 5 就够了。" />
+                      <CommonNumber label="输出随机性" v-model="formData.ai.temperature" :step="0.1" :min="0" :max="2.0" description="值越低越稳定，值越高越发散。一般用 0.7 左右即可。" />
                       <CommonSelect v-if="formData.ai.provider === 'openai_compatible'"
-                        label="端点模式" v-model="formData.ai.endpoint_mode"
-                        description="Auto 会自动在 chat.completions 和 responses 之间选择；排障时可以手动固定。"
+                        label="兼容模式" v-model="formData.ai.endpoint_mode"
+                        description="自动模式会按当前模型选择更合适的兼容方式。只有排查兼容问题时才需要手动切换。"
                         :options="[
                           { label: '自动选择', value: 'auto' },
-                          { label: 'Chat Completions', value: 'chat_completions' },
-                          { label: 'Responses', value: 'responses' }
+                          { label: '标准对话模式', value: 'chat_completions' },
+                          { label: '高级响应模式', value: 'responses' }
                         ]" />
-                      
+
                       <!-- 测试区 -->
                       <div data-tour="settings-ai-test" class="col-span-2 pt-2 border-t border-text-main/5 flex gap-3">
-                        <CommonInput label="测试输入" class="flex-1" v-model="testPrompt" placeholder="简单输入一句话测试连接 (如：是谁？)" @keydown.enter="testModel"></CommonInput>
+                        <CommonInput label="测试内容" class="flex-1" v-model="testPrompt" placeholder="输入一句简单的话测试连接，例如：你好" @keydown.enter="testModel"></CommonInput>
                         <button class="mt-[1.3rem] flex items-center justify-center bg-accent-special/70 hover:bg-accent-special hover:text-text-main text-text-dim px-6 py-2 rounded-lg font-bold transition-all" 
-                          :class="[appStore.aiState.isLoading?'cursor-not-allowed pointer-events-none opacity-50':'cursor-pointer']"
+                          :class="[aiStore.isLoading?'cursor-not-allowed pointer-events-none opacity-50':'cursor-pointer']"
                           @click="testModel">
-                          <svg v-if="appStore.aiState.isLoading" class="animate-spin size-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                          <svg v-if="aiStore.isLoading" class="animate-spin size-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                           发起测试
                         </button>
                       </div>
                       <div v-if="testResponse" class="col-span-2 p-4 rounded-xl text-text-main/80 bg-accent-special/10 border border-text-main/10 relative">
-                        <button @click="testResponse=''" class="absolute top-2 right-2 text-text-dim hover:text-text-main">×</button>
+                        <button @click="clearTestResult" class="absolute top-2 right-2 text-text-dim hover:text-text-main">×</button>
                         <div class="text-xs text-text-dim mb-1 font-bold">AI 响应结果：</div>
                         <div class="text-sm whitespace-pre-wrap leading-relaxed">{{ testResponse }}</div>
+                        <details v-if="testRawResponse" class="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-text-dim">
+                          <summary class="cursor-pointer font-bold text-text-main">查看原始返回内容</summary>
+                          <pre class="mt-2 whitespace-pre-wrap break-all rounded-lg border border-white/5 bg-black/30 p-3 text-xs text-text-main">{{ prettyTestRawResponse }}</pre>
+                        </details>
                       </div>
                     </div>
                   </div>
@@ -585,12 +587,12 @@
   <Teleport to="body">
     <transition name="panel-fade">
       <div v-if="showDataBundleModal && appStore.uiState.showSettingsPanel"
-        class="fixed inset-0 z-[120] flex items-center justify-center bg-bg-deep/70 backdrop-blur-md"
+        class="fixed inset-0 z-120 flex items-center justify-center bg-bg-deep/70 backdrop-blur-md"
         @click.self="closeDataBundleModal"
       >
         <div class="relative w-[min(920px,92vw)] max-h-[84vh] flex flex-col overflow-hidden rounded-4xl border border-accent-primary/20 bg-bg-deep/95 shadow-[0_0_50px_rgba(0,0,0,0.65)]">
-          <div class="absolute -top-20 -left-16 w-56 h-56 rounded-full bg-accent-primary/10 blur-[90px] pointer-events-none"></div>
-          <div class="absolute -bottom-20 -right-16 w-56 h-56 rounded-full bg-accent-special/10 blur-[90px] pointer-events-none"></div>
+          <div class="absolute -top-20 -left-16 w-56 h-56 rounded-full bg-accent-primary/10 blur-3xl pointer-events-none"></div>
+          <div class="absolute -bottom-20 -right-16 w-56 h-56 rounded-full bg-accent-special/10 blur-3xl pointer-events-none"></div>
 
           <header class="relative z-10 flex items-center justify-between gap-4 px-5 py-4 border-b border-text-main/8">
             <div class="min-w-0">
@@ -617,7 +619,7 @@
                   >
                   <span class="text-sm font-bold text-text-main">{{ module.label }}</span>
                   <button v-if="buildBundleModuleTooltip(module)" type="button" v-tooltip="buildBundleModuleTooltip(module)" @click.prevent
-                    class="ml-auto size-5 rounded-full border border-text-main/10 text-[11px] font-bold text-text-dim hover:text-text-main hover:border-text-main/20 transition-all"
+                    class="ml-auto size-5 rounded-full border border-text-main/10 text-xs font-bold text-text-dim hover:text-text-main hover:border-text-main/20 transition-all"
                   >?
                   </button>
                 </div>
@@ -645,8 +647,8 @@
                       <div class="min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
                           <span class="text-sm font-bold text-text-main">{{ profile.name }}</span>
-                          <span v-if="profile.is_default" class="text-[10px] px-1.5 py-0.5 rounded bg-accent-highlight/20 text-accent-highlight">默认</span>
-                          <span v-if="profile.game_version" class="text-[10px] px-1.5 py-0.5 rounded bg-accent-secondary/20 text-accent-secondary">{{ profile.game_version }}</span>
+                          <span v-if="profile.is_default" class="text-[0.7rem] px-1.5 py-0.5 rounded bg-accent-highlight/20 text-accent-highlight">默认</span>
+                          <span v-if="profile.game_version" class="text-[0.7rem] px-1.5 py-0.5 rounded bg-accent-secondary/20 text-accent-secondary">{{ profile.game_version }}</span>
                         </div>
                         <p class="text-xs text-text-dim/80 mt-1">
                           {{ profile.has_user_data ? (profile.description || '将打包整个环境目录') : '未检测到可打包的用户数据目录' }}
@@ -697,11 +699,13 @@ import { RUN_COMMAND_TAGS } from '../utils/constants'
 import { formatFileSize } from '../utils/format'
 import { useRuleStore } from '../stores/ruleStore'
 import { useAppStore } from '../stores/appStore'
+import { useAiStore } from '../stores/aiStore'
 import { useConfirmStore } from '../stores/confirmStore'
 import { useProfileStore } from '../stores/profileStore'
 import { useGuideStore } from '../stores/guideStore'
 
 const appStore = useAppStore()
+const aiStore = useAiStore()
 const ruleStore = useRuleStore()
 const confirmStore = useConfirmStore()
 const profileStore = useProfileStore()
@@ -739,8 +743,8 @@ const downloadState = ref({
   workshop_db: false,
   instead_db: false,
 })
-const currentAiProviders = ref([])  // AI厂商或代理协议列表
-const currentAiModels = ref([])     // 当前AI的模型列表
+const currentAiProviders = computed(() => aiStore.listAiProviders())
+const currentAiModels = computed(() => aiStore.getCachedAiModelOptions(formData.value?.ai || {}))
 const dataBundleSchema = ref({
   modules: [],
   profiles: [],
@@ -861,9 +865,9 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
       await checkPaths()
       await loadDataBundleSchema()
       await appStore.refreshRemoteImageCacheStats()
-      // 如果 AI 已启用，且面板刚打开，加载初始的厂商和模型列表
+      // AI 厂商定义已在 aiStore 初始化时一并获取。
+      // 模型列表仍按需请求，但优先复用 aiStore 缓存，避免设置面板维护重复状态。
       if (formData.value.ai) {
-        await loadAiProviders()
         if (formData.value.ai.provider) {
           await fetchAiModels()
         }
@@ -990,37 +994,49 @@ const handleBrowse = async (pathKey, fileTypes, checkTarget = undefined) => {
 // 测试提示词
 const testPrompt = ref("介绍一下自己")
 const testResponse = ref("")
+const testRawResponse = ref(null)
+const prettyTestRawResponse = computed(() => {
+  if (testRawResponse.value == null) return ''
+  try {
+    return JSON.stringify(testRawResponse.value, null, 2)
+  } catch {
+    return String(testRawResponse.value)
+  }
+})
+const clearTestResult = () => {
+  testResponse.value = ""
+  testRawResponse.value = null
+}
 // 测试模型
 const testModel = async () => {
-  const res = await appStore.chatWithAI(testPrompt.value, formData.value.ai)
-  if (res) {
-    testResponse.value = res
-    // console.log("模型测试结果:", res)
+  clearTestResult()
+  const res = await aiStore.chatWithAI(testPrompt.value, formData.value.ai)
+  testRawResponse.value = res?.raw ?? null
+  if (res?.ok) {
+    testResponse.value = res.text
     toast.success("模型测试成功")
+    return
   }
+  if (res?.isEmpty) {
+    testResponse.value = '模型已返回，但内容为空。可尝试切换模型、检查代理兼容策略或改用正式助手会话测试。'
+    toast.warning('模型返回了空内容')
+    return
+  }
+  testResponse.value = res?.error || '模型测试失败'
+  toast.error(res?.error || '模型测试失败')
 }
 
 // 切换厂商/协议时，如果是官方模式，立即获取模型；若是代理模式，清空让用户重新获取
 const handleProviderChange = async () => {
   formData.value.ai.model = ''
-  currentAiModels.value = [] // 代理模式需要base_url，等用户填好自己点下拉框获取
-}
-// 加载厂商列表
-const loadAiProviders = async () => {
-  const providers = await appStore.getAiProviders()
-  currentAiProviders.value = providers || []
+  await fetchAiModels()
 }
 // 拉取模型列表 (兼容旧的，组装为 CommonSelect 接受的结构)
-const fetchAiModels = async () => {
-  if (!formData.value.ai.provider || !formData.value.ai.enabled || !formData.value.ai.base_url || !formData.value.ai.api_key) {
+const fetchAiModels = async (forceRefresh = false) => {
+  if (!formData.value.ai.provider || !formData.value.ai.enabled) {
     return
   }
-  const models = await appStore.getAiModels(formData.value.ai)
-  if (models) {
-    currentAiModels.value = models.map(m => ({ value: m, label: m }))
-  } else {
-    currentAiModels.value = []
-  }
+  await aiStore.getAiModels(formData.value.ai, { forceRefresh })
 }
 
 const openUrlOnSteam = (url) => {

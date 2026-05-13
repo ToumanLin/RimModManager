@@ -67,7 +67,7 @@ from backend.managers.mgr_sorter import OrderSorter
 from backend.managers.mgr_download import DownloadManager, TaskStatus
 from backend.managers.mgr_steam import RIMWORLD_APP_ID, SteamManager
 from backend.managers.mgr_sub_browser import SubBrowserManager
-from backend.ai.service import AIManager
+from backend.ai.ai_service import AIManager
 from backend.managers.mgr_workshop_db import WorkshopDBManager
 # from backend.managers.mgr_workshop_db_old import WorkshopDBManager
 from backend.managers.mgr_update import UpdateManager, UpdateInfo
@@ -146,8 +146,7 @@ class ApiResponse:
 
     @classmethod
     def serialize_data(cls, obj):
-        if obj is None:
-            return None
+        if obj is None: return None
         """递归将模型和日期转换为 JSON 可接受的类型"""
         # 1. 检查对象是否自带 to_dict 方法 (这会覆盖 dataclass 的默认行为)
         if hasattr(obj, 'to_dict') and callable(getattr(obj, 'to_dict')):
@@ -351,8 +350,7 @@ class API:
         """仅在打包桌面模式下确保 Browser mode 快捷方式存在。"""
         try:
             import sys
-            if not getattr(sys, 'frozen', False):
-                return
+            if not getattr(sys, 'frozen', False): return
 
             result = FileManager.ensure_browser_mode_shortcut(sys.executable)
             action = "已创建" if result.get('changed') else "已存在"
@@ -390,8 +388,7 @@ class API:
             return
 
         last_version = str(last_ver_record.value or '').strip() or current_version
-        if last_version == current_version:
-            return
+        if last_version == current_version: return
 
         # 标记版本已变动
         self._upgrade_context["version_changed"] = True
@@ -403,7 +400,6 @@ class API:
             migration_result = run_app_upgrade_migrations(
                 last_version=last_version,
                 current_version=current_version,
-                ai_mgr=self.ai_mgr,
             )
             self._upgrade_context["pending_actions"].extend(migration_result.pending_actions)
             self._upgrade_context["messages"].extend(migration_result.messages)
@@ -533,8 +529,7 @@ class API:
         - 不存在的路径返回空串，让上层继续走回退链
         """
         value = str(path_value or "").strip()
-        if not value:
-            return ""
+        if not value: return ""
         candidate = Path(value)
         # 保存对话框返回的目标文件在成功写入前通常还不存在，这里根据后缀推断父目录。
         if candidate.is_file() or candidate.suffix:
@@ -548,8 +543,7 @@ class API:
         若创建失败则返回空串，由上层继续走兜底逻辑。
         """
         value = str(path_value or "").strip()
-        if not value:
-            return ""
+        if not value: return ""
         try:
             candidate = Path(value)
             candidate.mkdir(parents=True, exist_ok=True)
@@ -563,8 +557,7 @@ class API:
         默认导入目录固定指向当前环境用户数据下的 ModLists。
         该目录是用户显式要求的导入入口，目录缺失时自动创建。
         """
-        if not context:
-            return ""
+        if not context: return ""
         base_dir = str(Path(context.user_data_path) / "ModLists")
         return self._ensure_directory(base_dir)
 
@@ -609,8 +602,7 @@ class API:
         仅在通过文件选择器且操作成功后调用，更新对应的全局“上次目录”。
         """
         normalized_dir = self._normalize_existing_dir(path_value)
-        if not normalized_dir:
-            return
+        if not normalized_dir: return
         if kind == "import":
             settings.set("load_order_import_last_path", normalized_dir)
             return
@@ -669,16 +661,14 @@ class API:
     def _normalize_native_drop_selector(self, selector: str | None = None) -> str:
         """把前端传入的 id / selector 统一成 pywebview 可直接查询的 CSS 选择器。"""
         normalized = str(selector or self._native_drop_selector or '').strip() or '#backup-drop-zone'
-        if normalized.startswith(('#', '.', '[')):
-            return normalized
+        if normalized.startswith(('#', '.', '[')): return normalized
         return f'#{normalized}'
 
     def _bind_native_drag_drop(self, selector: str | None = None):
         """
         把原生 drop 事件只绑定到备份面板本体，减少整页级别监听带来的额外事件噪音。
         """
-        if not self._window:
-            return False
+        if not self._window: return False
 
         normalized_selector = self._normalize_native_drop_selector(selector)
 
@@ -694,8 +684,7 @@ class API:
                 self._native_drop_bound and
                 normalized_selector == self._native_drop_selector and
                 self._native_drop_element == element
-            ):
-                return True
+            ): return True
 
             if self._native_drop_element and self._native_drop_handler:
                 try:
@@ -721,8 +710,7 @@ class API:
         """
         直接把文件路径送回前端的全局处理器，避免再经过事件总线序列化一层。
         """
-        if not self._window or not full_paths:
-            return
+        if not self._window or not full_paths: return
 
         try:
             payload = json.dumps(full_paths, ensure_ascii=False)
@@ -746,8 +734,7 @@ class API:
                 full_path = str(file_info.get('pywebviewFullPath') or '').strip()
                 if full_path:
                     full_paths.append(full_path)
-            if not full_paths:
-                return
+            if not full_paths: return
             threading.Thread(target=self._dispatch_native_drop_paths, args=(full_paths,), daemon=True).start()
         except Exception as e:
             logger.warning(f"处理原生拖放事件失败: {e}")
@@ -1050,8 +1037,7 @@ class API:
             return ApiResponse.warning("当前正在处理数据库操作，请稍后再试。")
         try:
             ready, reason = self._prepare_database_maintenance()
-            if not ready:
-                return ApiResponse.warning(reason)
+            if not ready: return ApiResponse.warning(reason)
             self._close_database_for_maintenance()
 
             # 清理修复残留，避免重置后下次启动又应用旧的修复候选库。
@@ -1069,16 +1055,14 @@ class API:
 
             if os.path.exists(db_path):
                 result = clear_db()
-                if not result:
-                    return ApiResponse.error("重置失败，请关闭相关操作后重试。")
+                if not result: return ApiResponse.error("重置失败，请关闭相关操作后重试。")
                 self._close_database_for_maintenance()
             elif delete_error:
                 logger.warning("主库已删除，但删除阶段存在告警: %s", delete_error)
 
             self.is_first_db_init = True
             init_ok = init_db(db_path)
-            if not init_ok:
-                return ApiResponse.error("重置失败，数据库无法重新创建。")
+            if not init_ok: return ApiResponse.error("重置失败，数据库无法重新创建。")
             # 重置后显式写回当前应用版本，避免少数 fallback 场景把旧元数据残留到下次启动。
             SystemInfo.insert(key='app_version', value=__version__).on_conflict_replace().execute()
             # 重置会清空所有环境记录，当前进程必须立即回退到 default 并重建上下文，
@@ -1103,12 +1087,10 @@ class API:
             return ApiResponse.warning("当前正在处理数据库操作，请稍后再试。")
         try:
             ready, reason = self._prepare_database_maintenance()
-            if not ready:
-                return ApiResponse.warning(reason)
+            if not ready: return ApiResponse.warning(reason)
             db_path = str(DATA_DIR / 'mod_manager.db')
             result = prepare_manual_database_repair(db_path)
-            if not result:
-                return ApiResponse.error("修复失败，请稍后重试。")
+            if not result: return ApiResponse.error("修复失败，请稍后重试。")
             if result.get("initialized"):
                 self.is_first_db_init = True
                 return ApiResponse.success({
@@ -1302,8 +1284,7 @@ class API:
                     'All Files (*.*)',
                 ),
             )
-            if not target_path:
-                return ApiResponse.warning("已取消")
+            if not target_path: return ApiResponse.warning("已取消")
 
             export_result = self.data_bundle_mgr.write_bundle(
                 target_path=target_path,
@@ -1415,8 +1396,7 @@ class API:
                         paths_to_scan.append(str(TOOL_MODS_DIR))
                 else:
                     return ApiResponse.error("当前 环境 未激活，无法扫描 Mods")
-            if not paths_to_scan:
-                return ApiResponse.error("没有配置有效的扫描路径")
+            if not paths_to_scan: return ApiResponse.error("没有配置有效的扫描路径")
             # 调用异步扫描
             # 注意：这里不需要 try-catch 包裹整个逻辑，因为异常在线程内被捕获并通过事件发回了
             # 1. 扫描所有路径入库
@@ -1806,8 +1786,7 @@ class API:
                 ),
                 file_types=LOAD_ORDER_OPEN_FILE_TYPES,
             )
-        if not file:
-            return ApiResponse.warning("未选择文件")
+        if not file: return ApiResponse.warning("未选择文件")
         res = self.load_order_mgr.read_active_mods(file) if self.load_order_mgr else {}
         result = self._build_load_order_result(
             file,
@@ -2082,8 +2061,7 @@ class API:
         """
         context = self.profile_mgr.build_profile_context(profile_id)
         local_mods_root = context.local_mods_path
-        if not local_mods_root or not os.path.exists(local_mods_root):
-            return False
+        if not local_mods_root or not os.path.exists(local_mods_root): return False
         runtime_analysis = ModDAO.get_profile_conflict_analysis(context, include_workshop=include_workshop)
         return self.file_mgr.sync_managed_links(local_mods_root, runtime_analysis.get('deploy_paths', []))
 
@@ -2301,8 +2279,7 @@ class API:
     def profile_create_desktop_shortcut(self, profile_id: str):
         """为指定环境创建桌面快捷方式。"""
         try:
-            if not profile_id:
-                return ApiResponse.error("未指定 Profile ID")
+            if not profile_id: return ApiResponse.error("未指定 Profile ID")
 
             profile = self.profile_mgr.get_profile(profile_id)
             check_install = PathChecker.check_install_path(profile.game_install_path)
@@ -2587,8 +2564,7 @@ class API:
         """
         try:
             folder = file_mgr.select_folder_dialog(initial_dir)
-            if folder:
-                return ApiResponse.success(folder)
+            if folder: return ApiResponse.success(folder)
         except Exception as e:
             return ApiResponse.error(f"选择文件夹时出错: {e}")
         return ApiResponse.warning("未选择文件夹")
@@ -2607,8 +2583,7 @@ class API:
         """
         try:
             file = file_mgr.select_file_dialog(initial_dir, file_types)
-            if file:
-                return ApiResponse.success(file)
+            if file: return ApiResponse.success(file)
         except Exception as e:
             return ApiResponse.error(f"选择文件时出错: {e}")
         return ApiResponse.warning("未选择文件")
@@ -2625,8 +2600,7 @@ class API:
         """
         try:
             file = file_mgr.save_file_dialog(initial_dir, default_filename, file_types)
-            if file:
-                return ApiResponse.success(file)
+            if file: return ApiResponse.success(file)
         except Exception as e:
             return ApiResponse.error(f"保存文件时出错: {e}")
         return ApiResponse.warning("未选择文件")
@@ -2649,8 +2623,7 @@ class API:
         """
         cfg = settings.config
         local_root = self.active_context.local_mods_path if self.active_context else ""
-        if not local_root:
-            return ApiResponse.error("未指定本地模组路径")
+        if not local_root: return ApiResponse.error("未指定本地模组路径")
         
         # 1. 准备任务 (使用 JOIN 一次性查出所有需要的数据)
         # 这里的退回顺序逻辑直接在 Python 循环中处理，清晰易维护
@@ -2675,8 +2648,7 @@ class API:
         :param target_store: 'local' 或 'self'
         :param mode: 'copy' 或 'move'
         """
-        if not self.active_context: 
-            return ApiResponse.error("未指定环境")
+        if not self.active_context: return ApiResponse.error("未指定环境")
         # 1. 拦截非法目标
         # if target_store == 'workshop':
         #     return ApiResponse.error("为了保证 Steam 同步机制不被破坏，禁止手动向创意工坊目录导入文件。")
@@ -2998,8 +2970,7 @@ class API:
             if log_type == 'app':
                 files = app_log_reader.get_log_files()
             else:
-                if not self.game_log_mgr: 
-                    return ApiResponse.warning("游戏环境未就绪，无法获取游戏日志")
+                if not self.game_log_mgr: return ApiResponse.warning("游戏环境未就绪，无法获取游戏日志")
                 files = self.game_log_mgr.get_log_files()
                 
             return ApiResponse.success(files)
@@ -3013,12 +2984,10 @@ class API:
             if log_type == 'app':
                 result = app_log_reader.read_log_page(filename, page, page_size)
             else:
-                if not self.game_log_mgr: 
-                    return ApiResponse.warning("游戏环境未就绪，无法读取游戏日志")
+                if not self.game_log_mgr: return ApiResponse.warning("游戏环境未就绪，无法读取游戏日志")
                 result = self.game_log_mgr.read_log_page(filename, page, page_size)
                 
-            if 'error' in result:
-                return ApiResponse.error(result['error'])
+            if 'error' in result: return ApiResponse.error(result['error'])
             return ApiResponse.success(result)
         except Exception as e:
             logger.error(f"Read log page failed: {e}", exc_info=True)
@@ -3105,11 +3074,11 @@ class API:
             ok = self.file_search_mgr.cancel_task(normalized_task_id) if self.file_search_mgr else False
             return ApiResponse.success(message="已请求取消文件搜索任务") if ok else ApiResponse.error("当前没有可取消的文件搜索任务")
 
-        if normalized_type == "ai-batch":
+        if normalized_type == "ai-task":
             if not normalized_task_id:
                 return ApiResponse.error("缺少任务 ID")
-            ok = self.ai_mgr.cancel_batch_task(normalized_task_id)
-            return ApiResponse.success(message="已请求取消 AI 批量任务") if ok else ApiResponse.error("当前没有可取消的 AI 批量任务")
+            ok = self.ai_mgr.cancel_task(normalized_task_id)
+            return ApiResponse.success(message="已请求取消 AI 任务") if ok else ApiResponse.error("当前没有可取消的 AI 任务")
 
         return ApiResponse.error(f"该任务类型暂不支持取消: {normalized_type or 'unknown'}")
 
@@ -3397,7 +3366,7 @@ class API:
     
     @log_api_call
     def ai_get_config(self):
-        """获取当前 AI 配置和 Prompt 列表"""
+        """获取当前 AI 配置和模板列表"""
         from backend.settings import AIConfig
         ai_cfg = settings.config.ai
         # 如果是字典，先转成对象，方便统一调用 asdict
@@ -3405,18 +3374,35 @@ class API:
             ai_cfg = AIConfig(**ai_cfg)
         return ApiResponse.success({
             "config": asdict(ai_cfg),
-            "prompts": self.ai_mgr.prompts # 返回 prompt 定义，供前端生成动态表单
+            "prompts": self.ai_mgr.prompts,
+            "assistants": self.ai_mgr.assistants,
+            "tasks": self.ai_mgr.tasks,
+            "definition_editor_meta": self.ai_mgr.definition_editor_meta,
+            "providers": self.ai_mgr.get_providers(),
+            "model_capability_meta": self.ai_mgr.get_model_capability_meta(),
         })
 
     @log_api_call
     def ai_save_config(self, config_data: dict):
         """保存 AI 配置"""
         try:
-            # 增量更新设置
             current_ai = settings.config.ai
-            for k, v in config_data.items():
-                if hasattr(current_ai, k):
-                    setattr(current_ai, k, v)
+            editable_keys = {
+                "enabled",
+                "provider",
+                "endpoint_mode",
+                "base_url",
+                "api_key",
+                "model",
+                "temperature",
+                "max_tokens",
+                "max_concurrency",
+            }
+            for k, v in (config_data or {}).items():
+                if k not in editable_keys or not hasattr(current_ai, k):
+                    continue
+                setattr(current_ai, k, v)
+
             settings.save()
             return ApiResponse.success(message="AI 配置已保存")
         except Exception as e:
@@ -3481,6 +3467,15 @@ class API:
             return ApiResponse.error(f"获取模型列表失败: {str(e)}")
 
     @log_api_call
+    def ai_get_model_capabilities(self, temp_config: dict):
+        """获取当前临时 AI 配置对应的模型能力摘要。"""
+        try:
+            capabilities = self.ai_mgr.get_model_capabilities(temp_config or {})
+            return ApiResponse.success(capabilities)
+        except Exception as e:
+            return ApiResponse.error(f"获取模型能力失败: {str(e)}")
+
+    @log_api_call
     def ai_chat(self, message: str, config_data: dict={}):
         """测试对话"""
         result = self._ai_check_enable_with_config(config_data)
@@ -3490,91 +3485,212 @@ class API:
             return ApiResponse.success(result)
         except Exception as e:
             return ApiResponse.error(str(e))
-        
+
     @log_api_call
-    def cancel_ai_diagnostic(self, session_id: str):
-        """取消 AI 日志分析任务"""
-        ok = self.ai_mgr.cancel_diagnostic_request(session_id)
+    def cancel_ai_session(self, session_id: str):
+        """取消 AI 助手会话"""
+        ok = self.ai_mgr.cancel_assistant_request(session_id)
         return ApiResponse.success() if ok else ApiResponse.error("取消失败，可能请求已完成或不存在")
+
+    def _resolve_assistant_log_request(self, assistant_context: dict, request_payload: dict) -> tuple[str, str]:
+        """解析助手会话中的日志来源信息。
+
+        运行时唯一可信来源应当是 assistant_context.request_payload；
+        如果调用方只给了 diagnosis_context 附件，则从附件 source 中兜底提取。
+        """
+
+        source_type = str(
+            request_payload.get("source_type")
+            or request_payload.get("log_source_type")
+            or ""
+        ).strip()
+        filename = str(request_payload.get("filename") or "").strip()
+
+        attachments = request_payload.get("attachments", []) or []
+        if isinstance(attachments, list):
+            for attachment in attachments:
+                if not isinstance(attachment, dict):
+                    continue
+                if str(attachment.get("kind") or "").strip() != "diagnosis_context":
+                    continue
+                source = dict(attachment.get("source") or {})
+                source_type = source_type or str(source.get("source_type") or "").strip()
+                filename = filename or str(source.get("filename") or "").strip()
+                if source_type and filename:
+                    break
+
+        return source_type, filename
+
+    def _normalize_assistant_session_payload(self, payload: dict) -> dict:
+        """把前端 canonical assistant 请求整理成后端统一执行载荷。"""
+
+        normalized_payload = dict(payload or {})
+        assistant_context = dict(normalized_payload.get("assistant_context") or {})
+        if not assistant_context:
+            raise ValueError("assistant_context is required")
+
+        request_payload = dict(assistant_context.get("request_payload") or {})
+        question = str(
+            assistant_context.get("question")
+            or request_payload.get("question")
+            or normalized_payload.get("question")
+            or ""
+        ).strip()
+        attachments = list(request_payload.get("attachments", []) or normalized_payload.get("attachments", []) or [])
+        enabled_tools = list(request_payload.get("enabled_tools", []) or normalized_payload.get("enabled_tools", []) or [])
+        override_config = dict(
+            request_payload.get("ai_override_config")
+            or assistant_context.get("override_config")
+            or normalized_payload.get("ai_override_config")
+            or {}
+        )
+        source_type, filename = self._resolve_assistant_log_request(assistant_context, request_payload)
+
+        request_payload.update({
+            "question": question,
+            "attachments": attachments,
+            "enabled_tools": enabled_tools,
+            "ai_override_config": override_config,
+        })
+        if source_type:
+            request_payload["source_type"] = source_type
+            request_payload["log_source_type"] = source_type
+        if filename:
+            request_payload["filename"] = filename
+
+        assistant_context.update({
+            "question": question,
+            "override_config": override_config,
+            "request_payload": request_payload,
+        })
+
+        normalized_payload.update({
+            "assistant_context": assistant_context,
+            "question": question,
+            "attachments": attachments,
+            "enabled_tools": enabled_tools,
+            "ai_override_config": override_config,
+        })
+        if source_type:
+            normalized_payload["log_source_type"] = source_type
+        if filename:
+            normalized_payload["filename"] = filename
+        return normalized_payload
+
+    def _resolve_assistant_request_runtime(self, payload: dict) -> tuple[dict, dict, dict, str, str, Any]:
+        """统一解析助手请求执行所需的运行时上下文。"""
+        normalized_payload = self._normalize_assistant_session_payload(payload)
+        assistant_context = dict(normalized_payload.get("assistant_context") or {})
+        request_payload = dict(assistant_context.get("request_payload") or {})
+        source_type, filename = self._resolve_assistant_log_request(assistant_context, request_payload)
+        reader = None
+        if source_type:
+            if source_type == 'app' and not settings.config.debug_mode:
+                raise ValueError("软件日志分析仅在 Debug 模式下可用。")
+            reader = self.game_log_mgr if source_type == 'game' else app_log_reader
+            if not reader:
+                raise ValueError("日志读取器未初始化")
+        return normalized_payload, assistant_context, request_payload, source_type, filename, reader
     
     @log_api_call
-    def ai_execute_task(self, task_key: str, params: dict):
-        """
-        执行特定任务 (翻译、日志分析等)
-        前端调用示例: ai_execute_task('translation', {content: 'About RimWorld', target_lang: 'Chinese'})
-        """
+    def ai_start_task(self, task_key: str, payload: dict | None = None):
+        """统一启动异步 AI 任务。"""
         result = self.ai_check_enable()
         if not result['status'] == 'success': return result
-        try:
-            result = self.ai_mgr.execute_task(task_key, params)
-            return ApiResponse.success(result)
-        except Exception as e:
-            return ApiResponse.error(str(e))
-    
-    @log_api_call
-    def ai_execute_batch_task(self, task_key: str, items: list, variables: dict = {}):
-        """
-        发起异步批量 AI 任务。
-        前端调用此接口后会立即返回 task_id，随后通过 EventBus 监听进度。
-        """
-        result = self.ai_check_enable()
-        if not result['status'] == 'success': return result
-        if not variables: variables = {}
-        # 1. 生成唯一的任务 ID，供前端监听特定频道
-        task_event_id = str(uuid.uuid4())
-        # 2. 定义后台运行的工作线程
+        payload = dict(payload or {})
+        task_id = str(uuid.uuid4())
+        task_definition = (self.ai_mgr.tasks or {}).get(task_key) if hasattr(self.ai_mgr, "tasks") else {}
+        task_title = str((task_definition or {}).get("name") or "AI 任务").strip() or "AI 任务"
+
         def background_worker():
-            # 为这个新线程创建一个全新的事件循环
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                # 运行写好的批量调度引擎
                 results = loop.run_until_complete(
-                    self.ai_mgr.execute_batch_task_async(task_key, items, variables, task_event_id)
+                    self.ai_mgr.execute_task_async(task_key, payload, task_id)
                 )
-                # 任务彻底完成后，发送 complete 事件
-                EventBus.emit(f'ai-batch-complete', {
-                    'task_event_id': task_event_id,
+                EventBus.emit("ai-task-complete", {
+                    'task_id': task_id,
                     'status': 'cancelled' if results.get('cancelled') else 'success', 
                     'data': results
                 })
-                # 可选：可以直接在这里调用 ModDAO 批量入库
-                # if results:
-                #     self._save_ai_results_to_db(results)
             except Exception as e:
                 logger.error(f"Background AI task failed: {e}", exc_info=True)
                 EventBus.emit_progress(
-                    task_event_id,
-                    "ai-batch",
+                    task_id,
+                    "ai-task",
                     status="failed",
                     progress=0,
                     message=f"AI 任务异常: {e}",
-                    metrics={"task_key": task_key, "total": len(items), "title": "AI 批量处理"},
+                    metrics={
+                        "task_id": task_id,
+                        "task_key": task_key,
+                        "title": task_title,
+                        "error": str(e),
+                    },
                 )
-                EventBus.emit(f'ai-batch-complete', {
-                    'task_event_id': task_event_id,
+                EventBus.emit("ai-task-complete", {
+                    'task_id': task_id,
                     'status': 'error', 
                     'message': str(e)
                 })
             finally:
+                try:
+                    pending_tasks = [
+                        task for task in asyncio.all_tasks(loop)
+                        if not task.done()
+                    ]
+                    for pending_task in pending_tasks:
+                        pending_task.cancel()
+                    if pending_tasks:
+                        loop.run_until_complete(
+                            asyncio.gather(*pending_tasks, return_exceptions=True)
+                        )
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Background AI task pending cleanup failed: {cleanup_error}",
+                        exc_info=True,
+                    )
+                try:
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Background AI task asyncgen cleanup failed: {cleanup_error}",
+                        exc_info=True,
+                    )
+                try:
+                    loop.run_until_complete(loop.shutdown_default_executor())
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Background AI task executor cleanup failed: {cleanup_error}",
+                        exc_info=True,
+                    )
+                try:
+                    asyncio.set_event_loop(None)
+                except Exception:
+                    pass
                 loop.close()
 
-        # 3. 启动守护线程（不阻塞当前 pywebview 的请求）
         EventBus.emit_progress(
-            task_event_id,
-            "ai-batch",
+            task_id,
+            "ai-task",
             status="pending",
             progress=0,
             message="任务已加入后台队列",
-            metrics={"task_key": task_key, "total": len(items), "title": "AI 批量处理"},
+            metrics={
+                "task_id": task_id,
+                "task_key": task_key,
+                "title": task_title,
+            },
         )
         threading.Thread(target=background_worker, daemon=True).start()
-
-        # 4. 立即返回响应给前端，让前端开始监听
         return ApiResponse.success({
-            "task_event_id": task_event_id,
-            "total_items": len(items)
-        }, message="批量任务已在后台启动")
+            "task_id": task_id,
+            "task_type": "ai-task",
+            "task_key": task_key,
+            "accepted": True,
+            "status": "pending",
+        }, message="AI 任务已在后台启动")
     
     @log_api_call
     def ai_prepare_diagnosis(self, payload: dict):
@@ -3617,43 +3733,60 @@ class API:
 
 
     @log_api_call
-    def ai_diagnostic_chat(self, payload: dict):
-        """
-        处理前端的日志诊断请求，直接接收浓缩后的数据
-        payload 结构: { "history": [], "diagnosis_context": {...}, "question": "..." }
-        """
+    def ai_execute_assistant_session(self, payload: dict):
+        """处理前端的通用助手会话请求。"""
         result = self.ai_check_enable()
         if not result['status'] == 'success': return result
-        source_type = payload.get("log_source_type", "game")
-        if source_type == 'app' and not settings.config.debug_mode:
-            return ApiResponse.error("软件日志分析仅在 Debug 模式下可用。")
-            
         try:
-            source_type = payload.get("log_source_type", "game")
-            session_id = payload.get("session_id", "")
-            reader = self.game_log_mgr if source_type == 'game' else app_log_reader
-            if not reader: return ApiResponse.error("日志读取器未初始化")
+            normalized_payload, assistant_context, request_payload, source_type, filename, reader = self._resolve_assistant_request_runtime(payload)
+            session_id = str(normalized_payload.get("session_id") or "").strip()
+            assistant_id = str(assistant_context.get("assistant_id") or "").strip()
 
             logger.debug(
-                f"[AI诊断API] 收到请求 session_id={session_id} source={source_type} "
-                f"filename={payload.get('filename', '')} history={len(payload.get('history', []))} "
-                f"has_context={bool(payload.get('diagnosis_context'))}"
+                f"[AI会话API] 收到请求 session_id={session_id} "
+                f"assistant_id={assistant_id} "
+                f"source_type={source_type or '<empty>'} "
+                f"filename={filename or '<empty>'} "
+                f"history={len(request_payload.get('history', []) or [])} "
+                f"attachments={len(request_payload.get('attachments', []) or [])}"
             )
             
-            # 直接使用传入的浓缩数据，不再自己计算
-            result = self.ai_mgr.ai_diagnostic_chat(payload, self.active_context, reader=reader)
+            result = self.ai_mgr.run_assistant_session(normalized_payload, self.active_context, reader=reader)
             logger.debug(
-                f"[AI诊断API] 请求完成 session_id={session_id} "
+                f"[AI会话API] 请求完成 session_id={session_id} "
                 f"analysis_chars={len(result.get('analysis', '')) if isinstance(result, dict) else 0} "
                 f"total_tokens≈{result.get('token_usage', {}).get('estimated_total_tokens', 0) if isinstance(result, dict) else 0}"
             )
             return ApiResponse.success(result)
         except Exception as e:
             # 增加异常堆栈打印，方便调试
-            logger.error(f"智能诊断异常: {str(e)}", exc_info=True)
-            return ApiResponse.error(f"智能诊断异常: {str(e)}")
-        
-    
+            logger.error(f"智能会话异常: {str(e)}", exc_info=True)
+            return ApiResponse.error(f"智能会话异常: {str(e)}")
+
+    @log_api_call
+    def ai_estimate_assistant_session_request(self, payload: dict):
+        """按真实助手请求结构预估本轮主对话输入消耗。"""
+        result = self.ai_check_enable()
+        if not result['status'] == 'success': return result
+        try:
+            normalized_payload, assistant_context, request_payload, source_type, filename, reader = self._resolve_assistant_request_runtime(payload)
+
+            logger.debug(
+                f"[AI会话预估] session_id={normalized_payload.get('session_id', '')} "
+                f"assistant_id={assistant_context.get('assistant_id', '')} "
+                f"source_type={source_type or '<empty>'} "
+                f"filename={filename or '<empty>'}"
+            )
+            result = self.ai_mgr.estimate_assistant_session_request(
+                normalized_payload,
+                self.active_context,
+                reader=reader,
+            )
+            return ApiResponse.success(result)
+        except Exception as e:
+            logger.error(f"助手请求预估异常: {str(e)}", exc_info=True)
+            return ApiResponse.error(f"助手请求预估异常: {str(e)}")
+
     # 供“一键排错”使用的全局扫描接口
     @log_api_call
     def ai_scan_global_errors(self, payload: dict):
@@ -3713,15 +3846,10 @@ class API:
             "is_over_limit": estimated_tokens > token_limit,
             "estimated_tokens": estimated_tokens,
             "token_limit": token_limit,
-            "diagnosis_context": diagnosis_context,
+            "condensed_data": diagnosis_context,
             "compression_notice": compression_notice
         })
     
-    @log_api_call
-    def ai_get_prompts(self):
-        """获取所有提示词"""
-        return ApiResponse.success(self.ai_mgr.prompts)
-
     @log_api_call
     def ai_save_prompt(self, prompt_id: str, prompt_data: dict):
         """保存提示词"""
@@ -3741,11 +3869,34 @@ class API:
             return ApiResponse.error(str(e))
 
     @log_api_call
-    def ai_reset_prompts(self):
-        """恢复默认提示词"""
+    def ai_save_assistant(self, assistant_id: str, assistant_data: dict):
+        """保存助手定义"""
         try:
-            res = self.ai_mgr.reset_system_prompts()
+            res = self.ai_mgr.save_assistant(assistant_id, assistant_data)
             return ApiResponse.success(res)
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def ai_save_task(self, task_id: str, task_data: dict):
+        """保存任务定义"""
+        try:
+            res = self.ai_mgr.save_task(task_id, task_data)
+            return ApiResponse.success(res)
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def ai_get_trace_records(self, session_id: str = ""):
+        """获取运行期 AI 请求链记录。
+
+        当前返回的是“按会话归档”的链路数据：
+        - 不传 `session_id` 时返回所有会话摘要
+        - 传入后返回单个会话的完整链路
+        """
+        try:
+            normalized_session_id = str(session_id or "").strip()
+            return ApiResponse.success(self.ai_mgr.get_trace_records(normalized_session_id or None))
         except Exception as e:
             return ApiResponse.error(str(e))
     
@@ -4448,8 +4599,7 @@ class API:
                 seen_wids.add(wid_str)
                 normalized_wids.append(wid_str)
 
-        if not normalized_wids:
-            return {}
+        if not normalized_wids: return {}
 
         resolved_map: dict[str, str] = {}
         manifest_map = ExtDAO.get_manifests_by_workshop_ids(normalized_wids)
@@ -4618,8 +4768,7 @@ class API:
 
     def _schedule_github_subs_refresh(self, records: list) -> bool:
         """给 GitHub 订阅刷新加最短触发间隔，避免页面频繁打开时重复打满 API。"""
-        if not records:
-            return False
+        if not records: return False
 
         now = current_ms()
         with self._github_subs_refresh_lock:
@@ -4633,8 +4782,7 @@ class API:
             self._github_subs_refresh_started_at = now
 
         started = self._start_tracked_main_db_task("github-subs-refresh", self._bg_refresh_github_subs, records)
-        if started:
-            return True
+        if started: return True
 
         with self._github_subs_refresh_lock:
             self._github_subs_refresh_running = False
@@ -4645,8 +4793,7 @@ class API:
         后台多线程并发刷新 GitHub 数据
         """
         try:
-            if not records:
-                return
+            if not records: return
             
             updated_records = {}
             # 使用线程池并发请求 GitHub API，避免串行卡顿
@@ -4671,8 +4818,7 @@ class API:
                         logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
 
             # 如果没有成功获取到任何数据，直接结束
-            if not updated_records:
-                return
+            if not updated_records: return
             # 批量更新数据库的缓存
             from backend.database.models import db, GithubModRecord
             import time
@@ -4728,8 +4874,7 @@ class API:
     def _resolve_mod_paths(self, package_ids: List[str]) -> List[str]:
         """内部辅助方法：将前端传来的 package_id 列表转换为当前环境下绝对物理路径列表"""
         target_ids = {normalize_package_id(pid) for pid in package_ids if pid}
-        if not target_ids:
-            return []
+        if not target_ids: return []
         
         # 使用当前 Profile 上下文，确保获取的是正在使用的正确 Mod 路径 (解决软冲突路径)
         context_mods = ModDAO.get_profile_mods(self.active_context)

@@ -9,10 +9,10 @@ import { useOrderStore } from './orderStore'
 import { useRuleStore } from './ruleStore'
 import { useConfirmStore } from './confirmStore'
 import { useProfileStore } from './profileStore'
-import { cleanRichText } from '../utils/text'
 import { useTextureStore } from './textureStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { useTaskStore } from './taskStore'
+import { useAiStore } from './aiStore'
 import { isBrowserRuntime, openManagedSubBrowserUrl } from '../runtime/runtimeBridge'
 import { normalizeInstallSource, normalizeInstallSources } from '../utils/modIdentity'
 
@@ -35,8 +35,8 @@ export const useAppStore = defineStore('app', () => {
     showTestDrawer: false,       // 是否显示测试抽屉
     showRuleDrawer: false,       // 是否显示规则抽屉
     showProfileDrawer: false,    // 是否显示环境抽屉
-    showAiReviewModal: false,    // 是否显示 AI 弹窗
-    showPromptManager: false,    // 是否显示提示词管理器
+    showModAliasReviewModal: false,    // 是否显示模组别名检阅弹窗
+    showAIDefinitionManager: false,    // 是否显示 AI 定义管理器
     showWorkspace: false,        // 是否显示工坊更新管理中心
     showTextureOptModal: false,  // 是否显示贴图优化弹窗
     showFileSearchWorkbench: false, // 是否显示文件内容搜索工作台
@@ -51,17 +51,10 @@ export const useAppStore = defineStore('app', () => {
     info: null,    // 存储后端返回的 UpdateInfo
     isChecking: false,
   })
-  // AI相关状态
-  const aiState = reactive({
-    isLoading: false,
-    chatHistory: [],
-  })
   const remoteImageCache = reactive({
     file_count: 0,
     total_bytes: 0,
   })
-  const aiBatchSessions = ref(new Map())
-  const currentAiBatchTaskId = ref('')
   const cancelPendingTaskIds = ref(new Set())
   const cancelPendingTimers = new Map()
   const CANCELLATION_PENDING_TIMEOUT_MS = 15000
@@ -192,7 +185,7 @@ export const useAppStore = defineStore('app', () => {
     // --- AI ---
     ai: {
       enabled: false,
-      provider: 'openai',
+      provider: 'openai_compatible',
       base_url: '',
       api_key: '',
       model: 'gpt-3.5-turbo',
@@ -250,33 +243,6 @@ export const useAppStore = defineStore('app', () => {
   // === Getters ===
   const isDownloading = computed(() => taskStore.hasActiveTaskOfType(['download', 'update', 'steamcmd-download']))
   const isScanRunning = computed(() => taskStore.hasActiveTaskOfType('scan'))
-
-  const ensureAiBatchSession = (taskId) => {
-    if (!taskId) return null
-    const sessions = aiBatchSessions.value
-    if (!sessions.has(taskId)) {
-      sessions.set(taskId, { items: [], createdAt: Date.now() })
-    }
-    return sessions.get(taskId)
-  }
-
-  const aiBatchResults = computed({
-    get: () => {
-      const session = ensureAiBatchSession(currentAiBatchTaskId.value)
-      return session?.items || []
-    },
-    set: (items) => {
-      const session = ensureAiBatchSession(currentAiBatchTaskId.value)
-      if (session) session.items = Array.isArray(items) ? items : []
-    }
-  })
-
-  const aiBatchResultCount = computed(() => aiBatchResults.value.length)
-  const currentAiBatchTask = computed(() => (
-    currentAiBatchTaskId.value
-      ? taskStore.getTask(currentAiBatchTaskId.value)
-      : taskStore.getLatestTaskByType('ai-batch')
-  ))
   const updateInstallPrompted = new Set()
   const pendingModScanRequested = ref(false)
   // 这里只保留后端已实现“真实终止点”的任务类型，避免按钮可点但实际上无法取消。
@@ -291,7 +257,7 @@ export const useAppStore = defineStore('app', () => {
     'steam-unsubscribe',
     'texture-opt',
     'texture-opt-analyze',
-    'ai-batch',
+    'ai-task',
     'file-search',
   ])
 
@@ -739,6 +705,9 @@ export const useAppStore = defineStore('app', () => {
       await waitForBackend()
       // 注册事件监听
       setupEventListeners()
+      // AI 运行时配置需要在后端桥接就绪后再初始化。
+      const aiStore = useAiStore()
+      await aiStore.initialize()
 
       // 获取初始数据 (这里包含 settings, version 等)
       const refreshed = await refreshData(true)
@@ -847,38 +816,6 @@ export const useAppStore = defineStore('app', () => {
       }
     })
 
-    // 每完成一个 Chunk，将数据推入数组，供弹窗实时渲染
-    window.addEventListener('ai-batch-chunk-ready', (e) => {
-      const taskId = e.detail?.task_event_id
-      const items = Array.isArray(e.detail?.items) ? e.detail.items : []
-      if (taskId && items.length > 0) {
-        currentAiBatchTaskId.value = taskId
-        const session = ensureAiBatchSession(taskId)
-        session.items.push(...items)
-      }
-    })
-    // 监听：AI 批量处理完成
-    window.addEventListener('ai-batch-complete', (e) => {
-      const taskId = e.detail?.task_event_id || ''
-      if (taskId) currentAiBatchTaskId.value = taskId
-      if (e.detail.status === 'cancelled') {
-        toast.info('AI 批量任务已取消')
-        return
-      }
-      if (e.detail.status === 'success') {
-        const payload = e.detail.data // 获取后端的字典结果
-        const successCount = payload.success_count || 0
-        const failedCount = payload.failed_count || 0
-        if (failedCount > 0) {
-          toast.warning(`任务完成。成功: ${successCount}，失败/置空: ${failedCount} 项，请手动处理高亮条目。`, {timeout: 6000})
-        } else {
-          toast.success(`任务完美完成！成功生成 ${successCount} 项。`)
-        }
-        uiState.showAiReviewModal = true 
-      } else {
-        toast.error(`AI 任务异常: ${e.detail.message}`)
-      }
-    })
     // 监听：本地化完成
     window.addEventListener('localize-complete', (e) => {
         const { success_count, error_count, errors, status } = e.detail;
@@ -1643,153 +1580,6 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  // === AI 交互 ===
-  // 获取AI设置
-  const getAiConfig = async () => {
-    if (!window.pywebview) return
-    const res = await window.pywebview.api.ai_get_config()
-    if (checkResult(res, "获取AI配置")) {
-      res.data.config
-      res.data.prompts
-    }
-  }
-  // 保存AI设置
-  const saveAIConfig = async (config_data) => {
-    if (!window.pywebview) return
-    const res = await window.pywebview.api.ai_save_config(config_data)
-    if (checkResult(res, "保存AI配置",true)) {
-      return true
-    }
-  }
-  // 获取AI厂商或代理协议列表
-  const getAiProviders = async () => {
-    if (!window.pywebview) return
-    aiState.isLoading = true
-    const res = await window.pywebview.api.ai_get_providers()
-    if (checkResult(res, "获取AI厂商或代理协议列表")) {
-      aiState.isLoading = false
-      return res.data
-    }
-    aiState.isLoading = false
-  }
-  // 获取AI模型 temp_config: {provider, base_url, api_key}
-  const getAiModels = async (temp_config) => {
-    if (!window.pywebview) return
-    if (!temp_config || !temp_config.provider) {
-      return
-    }
-    aiState.isLoading = true
-    try {
-      const res = await window.pywebview.api.ai_get_models(temp_config)
-      if (checkResult(res, "获取AI模型")) {
-        return res.data
-      }
-    } finally {
-      aiState.isLoading = false
-    }
-  }
-  // 与AI聊天
-  const chatWithAI = async (prompt, temp_config) => {
-    if (!window.pywebview) return
-    aiState.isLoading = true
-    try {
-      const res = await window.pywebview.api.ai_chat(prompt, temp_config)
-      if (checkResult(res, "与AI聊天")) {
-        return res.data
-      }
-    } finally {
-      aiState.isLoading = false
-    }
-  }
-  // 使用AI功能
-  const useAI = async (task_key, params) => {
-    if (!window.pywebview) return
-    aiState.isLoading = true
-    if (!settings.value.ai.enabled) {
-      toast.warning("AI功能未启用！")
-      aiState.isLoading = false
-      return
-    }
-    try {
-      const res = await window.pywebview.api.ai_execute_task(task_key, params)
-      if (checkResult(res, `使用AI ${task_key}`)) {
-        aiState.isLoading = false
-        // 【核心修复】：判断返回的数据类型
-        const data = res.data
-        if (typeof data === 'string') {
-          try {
-            // 如果是字符串且看起来像 JSON，尝试解析
-            if (data.trim().startsWith('{') || data.trim().startsWith('[')) {
-              return JSON.parse(data)
-            }
-            return data // 普通文本字符串
-          } catch (e) {
-            console.warn("AI 返回了无法解析的字符串内容", data)
-            return data
-          }
-        }
-        // 如果已经是对象（后端已经 parse 过了），直接返回
-        return data 
-      }
-    } catch (e) {
-      console.error("AI 任务执行异常:", e)
-    } finally {
-      aiState.isLoading = false
-    }
-  }
-  // 发起批量AI任务
-  const startAiBatchTask = async (task_key, modsList) => {
-    if (!window.pywebview) return
-    toast.info("AI 批量任务已在后台启动，请留意底部状态栏。")
-    
-    // 提取必要字段减小发给大模型的体积
-    const items = modsList.map(m => ({
-      package_id: m.package_id,
-      name: m.name,
-      description: cleanRichText(m.description,1000)
-    }))
-    
-    const res = await window.pywebview.api.ai_execute_batch_task(task_key, items, {})
-    if (checkResult(res, `启动 AI 批量任务 ${task_key}`)) {
-      const taskId = res.data?.task_event_id || ''
-      if (taskId) {
-        currentAiBatchTaskId.value = taskId
-        aiBatchSessions.value.set(taskId, { items: [], createdAt: Date.now() })
-        taskStore.createPlaceholderTask({
-          id: taskId,
-          type: 'ai-batch',
-          status: 'pending',
-          progress: 0,
-          message: '任务已加入后台队列',
-          metrics: { task_key, total: items.length, title: 'AI 批量处理' },
-        })
-      }
-      return res.data
-    }
-  }
-  // --- 提示词管理 ---
-  const fetchPrompts = async () => {
-    if (!window.pywebview) return {}
-    const res = await window.pywebview.api.ai_get_prompts()
-    if (checkResult(res, "获取提示词库")) return res.data
-    return {}
-  }
-  const savePrompt = async (id, data) => {
-    if (!window.pywebview) return false
-    const res = await window.pywebview.api.ai_save_prompt(id, data)
-    return checkResult(res, "保存提示词", true) ? res.data : false
-  }
-  const deletePrompt = async (id) => {
-    if (!window.pywebview) return false
-    const res = await window.pywebview.api.ai_delete_prompt(id)
-    return checkResult(res, "删除提示词", true) ? res.data : false
-  }
-  const resetPrompts = async () => {
-    if (!window.pywebview) return false
-    const res = await window.pywebview.api.ai_reset_prompts()
-    return checkResult(res, "恢复默认提示词", true) ? res.data : false
-  }
-
   // --- 统一软件数据导入导出 ---
   const getDataBundleSchema = async () => {
     if (!window.pywebview) return null
@@ -1943,19 +1733,9 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  const setCurrentAiBatchTask = (taskId = '') => {
-    currentAiBatchTaskId.value = taskId
-    ensureAiBatchSession(taskId)
-  }
-
-  const clearCurrentAiBatchResults = () => {
-    const session = ensureAiBatchSession(currentAiBatchTaskId.value)
-    if (session) session.items = []
-  }
-
   return {
     appVersion, buildMode, uiState, settings, isLoading, isDownloading, isScanRunning, updateState,
-    aiState, aiBatchResults, aiBatchResultCount, currentAiBatchTask, currentAiBatchTaskId, remoteImageCache, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, upgradeContext,
+    remoteImageCache, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, upgradeContext,
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode, exitSleepMode,
     refreshModsData,
     requestModScan,
@@ -1967,9 +1747,6 @@ export const useAppStore = defineStore('app', () => {
     
     checkSteamTools, checkToolMaintenance, checkExternalDataUpdates, checkSteamcmdModUpdates, runScheduledMaintenanceChecks,
     openSteamWorkshopUrl, unsubscribeWorkshopIds, subscribeWorkshopIds, subscribeInstallSources, downloadInstallSources, openInstallSource, checkUpdate, updateExternalDB,
-    // AI处理
-    getAiConfig, saveAIConfig, getAiProviders, getAiModels, useAI, chatWithAI, startAiBatchTask, setCurrentAiBatchTask, clearCurrentAiBatchResults,
-    fetchPrompts, savePrompt, deletePrompt, resetPrompts,
     getDataBundleSchema, inspectDataBundle, exportDataBundle, importDataBundle,
   }
 })

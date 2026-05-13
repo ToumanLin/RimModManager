@@ -18,7 +18,6 @@
     </button>
     
     <!-- 内容区域 -->
-      <!-- :class="[searchMatch ? 'ring-2 ring-accent-highlight scale-[1.02] z-20' : '', getCardClass, simple ? 'h-[30px]' : 'h-[50px]']"  -->
     <div class="select-trigger drag-handle flex-1 flex items-center min-w-0 gap-1.5 p-1 rounded-lg border hover:opacity-90 backdrop-blur-sm group shadow-sm text-text-main/80"
       :class="[searchMatch ? 'ring-2 ring-accent-highlight scale-[1.02] z-20' : '', cardClass]" 
       :style="getCardStyle(item_id)"
@@ -112,9 +111,9 @@
           <!-- 标签 -->
           <div class="overflow-hidden" style="box-shadow: inset 8px 0 10px -8px rgba(0, 0, 0, 0.3), inset -8px 0 10px -8px rgba(0, 0, 0, 0.3);">
             <div v-if="modData?.tags && modData.tags.length && !simple" class="flex gap-0.5 w-full overflow-y-hidden overflow-x-scroll custom-scrollbar mt-0.5 outline-none ">
-                <span v-for="tag in modData.tags" :key="tag" class="min-w-fit font-mono px-0.5 py-0 my-0 rounded-md bg-accent-primary/10 text-accent-primary text-[0.7rem] font-bold border border-accent-primary/10 drop-shadow-xl/25">
-                  {{ tag }}
-                </span>
+              <span v-for="tag in modData.tags" :key="tag" class="min-w-fit font-mono px-0.5 py-0 my-0 rounded-md bg-accent-primary/10 text-accent-primary text-[0.7rem] font-bold border border-accent-primary/10 drop-shadow-xl/25">
+                {{ tag }}
+              </span>
             </div>
           </div>
         </template>
@@ -181,6 +180,7 @@ import { computed, h, nextTick, watch  } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { MOD_SIGN_COLOR_MAP, ISSUE_TYPE, MOD_TYPE_MAP, ISSUE_TITLE_MAP, MOD_TYPE_ICON_MAP, SOURCE_TYPE_MAP, IconSteam, IconSelf } from '../../utils/constants'
 import { useAppStore } from '../../stores/appStore'
+import { useAiStore } from '../../stores/aiStore'
 import { useModStore } from '../../stores/modStore'
 import { useGroupStore } from '../../stores/groupStore'
 import { useRuleStore } from '../../stores/ruleStore'
@@ -215,6 +215,7 @@ const props = defineProps({
 const emit = defineEmits(['contextmenu', 'toggle-section', 'expand-selected-sections', 'collapse-selected-sections'])
 
 const appStore = useAppStore()
+const aiStore = useAiStore()
 const modStore = useModStore()
 const groupStore = useGroupStore()
 const menuStore = useContextMenuStore()
@@ -390,10 +391,32 @@ const deleteModFiles = async () => {
 }
 // 批量生成别名备注
 const generateAliasNotes = async () => {
-  const res = await appStore.startAiBatchTask('batch_alias_generation', modStore.selectedMods)
-  if (res) {
-    console.log('批量生成别名备注',res)
+  const selectedMods = Array.isArray(modStore.selectedMods) ? modStore.selectedMods : []
+  if (selectedMods.length === 0) return
+
+  if (selectedMods.length === 1) {
+    const mod = selectedMods[0]
+    const packageId = String(mod?.package_id || '').trim().toLowerCase()
+    if (!packageId) return
+    const result = await aiStore.requestSingleModAliasGenerationResult({
+      packageId,
+      name: mod?.name || '',
+      description: mod?.description || '',
+      ownerType: 'mod_list',
+    })
+    if (!result) return
+    await modStore.updateModUserData(result.package_id, {
+      alias_name: String(result.alias_name || ''),
+      notes: String(result.notes || ''),
+    })
+    return
   }
+
+  await aiStore.startModAliasGenerationTask({
+    mods: selectedMods,
+    ownerType: 'mod_list',
+    needsReview: true,
+  })
 }
 // 取消订阅模组
 const unsubscribeWorkshopIds = async (delete_file = false) => {
