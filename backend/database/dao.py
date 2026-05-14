@@ -264,8 +264,16 @@ def _build_group_structures(allowed_ids: set[str] | None = None) -> list[dict[st
     `get_all_groups_structured()` 和 `get_groups_structured_by_mod_ids()` 的唯一区别，
     只是是否需要按当前可见 Mod 集合过滤成员，因此用一个内部函数收口。
     """
-    groups = list(GroupData.select().order_by(GroupData.sort_index).dicts())
-    group_mods = list(GroupMod.select().order_by(GroupMod.sort_index).dicts())
+    groups = list(
+        GroupData.select()
+        .order_by(GroupData.sort_index, GroupData.group_id)
+        .dicts()
+    )
+    group_mods = list(
+        GroupMod.select()
+        .order_by(GroupMod.group_id, GroupMod.sort_index, GroupMod.mod_id)
+        .dicts()
+    )
 
     group_map = {group["group_id"]: [] for group in groups}
     for group_mod in group_mods:
@@ -1081,9 +1089,23 @@ class GroupDAO:
     @staticmethod
     def update_group_info(group_id: str, **kwargs):
         """更新分组名称、颜色或折叠状态。"""
-        if "color" in kwargs:
-            kwargs["color"] = normalize_hex_color(kwargs["color"])
-        return GroupData.update(**kwargs).where(GroupData.group_id == group_id).execute()
+        allowed_fields = {"name", "color", "is_expanded"}
+        clean_updates = {
+            key: value
+            for key, value in kwargs.items()
+            if key in allowed_fields
+        }
+        if not clean_updates:
+            raise ValueError("更新分组失败：未提供有效字段。")
+        if "name" in clean_updates:
+            clean_updates["name"] = str(clean_updates["name"] or "").strip()
+            if not clean_updates["name"]:
+                raise ValueError("更新分组失败：分组名称不能为空。")
+        if "color" in clean_updates:
+            clean_updates["color"] = normalize_hex_color(clean_updates["color"])
+        if "is_expanded" in clean_updates:
+            clean_updates["is_expanded"] = bool(clean_updates["is_expanded"])
+        return GroupData.update(**clean_updates).where(GroupData.group_id == group_id).execute()
 
     @staticmethod
     def add_mods_to_group(group_id: str, mod_ids: List[str]):
@@ -1122,8 +1144,19 @@ class GroupDAO:
     @staticmethod
     def reorder_groups(group_id_list: List[str]):
         """按前端传回的新顺序重排分组本身。"""
+        normalized_ids = [str(group_id or "").strip() for group_id in group_id_list if str(group_id or "").strip()]
+        existing_ids = [row.group_id for row in GroupData.select(GroupData.group_id).order_by(GroupData.sort_index, GroupData.group_id)]
+        if not existing_ids:
+            return
+        if len(normalized_ids) != len(existing_ids):
+            raise ValueError("分组排序失败：提交的分组数量与当前数据不一致。")
+        if len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("分组排序失败：提交的分组列表存在重复项。")
+        if set(normalized_ids) != set(existing_ids):
+            raise ValueError("分组排序失败：提交的分组集合与当前数据不一致。")
+
         with db.atomic():
-            for index, group_id in enumerate(group_id_list):
+            for index, group_id in enumerate(normalized_ids):
                 GroupData.update(sort_index=index).where(GroupData.group_id == group_id).execute()
 
     @staticmethod
@@ -1131,20 +1164,46 @@ class GroupDAO:
         """
         重排分组内成员顺序。
 
-        这里直接“删旧关系 + 批量插入新顺序”，因为这比逐条 update 更简单，
-        而且分组内成员数量通常远小于全表规模。
+        前端当前拿到的是“当前上下文下可见成员”的子集，因此这里不能再直接
+        删整组后按子集重建，否则会把跨 profile 持久存在但当前不可见的成员误删。
+        正确做法是：
+        1. 校验传入列表必须是当前组内成员的子集，且不能有重复
+        2. 仅重排这批“可见成员”的相对顺序
+        3. 保留其余不可见成员，并把它们稳定地续接在后面
         """
         normalized_ids = normalize_package_ids(mod_id_list)
         if not normalized_ids:
-            GroupMod.delete().where(GroupMod.group_id == group_id).execute()
-            return
+            raise ValueError("分组内排序失败：提交的成员列表为空。")
 
         with db.atomic():
-            _ensure_user_data_rows(normalized_ids)
+            existing_rows = list(
+                GroupMod.select(GroupMod.mod_id, GroupMod.sort_index)
+                .where(GroupMod.group_id == group_id)
+                .order_by(GroupMod.sort_index, GroupMod.mod_id)
+                .dicts()
+            )
+            if not existing_rows:
+                raise ValueError("分组内排序失败：目标分组不存在或没有成员。")
+
+            existing_ids = [normalize_package_id(row.get("mod_id")) for row in existing_rows]
+            existing_id_set = set(existing_ids)
+            if len(normalized_ids) != len(set(normalized_ids)):
+                raise ValueError("分组内排序失败：提交的成员列表存在重复项。")
+            if not set(normalized_ids).issubset(existing_id_set):
+                raise ValueError("分组内排序失败：提交的成员列表包含无效成员。")
+
+            visible_id_set = set(normalized_ids)
+            reordered_visible_iter = iter(normalized_ids)
+            merged_ids = [
+                next(reordered_visible_iter) if mod_id in visible_id_set else mod_id
+                for mod_id in existing_ids
+            ]
+
+            _ensure_user_data_rows(merged_ids)
             GroupMod.delete().where(GroupMod.group_id == group_id).execute()
             data_source = [
                 {"group_id": group_id, "mod_id": mod_id, "sort_index": index}
-                for index, mod_id in enumerate(normalized_ids)
+                for index, mod_id in enumerate(merged_ids)
             ]
             for batch in chunked(data_source, 500):
                 GroupMod.insert_many(batch).execute()

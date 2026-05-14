@@ -346,6 +346,7 @@ watch(() => appStore.isLoading, async (loading) => {
 })
 
 onBeforeUnmount(() => {
+  saveGroupColor.flush?.()
   if (isDragging.value) {
     finishDragSession({ suppressDrop: true })
     dispatchSyntheticDragEnd()
