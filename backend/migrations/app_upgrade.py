@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from backend.database.models_ext import ext_db
+from backend.database.repair import _remove_file_with_retry
 from backend.database.models import GameProfile
 from backend.settings import COMMUNITY_INSTEAD_DB_PATH, COMMUNITY_WORKSHOP_DB_PATH, DATA_DIR, settings
+from backend.utils.logger import logger
 
 
 @dataclass
@@ -102,6 +105,12 @@ def _migrate_legacy_workshop_cache_schema(result: AppUpgradeResult):
     这里直接删除旧缓存库，让新版启动后的默认重建流程按新结构重新生成。
     """
     db_path = DATA_DIR / "workshop_cache.db"
+    try:
+        if not ext_db.is_closed():
+            ext_db.close()
+    except Exception as exc:
+        logger.warning(f"关闭旧版外置缓存数据库连接失败，将继续尝试清理文件: {exc}", exc_info=True)
+
     sidecar_paths = [
         db_path,
         db_path.with_name(db_path.name + "-wal"),
@@ -113,7 +122,7 @@ def _migrate_legacy_workshop_cache_schema(result: AppUpgradeResult):
     for path in sidecar_paths:
         if not path.exists():
             continue
-        path.unlink()
+        _remove_file_with_retry(str(path), retries=5, delay=0.1)
         removed_any = True
 
     if removed_any:

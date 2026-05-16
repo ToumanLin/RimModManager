@@ -277,7 +277,6 @@ class AppConfig:
     steamcmd_mod_update_check_interval_days: int = 1
     last_steamcmd_mod_update_check_time: float = 0
     
-    last_version: str = ""                 # 之前的版本号(用于判断是否更新过了)
     last_run_time: float = 0               # 上次运行时间（用于判断Mod是否存在变动）
     run_count: int = 0                     # 运行次数（用于判断是否需要重新扫描）
     

@@ -109,7 +109,6 @@ class DataBundleManager:
         "last_tool_check_time",
         "last_external_data_update_check_time",
         "last_steamcmd_mod_update_check_time",
-        "last_version",
         "last_run_time",
         "run_count",
     }

@@ -235,6 +235,10 @@ class API:
         self._github_subs_refresh_started_at = 0
         # 桌面模式首屏阶段只允许触发一次后台预热，避免 loaded / ready 多次回调时重复导入大缓存文件。
         self._startup_warmup_started = False
+        # 应用层升级迁移必须早于外置缓存库管理器初始化。
+        # 否则像 workshop_cache.db 这类需要“删库重建”的迁移，
+        # 会在 Windows 上撞到已打开文件句柄导致无法删除。
+        self._handle_app_version_upgrade()
         # 2. 实例化各个管理器
         self.workshop_db_mgr = WorkshopDBManager()
         self.game_mgr = GameManager()
@@ -274,9 +278,7 @@ class API:
         # 打包版每次启动都校验 Browser mode 快捷方式，缺失或过期就自动修复。
         if self._runtime_mode == "desktop" and os.name == "nt":
             self._ensure_browser_mode_shortcut()
-        
-        # 执行升级检查
-        self._handle_app_version_upgrade()
+
         logger.info("API Layer Ready.")
         
     @staticmethod

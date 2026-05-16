@@ -100,7 +100,6 @@ def persist_exit_state():
     """统一持久化退出状态"""
     settings.set('last_run_time', current_ms())
     settings.set('run_count', settings.get('run_count') + 1)
-    settings.set('last_version', __version__)
     settings.save()  # 保存配置
 
 def get_launch_mode():
