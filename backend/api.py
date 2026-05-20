@@ -75,6 +75,7 @@ from backend.managers.mgr_workshop_db import WorkshopDBManager
 from backend.managers.mgr_update import UpdateManager, UpdateInfo
 from backend.managers.mgr_game_monitor import GameMonitor
 from backend.managers.mgr_profile import ProfileContext, ProfileManager
+from backend.managers.mgr_mod_config import ModConfigManager
 from backend.utils.profile_runtime import resolve_profile_runtime_capabilities
 from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.managers.mgr_github import GithubManager
@@ -1948,7 +1949,40 @@ class API:
             "import_check": res.get('import_check', {"summary": {}, "items": []}),
             "version_token": res.get('version_token', {}),
         })
-    
+
+    @log_api_call
+    def mod_config_get_overview(self):
+        """读取当前环境下官方 ModSettings 配置文件总览。"""
+        if not self.active_context:
+            return ApiResponse.error("当前环境未初始化")
+        active_tokens = []
+        if self.load_order_mgr:
+            active_tokens = list((self.load_order_mgr.read_active_mods() or {}).get("active_mods", []) or [])
+        try:
+            overview = ModConfigManager.get_overview(self.active_context, active_tokens)
+            return ApiResponse.success(overview)
+        except Exception as e:
+            return ApiResponse.error(f"读取模组配置总览失败: {e}")
+
+    @log_api_call
+    def mod_config_sync(self, source_path: str, target_path: str):
+        """在同一 package_id 分组内手动覆盖同步配置文件。"""
+        if not self.active_context:
+            return ApiResponse.error("当前环境未初始化")
+        active_tokens = []
+        if self.load_order_mgr:
+            active_tokens = list((self.load_order_mgr.read_active_mods() or {}).get("active_mods", []) or [])
+        try:
+            result = ModConfigManager.sync_group_instance(
+                self.active_context,
+                active_tokens,
+                source_path,
+                target_path,
+            )
+            return ApiResponse.success(result, message="已完成配置覆盖")
+        except Exception as e:
+            return ApiResponse.error(f"覆盖配置失败: {e}")
+
     @log_api_call
     def load_order_file_open(self, mods_config_file_path: str|None = None, profile_id: str | None = None):
         """
