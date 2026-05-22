@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import platform
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.managers.mgr_game import GameManager
-from backend.settings import DATA_DIR
+from backend.settings import BASE_RESOURCE_DIR, DATA_DIR
 from backend.utils.logger import logger
 from backend.utils.tools import current_ms
 
@@ -373,51 +374,36 @@ class GameInstallInspector:
             return "missing"
 
         target_appid_path = steam_appid_path or str(Path(install_path) / "steam_appid.txt")
-        probe_script = r"""
-import ctypes
-import os
-import sys
-from pathlib import Path
+        payload = base64.urlsafe_b64encode(json.dumps({
+            "install_path": install_path,
+            "steam_api_path": steam_api_path,
+            "steam_appid_path": target_appid_path,
+        }, ensure_ascii=False).encode("utf-8")).decode("ascii").rstrip("=")
+        cmd = [sys.executable]
+        if not getattr(sys, "frozen", False):
+            cmd.append(str(BASE_RESOURCE_DIR / "main.py"))
+        cmd.extend(["--steam-worker", "steam-api-probe", payload])
 
-install_root = Path(sys.argv[1])
-lib_path = Path(sys.argv[2])
-appid_path = Path(sys.argv[3])
-old_text = ""
-had_appid = appid_path.exists()
-try:
-    if had_appid:
-        old_text = appid_path.read_text(encoding="utf-8", errors="ignore")
-    else:
-        appid_path.parent.mkdir(parents=True, exist_ok=True)
-    appid_path.write_text("999999999", encoding="utf-8")
-    os.chdir(install_root)
-    loader = ctypes.CDLL(str(lib_path))
-    fn = loader.SteamAPI_Init
-    fn.restype = ctypes.c_bool
-    result = bool(fn())
-    shutdown = getattr(loader, "SteamAPI_Shutdown", None)
-    if shutdown:
-        try:
-            shutdown()
-        except Exception:
-            pass
-    print("emulator" if result else "official")
-finally:
-    if had_appid:
-        appid_path.write_text(old_text, encoding="utf-8")
-    else:
-        try:
-            appid_path.unlink()
-        except Exception:
-            pass
-"""
+        current_env = os.environ.copy()
+        current_env["_PYI_SPLASH_IPC"] = "0"
+        current_env["PYINSTALLER_SUPPRESS_SPLASH_SCREEN"] = "1"
+        current_env["PYTHONIOENCODING"] = "utf-8"
+        startupinfo = None
+        if platform.system() == "Windows" and hasattr(subprocess, "STARTUPINFO"):
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         try:
             completed = subprocess.run(
-                [sys.executable, "-c", probe_script, install_path, steam_api_path, target_appid_path],
+                cmd,
+                cwd=install_path,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=8,
                 check=False,
+                startupinfo=startupinfo,
+                env=current_env,
             )
         except subprocess.TimeoutExpired:
             return "timeout"
@@ -425,9 +411,13 @@ finally:
             logger.debug(f"Steam API 校验启动失败: {exc}")
             return "probe_error"
 
-        result = str(completed.stdout or "").strip().lower()
-        if result in {"official", "emulator"}:
-            return result
+        marker = "STEAM_API_PROBE_RESULT:"
+        for line in reversed(str(completed.stdout or "").splitlines()):
+            if line.startswith(marker):
+                result = line[len(marker):].strip().lower()
+                if result in {"official", "emulator", "missing"}:
+                    return result
+                return "probe_error"
         if completed.returncode != 0:
             return "probe_error"
         return "unknown"

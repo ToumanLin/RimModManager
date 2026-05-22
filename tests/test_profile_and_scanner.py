@@ -1,10 +1,12 @@
+import base64
+import io
 import os
 import json
 import shutil
 import tempfile
 import threading
 import unittest
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -16,7 +18,7 @@ from backend.managers.mgr_game_install import GameInstallFacts, GameInstallInspe
 from backend.managers.mgr_files import PathChecker
 from backend.managers.mgr_game_monitor import RuntimeSession
 from backend.managers.mgr_profile import ProfileContext, ProfileManager
-from backend.managers.mgr_steam import SteamManager
+from backend.managers.mgr_steam import SteamManager, run_steam_worker
 from backend.utils.profile_runtime import normalize_profile_runtime_flags, resolve_profile_runtime_capabilities
 from backend.migrations.app_upgrade import AppUpgradeResult, _migrate_profile_steam_runtime_flags
 from backend.scanner.analyzer import ModAnalyzer
@@ -632,6 +634,63 @@ class TestGameInstallInspector(unittest.TestCase):
         self.assertEqual(Path(facts.steam_appid_path).resolve(), (bundle_root / "steam_appid.txt").resolve())
         self.assertTrue(facts.is_steam)
         self.assertIn("probe_fallback:probe_error", facts.signals)
+
+    def test_probe_official_steam_api_uses_steam_worker_instead_of_python_c(self):
+        install_root = self.temp_root / "RimWorld"
+        install_root.mkdir(parents=True, exist_ok=True)
+        steam_api = install_root / "steam_api64.dll"
+        steam_api.write_text("", encoding="utf-8")
+        appid_path = install_root / "steam_appid.txt"
+        completed = SimpleNamespace(
+            stdout="ignored\nSTEAM_API_PROBE_RESULT:official\n",
+            stderr="",
+            returncode=0,
+        )
+
+        inspector = GameInstallInspector.__new__(GameInstallInspector)
+        with patch("backend.managers.mgr_game_install.subprocess.run", return_value=completed) as run_mock, \
+             patch("backend.managers.mgr_game_install.sys.executable", "E:/RimModManager/RimModManager.exe"), \
+             patch("backend.managers.mgr_game_install.sys.frozen", True, create=True), \
+             patch("backend.managers.mgr_game_install.platform.system", return_value="Linux"):
+            result = inspector._probe_official_steam_api(str(install_root), str(steam_api), str(appid_path))
+
+        self.assertEqual(result, "official")
+        cmd = run_mock.call_args.args[0]
+        self.assertEqual(cmd[:3], ["E:/RimModManager/RimModManager.exe", "--steam-worker", "steam-api-probe"])
+        self.assertNotIn("-c", cmd)
+        decoded = json.loads(base64.urlsafe_b64decode(cmd[3] + "=" * (-len(cmd[3]) % 4)).decode("utf-8"))
+        self.assertEqual(decoded["install_path"], str(install_root))
+        self.assertEqual(decoded["steam_api_path"], str(steam_api))
+        self.assertEqual(decoded["steam_appid_path"], str(appid_path))
+        self.assertEqual(run_mock.call_args.kwargs["cwd"], str(install_root))
+        self.assertEqual(run_mock.call_args.kwargs["env"]["_PYI_SPLASH_IPC"], "0")
+        self.assertEqual(run_mock.call_args.kwargs["env"]["PYINSTALLER_SUPPRESS_SPLASH_SCREEN"], "1")
+
+    def test_steam_api_probe_worker_restores_appid_and_prints_marker(self):
+        install_root = self.temp_root / "RimWorld"
+        install_root.mkdir(parents=True, exist_ok=True)
+        steam_api = install_root / "steam_api64.dll"
+        steam_api.write_text("", encoding="utf-8")
+        appid_path = install_root / "steam_appid.txt"
+        appid_path.write_text("294100", encoding="utf-8")
+        payload = base64.urlsafe_b64encode(json.dumps({
+            "install_path": str(install_root),
+            "steam_api_path": str(steam_api),
+            "steam_appid_path": str(appid_path),
+        }).encode("utf-8")).decode("ascii").rstrip("=")
+
+        fake_loader = SimpleNamespace(
+            SteamAPI_Init=Mock(return_value=True),
+            SteamAPI_Shutdown=Mock(),
+        )
+        old_cwd = Path.cwd()
+        output = io.StringIO()
+        with patch("backend.managers.mgr_steam.ctypes.CDLL", return_value=fake_loader), redirect_stdout(output):
+            run_steam_worker("steam-api-probe", payload)
+
+        self.assertIn("STEAM_API_PROBE_RESULT:emulator", output.getvalue())
+        self.assertEqual(appid_path.read_text(encoding="utf-8"), "294100")
+        self.assertEqual(Path.cwd(), old_cwd)
 
     def test_quick_inspect_uncached_path_runs_full_inspect_and_persists_result(self):
         install_root = self.temp_root / "RimWorld"
