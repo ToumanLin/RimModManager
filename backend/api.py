@@ -82,7 +82,7 @@ from backend.managers.mgr_github import GithubManager
 from backend.managers.mgr_maintenance import MaintenanceManager
 from backend.managers.mgr_data_bundle import DataBundleManager
 from backend.managers.mgr_mod_package import ModPackageManager
-from backend.managers.mgr_texture_opt import TextureOptCancelled, TextureOptimizationManager
+from backend.managers.mgr_texture_opt import TextureOptimizationManager
 from backend.load_order.language_pack_ownership import resolve_language_pack_ownership_for_mods
 from backend.load_order.package_tokens import parse_package_token
 from backend.browser_runtime import build_sub_browser_target_url
@@ -2447,9 +2447,7 @@ class API:
 
     def _build_scan_paths_for_profile(self, context: ProfileContext | None) -> list[str]:
         paths_to_scan: list[str] = []
-        if not context:
-            return paths_to_scan
-
+        if not context: return paths_to_scan
         cfg = settings.config
         if os.path.exists(context.game_dlc_path):
             paths_to_scan.append(context.game_dlc_path)
@@ -2477,15 +2475,6 @@ class API:
         if not normalized_profile_id:
             return {"ok": False, "message": "未指定 Profile ID"}
 
-        target_context: ProfileContext | None = None
-        if normalized_profile_id == active_profile_id:
-            target_context = self.active_context
-        else:
-            build_context = getattr(self.profile_mgr, "build_profile_context", None)
-            if not callable(build_context):
-                return { "ok": True, "message": "缺少环境上下文构建器，已跳过启动前检查同步。", "mode": "no-context" }
-            target_context = build_context(normalized_profile_id)
-
         if normalized_profile_id == active_profile_id:
             success = self._ensure_runtime_links_for_launch(normalized_profile_id, include_workshop=include_workshop)
             return {
@@ -2494,7 +2483,13 @@ class API:
                 "mode": "active-profile",
             }
 
-        launch_context = target_context
+        try:
+            launch_context = self.profile_mgr.build_profile_context(normalized_profile_id)
+        except AttributeError:
+            return { "ok": True, "message": "缺少环境上下文构建器，已跳过启动前检查同步。", "mode": "no-context" }
+        if launch_context is None:
+            return { "ok": False, "message": "无法构建目标环境上下文，请检查环境是否存在。", "mode": "missing-context" }
+
         if not launch_context.is_healthy:
             return { "ok": False, "message": "目标环境路径不可用，请先完成路径设置。", "mode": "unhealthy" }
 
@@ -3120,12 +3115,7 @@ class API:
         return ApiResponse.warning("未选择文件")
 
     @log_api_call
-    def file_save_dialog(
-        self,
-        initial_dir: str = '',
-        default_filename: str = 'output.xml',
-        file_types = ('XML Files (*.xml)', 'RML Files (*.rml)', 'All Files (*.*)'),
-    ):
+    def file_save_dialog( self, initial_dir: str = '',  default_filename: str = 'output.xml', file_types = ('XML Files (*.xml)', 'RML Files (*.rml)', 'All Files (*.*)')):
         """
         打开系统原生的文件保存框
         """
@@ -3135,17 +3125,6 @@ class API:
         except Exception as e:
             return ApiResponse.error(f"保存文件时出错: {e}")
         return ApiResponse.warning("未选择文件")
-
-    @log_api_call
-    def search_files_start(self, payload: dict):
-        if not self.file_search_mgr:
-            return ApiResponse.error("文件搜索管理器未初始化")
-        try:
-            task_id = self.file_search_mgr.start_search(payload)
-            return ApiResponse.success({"task_id": task_id}, message="搜索任务已启动")
-        except Exception as e:
-            logger.error(f"启动文件搜索失败: {e}", exc_info=True)
-            return ApiResponse.error(f"启动文件搜索失败: {e}")
     
     @log_api_call
     def localize_workshop_mods(self, path_hashes: List[str], store: str = 'workshop'):
@@ -3587,6 +3566,52 @@ class API:
         return ApiResponse.success({"task_id": task_id}, "下载任务已添加")
 
     @log_api_call
+    def open_sub_browser(self, url='', title = 'RimModManager'):
+        """打开或更新 浏览器子窗口"""
+        if self.is_browser_runtime() or not self._window:
+            target_url = build_sub_browser_target_url(self._browser_base_url, url, title) if self.is_browser_runtime() else str(url or "")
+            if target_url:
+                webbrowser.open(target_url)
+            return ApiResponse.success({"url": target_url or str(url or "")})
+        if not self.browser_window: 
+            self.browser_window = SubBrowserManager(self)
+        self.browser_window.open(url, title)
+        return ApiResponse.success()
+
+    @log_api_call
+    def workshop_browser_action(self, action: str, workshop_id: str = "", target_url: str = ""):
+        normalized_action = str(action or "").strip().lower()
+        normalized_workshop_id = str(workshop_id or "").strip()
+        normalized_target_url = str(target_url or "").strip()
+
+        if normalized_action == "open_in_steam":
+            if normalized_workshop_id:
+                return self.steam_open_workshop_page(normalized_workshop_id)
+            return ApiResponse.error("无法识别当前页面的 Workshop ID")
+
+        if not normalized_workshop_id:
+            return ApiResponse.error("无法识别当前页面的 Workshop ID")
+
+        if normalized_action == "subscribe":
+            return self.steam_subscribe([normalized_workshop_id])
+        if normalized_action == "unsubscribe":
+            return self.steam_unsubscribe([normalized_workshop_id])
+        if normalized_action == "download":
+            return self.steamcmd_download([normalized_workshop_id])
+        if normalized_action == "open_original":
+            if normalized_target_url:
+                webbrowser.open(normalized_target_url)
+                return ApiResponse.success(message="已在系统浏览器打开原网页")
+            return ApiResponse.error("未提供目标网页地址")
+
+        return ApiResponse.error(f"未知操作: {normalized_action}")
+
+    
+    # ==========================================
+    #  10. 任务管理 (Tasks Management)
+    # ==========================================
+    
+    @log_api_call
     def cancel_progress_task(self, task_id: str, task_type: str):
         """统一取消入口，供前端全局任务栏按任务类型路由控制。"""
         normalized_task_id = str(task_id or "").strip()
@@ -3662,51 +3687,10 @@ class API:
         """获取所有任务状态 (用于 UI 恢复)"""
         return ApiResponse.success(self.download_mgr.get_tasks_info())
     
-    @log_api_call
-    def open_sub_browser(self, url='', title = 'RimModManager'):
-        """打开或更新 浏览器子窗口"""
-        if self.is_browser_runtime() or not self._window:
-            target_url = build_sub_browser_target_url(self._browser_base_url, url, title) if self.is_browser_runtime() else str(url or "")
-            if target_url:
-                webbrowser.open(target_url)
-            return ApiResponse.success({"url": target_url or str(url or "")})
-        if not self.browser_window: 
-            self.browser_window = SubBrowserManager(self)
-        self.browser_window.open(url, title)
-        return ApiResponse.success()
-
-    @log_api_call
-    def workshop_browser_action(self, action: str, workshop_id: str = "", target_url: str = ""):
-        normalized_action = str(action or "").strip().lower()
-        normalized_workshop_id = str(workshop_id or "").strip()
-        normalized_target_url = str(target_url or "").strip()
-
-        if normalized_action == "open_in_steam":
-            if normalized_workshop_id:
-                return self.steam_open_workshop_page(normalized_workshop_id)
-            return ApiResponse.error("无法识别当前页面的 Workshop ID")
-
-        if not normalized_workshop_id:
-            return ApiResponse.error("无法识别当前页面的 Workshop ID")
-
-        if normalized_action == "subscribe":
-            return self.steam_subscribe([normalized_workshop_id])
-        if normalized_action == "unsubscribe":
-            return self.steam_unsubscribe([normalized_workshop_id])
-        if normalized_action == "download":
-            return self.steamcmd_download([normalized_workshop_id])
-        if normalized_action == "open_original":
-            if normalized_target_url:
-                webbrowser.open(normalized_target_url)
-                return ApiResponse.success(message="已在系统浏览器打开原网页")
-            return ApiResponse.error("未提供目标网页地址")
-
-        return ApiResponse.error(f"未知操作: {normalized_action}")
-
-
     # ==========================================
     #  10. 更新管理 (Updates)
     # ==========================================
+    
     @log_api_call
     def update_check(self, manual=True):
         """
@@ -5472,36 +5456,9 @@ class API:
     
     
     # =========================================================================
-    #  15. 贴图优化管理 (Texture Optimization)
+    #  15 贴图优化管理
     # =========================================================================
     
-    def _resolve_mod_paths(self, package_ids: List[str]) -> List[str]:
-        """内部辅助方法：将前端传来的 package_id 列表转换为当前环境下绝对物理路径列表"""
-        target_tokens = [parse_package_token(pid) for pid in (package_ids or []) if pid]
-        if not target_tokens: return []
-        
-        # 使用当前 Profile 上下文，确保获取的是正在使用的正确 Mod 路径 (解决软冲突路径)
-        context_mods = ModDAO.get_profile_mods(self.active_context)
-        mod_map = {
-            normalize_package_id(m.get('package_id', '')): m
-            for m in context_mods
-            if normalize_package_id(m.get('package_id', ''))
-        }
-        paths = []
-        seen_paths: set[str] = set()
-        for token_info in target_tokens:
-            mod = mod_map.get(token_info.canonical_package_id)
-            if not mod:
-                continue
-            target_mod = mod
-            if token_info.source_preference == "steam":
-                target_mod = mod.get("coexist_workshop_variant") or mod
-            path = str(target_mod.get('path') or '').strip()
-            if path and path not in seen_paths:
-                seen_paths.add(path)
-                paths.append(path)
-        return paths
-
     @log_api_call
     def texture_get_env_status(self, options: dict|None = None):
         """获取贴图优化工具状态"""
@@ -5523,6 +5480,79 @@ class API:
             return ApiResponse.error(str(e))
 
     @log_api_call
+    def texture_analyze_mods(self, package_ids: List[str], options: dict|None = None):
+        """
+        开始分析选中模组的贴图（多线程异步预热）
+        """
+        request_options = dict(options or {})
+        target_scope = str(request_options.get("target_scope") or "active").strip().lower()
+        if not package_ids and target_scope != "all":
+            return ApiResponse.error("未指定要分析的模组")
+        targets = self.texture_mgr.resolve_targets(package_ids, target_scope, self.active_context)
+        if not targets:
+            return ApiResponse.error("未能找到指定模组的有效物理路径")
+
+        try:
+            res = self.texture_mgr.start_analysis_task(targets, request_options)
+            return ApiResponse.success(res, message="贴图分析任务已在后台启动")
+        except Exception as e:
+            logger.error("贴图分析启动失败", exc_info=True)
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_start_task(self, package_ids: List[str], action: str = "optimize", options: dict|None = None):
+        """
+        开始贴图优化或清理已生成 DDS
+        :param action: "optimize" / "clean_generated"
+        """
+        request_options = dict(options or {})
+        target_scope = str(request_options.get("target_scope") or "active").strip().lower()
+        targets = self.texture_mgr.resolve_targets(package_ids, target_scope, self.active_context)
+        if not targets:
+            return ApiResponse.error("未能找到指定模组的有效物理路径")
+
+        try:
+            res = self.texture_mgr.start_task(targets, action=action, options=request_options)
+            msg = "清理已生成 DDS" if action == "clean_generated" else "贴图优化"
+            return ApiResponse.success(res, message=f"{msg}任务已加入队列")
+        except Exception as e:
+            logger.error("贴图优化任务启动失败", exc_info=True)
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_get_result_history(self, limit: int = 3):
+        try:
+            return ApiResponse.success(self.texture_mgr.list_result_history(limit))
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_get_exclusions(self):
+        try:
+            return ApiResponse.success(self.texture_mgr.get_exclusions())
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_toggle_mod_exclusion(self, package_id: str, exclude: bool):
+        try:
+            return ApiResponse.success(self.texture_mgr.set_mod_exclusion(package_id, exclude))
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_toggle_file_exclusion(self, mod_path: str, rel_path: str, exclude: bool):
+        try:
+            return ApiResponse.success(self.texture_mgr.set_file_exclusion(mod_path, rel_path, exclude))
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+
+    # =========================================================================
+    #  16 文件搜索工具管理
+    # =========================================================================
+
+    @log_api_call
     def ripgrep_prepare_download(self):
         """触发自动下载 ripgrep。"""
         try:
@@ -5534,87 +5564,20 @@ class API:
             return ApiResponse.success(res, message="已启动 ripgrep 下载任务")
         except Exception as e:
             return ApiResponse.error(str(e))
-
-    @log_api_call
-    def texture_analyze_mods(self, package_ids: List[str], options: dict|None = None):
-        """
-        开始分析选中模组的贴图（多线程异步预热）
-        """
-        if not package_ids:
-            return ApiResponse.error("未指定要分析的模组")
-        
-        paths = self._resolve_mod_paths(package_ids)
-        if not paths:
-            return ApiResponse.error("未能找到指定模组的有效物理路径")
-
-        try:
-            # 1. 直接先生成一个任务 ID 返回给前端，防止 pywebview Python主线程卡死
-            task_id = uuid.uuid4().hex
-            cancel_event = self.texture_mgr.register_analysis_task(task_id)
-            
-            def background_analyze():
-                try:
-                    self.texture_mgr.analyze_mods(
-                        paths,
-                        options,
-                        task_id=task_id,
-                        cancel_event=cancel_event,
-                    )
-                except TextureOptCancelled:
-                    logger.info("后台贴图分析任务已取消")
-                    self.texture_mgr._emit_analysis_progress(
-                        task_id,
-                        status="cancelled",
-                        progress=0,
-                        message="贴图扫描任务已取消",
-                        processed_mods=0,
-                        total_mods=len(paths),
-                        summary=self.texture_mgr._create_empty_stat(include_mod_count=True, mod_count=len(paths)),
-                    )
-                except Exception as e:
-                    logger.error(f"后台贴图分析任务执行失败: {e}", exc_info=True)
-                finally:
-                    self.texture_mgr.finish_analysis_task(task_id)
-
-            # 2. 扔到守护后台线程去默默跑
-            threading.Thread(target=background_analyze, daemon=True).start()
-
-            return ApiResponse.success({"task_id": task_id}, message="贴图分析任务已在后台启动")
-        except Exception as e:
-            logger.error("贴图分析启动失败", exc_info=True)
-            return ApiResponse.error(str(e))
-
-    @log_api_call
-    def texture_start_task(self, package_ids: List[str], action: str = "optimize", options: dict|None = None):
-        """
-        开始贴图优化或清理已生成 DDS
-        :param action: "optimize" / "clean_generated"
-        """
-        # if not package_ids:
-        #     return ApiResponse.error("未指定要处理的模组")
-            
-        paths = self._resolve_mod_paths(package_ids)
-        if not paths:
-            return ApiResponse.error("未能找到指定模组的有效物理路径")
-
-        try:
-            res = self.texture_mgr.start_task(paths, action=action, options=options)
-            msg = "清理已生成 DDS" if action == "clean_generated" else "贴图优化"
-            return ApiResponse.success(res, message=f"{msg}任务已加入队列")
-        except Exception as e:
-            logger.error("贴图优化任务启动失败", exc_info=True)
-            return ApiResponse.error(str(e))
-
-    @log_api_call
-    def texture_cancel_task(self, task_id: str):
-        """取消正在执行的贴图任务"""
-        try:
-            res = self.texture_mgr.cancel_task(task_id)
-            return ApiResponse.success(res, message="正在尝试中止任务...")
-        except Exception as e:
-            return ApiResponse.error(str(e))
-
     
+    @log_api_call
+    def search_files_start(self, payload: dict):
+        if not self.file_search_mgr:
+            return ApiResponse.error("文件搜索管理器未初始化")
+        try:
+            task_id = self.file_search_mgr.start_search(payload)
+            return ApiResponse.success({"task_id": task_id}, message="搜索任务已启动")
+        except Exception as e:
+            logger.error(f"启动文件搜索失败: {e}", exc_info=True)
+            return ApiResponse.error(f"启动文件搜索失败: {e}")
+        
+        
+
 if __name__ == "__main__":
     # valid_field_names = set(UserModData._meta.fields.keys()) # type: ignore
     # print(valid_field_names)
@@ -5629,7 +5592,6 @@ if __name__ == "__main__":
     
     # res = api.lifecycle_fetch_collection("3670074636")
     # print(res)
-    # res= api.texture_start_task([])
     res = api.get_mod_workshop_detail("3671245310", force_refresh=True)
     print(res)
     

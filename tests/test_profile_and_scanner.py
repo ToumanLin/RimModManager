@@ -1600,6 +1600,18 @@ class TestApiRuntimeLinkSync(unittest.TestCase):
         self.assertEqual(res["mode"], "cached-links")
         api._sync_runtime_links_for_profile.assert_called_once_with("profile-b", include_workshop=False)
 
+    def test_prepare_profile_launch_handles_missing_target_context(self):
+        api = API.__new__(API)
+        api.active_context = SimpleNamespace(profile_id="profile-a")
+        api.profile_mgr = SimpleNamespace(build_profile_context=Mock(return_value=None))
+        api._sync_runtime_links_for_profile = Mock()
+
+        res = API._prepare_profile_launch(api, "profile-b", include_workshop=False)
+
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["mode"], "missing-context")
+        api._sync_runtime_links_for_profile.assert_not_called()
+
     def test_get_initial_data_includes_runtime_session_even_without_active_context(self):
         api = API.__new__(API)
         api._runtime_mode = "desktop"
