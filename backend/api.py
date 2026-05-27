@@ -374,6 +374,17 @@ class API:
         )
 
     @staticmethod
+    def _log_maintenance_check(event: str, check_id: str, **fields):
+        """统一检测日志格式。
+
+        前后端都使用 [RMM][maintenance-check] 前缀，排查启动检测时可以按 id/event 快速过滤。
+        """
+        parts = [f"event={event}", f"id={check_id}"]
+        for key, value in fields.items():
+            parts.append(f"{key}={value}")
+        logger.info("[RMM][maintenance-check] %s", " ".join(parts))
+
+    @staticmethod
     def _build_delete_response(target_name: str, total: int, result: dict, success_message: str = ""):
         success_count = int(result.get('success_count', 0) or 0)
         errors = [str(item) for item in (result.get('errors') or []) if str(item).strip()]
@@ -3681,6 +3692,7 @@ class API:
             info = self.update_mgr.check_all()
             # 记录检查时间
             settings.set('last_update_check_time', current_ms())
+            self._log_maintenance_check("api_result", "app-update", status="success", has_update=bool(info.has_update), version=info.version or "", local_status=info.local_status or "", manual=bool(manual))
             # 2. 自动忽略逻辑
             # 如果不是手动检查，且版本是被用户标记忽略的，且本地没有已经下载好的包
             # (如果本地已经下好了，即使是忽略版本也应该提示安装，避免浪费空间)
@@ -3732,6 +3744,7 @@ class API:
             checked = self.maintenance_mgr.check_tools()
             checked_at = int(checked.get("checked_at") or current_ms())
             settings.set("last_tool_check_time", checked_at)
+            self._log_maintenance_check("api_result", "tools", status="success", checked_at=checked_at, issues=len(checked.get("issues") or []), total=len(checked.get("items") or []))
             return ApiResponse.success(checked)
         except Exception as e:
             logger.error("Check tools maintenance failed: %s", e, exc_info=True)
@@ -3750,6 +3763,7 @@ class API:
             # 整轮远端状态都没拿到时，不刷新“上次成功检查时间”，避免自动检查被失败结果错误限流。
             if not items or len(failed) < len(items):
                 settings.set("last_external_data_update_check_time", checked_at)
+            self._log_maintenance_check("api_result", "external-data", status="success", checked_at=checked_at, updates=len(checked.get("updates") or []), failed=len(failed), total=len(items))
             return ApiResponse.success(checked)
         except Exception as e:
             logger.error("Check external data maintenance failed: %s", e, exc_info=True)
@@ -3762,10 +3776,24 @@ class API:
             checked = self.maintenance_mgr.check_steamcmd_mod_updates()
             checked_at = int(checked.get("checked_at") or current_ms())
             settings.set("last_steamcmd_mod_update_check_time", checked_at)
+            self._log_maintenance_check("api_result", "steamcmd-mods", status="success", checked_at=checked_at, updates=len(checked.get("updates") or []))
             return ApiResponse.success(checked)
         except Exception as e:
             logger.error("Check SteamCMD mod updates failed: %s", e, exc_info=True)
             return ApiResponse.error(f"检查 SteamCMD 模组更新失败: {e}")
+
+    @log_api_call
+    def maintenance_check_managed_mod_updates(self):
+        """统一检查管理器负责的模组更新，包括 SteamCMD 工坊模组和 GitHub 订阅模组。"""
+        try:
+            checked = self.maintenance_mgr.check_managed_mod_updates()
+            checked_at = int(checked.get("checked_at") or current_ms())
+            settings.set("last_steamcmd_mod_update_check_time", checked_at)
+            self._log_maintenance_check("api_result", "managed-mods", status="success", checked_at=checked_at, updates=len(checked.get("updates") or []), steamcmd=checked.get("steamcmd_count", 0), github=checked.get("github_count", 0))
+            return ApiResponse.success(checked)
+        except Exception as e:
+            logger.error("Check managed mod updates failed: %s", e, exc_info=True)
+            return ApiResponse.error(f"检查管理器模组更新失败: {e}")
     
     
     # =========================================================================
@@ -5532,12 +5560,12 @@ class API:
     # =========================================================================
 
     @log_api_call
-    def ripgrep_prepare_download(self):
+    def ripgrep_prepare_download(self, force: bool = False):
         """触发自动下载 ripgrep。"""
         try:
             from backend.text_search.tooling import prepare_ripgrep_download
 
-            res = prepare_ripgrep_download(self.download_mgr, getattr(settings.config, "ripgrep_path", ""))
+            res = prepare_ripgrep_download(self.download_mgr, getattr(settings.config, "ripgrep_path", ""), force=bool(force))
             if res.get("already_ready"):
                 return ApiResponse.success(res, message="工具已经就绪")
             return ApiResponse.success(res, message="已启动 ripgrep 下载任务")

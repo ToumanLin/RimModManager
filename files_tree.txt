@@ -1,43 +1,11 @@
 ·[RimModManager]
 ├── ·[.claude]
-│   ├── ·[skills]
-│   │   └── ·[gitnexus]
-│   │   
-│   │       ├── ·[gitnexus-cli]
-│   │       ├── ·[gitnexus-debugging]
-│   │       ├── ·[gitnexus-exploring]
-│   │       ├── ·[gitnexus-guide]
-│   │       ├── ·[gitnexus-impact-analysis]
-│   │       └── ·[gitnexus-refactoring]
-│   │       
-│   └── ·[worktrees]
-│   
-│       ├── ·[festive-mahavira-4166a2]
-│       ├── ·[funny-turing-4aa078]
-│       └── ·[loving-lamarr-d7e11b]
-│       
+├── ·[.codegraph]
+├── ·[.cursor]
+├── ·[.docs]
 ├── ·[.history]
 ├── ·[.pytest_cache]
-│   ├── ·[v]
-│   ├──  .gitignore
-│   ├──  CACHEDIR.TAG
-│   └──  README.md
-│   
 ├── ·[.ruff_cache]
-│   ├── ·[0.9.6]
-│   │   ├──  12228878442278937604
-│   │   ├──  12350152229933616243
-│   │   ├──  12597327884289657622
-│   │   ├──  14152611443496745280
-│   │   ├──  15664606002408002217
-│   │   ├──  16606532305242249928
-│   │   ├──  3498731509232515300
-│   │   ├──  4941758101431761949
-│   │   └──  7229181939580559217
-│   │   
-│   ├──  .gitignore
-│   └──  CACHEDIR.TAG
-│   
 ├── ·[backend]
 │   ├── ·[ai]
 │   │   ├──  __init__.py
@@ -116,6 +84,10 @@
 │   │   ├──  mod_scanner.py
 │   │   ├──  parser_dlc.py
 │   │   └──  parser_xml.py
+│   │   
+│   ├── ·[startup]
+│   │   ├──  __init__.py
+│   │   └──  coordinator.py
 │   │   
 │   ├── ·[text_search]
 │   │   ├──  __init__.py
@@ -263,8 +235,10 @@
 │   │   │   ├──  modStore.js
 │   │   │   ├──  orderStore.js
 │   │   │   ├──  profileStore.js
+│   │   │   ├──  promptQueueStore.js
 │   │   │   ├──  ruleStore.js
 │   │   │   ├──  searchStore.js
+│   │   │   ├──  startupStore.js
 │   │   │   ├──  supplementStore.js
 │   │   │   ├──  taskStore.js
 │   │   │   ├──  textureStore.js
@@ -321,6 +295,7 @@
 │   ├──  test_rule_manager_dynamic_weights.py
 │   ├──  test_shortcuts.py
 │   ├──  test_sorter_strategies.py
+│   ├──  test_startup_coordinator.py
 │   ├──  test_texture_opt_api.py
 │   ├──  test_texture_opt_batch_recovery.py
 │   ├──  test_texture_opt_manager.py

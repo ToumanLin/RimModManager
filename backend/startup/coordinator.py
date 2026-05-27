@@ -47,21 +47,21 @@ class StartupCoordinator:
         try:
             if not self.workshop_db_mgr.cache_loaded:
                 # 工坊缓存和规则镜像都属于“有则更准”的数据，失败只提示，不阻塞启动。
-                logger.info("启动后台预热：开始加载社区工坊缓存与替代规则缓存")
+                logger.info("启动后台预热：开始加载工坊数据缓存并刷新规则索引")
                 self.workshop_db_mgr.load_all_cache()
                 rule_mgr = self.rule_mgr_provider() if self.rule_mgr_provider else None
                 if rule_mgr:
                     # 工坊缓存会影响依赖/替代规则判断，预热完成后同步重建规则镜像。
                     rule_mgr.build_workshop_rules()
-                startup_messages.append("社区规则缓存已在后台完成预热。")
+                startup_messages.append("工坊数据缓存已加载，规则索引已刷新。")
         except Exception as exc:
             logger.error(f"启动后台预热失败: {exc}", exc_info=True)
-            startup_messages.append("社区缓存预热失败，首屏已继续打开；部分依赖/替代提示可能稍后才恢复。")
+            startup_messages.append("工坊数据缓存加载失败，主界面已继续打开；依赖和替代提示可能暂时不完整。")
         finally:
             if not startup_messages:
                 return
-            if self.append_messages:
-                # 写入升级上下文，前端后续刷新数据时也能看到这类启动期提示。
+            if self.append_messages and any("失败" in item for item in startup_messages):
+                # 只有失败需要写入启动上下文，成功消息只走即时 toast，避免前端再提示一次。
                 self.append_messages(startup_messages)
             EventBus.send_toast(
                 "\n".join(startup_messages),

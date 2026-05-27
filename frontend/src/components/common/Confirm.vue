@@ -145,7 +145,7 @@
                     <button
                       v-for="action in item.actions"
                       :key="action.id"
-                      :disabled="item.status === 'running'"
+                      :disabled="item.status !== 'pending' || confirmStore.state.isResolving"
                       @click="confirmStore.choosePromptItemAction(item.id, action.id)"
                       class="rounded-lg px-2 py-1 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50"
                       :class="action.kind === 'primary'
@@ -171,8 +171,9 @@
               <button
                 v-for="action in confirmStore.state.actionButtons"
                 :key="action.value?.action || action.label"
+                :disabled="confirmStore.state.isResolving"
                 @click="confirmStore.chooseAction(action.value)"
-                class="rounded-lg text-xs font-bold transition-all duration-200"
+                class="rounded-lg text-xs font-bold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
                 :class="[
                   isMini ? 'px-2 py-1' : 'px-4 py-1.5',
                   action.kind === 'primary'

@@ -27,6 +27,7 @@ export const useConfirmStore = defineStore('confirm', () => {
     actionButtons: [],
     promptItems: [],
     onPromptItemAction: null,
+    isResolving: false,
   })
 
   // Promise 控制器
@@ -54,6 +55,7 @@ export const useConfirmStore = defineStore('confirm', () => {
     state.actionButtons = []
     state.promptItems = []
     state.onPromptItemAction = null
+    state.isResolving = false
     
     // 2. 合并配置
     Object.assign(state, {
@@ -83,6 +85,7 @@ export const useConfirmStore = defineStore('confirm', () => {
 
   // 确认操作
   const confirm = () => {
+    if (state.isResolving) return
     if (state.mode === 'prompt') {
       // 验证逻辑
       if (state.validation && !state.validation(state.inputValue)) {
@@ -96,16 +99,20 @@ export const useConfirmStore = defineStore('confirm', () => {
     } else {
       resolvePromise && resolvePromise(true)
     }
+    state.isResolving = true
     isVisible.value = false
   }
 
   const chooseAction = (value) => {
+    if (state.isResolving) return
+    state.isResolving = true
     resolvePromise && resolvePromise(value)
     isVisible.value = false
   }
 
   // 队列弹窗的单项按钮不直接 resolve 当前弹窗，由 promptQueueStore 决定移除条目或关闭弹窗。
   const choosePromptItemAction = async (itemId, actionId) => {
+    if (state.isResolving) return
     if (typeof state.onPromptItemAction !== 'function') return
     await state.onPromptItemAction(itemId, actionId)
   }
@@ -118,6 +125,7 @@ export const useConfirmStore = defineStore('confirm', () => {
 
   // 取消操作
   const cancel = () => {
+    if (state.isResolving) return
     // Confirm/Prompt 模式下，取消通常意味着 Promise resolve(false) 或 reject
     // 这里约定：Confirm 返回 false，Prompt 返回 null
     if (state.mode === 'confirm' && state.showDeleteOptions) {
@@ -125,6 +133,7 @@ export const useConfirmStore = defineStore('confirm', () => {
     } else if (state.mode === 'confirm') resolvePromise && resolvePromise(false)
     else resolvePromise && resolvePromise(null)
     
+    state.isResolving = true
     isVisible.value = false
   }
 

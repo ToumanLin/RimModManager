@@ -16,25 +16,31 @@ const normalizePromptItem = (item = {}) => ({
   title: String(item.title || item.name || '').trim(),
   description: String(item.description || item.message || '').trim(),
   meta: Array.isArray(item.meta) ? item.meta.map(value => String(value || '').trim()).filter(Boolean) : [],
-  status: '',
+  status: 'pending',
   statusMessage: '',
   actions: (item.actions || []).map(normalizeAction).filter(action => action.id && action.label),
   raw: item.raw || item,
 })
 
 // prompt 代表一个“类别弹窗”，例如工具环境、外部库更新、SteamCMD 模组更新。
-const normalizePrompt = (prompt = {}) => ({
-  id: String(prompt.id || `prompt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
-  category: String(prompt.category || 'general'),
-  title: String(prompt.title || '系统提示'),
-  message: String(prompt.message || ''),
-  type: String(prompt.type || 'warning'),
-  priority: Number(prompt.priority || 100),
-  items: (prompt.items || []).map(normalizePromptItem).filter(item => item.id && item.title),
-  bulkActions: (prompt.bulkActions || []).map(normalizeAction).filter(action => action.id && action.label),
-  onItemAction: typeof prompt.onItemAction === 'function' ? prompt.onItemAction : null,
-  onBulkAction: typeof prompt.onBulkAction === 'function' ? prompt.onBulkAction : null,
-})
+const normalizePrompt = (prompt = {}) => {
+  const normalized = {
+    id: String(prompt.id || `prompt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+    category: String(prompt.category || 'general'),
+    title: String(prompt.title || '系统提示'),
+    message: String(prompt.message || ''),
+    type: String(prompt.type || 'warning'),
+    priority: Number(prompt.priority || 100),
+    items: (prompt.items || []).map(normalizePromptItem).filter(item => item.id && item.title),
+    bulkActions: (prompt.bulkActions || []).map(normalizeAction).filter(action => action.id && action.label),
+    onItemAction: typeof prompt.onItemAction === 'function' ? prompt.onItemAction : null,
+    onBulkAction: typeof prompt.onBulkAction === 'function' ? prompt.onBulkAction : null,
+  }
+  // 提交集合是队列层的幂等锁：条目一旦被单项/批量操作领取，后续点击就不能再次领取。
+  normalized.submittedItemIds = new Set()
+  normalized.isBulkSubmitting = false
+  return normalized
+}
 
 // 统一启动期/维护期提示入口：同一时间只打开一个 Confirm，后续提示按优先级排队。
 export const usePromptQueueStore = defineStore('promptQueue', () => {
@@ -47,6 +53,22 @@ export const usePromptQueueStore = defineStore('promptQueue', () => {
       if (left.priority !== right.priority) return left.priority - right.priority
       return left.id.localeCompare(right.id)
     })
+  }
+
+  const isItemActionable = (prompt, item) => {
+    return !!item && item.status === 'pending' && !prompt.submittedItemIds.has(item.id)
+  }
+
+  // 条目移除必须发生在点击同步阶段，避免用户随后点“全部处理”时再次提交同一条任务。
+  const removePromptItem = (prompt, itemId) => {
+    const index = prompt.items.findIndex(candidate => candidate.id === itemId)
+    if (index >= 0) prompt.items.splice(index, 1)
+  }
+
+  const closePromptIfEmpty = (prompt, confirmStore) => {
+    if (prompt.items.length === 0 && confirmStore.isVisible && !confirmStore.state.isResolving) {
+      confirmStore.chooseAction({ scope: 'prompt-complete' })
+    }
   }
 
   // 入队：将一个类别弹窗添加到队列，按优先级排序。
@@ -62,18 +84,16 @@ export const usePromptQueueStore = defineStore('promptQueue', () => {
     })
   }
 
-  // 处理单项操作：根据类别弹窗回调函数执行具体操作，更新状态并通知外部。
+  // 单项任务在条目移除后后台派发；结果交给任务管理器或 toast，不再阻塞当前弹窗。
   const runItemAction = async (prompt, item, actionId) => {
     const targetAction = item.actions.find(action => action.id === actionId)
     if (!targetAction) return false
-    item.status = 'running'
-    item.statusMessage = '处理中...'
+    item.status = 'submitted'
+    item.statusMessage = '已提交处理'
     try {
       if (prompt.onItemAction) {
         await prompt.onItemAction(item.raw, actionId, item)
       }
-      item.status = 'success'
-      item.statusMessage = targetAction.label === '跳过' ? '已跳过' : '已提交处理'
       return true
     } catch (error) {
       item.status = 'failed'
@@ -83,16 +103,28 @@ export const usePromptQueueStore = defineStore('promptQueue', () => {
     }
   }
 
-  // 处理批量操作：根据类别弹窗回调函数执行具体操作，更新状态并通知外部。
+  // 批量任务只领取仍处于 pending 的条目，和单项点击共享 submittedItemIds 幂等锁。
   const runBulkAction = async (prompt, actionId) => {
     const targetAction = prompt.bulkActions.find(action => action.id === actionId)
     if (!targetAction) return
+    if (prompt.isBulkSubmitting) return
+    prompt.isBulkSubmitting = true
+    const targets = prompt.items.filter(item => isItemActionable(prompt, item))
+    targets.forEach(item => {
+      prompt.submittedItemIds.add(item.id)
+      item.status = 'submitted'
+      item.statusMessage = '已提交处理'
+    })
+    prompt.items.splice(0, prompt.items.length)
     try {
+      if (targets.length === 0) return
       if (prompt.onBulkAction) {
-        await prompt.onBulkAction(actionId, prompt.items.map(item => item.raw), prompt)
+        await prompt.onBulkAction(actionId, targets.map(item => item.raw), prompt)
       }
     } catch (error) {
       toast.error(error?.message || `${targetAction.label}失败`)
+    } finally {
+      prompt.isBulkSubmitting = false
     }
   }
 
@@ -105,19 +137,17 @@ export const usePromptQueueStore = defineStore('promptQueue', () => {
       type: prompt.type,
       mode: 'confirm',
       promptItems: prompt.items,
-      // 单项操作在 Confirm 内完成，不关闭整个队列；成功后移除条目，失败则保留并显示失败状态。
+      // 单项操作点击即领取并移除，具体任务结果由任务栏/toast 呈现，弹窗只负责不重复提交。
       onPromptItemAction: async (itemId, actionId) => {
         const itemIndex = prompt.items.findIndex(candidate => candidate.id === itemId)
         const item = prompt.items[itemIndex]
-        if (!item || item.status === 'running') return
-        const handled = await runItemAction(prompt, item, actionId)
-        if (!handled) return
-
-        // 单项处理完成后立即从当前弹窗移除；全部处理完则关闭弹窗并继续队列。
-        prompt.items.splice(itemIndex, 1)
-        if (prompt.items.length === 0) {
-          confirmStore.chooseAction({ scope: 'prompt-complete' })
-        }
+        if (!isItemActionable(prompt, item)) return
+        prompt.submittedItemIds.add(item.id)
+        item.status = 'submitted'
+        item.statusMessage = '已提交处理'
+        removePromptItem(prompt, item.id)
+        closePromptIfEmpty(prompt, confirmStore)
+        void runItemAction(prompt, item, actionId)
       },
       // 底部按钮是窗口级操作：点击后关闭当前弹窗，再执行批量动作并继续处理队列。
       actionButtons: prompt.bulkActions.map(action => ({

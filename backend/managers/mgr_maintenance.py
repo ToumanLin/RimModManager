@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 import platform
 from typing import Any
 
+from packaging.version import InvalidVersion, Version
+
+from backend.database.models import GithubModRecord
 from backend.managers.mgr_github import GithubManager
 from backend.managers.mgr_network import build_retry_session, merge_headers
 from backend.managers.mgr_steam import SteamManager
@@ -79,6 +83,7 @@ class MaintenanceManager:
                 "ready": steamcmd_ready,
                 "can_install": True,
                 "action": "steam_tools_install",
+                "maintenance_action": "none" if steamcmd_ready else ("install" if not steamcmd_installed else "initialize"),
                 "resolved_path": str(steamcmd_exe),
                 "state": "ready" if steamcmd_ready else ("missing" if not steamcmd_installed else "not_initialized"),
                 "message": (
@@ -92,16 +97,18 @@ class MaintenanceManager:
         texture_options = asdict(settings.config.texture_opt)
         todds_status = self.texture_mgr.get_backend_status(texture_options)
         todds_release = self.github_mgr.fetch_release("todds-encoder", "todds", missing_ok=True) or {}
+        todds_ready = bool(todds_status.get("available"))
         items.append(
             {
                 "tool_id": "todds",
                 "name": "todds 贴图工具",
-                "installed": bool(todds_status.get("available")),
-                "ready": bool(todds_status.get("available")),
+                "installed": todds_ready,
+                "ready": todds_ready,
                 "can_install": True,
                 "action": "texture_tools_install",
+                "maintenance_action": "none" if todds_ready else "install",
                 "resolved_path": str(todds_status.get("resolved_path") or ""),
-                "state": "ready" if todds_status.get("available") else "missing",
+                "state": "ready" if todds_ready else "missing",
                 "message": str(todds_status.get("message") or ""),
                 "latest_version": str(todds_release.get("tag_name") or ""),
             }
@@ -109,24 +116,31 @@ class MaintenanceManager:
 
         ripgrep_status = get_ripgrep_status(getattr(settings.config, "ripgrep_path", ""))
         ripgrep_release = self.github_mgr.fetch_release("BurntSushi", "ripgrep", missing_ok=True) or {}
+        ripgrep_current_version = str(ripgrep_status.current_version or "")
+        ripgrep_latest_version = str(ripgrep_release.get("tag_name") or "")
         ripgrep_can_install = platform.system() == "Windows" and Path(str(getattr(settings.config, "ripgrep_path", "") or "")).suffix.lower() != ".exe"
+        ripgrep_outdated = bool(ripgrep_status.available) and ripgrep_can_install and self._is_version_outdated(ripgrep_current_version, ripgrep_latest_version)
         items.append(
             {
                 "tool_id": "ripgrep",
                 "name": "ripgrep 搜索工具",
                 "installed": bool(ripgrep_status.available),
-                "ready": bool(ripgrep_status.available),
+                "ready": bool(ripgrep_status.available) and not ripgrep_outdated,
                 "can_install": ripgrep_can_install,
                 "action": "ripgrep_install",
+                "maintenance_action": "upgrade" if ripgrep_outdated else ("none" if ripgrep_status.available else "install"),
                 "resolved_path": str(ripgrep_status.resolved_path or ""),
-                "state": "ready" if ripgrep_status.available else "missing",
-                "message": str(ripgrep_status.message or ""),
-                "current_version": str(ripgrep_status.current_version or ""),
-                "latest_version": str(ripgrep_release.get("tag_name") or ""),
+                "state": "outdated" if ripgrep_outdated else ("ready" if ripgrep_status.available else "missing"),
+                "message": (
+                    f"已安装 {ripgrep_current_version}，检测到新版本 {ripgrep_latest_version}。"
+                    if ripgrep_outdated else str(ripgrep_status.message or "")
+                ),
+                "current_version": ripgrep_current_version,
+                "latest_version": ripgrep_latest_version,
             }
         )
 
-        issues = [item for item in items if not item.get("ready")]
+        issues = [item for item in items if item.get("state") != "ready"]
         return {
             "checked_at": checked_at,
             "items": items,
@@ -221,6 +235,66 @@ class MaintenanceManager:
             "updates": updates,
             "count": len(updates),
         }
+
+    def check_managed_mod_updates(self) -> dict[str, Any]:
+        """统一检查由管理器负责部署的模组更新。
+
+        SteamCMD 与 GitHub 订阅最终都需要用户确认后触发下载/部署，因此这里合并成一个维护检查，
+        前端只需要处理同一种“管理器模组更新”提示即可。
+        """
+        checked_at = current_ms()
+        steamcmd_result = self.check_steamcmd_mod_updates()
+        steamcmd_updates = [
+            {**item, "source": "steamcmd", "source_label": "SteamCMD"}
+            for item in (steamcmd_result.get("updates") or [])
+        ]
+        github_updates = self._check_github_mod_updates()
+        updates = [*steamcmd_updates, *github_updates]
+        return {
+            "checked_at": checked_at,
+            "updates": updates,
+            "count": len(updates),
+            "steamcmd_count": len(steamcmd_updates),
+            "github_count": len(github_updates),
+        }
+
+    def _check_github_mod_updates(self) -> list[dict[str, Any]]:
+        updates: list[dict[str, Any]] = []
+        for record in GithubModRecord.select().dicts():
+            online_info = record.get("online_info_cache") or {}
+            if not isinstance(online_info, dict):
+                continue
+            install_type = str(record.get("install_type") or "source").strip() or "source"
+            installed_version = str(record.get("installed_version") or "").strip()
+            latest_version = (
+                str(online_info.get("latest_release_tag") or "").strip()
+                if install_type == "release"
+                else str(online_info.get("latest_source_version") or "").strip()
+            )
+            if not installed_version or not latest_version or installed_version == latest_version:
+                continue
+
+            # source 模式下载参数仍然是分支名；latest_source_version 只用于判断和展示版本差异。
+            target_version = (
+                latest_version
+                if install_type == "release"
+                else str(online_info.get("latest_source_branch") or record.get("target_branch") or online_info.get("default_branch") or "main").strip()
+            )
+            repo_name = str(record.get("repo_name") or record.get("repo_url") or "").strip()
+            updates.append(
+                {
+                    "source": "github",
+                    "source_label": "GitHub",
+                    "repo_url": str(record.get("repo_url") or "").strip(),
+                    "title": repo_name or "GitHub 模组",
+                    "install_type": install_type,
+                    "installed_version": installed_version,
+                    "latest_version": latest_version,
+                    "target_version": target_version,
+                    "message": f"本地版本 {installed_version}，远端版本 {latest_version}。",
+                }
+            )
+        return updates
 
     def _check_external_dataset(self, spec: dict[str, str]) -> dict[str, Any]:
         data_type = str(spec["data_type"])
@@ -368,6 +442,30 @@ class MaintenanceManager:
                 "available": False,
                 "message": f"获取远端状态失败: {exc}",
             }
+
+    @staticmethod
+    def _normalize_release_version(value: Any) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        match = re.search(r"\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]+)?", raw)
+        return match.group(0) if match else raw.lstrip("vV")
+
+    @classmethod
+    def _is_version_outdated(cls, current: Any, latest: Any) -> bool:
+        """保守比较工具版本。
+
+        只有当前版本和远端版本都能解析时才提示升级，避免把非标准 tag 误判成必须更新。
+        """
+        current_version = cls._normalize_release_version(current)
+        latest_version = cls._normalize_release_version(latest)
+        if not current_version or not latest_version:
+            return False
+        try:
+            return Version(current_version) < Version(latest_version)
+        except InvalidVersion:
+            logger.debug("Skip non-standard tool version compare: %s -> %s", current, latest)
+            return False
 
     @staticmethod
     def _parse_http_datetime_to_ms(value: Any) -> int:

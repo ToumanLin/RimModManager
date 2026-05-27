@@ -362,6 +362,21 @@ export const useAppStore = defineStore('app', () => {
     return !last || duration > interval || duration < 0
   }
 
+  const buildTimedCheckDecision = ({ enabled, lastCheckTime, intervalDays, fallbackDays = 1 } = {}) => {
+    const last = Number(lastCheckTime || 0)
+    const interval = Math.max(1, Number(intervalDays || fallbackDays)) * 24 * 60 * 60 * 1000
+    const elapsed = Date.now() - last
+    const due = !!enabled && (!last || elapsed > interval || elapsed < 0)
+    const reason = !enabled ? 'disabled' : (!last ? 'never_checked' : (elapsed < 0 ? 'clock_rollback' : (due ? 'interval_due' : 'interval_not_due')))
+    return { due, reason, enabled: !!enabled, lastCheckTime: last, intervalDays: Math.round(interval / 24 / 60 / 60 / 1000), elapsedMs: elapsed }
+  }
+
+  const logMaintenanceCheck = (event, payload = {}, level = 'info') => {
+    // 统一启动/维护检测日志格式，排查“为什么没自动检查”时只需要搜索这个前缀。
+    const method = level === 'warn' ? 'warn' : level === 'error' ? 'error' : 'info'
+    console[method]('[RMM][maintenance-check]', { event, ...payload })
+  }
+
   const formatDateTime = (timestamp) => {
     const value = Number(timestamp || 0)
     if (!value) return '未知'
@@ -561,7 +576,8 @@ export const useAppStore = defineStore('app', () => {
     }
 
     if (hasRipgrepIssue) {
-      const res = await window.pywebview.api.ripgrep_prepare_download()
+      const ripgrepIssue = issues.find(item => item?.tool_id === 'ripgrep') || {}
+      const res = await window.pywebview.api.ripgrep_prepare_download(ripgrepIssue?.maintenance_action === 'upgrade')
       if (checkResult(res, '处理 ripgrep 环境')) {
         started = true
         if (!res.data?.already_ready) {
@@ -570,6 +586,43 @@ export const useAppStore = defineStore('app', () => {
       }
     }
     return started
+  }
+
+  const getToolIssueActionLabel = (item = {}) => {
+    // 后端会把存在性、初始化、升级判断统一成 maintenance_action，前端只负责显示用户能理解的动作。
+    const action = String(item?.maintenance_action || '').trim()
+    if (action === 'upgrade') return '升级'
+    if (action === 'initialize') return '初始化'
+    if (action === 'install') return '安装'
+    return '处理'
+  }
+
+  const triggerGithubManagedModUpdate = async (item = {}) => {
+    if (!window.pywebview || !item?.repo_url) return false
+    const targetVersion = String(item.target_version || item.latest_version || '').trim()
+    const res = await window.pywebview.api.github_trigger_download(item.repo_url, item.install_type || 'source', targetVersion)
+    if (!checkResult(res, `更新 GitHub 模组 ${item.title || ''}`.trim())) return false
+    toast.info('GitHub 部署任务已启动，请留意底部状态栏。', { timeout: 4000 })
+    const workspaceStore = useWorkspaceStore()
+    workspaceStore.startGithubTimelinePolling(item.repo_url, { intervalMs: 4000, maxPolls: 15 })
+    return true
+  }
+
+  const updateManagedModItems = async (items = []) => {
+    // 批量动作按来源拆分：SteamCMD 支持合并下载，GitHub 订阅逐项启动部署任务。
+    const normalizedItems = Array.isArray(items) ? items : []
+    const workshopIds = [...new Set(
+      normalizedItems
+        .filter(item => String(item?.source || '').toLowerCase() === 'steamcmd')
+        .map(item => String(item?.workshop_id || '').trim())
+        .filter(Boolean)
+    )]
+    if (workshopIds.length > 0) await downloadWorkshopItems(workshopIds)
+
+    for (const item of normalizedItems.filter(item => String(item?.source || '').toLowerCase() === 'github')) {
+      await triggerGithubManagedModUpdate(item)
+    }
+    return workshopIds.length > 0 || normalizedItems.some(item => String(item?.source || '').toLowerCase() === 'github')
   }
 
   // 维护检查的时间戳统一在前端落到 settings，避免每个检查函数重复处理“何时算检查成功”。
@@ -594,11 +647,13 @@ export const useAppStore = defineStore('app', () => {
 
     const res = await caller()
     if (manual ? !checkResult(res, workName) : res?.status !== 'success') {
+      logMaintenanceCheck('api_result', { apiName, workName, manual, status: res?.status || 'missing', message: res?.message || '' }, manual ? 'warn' : 'error')
       return null
     }
 
     const data = res.data || {}
     persistMaintenanceCheckedAt(lastCheckKey, data, shouldPersistCheckedAt)
+    logMaintenanceCheck('api_result', { apiName, workName, manual, status: res.status, checkedAt: data.checked_at || 0, count: data.count ?? data.issues?.length ?? data.updates?.length ?? 0 })
     return data
   }
 
@@ -630,10 +685,14 @@ export const useAppStore = defineStore('app', () => {
         id: item.tool_id || item.name,
         title: item.name || item.tool_id || '工具',
         description: item.message || '需要处理',
-        meta: [item.resolved_path, item.latest_version ? `最新版本 ${item.latest_version}` : ''].filter(Boolean),
+        meta: [
+          item.resolved_path,
+          item.current_version ? `当前版本 ${item.current_version}` : '',
+          item.latest_version ? `最新版本 ${item.latest_version}` : '',
+        ].filter(Boolean),
         raw: item,
         actions: [
-          { id: 'install', label: '处理', kind: 'primary' },
+          { id: 'install', label: getToolIssueActionLabel(item), kind: 'primary' },
           { id: 'skip', label: '稍后', kind: 'secondary' },
         ],
       })),
@@ -722,11 +781,11 @@ export const useAppStore = defineStore('app', () => {
     return data
   }
 
-  // SteamCMD 管理的工坊模组更新可能触发下载，按“发现后询问、执行走现有下载任务”的方式处理。
-  const checkSteamcmdModUpdates = async ({ manual = true, prompt = true } = {}) => {
+  // 管理器负责的模组更新包含 SteamCMD 工坊模组和 GitHub 订阅模组，统一弹窗避免多来源重复打扰。
+  const checkManagedModUpdates = async ({ manual = true, prompt = true } = {}) => {
     const data = await fetchMaintenanceData({
-      apiName: 'maintenance_check_steamcmd_mod_updates',
-      workName: '检查 SteamCMD 模组更新',
+      apiName: 'maintenance_check_managed_mod_updates',
+      workName: '检查管理器模组更新',
       manual,
       lastCheckKey: 'last_steamcmd_mod_update_check_time',
     })
@@ -735,21 +794,26 @@ export const useAppStore = defineStore('app', () => {
     const updates = Array.isArray(data.updates) ? data.updates : []
     if (!prompt) return data
     if (updates.length === 0) {
-      if (manual) toast.success('SteamCMD 模组检查完成，当前均已是最新。')
+      if (manual) toast.success('管理器模组检查完成，当前均已是最新。')
       return data
     }
 
     const promptQueue = usePromptQueueStore()
     await promptQueue.enqueue({
-      category: 'startup-steamcmd-mods',
-      title: '发现 SteamCMD 模组更新',
-      message: `检测到 ${updates.length} 个通过 SteamCMD 管理的工坊模组有新版本。`,
+      category: 'startup-managed-mods',
+      title: '发现管理器模组更新',
+      message: `检测到 ${updates.length} 个由管理器维护的模组有新版本。`,
       type: 'warning',
       priority: manual ? 40 : 70,
       items: updates.map(item => ({
-        id: item.workshop_id,
+        id: `${item.source || 'mod'}:${item.workshop_id || item.repo_url || item.title}`,
         title: item.title || item.workshop_id || '未知模组',
-        description: item.workshop_id ? `Workshop ID: ${item.workshop_id}` : '',
+        description: item.message || (item.workshop_id ? `Workshop ID: ${item.workshop_id}` : item.repo_url || ''),
+        meta: [
+          item.source_label || item.source,
+          item.installed_version ? `当前版本 ${item.installed_version}` : '',
+          item.latest_version ? `最新版本 ${item.latest_version}` : '',
+        ].filter(Boolean),
         raw: item,
         actions: [
           { id: 'update', label: '更新', kind: 'primary' },
@@ -761,22 +825,21 @@ export const useAppStore = defineStore('app', () => {
         { id: 'skip_all', label: '全部稍后', kind: 'secondary' },
       ],
       onItemAction: async (item, actionId) => {
-        if (actionId === 'update' && item.workshop_id) {
-          await downloadWorkshopItems([item.workshop_id])
-        }
+        if (actionId === 'update') await updateManagedModItems([item])
       },
       onBulkAction: async (actionId, items) => {
-        if (actionId === 'update_all') {
-          await downloadWorkshopItems(items.map(item => item.workshop_id).filter(Boolean))
-        }
+        if (actionId === 'update_all') await updateManagedModItems(items)
       },
     })
     return data
   }
+  const checkSteamcmdModUpdates = checkManagedModUpdates
 
   // 启动后的维护检查只做轻量描述表，不引入任务引擎；以后新增检查时只追加一项配置。
   const getScheduledMaintenanceChecks = () => [
     {
+      id: 'tools',
+      name: '外部工具',
       enabled: settings.value.enable_auto_tool_check,
       lastCheckTime: settings.value.last_tool_check_time,
       intervalDays: settings.value.tool_check_interval_days,
@@ -784,6 +847,8 @@ export const useAppStore = defineStore('app', () => {
       run: () => checkToolMaintenance({ manual: false, prompt: true }),
     },
     {
+      id: 'external-data',
+      name: '外部库',
       enabled: settings.value.enable_auto_external_data_update_check,
       lastCheckTime: settings.value.last_external_data_update_check_time,
       intervalDays: settings.value.external_data_update_check_interval_days,
@@ -791,18 +856,28 @@ export const useAppStore = defineStore('app', () => {
       run: () => checkExternalDataUpdates({ manual: false, prompt: true }),
     },
     {
+      id: 'managed-mods',
+      name: '管理器模组更新',
       enabled: settings.value.enable_auto_steamcmd_mod_update_check,
       lastCheckTime: settings.value.last_steamcmd_mod_update_check_time,
       intervalDays: settings.value.steamcmd_mod_update_check_interval_days,
       fallbackDays: 1,
-      run: () => checkSteamcmdModUpdates({ manual: false, prompt: true }),
+      run: () => checkManagedModUpdates({ manual: false, prompt: true }),
     },
   ]
 
   const runScheduledMaintenanceChecks = async () => {
     for (const check of getScheduledMaintenanceChecks()) {
-      if (isTimedCheckDue(check.enabled, check.lastCheckTime, check.intervalDays, check.fallbackDays)) {
+      const decision = buildTimedCheckDecision(check)
+      logMaintenanceCheck('schedule_decision', { id: check.id, name: check.name, ...decision })
+      if (!decision.due) continue
+      try {
+        logMaintenanceCheck('schedule_run', { id: check.id, name: check.name })
         await check.run()
+        logMaintenanceCheck('schedule_done', { id: check.id, name: check.name })
+      } catch (error) {
+        logMaintenanceCheck('schedule_error', { id: check.id, name: check.name, message: error?.message || String(error || '') }, 'error')
+        throw error
       }
     }
   }
@@ -1930,10 +2005,12 @@ export const useAppStore = defineStore('app', () => {
   // 检查更新
   const checkUpdate = async (manual = true) => {
     updateState.isChecking = true
+    logMaintenanceCheck('api_start', { id: 'app-update', name: '软件更新', manual })
     try {
       const res = await window.pywebview.api.update_check(manual)
       if (checkResult(res, "检查更新")) {
         const info = res.data
+        logMaintenanceCheck('api_result', { id: 'app-update', name: '软件更新', manual, status: res.status, hasUpdate: !!info?.has_update, version: info?.version || '', localStatus: info?.local_status || '' })
         if (info.has_update) {
           updateState.hasUpdate = true
           updateState.info = info
@@ -1976,7 +2053,12 @@ export const useAppStore = defineStore('app', () => {
         } else if (manual) {
           toast.success("当前已是最新版本")
         }
+      } else {
+        logMaintenanceCheck('api_result', { id: 'app-update', name: '软件更新', manual, status: res?.status || 'error', message: res?.message || '' }, 'warn')
       }
+    } catch (error) {
+      logMaintenanceCheck('api_error', { id: 'app-update', name: '软件更新', manual, message: error?.message || String(error || '') }, 'error')
+      throw error
     } finally {
       updateState.isChecking = false
     }
@@ -2070,7 +2152,7 @@ export const useAppStore = defineStore('app', () => {
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, repairDatabase, restartApplication, showChangelog, setSidebarTab, cancelTextureTask, cancelTaskByProgress, supportsTaskCancellation, canCancelTask, isTaskCancelPending,
     openPackageTransferDialog, openCustomModExportDialog, updatePackageTransferDialogPreset, closePackageTransferDialog,
     
-    checkSteamTools, checkToolMaintenance, checkExternalDataUpdates, checkSteamcmdModUpdates, runScheduledMaintenanceChecks,
+    checkSteamTools, checkToolMaintenance, checkExternalDataUpdates, checkManagedModUpdates, checkSteamcmdModUpdates, runScheduledMaintenanceChecks,
     openSteamWorkshopUrl, unsubscribeWorkshopIds, subscribeWorkshopIds, subscribeInstallSources, downloadInstallSources, openInstallSource, checkUpdate, updateExternalDB,
     getDataBundleSchema, inspectDataBundle, exportDataBundle, importDataBundle,
     getModPackageSchema, prepareModPackageImport, getModPackageProfileSummary, exportModPackage, importModPackage,

@@ -21,6 +21,20 @@ export const useStartupStore = defineStore('startup', () => {
     return !last || duration > 24 * 60 * 60 * 1000 || duration < 0
   }
 
+  const buildDailyCheckDecision = (enabled, lastCheckTime) => {
+    const last = Number(lastCheckTime || 0)
+    const elapsed = Date.now() - last
+    const due = !!enabled && (!last || elapsed > 24 * 60 * 60 * 1000 || elapsed < 0)
+    const reason = !enabled ? 'disabled' : (!last ? 'never_checked' : (elapsed < 0 ? 'clock_rollback' : (due ? 'interval_due' : 'interval_not_due')))
+    return { due, reason, enabled: !!enabled, lastCheckTime: last, intervalDays: 1, elapsedMs: elapsed }
+  }
+
+  const logStartupCheck = (event, payload = {}, level = 'info') => {
+    // 与维护检查保持同一日志前缀，方便在控制台按 [RMM][maintenance-check] 过滤启动期检测。
+    const method = level === 'warn' ? 'warn' : level === 'error' ? 'error' : 'info'
+    console[method]('[RMM][maintenance-check]', { event, ...payload })
+  }
+
   // 升级上下文由后端在启动时生成；这里把它转成前端动作，例如提示用户和强制刷新扫描。
   const handleUpgradeContext = (upgradeContext) => {
     let scanForce = false
@@ -76,7 +90,10 @@ export const useStartupStore = defineStore('startup', () => {
       }
       // 自动更新探测
       setPhase('startup_update_probe')
+      const updateDecision = buildDailyCheckDecision(settings.value.enable_auto_update_check, settings.value.last_update_check_time)
+      logStartupCheck('schedule_decision', { id: 'app-update', name: '软件更新', ...updateDecision })
       if (settings.value.enable_auto_update_check && shouldRunDailyCheck(settings.value.last_update_check_time)) {
+        logStartupCheck('schedule_run', { id: 'app-update', name: '软件更新' })
         void checkUpdate(false)
       }
       // 自动扫描
@@ -88,9 +105,12 @@ export const useStartupStore = defineStore('startup', () => {
       // 给主界面一次渲染和用户操作机会，再排队启动维护检查，避免首屏刚出现就被弹窗抢占。
       setPhase('maintenance_probe_scheduled')
       window.setTimeout(() => {
-        if (uiState.showSettingsPanel) return
+        if (uiState.showSettingsPanel) {
+          logStartupCheck('schedule_skip', { id: 'maintenance', name: '启动维护检查', reason: 'settings_panel_open' })
+          return
+        }
         runScheduledMaintenanceChecks().catch((error) => {
-          console.error('启动后的维护检查失败:', error)
+          logStartupCheck('schedule_error', { id: 'maintenance', name: '启动维护检查', message: error?.message || String(error || '') }, 'error')
         })
       }, 3000)
 

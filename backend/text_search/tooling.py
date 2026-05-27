@@ -187,12 +187,13 @@ def get_ripgrep_status(raw_path: str | None = None, *, strict: bool = False) -> 
     )
 
 
-def prepare_ripgrep_download(download_mgr, raw_path: str | None = None) -> dict[str, bool]:
+def prepare_ripgrep_download(download_mgr, raw_path: str | None = None, *, force: bool = False) -> dict[str, bool]:
     if platform.system() != "Windows":
         raise RuntimeError("当前自动下载 ripgrep 仅支持 Windows 平台。")
 
     status = get_ripgrep_status(raw_path)
-    if status.available: return {"already_ready": True}
+    # 普通安装只补缺失；维护检查判定为 outdated 时会传 force=True，复用同一套下载/覆盖流程升级。
+    if status.available and not force: return {"already_ready": True}
 
     install_dir = resolve_ripgrep_root(raw_path)
     install_dir.mkdir(parents=True, exist_ok=True)
