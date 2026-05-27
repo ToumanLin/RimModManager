@@ -445,7 +445,7 @@ class ModScanner:
         T_PATH = norm(str(TOOL_MODS_DIR))
         # 补充 store
         m_path = norm(mod_path)
-        if S_PATH and m_path.startswith(S_PATH) and (S_PATH != L_PATH):
+        if S_PATH and m_path.startswith(S_PATH) and (S_PATH != L_PATH) and (S_PATH != W_PATH):
             mod_data['store'] = 'self'
         elif T_PATH and m_path.startswith(T_PATH):
             mod_data['store'] = 'self'

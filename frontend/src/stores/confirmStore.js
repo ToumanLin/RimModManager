@@ -23,7 +23,10 @@ export const useConfirmStore = defineStore('confirm', () => {
     trashOptionText: '移入回收站',
     forceOptionText: '强制删除',
     deleteOptionsHint: '',
+    // actionButtons 是窗口级按钮，promptItems 是队列弹窗的逐项操作列表；老 confirm/alert 调用不传则保持原行为。
     actionButtons: [],
+    promptItems: [],
+    onPromptItemAction: null,
   })
 
   // Promise 控制器
@@ -49,6 +52,8 @@ export const useConfirmStore = defineStore('confirm', () => {
     state.forceOptionText = '强制删除'
     state.deleteOptionsHint = ''
     state.actionButtons = []
+    state.promptItems = []
+    state.onPromptItemAction = null
     
     // 2. 合并配置
     Object.assign(state, {
@@ -99,6 +104,12 @@ export const useConfirmStore = defineStore('confirm', () => {
     isVisible.value = false
   }
 
+  // 队列弹窗的单项按钮不直接 resolve 当前弹窗，由 promptQueueStore 决定移除条目或关闭弹窗。
+  const choosePromptItemAction = async (itemId, actionId) => {
+    if (typeof state.onPromptItemAction !== 'function') return
+    await state.onPromptItemAction(itemId, actionId)
+  }
+
   const closeSilently = () => {
     // 仅关闭弹窗，不注入确认/取消结果。
     // 用于“后台等待流程已自动完成，只需把弹窗收起来”的场景。
@@ -143,7 +154,7 @@ export const useConfirmStore = defineStore('confirm', () => {
 
   return { 
     isVisible, state, 
-    open, confirm, cancel, chooseAction, closeSilently,
+    open, confirm, cancel, chooseAction, choosePromptItemAction, closeSilently,
     alert, confirmAction, confirmDeleteAction, prompt, popover
   }
 })

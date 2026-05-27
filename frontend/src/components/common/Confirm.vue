@@ -112,16 +112,65 @@
                 {{ confirmStore.state.deleteOptionsHint }}
               </p>
             </div>
+
+            <!-- 队列弹窗条目区：每个检查项独立处理，成功后由 store 从列表移除。 -->
+            <div v-else-if="confirmStore.state.promptItems?.length" class="space-y-2 max-h-[46vh] overflow-y-auto pr-1">
+              <div
+                v-for="item in confirmStore.state.promptItems"
+                :key="item.id"
+                class="rounded-xl border border-text-main/10 bg-black/25 px-3 py-2"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold text-text-main break-all">{{ item.title }}</div>
+                    <div v-if="item.description" class="mt-1 text-xs text-text-dim/80 leading-relaxed break-all">{{ item.description }}</div>
+                    <div v-if="item.meta?.length" class="mt-1 flex flex-wrap gap-1">
+                      <span
+                        v-for="meta in item.meta"
+                        :key="meta"
+                        class="rounded-md border border-text-main/10 bg-text-main/5 px-1.5 py-0.5 text-[10px] text-text-dim"
+                      >
+                        {{ meta }}
+                      </span>
+                    </div>
+                    <div
+                      v-if="item.statusMessage"
+                      class="mt-1 text-xs"
+                      :class="item.status === 'failed' ? 'text-accent-danger' : item.status === 'success' ? 'text-accent-success' : 'text-text-dim'"
+                    >
+                      {{ item.statusMessage }}
+                    </div>
+                  </div>
+                  <div class="shrink-0 flex flex-wrap justify-end gap-1">
+                    <button
+                      v-for="action in item.actions"
+                      :key="action.id"
+                      :disabled="item.status === 'running'"
+                      @click="confirmStore.choosePromptItemAction(item.id, action.id)"
+                      class="rounded-lg px-2 py-1 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                      :class="action.kind === 'primary'
+                        ? `${theme.btnBg} text-black`
+                        : action.kind === 'danger'
+                          ? 'bg-accent-danger/90 text-black'
+                          : 'text-text-dim hover:text-text-main hover:bg-text-main/10 border border-text-main/5'"
+                    >
+                      {{ action.label }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- D. 底部操作栏 (玻璃分割线) -->
           <div class=" flex items-center justify-end gap-3 border-t border-text-main/5 bg-text-main/1"
             :class="isMini ? 'px-2 py-1' : 'px-4 py-2'">
             
+            <!-- 自定义底部按钮用于“全部处理/全部稍后”等窗口级动作，保持普通确认弹窗的旧按钮逻辑不变。 -->
             <template v-if="Array.isArray(confirmStore.state.actionButtons) && confirmStore.state.actionButtons.length > 0">
               <button
                 v-for="action in confirmStore.state.actionButtons"
-                :key="action.value"
+                :key="action.value?.action || action.label"
                 @click="confirmStore.chooseAction(action.value)"
                 class="rounded-lg text-xs font-bold transition-all duration-200"
                 :class="[

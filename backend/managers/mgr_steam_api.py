@@ -642,14 +642,14 @@ if __name__ == "__main__":
     # children = SteamWebAPI.fetch_collection_children(collection_id)
     # print(f"合集 {collection_id} 包含 {len(children)} 个 Mod")
     #  # 测试用例：解析 Mod 详情
-    mod_id = '3009527756'
+    mod_id = '3723552881'
     # details = SteamWebAPI.fetch_item_details([mod_id], True)
     # print(f"Mod {mod_id} 详情: {details}")
     
     # screenshots = SteamWebAPI._fetch_screenshots_via_scraper(mod_id)
     # print(f"Mod 截图: {screenshots}")
     
-    search_res = SteamWebAPI.search_workshop_online("Flora reskin")
-    print(f"搜索结果: {search_res}")
+    # search_res = SteamWebAPI.search_workshop_online("rim tuber")
+    # print(f"搜索结果: {search_res}")
     
     

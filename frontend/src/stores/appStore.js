@@ -12,7 +12,8 @@ import { useProfileStore } from './profileStore'
 import { useTextureStore } from './textureStore'
 import { useWorkspaceStore } from './workspaceStore'
 import { useTaskStore } from './taskStore'
-import { useAiStore } from './aiStore'
+import { usePromptQueueStore } from './promptQueueStore'
+import { useStartupStore } from './startupStore'
 import { isBrowserRuntime, openManagedSubBrowserUrl } from '../runtime/runtimeBridge'
 import { normalizeInstallSource, normalizeInstallSources } from '../utils/modIdentity'
 
@@ -498,13 +499,6 @@ export const useAppStore = defineStore('app', () => {
     return true
   }
 
-  const escapeHtml = (value = '') => String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-
   const recoverFromSuspendedState = async () => {
     if (suspendRecoveryPromise) return suspendRecoveryPromise
 
@@ -578,6 +572,7 @@ export const useAppStore = defineStore('app', () => {
     return started
   }
 
+  // 维护检查的时间戳统一在前端落到 settings，避免每个检查函数重复处理“何时算检查成功”。
   const persistMaintenanceCheckedAt = (settingKey, data, shouldPersist = null) => {
     const checkedAt = Number(data?.checked_at || 0)
     if (!settingKey || !checkedAt) return
@@ -585,6 +580,7 @@ export const useAppStore = defineStore('app', () => {
     settings.value[settingKey] = checkedAt
   }
 
+  // 维护类接口都遵循同一返回格式：手动触发走 checkResult 给用户反馈，启动期静默触发只接受 success。
   const fetchMaintenanceData = async ({
     apiName,
     workName,
@@ -606,6 +602,7 @@ export const useAppStore = defineStore('app', () => {
     return data
   }
 
+  // 工具环境可能涉及外部下载，因此只做检查本身静默；发现问题后统一进入提示队列交给用户决定。
   const checkToolMaintenance = async ({ manual = true, prompt = true } = {}) => {
     const data = await fetchMaintenanceData({
       apiName: 'maintenance_check_tools',
@@ -622,21 +619,39 @@ export const useAppStore = defineStore('app', () => {
       return data
     }
 
-    const confirmStore = useConfirmStore()
-    const html = issues.map(item => (
-      `<li><b>${escapeHtml(item.name || item.tool_id || '工具')}</b>：${escapeHtml(item.message || '需要处理')}</li>`
-    )).join('')
-    const ok = await confirmStore.confirmAction(
-      '工具环境需要处理',
-      `以下工具当前未就绪：<ul style="margin:8px 0 0 18px;list-style:disc;">${html}</ul>是否立即处理？`,
-      { confirmText: '立即处理', cancelText: '稍后再说', type: 'warning', isHtml: true }
-    )
-    if (ok) {
-      await installToolIssues(issues)
-    }
+    const promptQueue = usePromptQueueStore()
+    await promptQueue.enqueue({
+      category: 'startup-tools',
+      title: '工具环境需要处理',
+      message: '以下工具当前未就绪，可单独处理，也可以批量处理。',
+      type: 'warning',
+      priority: manual ? 30 : 60,
+      items: issues.map(item => ({
+        id: item.tool_id || item.name,
+        title: item.name || item.tool_id || '工具',
+        description: item.message || '需要处理',
+        meta: [item.resolved_path, item.latest_version ? `最新版本 ${item.latest_version}` : ''].filter(Boolean),
+        raw: item,
+        actions: [
+          { id: 'install', label: '处理', kind: 'primary' },
+          { id: 'skip', label: '稍后', kind: 'secondary' },
+        ],
+      })),
+      bulkActions: [
+        { id: 'install_all', label: '全部处理', kind: 'primary' },
+        { id: 'skip_all', label: '全部稍后', kind: 'secondary' },
+      ],
+      onItemAction: async (item, actionId) => {
+        if (actionId === 'install') await installToolIssues([item])
+      },
+      onBulkAction: async (actionId, items) => {
+        if (actionId === 'install_all') await installToolIssues(items)
+      },
+    })
     return data
   }
 
+  // 外部库更新属于网络下载动作：启动期可以静默检查，但实际更新必须经由队列弹窗确认。
   const checkExternalDataUpdates = async ({ manual = true, prompt = true } = {}) => {
     const data = await fetchMaintenanceData({
       apiName: 'maintenance_check_external_data',
@@ -666,29 +681,48 @@ export const useAppStore = defineStore('app', () => {
       return data
     }
 
-    const confirmStore = useConfirmStore()
-    const html = updates.map(item => {
-      const localVersion = item.local_version ? `本地版本: ${escapeHtml(item.local_version)}` : `本地时间: ${escapeHtml(formatDateTime(item.local_mtime))}`
-      const remoteVersion = item.remote_version ? `远端签名: ${escapeHtml(item.remote_version)}` : `远端时间: ${escapeHtml(formatDateTime(item.remote_updated_at))}`
-      return `<li><b>${escapeHtml(item.name || item.data_type || '外部库')}</b><br/>${localVersion}<br/>${remoteVersion}</li>`
-    }).join('')
-    const failedHtml = failed.length > 0
-      ? `<p style="margin:0 0 8px 0;color:#f59e0b;">另有 ${failed.length} 项外部库暂时检查失败，本次只展示已成功获取到远端状态的更新项。</p>`
-      : ''
-    const ok = await confirmStore.confirmAction(
-      '发现外部库更新',
-      `${failedHtml}以下外部库文件检测到更新：<ul style="margin:8px 0 0 18px;list-style:disc;">${html}</ul>是否现在开始更新？`,
-      { confirmText: '立即更新', cancelText: '稍后再说', type: 'warning', isHtml: true }
-    )
-    if (!ok) return data
-
-    for (const item of updates) {
-      // 顺序执行，避免同时刷新同一批缓存时互相打断。
-      await updateExternalDB(item.data_type)
-    }
+    const promptQueue = usePromptQueueStore()
+    await promptQueue.enqueue({
+      category: 'startup-external-data',
+      title: '发现外部库更新',
+      message: failed.length > 0
+        ? `另有 ${failed.length} 项外部库暂时检查失败，本次只展示已成功获取到远端状态的更新项。`
+        : '以下外部库文件检测到更新，可单独更新，也可以批量更新。',
+      type: 'warning',
+      priority: manual ? 35 : 65,
+      items: updates.map(item => ({
+        id: item.data_type || item.name,
+        title: item.name || item.data_type || '外部库',
+        description: item.message || '检测到远端版本与本地不一致。',
+        meta: [
+          item.local_version ? `本地版本 ${item.local_version}` : `本地时间 ${formatDateTime(item.local_mtime)}`,
+          item.remote_version ? `远端签名 ${item.remote_version}` : `远端时间 ${formatDateTime(item.remote_updated_at)}`,
+        ],
+        raw: item,
+        actions: [
+          { id: 'update', label: '更新', kind: 'primary' },
+          { id: 'skip', label: '稍后', kind: 'secondary' },
+        ],
+      })),
+      bulkActions: [
+        { id: 'update_all', label: '全部更新', kind: 'primary' },
+        { id: 'skip_all', label: '全部稍后', kind: 'secondary' },
+      ],
+      onItemAction: async (item, actionId) => {
+        if (actionId === 'update') await updateExternalDB(item.data_type)
+      },
+      onBulkAction: async (actionId, items) => {
+        if (actionId !== 'update_all') return
+        for (const item of items) {
+          // 顺序执行，避免同时刷新同一批缓存时互相打断。
+          await updateExternalDB(item.data_type)
+        }
+      },
+    })
     return data
   }
 
+  // SteamCMD 管理的工坊模组更新可能触发下载，按“发现后询问、执行走现有下载任务”的方式处理。
   const checkSteamcmdModUpdates = async ({ manual = true, prompt = true } = {}) => {
     const data = await fetchMaintenanceData({
       apiName: 'maintenance_check_steamcmd_mod_updates',
@@ -705,122 +739,90 @@ export const useAppStore = defineStore('app', () => {
       return data
     }
 
-    const confirmStore = useConfirmStore()
-    const previewHtml = updates.slice(0, 8).map(item => (
-      `<li><b>${escapeHtml(item.title || item.workshop_id || '未知模组')}</b>（${escapeHtml(item.workshop_id || '')}）</li>`
-    )).join('')
-    const remainText = updates.length > 8 ? `<p style="margin-top:8px;">其余 ${updates.length - 8} 项将在确认后一起更新。</p>` : ''
-    const ok = await confirmStore.confirmAction(
-      '发现 SteamCMD 模组更新',
-      `检测到 ${updates.length} 个通过 SteamCMD 管理的工坊模组有新版本：<ul style="margin:8px 0 0 18px;list-style:disc;">${previewHtml}</ul>${remainText}`,
-      { confirmText: '立即更新', cancelText: '稍后再说', type: 'warning', isHtml: true }
-    )
-    if (ok) {
-      await downloadWorkshopItems(updates.map(item => item.workshop_id).filter(Boolean))
-    }
+    const promptQueue = usePromptQueueStore()
+    await promptQueue.enqueue({
+      category: 'startup-steamcmd-mods',
+      title: '发现 SteamCMD 模组更新',
+      message: `检测到 ${updates.length} 个通过 SteamCMD 管理的工坊模组有新版本。`,
+      type: 'warning',
+      priority: manual ? 40 : 70,
+      items: updates.map(item => ({
+        id: item.workshop_id,
+        title: item.title || item.workshop_id || '未知模组',
+        description: item.workshop_id ? `Workshop ID: ${item.workshop_id}` : '',
+        raw: item,
+        actions: [
+          { id: 'update', label: '更新', kind: 'primary' },
+          { id: 'skip', label: '稍后', kind: 'secondary' },
+        ],
+      })),
+      bulkActions: [
+        { id: 'update_all', label: '全部更新', kind: 'primary' },
+        { id: 'skip_all', label: '全部稍后', kind: 'secondary' },
+      ],
+      onItemAction: async (item, actionId) => {
+        if (actionId === 'update' && item.workshop_id) {
+          await downloadWorkshopItems([item.workshop_id])
+        }
+      },
+      onBulkAction: async (actionId, items) => {
+        if (actionId === 'update_all') {
+          await downloadWorkshopItems(items.map(item => item.workshop_id).filter(Boolean))
+        }
+      },
+    })
     return data
   }
 
+  // 启动后的维护检查只做轻量描述表，不引入任务引擎；以后新增检查时只追加一项配置。
+  const getScheduledMaintenanceChecks = () => [
+    {
+      enabled: settings.value.enable_auto_tool_check,
+      lastCheckTime: settings.value.last_tool_check_time,
+      intervalDays: settings.value.tool_check_interval_days,
+      fallbackDays: 3,
+      run: () => checkToolMaintenance({ manual: false, prompt: true }),
+    },
+    {
+      enabled: settings.value.enable_auto_external_data_update_check,
+      lastCheckTime: settings.value.last_external_data_update_check_time,
+      intervalDays: settings.value.external_data_update_check_interval_days,
+      fallbackDays: 1,
+      run: () => checkExternalDataUpdates({ manual: false, prompt: true }),
+    },
+    {
+      enabled: settings.value.enable_auto_steamcmd_mod_update_check,
+      lastCheckTime: settings.value.last_steamcmd_mod_update_check_time,
+      intervalDays: settings.value.steamcmd_mod_update_check_interval_days,
+      fallbackDays: 1,
+      run: () => checkSteamcmdModUpdates({ manual: false, prompt: true }),
+    },
+  ]
+
   const runScheduledMaintenanceChecks = async () => {
-    if (isTimedCheckDue(
-      settings.value.enable_auto_tool_check,
-      settings.value.last_tool_check_time,
-      settings.value.tool_check_interval_days,
-      3
-    )) {
-      await checkToolMaintenance({ manual: false, prompt: true })
-    }
-
-    if (isTimedCheckDue(
-      settings.value.enable_auto_external_data_update_check,
-      settings.value.last_external_data_update_check_time,
-      settings.value.external_data_update_check_interval_days,
-      1
-    )) {
-      await checkExternalDataUpdates({ manual: false, prompt: true })
-    }
-
-    if (isTimedCheckDue(
-      settings.value.enable_auto_steamcmd_mod_update_check,
-      settings.value.last_steamcmd_mod_update_check_time,
-      settings.value.steamcmd_mod_update_check_interval_days,
-      1
-    )) {
-      await checkSteamcmdModUpdates({ manual: false, prompt: true })
+    for (const check of getScheduledMaintenanceChecks()) {
+      if (isTimedCheckDue(check.enabled, check.lastCheckTime, check.intervalDays, check.fallbackDays)) {
+        await check.run()
+      }
     }
   }
 
   // === Actions ===
-  // 初始化：获取数据并分类
+  // 初始化只保留“设置 loading + 调用启动编排 + 统一失败提示”，具体启动步骤交给 startupStore。
   const initialize = async () => {
     isLoading.value = true
     try {
-      // “暂停”直到 Python 后端连接成功
-      await waitForBackend()
-      // 注册事件监听
-      setupEventListeners()
-      // AI 运行时配置需要在后端桥接就绪后再初始化。
-      const aiStore = useAiStore()
-      await aiStore.initialize()
-
-      // 获取初始数据 (这里包含 settings, version 等)
-      const refreshed = await refreshData(true)
-      if (!refreshed) {
-        // toast.error('初始化失败，无法获取初始数据。')
-        isLoading.value = false
-        return
-      }
-      let scanForce = false
-      // 只有当版本真的发生过变动，且有待处理任务时才触发
-      if (upgradeContext.value.version_changed) {
-          console.log("检测到版本升级:", upgradeContext.value.old_version, "->", upgradeContext.value.new_version);
-          
-          // 1. 处理展示更新日志弹窗
-          if (upgradeContext.value.pending_actions.includes('show_update_news')) {
-            // handleUpdate(upgradeContext.value.changelog);
-          }
-          // 2. 强制刷新数据
-          if (upgradeContext.value.pending_actions.includes('recommend_scan')) {
-            scanForce = true
-          }
-          // 3. 处理静默通知 (Toast 告知用户后端干了什么)
-          if (upgradeContext.value.actions_taken.length > 0) {
-            toast.info(`升级完成: ${upgradeContext.value.actions_taken.join(', ')}`);
-          }
-      }
-      if (upgradeContext.value.messages?.length > 0) {
-        toast.info(upgradeContext.value.messages.join('\n'), { timeout: 5000 })
-      }
-      const profileStore = useProfileStore()
-      // 同步当前 Profile ID 到 profileStore
-      if (settings.value.current_profile_id) {
-        profileStore.currentProfileId = settings.value.current_profile_id
-      }
-      // 自动检查更新逻辑
-      if (settings.value.enable_auto_update_check) {
-        // 距离上次检查超过1天则检查更新
-        const lastCheckTime = settings.value.last_update_check_time || 0
-        const duration = Date.now() - lastCheckTime
-        console.log("上次检查时间:", lastCheckTime, Date.now(), duration)
-        if (!lastCheckTime || duration > 24 * 60 * 60 * 1000 || duration<0) {
-          console.log("正在执行启动检查更新...")
-          // 传入 false 表示静默检查
-          checkUpdate(false) 
-        }
-      }
-      // 界面渲染完毕后，根据设置决定是否启动后台扫描
-      if (settings.value.enable_auto_scan !== false) {
-        const modStore = useModStore()
-        modStore.scanMods(null, scanForce)
-      }
-      // 非软件更新类检查略微延后，避免和首屏提示撞在一起。
-      window.setTimeout(() => {
-        if (uiState.showSettingsPanel) return
-        runScheduledMaintenanceChecks().catch((e) => {
-          console.error('启动后的维护检查失败:', e)
-        })
-      }, 3000)
-      
+      const startupStore = useStartupStore()
+      await startupStore.run({
+        waitForBackend,
+        setupEventListeners,
+        refreshData,
+        settings,
+        upgradeContext,
+        uiState,
+        checkUpdate,
+        runScheduledMaintenanceChecks,
+      })
     } catch (e) {
       console.error("初始化失败:", e)
       toast.error(`初始化失败：\n${e}`)
@@ -1935,20 +1937,42 @@ export const useAppStore = defineStore('app', () => {
         if (info.has_update) {
           updateState.hasUpdate = true
           updateState.info = info
-          // 弹出全局确认框
-          const confirmStore = useConfirmStore()
-          const ok = await confirmStore.confirmAction(
-            `发现新版本 v${info.version}`,
-            `来源: ${info.source_name}<br/>文件大小: ${info.file_size || '未知'}<br/>更新内容:<br/>${info.changelog}`,
-            { confirmText: '立即更新', cancelText: manual ? '以后再说' : '忽略此版本', type: 'success', isHtml: true }
-          )
-          if (ok) {
-            // 触发下载
-            _performUpdateAction()
-          } else if (!manual) {
-            // 如果是启动时的自动弹窗点取消，则询问是否不再提醒该版本
-            await window.pywebview.api.update_ignore_version(info.version)
-          }
+          const promptQueue = usePromptQueueStore()
+          await promptQueue.enqueue({
+            category: 'startup-app-update',
+            title: `发现新版本 v${info.version}`,
+            message: `来源: ${info.source_name || '未知'}。文件大小: ${info.file_size || '未知'}。`,
+            type: 'success',
+            priority: manual ? 20 : 50,
+            items: [{
+              id: info.version || 'app-update',
+              title: `RimModManager v${info.version}`,
+              description: info.changelog || '发现可用更新。',
+              raw: info,
+              actions: [
+                { id: 'update', label: '立即更新', kind: 'primary' },
+                { id: manual ? 'skip' : 'ignore', label: manual ? '以后再说' : '忽略此版本', kind: 'secondary' },
+              ],
+            }],
+            bulkActions: [
+              { id: 'update_all', label: '立即更新', kind: 'primary' },
+              { id: manual ? 'skip_all' : 'ignore_all', label: manual ? '以后再说' : '忽略此版本', kind: 'secondary' },
+            ],
+            onItemAction: async (_item, actionId) => {
+              if (actionId === 'update') {
+                await _performUpdateAction()
+              } else if (actionId === 'ignore' && !manual) {
+                await window.pywebview.api.update_ignore_version(info.version)
+              }
+            },
+            onBulkAction: async (actionId) => {
+              if (actionId === 'update_all') {
+                await _performUpdateAction()
+              } else if (actionId === 'ignore_all' && !manual) {
+                await window.pywebview.api.update_ignore_version(info.version)
+              }
+            },
+          })
         } else if (manual) {
           toast.success("当前已是最新版本")
         }

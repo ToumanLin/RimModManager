@@ -89,6 +89,7 @@ from backend.browser_runtime import build_sub_browser_target_url
 from backend.utils.restart import launch_new_application
 from backend.migrations.app_upgrade import normalize_duplicate_group_names_on_load, run_app_upgrade_migrations
 from backend.text_search.manager import FileSearchManager
+from backend.startup import StartupCoordinator
 
 GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS = 3 * 60 * 1000
 
@@ -256,8 +257,6 @@ class API:
         self._github_subs_refresh_running = False
         self._github_subs_refresh_started_at = 0
         self._last_runtime_link_sync_result: dict[str, Any] = {}
-        # 桌面模式首屏阶段只允许触发一次后台预热，避免 loaded / ready 多次回调时重复导入大缓存文件。
-        self._startup_warmup_started = False
         # 应用层升级迁移必须早于外置缓存库管理器初始化。
         # 否则像 workshop_cache.db 这类需要“删库重建”的迁移，
         # 会在 Windows 上撞到已打开文件句柄导致无法删除。
@@ -306,6 +305,12 @@ class API:
             self.texture_mgr,
             self.workshop_db_mgr,
             rule_mgr_provider=lambda: self.sorter.rule_mgr if self.sorter else None,
+        )
+        # 启动期后台动作交给协调器，API 只注入依赖，避免 __init__ 继续膨胀。
+        self.startup_coordinator = StartupCoordinator(
+            self.workshop_db_mgr,
+            rule_mgr_provider=lambda: self.sorter.rule_mgr if self.sorter else None,
+            append_messages=lambda messages: self._upgrade_context["messages"].extend(messages),
         )
         
         # 每次启动 API 时，强制检查并修复 SteamCMD 的软链接！
@@ -805,33 +810,7 @@ class API:
         - 社区工坊库 / 替代库缓存重建属于“有则更好”的能力，不应拖住桌面首屏；
         - 因此把它后移到窗口完成首轮加载后再后台执行，用户至少能先看到主界面。
         """
-        if self._startup_warmup_started: return
-
-        self._startup_warmup_started = True
-
-        def background_warmup():
-            startup_messages: list[str] = []
-            try:
-                if not self.workshop_db_mgr.cache_loaded:
-                    logger.info("启动后台预热：开始加载社区工坊缓存与替代规则缓存")
-                    self.workshop_db_mgr.load_all_cache()
-                    if self.sorter and self.sorter.rule_mgr:
-                        # 工坊缓存会影响依赖/替代规则判断，因此缓存热加载完成后要同步重建规则镜像。
-                        self.sorter.rule_mgr.build_workshop_rules()
-                    startup_messages.append("社区规则缓存已在后台完成预热。")
-            except Exception as e:
-                logger.error(f"启动后台预热失败: {e}", exc_info=True)
-                startup_messages.append("社区缓存预热失败，首屏已继续打开；部分依赖/替代提示可能稍后才恢复。")
-            finally:
-                if startup_messages:
-                    self._upgrade_context["messages"].extend(startup_messages)
-                    EventBus.send_toast("\n".join(startup_messages), type="warning" if any("失败" in item for item in startup_messages) else "info")
-
-        threading.Thread(
-            target=background_warmup,
-            name="rmm-startup-warmup",
-            daemon=True,
-        ).start()
+        self.startup_coordinator.start_background_warmup()
 
     def _normalize_native_drop_selector(self, selector: str | None = None) -> str:
         """把前端传入的 id / selector 统一成 pywebview 可直接查询的 CSS 选择器。"""

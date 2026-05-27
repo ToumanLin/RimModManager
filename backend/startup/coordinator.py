@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import threading
+from typing import Callable
+
+from backend.utils.event_bus import EventBus
+from backend.utils.logger import logger
+
+
+class StartupCoordinator:
+    """收口启动期后台动作，避免 API 直接承载启动编排细节。
+
+    这里目前只放“不影响首屏打开”的后台预热；数据库修复、迁移等高风险动作仍应放在
+    API 初始化前置路径里阻塞执行，避免用户在不可靠状态下进入主界面。
+    """
+
+    def __init__(
+        self,
+        workshop_db_mgr,
+        *,
+        rule_mgr_provider: Callable[[], object | None] | None = None,
+        append_messages: Callable[[list[str]], None] | None = None,
+    ):
+        self.workshop_db_mgr = workshop_db_mgr
+        self.rule_mgr_provider = rule_mgr_provider
+        self.append_messages = append_messages
+        # 预热只允许启动一次；API 可能被前端 ready 事件或测试重复触发。
+        self._warmup_started = False
+        self._lock = threading.Lock()
+
+    def start_background_warmup(self) -> bool:
+        """启动不阻塞首屏的缓存预热任务。重复调用会被忽略。"""
+        with self._lock:
+            if self._warmup_started:
+                return False
+            self._warmup_started = True
+
+        threading.Thread(
+            target=self._run_background_warmup,
+            name="rmm-startup-warmup",
+            daemon=True,
+        ).start()
+        return True
+
+    def _run_background_warmup(self):
+        startup_messages: list[str] = []
+        try:
+            if not self.workshop_db_mgr.cache_loaded:
+                # 工坊缓存和规则镜像都属于“有则更准”的数据，失败只提示，不阻塞启动。
+                logger.info("启动后台预热：开始加载社区工坊缓存与替代规则缓存")
+                self.workshop_db_mgr.load_all_cache()
+                rule_mgr = self.rule_mgr_provider() if self.rule_mgr_provider else None
+                if rule_mgr:
+                    # 工坊缓存会影响依赖/替代规则判断，预热完成后同步重建规则镜像。
+                    rule_mgr.build_workshop_rules()
+                startup_messages.append("社区规则缓存已在后台完成预热。")
+        except Exception as exc:
+            logger.error(f"启动后台预热失败: {exc}", exc_info=True)
+            startup_messages.append("社区缓存预热失败，首屏已继续打开；部分依赖/替代提示可能稍后才恢复。")
+        finally:
+            if not startup_messages:
+                return
+            if self.append_messages:
+                # 写入升级上下文，前端后续刷新数据时也能看到这类启动期提示。
+                self.append_messages(startup_messages)
+            EventBus.send_toast(
+                "\n".join(startup_messages),
+                type="warning" if any("失败" in item for item in startup_messages) else "info",
+            )
