@@ -295,6 +295,18 @@
                     </div>
                     <CommonPathInput label="社区规则库路径" v-model="formData.community_rules_path" @browse="handleBrowse('community_rules_path', ['JSON Files (*.json)'])" :check="formData.check_info?.community_rules_path" />
                     <div class="py-2 pt-2 place-self-center w-[95%] border-b border-text-dim/20"></div>
+                    <div class="w-full">
+                      <div class="flex justify-between items-center px-1 mb-1">
+                        <label class="text-xs text-text-dim uppercase font-bold tracking-widest">
+                          Git 推荐清单来源
+                          <span v-tooltip="'每行一个来源，格式：名称|URL。留空时使用默认推荐清单。'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</span>
+                        </label>
+                      </div>
+                      <textarea v-model="formData.git_provider_catalog_url" rows="3"
+                        class="w-full input-glass bg-transparent px-3 py-2 text-sm text-text-main focus:outline-none font-mono resize-y"
+                        placeholder="RJW|https://example.invalid/providers.json"></textarea>
+                    </div>
+                    <div class="py-2 pt-2 place-self-center w-[95%] border-b border-text-dim/20"></div>
                     <div class="flex items-end gap-1.5">
                       <CommonInput label="工坊数据库 URL" v-model="formData.community_workshop_db_url" />
                       <button @click="updateExternalDB('workshop_db')" v-tooltip="'下载更新 社区工坊数据库'" :class="{'opacity-50 cursor-not-allowed pointer-events-none' : downloadState['workshop_db'] }"

@@ -5303,14 +5303,32 @@ class API:
     
     
     # ==========================================
-    # GitHub 相关接口
+    # Git 仓库相关接口
     # ==========================================
     @log_api_call
     def github_fetch_info(self, url: str, source_branch: str = ""):
-        """解析并获取远程仓库信息"""
+        """解析并获取远程 Git 仓库信息"""
         res = self.github_mgr.fetch_repo_info(url, source_branch=source_branch)
         if "error" in res: return ApiResponse.error(res["error"])
         return ApiResponse.success(res)
+
+    @log_api_call
+    def github_get_provider_catalog(self, url: str = "", force_refresh: bool = False):
+        """获取 Git 推荐列表"""
+        try:
+            return ApiResponse.success(self.github_mgr.fetch_provider_catalog(url, force_refresh=bool(force_refresh)))
+        except Exception as e:
+            logger.error("获取 Git 推荐列表失败: %s", e, exc_info=True)
+            return ApiResponse.error(f"获取推荐列表失败: {e}")
+
+    @log_api_call
+    def github_fetch_readme(self, url: str, source_branch: str = ""):
+        """获取公开 Git 仓库 README，用于在线推荐详情展示"""
+        try:
+            return ApiResponse.success(self.github_mgr.fetch_repo_readme(url, ref=source_branch))
+        except Exception as e:
+            logger.error("获取 Git 仓库 README 失败: %s", e, exc_info=True)
+            return ApiResponse.error(f"获取 README 失败: {e}")
 
     @log_api_call
     def github_subscribe(self, payload: dict):
@@ -5319,13 +5337,18 @@ class API:
         if not url: return ApiResponse.error("URL 不能为空")
         installed_version = str(payload.get("installed_version") or "").strip()
         info = payload.get("info") or {}
+        provider, host = self.github_mgr.detect_repo_provider(url)
         install_type = str(payload.get("install_type") or "source").strip() or "source"
-        target_branch = str(payload.get("default_branch") or "").strip() or "main"
+        target_branch = str(payload.get("default_branch") or "").strip()
+        if install_type != "zip":
+            target_branch = target_branch or "main"
 
         with db.atomic():
             record, created = GithubModRecord.get_or_create(
                 repo_url=url,
                 defaults={
+                    "provider": str(payload.get("provider") or info.get("provider") or provider),
+                    "host": str(payload.get("host") or info.get("host") or host),
                     "owner": payload.get("owner"),
                     "repo_name": payload.get("repo"),
                     "target_branch": target_branch,
@@ -5336,9 +5359,11 @@ class API:
                 }
             )
             if created:
-                self.github_mgr.record_timeline(url, "subscribe", "已添加 GitHub 仓库监听记录")
+                self.github_mgr.record_timeline(url, "subscribe", "已添加 Git 仓库监听记录")
             else:
                 # 再次订阅同一仓库时，更新监听策略和最新在线缓存，但不擅自覆盖已部署版本。
+                record.provider = str(payload.get("provider") or info.get("provider") or provider)
+                record.host = str(payload.get("host") or info.get("host") or host)
                 record.owner = payload.get("owner") or record.owner
                 record.repo_name = payload.get("repo") or record.repo_name
                 record.target_branch = target_branch
@@ -5352,26 +5377,64 @@ class API:
 
     @log_api_call
     def github_get_subscribed(self):
-        """获取所有已订阅的 Github 仓库"""
+        """获取所有已订阅的 Git 仓库"""
         records = list(GithubModRecord.select().dicts())
+        missing_urls: list[str] = []
+        latest_missing_time: dict[str, int] = {}
+        latest_present_time: dict[str, int] = {}
+        if records:
+            repo_urls = [str(r.get("repo_url") or "") for r in records if str(r.get("repo_url") or "")]
+        else:
+            repo_urls = []
+        if repo_urls:
+            latest_logs = (
+                GithubTimeline
+                .select(GithubTimeline.repo_url, GithubTimeline.action, GithubTimeline.time)
+                .where(GithubTimeline.repo_url.in_(repo_urls))
+                .order_by(GithubTimeline.repo_url, GithubTimeline.time.desc())
+            )
+            for log in latest_logs:
+                if log.action == "missing":
+                    latest_missing_time.setdefault(log.repo_url, int(log.time or 0))
+                elif log.action == "success":
+                    latest_present_time.setdefault(log.repo_url, int(log.time or 0))
         for r in records:
+            provider, host = self.github_mgr.detect_repo_provider(r.get("repo_url"))
+            r["provider"] = r.get("provider") or provider
+            r["host"] = r.get("host") or host
             # 将缓存的字典暴露给前端的 online_info 字段
             r["online_info"] = r.get("online_info_cache", {})
+            repo_url = str(r.get("repo_url") or "")
+            local_folder = str(r.get("local_folder") or "").strip()
+            if local_folder:
+                local_path = Path(str(settings.config.self_mods_path or "")) / local_folder
+                local_exists = local_path.exists()
+                r["local_exists"] = local_exists
+                last_missing = latest_missing_time.get(repo_url, 0)
+                last_present = latest_present_time.get(repo_url, 0)
+                if not local_exists and last_present >= last_missing:
+                    missing_urls.append(repo_url)
+            else:
+                r["local_exists"] = False
+        if missing_urls:
+            with db.atomic():
+                for repo_url in missing_urls:
+                    self.github_mgr.record_timeline(repo_url, "missing", "扫描时发现本地目录已不存在")
         self._schedule_github_subs_refresh(records)
 
         return ApiResponse.success(records)
 
     def _schedule_github_subs_refresh(self, records: list) -> bool:
-        """给 GitHub 订阅刷新加最短触发间隔，避免页面频繁打开时重复打满 API。"""
+        """给 Git 仓库订阅刷新加最短触发间隔，避免页面频繁打开时重复打满 API。"""
         if not records: return False
 
         now = current_ms()
         with self._github_subs_refresh_lock:
             if self._github_subs_refresh_running:
-                logger.debug("GitHub 订阅后台刷新已在执行，跳过重复触发")
+                logger.debug("Git 仓库订阅后台刷新已在执行，跳过重复触发")
                 return False
             if now - self._github_subs_refresh_started_at < GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS:
-                logger.debug("GitHub 订阅后台刷新距离上次启动过近，跳过本轮触发")
+                logger.debug("Git 仓库订阅后台刷新距离上次启动过近，跳过本轮触发")
                 return False
             self._github_subs_refresh_running = True
             self._github_subs_refresh_started_at = now
@@ -5385,16 +5448,19 @@ class API:
 
     def _bg_refresh_github_subs(self, records: list):
         """
-        后台多线程并发刷新 GitHub 数据
+        后台多线程并发刷新 Git 仓库数据
         """
         try:
             if not records: return
             
             updated_records = {}
-            # 使用线程池并发请求 GitHub API，避免串行卡顿
+            # 使用线程池并发请求远端 API，避免串行卡顿
             # 假设有 5 个订阅，5 个线程同时发请求，耗时取决于最慢的一个 (通常 < 500ms)
             def fetch_single(record):
                 repo_url = record["repo_url"]
+                if str(record.get("install_type") or "").strip() == "zip":
+                    info = self.github_mgr.resolve_catalog_subscription_info(record)
+                    return repo_url, info or {}
                 source_branch = ""
                 if str(record.get("install_type") or "").strip() == "source":
                     source_branch = str(record.get("target_branch") or "").strip()
@@ -5407,10 +5473,10 @@ class API:
                 for future in futures:
                     try:
                         repo_url, info = future.result()
-                        if "error" not in info:
+                        if info and "error" not in info:
                             updated_records[repo_url] = info
                     except Exception as e:
-                        logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
+                        logger.error(f"后台刷新 Git 仓库失败: {e}", exc_info=True)
 
             # 如果没有成功获取到任何数据，直接结束
             if not updated_records: return
@@ -5426,7 +5492,7 @@ class API:
                     ).where(GithubModRecord.repo_url == repo_url).execute()
             # 【核心】通过 EventBus 将最新数据推给前端 Vue
             EventBus.emit('github-online-update', updated_records)
-            logger.info(f"后台 GitHub 数据刷新完成，已推送 {len(updated_records)} 条更新")
+            logger.info(f"后台 Git 仓库数据刷新完成，已推送 {len(updated_records)} 条更新")
         finally:
             with self._github_subs_refresh_lock:
                 self._github_subs_refresh_running = False
@@ -5434,31 +5500,34 @@ class API:
     @log_api_call
     def github_trigger_download(self, url: str, install_type: str, version: str):
         """触发下载与安装流程"""
-        task_id = self.github_mgr.install_repo_mod(self.download_mgr, url, install_type, version)
-        return ApiResponse.success({"task_id": task_id}, message="GitHub 部署任务已启动")
+        if str(install_type or "").strip() == "zip":
+            task_id = self.github_mgr.install_catalog_zip_mod(self.download_mgr, url)
+        else:
+            task_id = self.github_mgr.install_repo_mod(self.download_mgr, url, install_type, version)
+        return ApiResponse.success({"task_id": task_id}, message="Git 订阅部署任务已启动")
 
     @log_api_call
     def github_get_timeline(self, url: str):
         """获取某仓库的本地操作时间线"""
         logs = list(GithubTimeline.select().where(GithubTimeline.repo_url == url).order_by(GithubTimeline.time.desc()).dicts())
         result=[]
-        title_map = {"subscribe": "订阅", "download": "下载", "update": "更新", "extract": "解压", "success":'部署成功', "error": "错误"}
-        color_map = {"subscribe": "primary", "download": "info", "update": "tip", "extract": "info", "success": "success", "error": "danger"}
+        title_map = {"subscribe": "订阅", "download": "下载", "update": "更新", "extract": "解压", "success":'部署成功', "error": "错误", "remove": "移除", "missing": "本地缺失"}
+        color_map = {"subscribe": "primary", "download": "info", "update": "tip", "extract": "info", "success": "success", "error": "danger", "remove": "danger", "missing": "danger"}
         for log in logs:
             result.append({
                 "time": log["time"],
                 "type": log["action"],
                 "desc": log["message"],
-                "title": title_map[log["action"]],
-                "color": color_map[log["action"]],
+                "title": title_map.get(log["action"], log["action"]),
+                "color": color_map.get(log["action"], "info"),
             })
         return ApiResponse.success(result)
         
     @log_api_call
     def github_remove_subscription(self, url: str):
         """移除订阅，可选连带删除文件(前端应另行调用删除文件API)"""
+        self.github_mgr.record_timeline(url, "remove", "已移除 Git 仓库订阅记录")
         GithubModRecord.delete().where(GithubModRecord.repo_url == url).execute()
-        GithubTimeline.delete().where(GithubTimeline.repo_url == url).execute()
         return ApiResponse.success(message="已移除订阅记录")
     
     

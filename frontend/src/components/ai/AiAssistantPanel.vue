@@ -271,14 +271,11 @@ import { useLogStore } from '../../stores/logStore'
 import { useModStore } from '../../stores/modStore'
 import { useRuleStore } from '../../stores/ruleStore'
 import { useConfirmStore } from '../../stores/confirmStore'
-import DOMPurify from 'dompurify'
-import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/atom-one-dark.css'
 import { CircleHelp, Copy, LoaderCircle, Square } from 'lucide-vue-next'
 import CommonSelect from '../common/input/CommonSelect.vue'
 import CommonNumber from '../common/input/CommonNumber.vue'
 import AiActionCard from './AiActionCard.vue'
+import { renderMarkdownContent } from '../../utils/markdown'
 import { createActionExecutorRegistry, createActionPresentationRuntime } from '../../runtime/aiActionRuntime'
 import {
   buildAssistantMessageUsageTooltip,
@@ -701,26 +698,6 @@ const clearChat = async () => {
 // -----------------------------------------------------------------
 // 文本渲染与复制 (Rendering)
 // -----------------------------------------------------------------
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: true,
-  highlight: function (str, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return `<pre class="hljs p-3 rounded-lg text-xs overflow-x-auto custom-scrollbar my-2 border border-white/5 bg-black/50"><code>${hljs.highlight(str, { language: lang, ignoreIllegals: true }).value}</code></pre>`
-      } catch {}
-    }
-    return `<pre class="hljs p-3 rounded-lg text-xs overflow-x-auto custom-scrollbar my-2 border border-white/5 bg-black/50"><code>${md.utils.escapeHtml(str)}</code></pre>`
-  }
-})
-
-const sanitizeRenderedHtml = (html) => DOMPurify.sanitize(html, {
-  USE_PROFILES: { html: true },
-  ADD_TAGS: ['details', 'summary'],
-  ADD_ATTR: ['class', 'target', 'rel']
-})
-
 const stripMarkdownToPlainText = (value) => String(value ?? '')
   .replace(/\r\n/g, '\n')
   .replace(/```[\w-]*\n?/g, '')
@@ -772,9 +749,7 @@ const shouldShowAssistantLoading = (msg) => {
 }
 const renderMarkdown = (text) => {
   /** 渲染并净化助手输出的 Markdown。 */
-  const content = getAssistantText(text)
-  const rendered = md.render(content).replace(/<code>/g, '<code class="bg-black/30 text-accent-special px-1.5 py-0.5 rounded text-sm font-mono border border-white/5">')
-  return sanitizeRenderedHtml(rendered)
+  return renderMarkdownContent(getAssistantText(text))
 }
 
 const copyMessage = async (msg, isMarkdown = false) => {

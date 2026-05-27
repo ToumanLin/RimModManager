@@ -50,12 +50,11 @@
 </template>
 
 <script setup>
-import { computed, ref, reactive, onMounted } from 'vue'
+import { computed } from 'vue'
 import { RefreshCw } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 import MatrixColumn from './MatrixColumn.vue'
 import TimelineDrawer from '../components/TimelineDrawer.vue'
-import { checkResult } from '../../../utils/common'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import { useAppStore } from '../../../stores/appStore'
 import { formatFileSize } from '../../../utils/format'
@@ -69,12 +68,19 @@ const visibleTotalCount = computed(() => (
   + workspaceStore.librariesMods.local.length
   + (hasWorkshopLibrary.value ? workspaceStore.librariesMods.workshop.length : 0)
 ))
+const getPathTail = (path = '') => {
+  const parts = String(path || '').replace(/\\/g, '/').split('/').filter(Boolean)
+  return parts.length ? parts[parts.length - 1] : ''
+}
+const isGitRepositoryMod = (mod = {}) => {
+  if (String(mod?.source || '').toLowerCase() === 'github') return true
+  return getPathTail(mod?.path).toLowerCase().startsWith('_gh_')
+}
 
 const handleOpenTimeline = (mod) => {
   if (!mod) return
-  console.log('handleOpenTimeline',mod)
-  if (mod.path?.includes('_GH_')) {
-    return workspaceStore.openTimelineGithub(mod.path)
+  if (isGitRepositoryMod(mod)) {
+    return workspaceStore.openTimelineGithub(mod)
   }
   if (mod.store === 'local') {
     toast.warning("该 Mod 位于游戏本地目录中，无法获取变动轨迹")

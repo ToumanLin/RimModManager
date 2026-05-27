@@ -141,8 +141,10 @@ class GroupMod(BaseModel):
 
 
 class GithubModRecord(BaseModel):
-    """GitHub 模组订阅记录"""
+    """Git 仓库模组订阅记录"""
     repo_url = CharField(primary_key=True)
+    provider = CharField(default="github")
+    host = CharField(default="github.com")
     owner = CharField()
     repo_name = CharField()
     install_type = CharField(default="source")

@@ -49,6 +49,7 @@ COMMUNITY_RULES_PATH = RULES_DIR / "communityRules.json"    # 社区库规则路
 # 外置数据库路径
 COMMUNITY_WORKSHOP_DB_PATH = DATA_DIR / "steamDB.json"         # 社区库数据库路径
 COMMUNITY_INSTEAD_DB_PATH = DATA_DIR / "replacements.json.gz"  # 替代Mod数据库路径
+GIT_PROVIDER_CATALOG_DIR = DATA_DIR / "git_catalogs"  # Git 推荐清单缓存目录
 
 
 @dataclass
@@ -253,6 +254,7 @@ class AppConfig:
     community_instead_db_path: str = str(COMMUNITY_INSTEAD_DB_PATH)
     community_rules_url: str = "https://github.com/RimSort/Community-Rules-Database/blob/main/communityRules.json"
     community_rules_path: str = str(COMMUNITY_RULES_PATH)
+    git_provider_catalog_url: str = "RJW|https://gitgud.io/api/v4/projects/AblativeAbsolute%2Flibidinous_loader_providers/packages/generic/provider_nopin/latest/providers.json"
     user_rules_path: str = str(USER_RULES_PATH)
     steam_web_api_key: str = ""  # Steamworks Web API 鉴权密钥，仅供需要受限接口的后端请求使用
     

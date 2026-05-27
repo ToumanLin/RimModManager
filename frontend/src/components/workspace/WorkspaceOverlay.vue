@@ -75,7 +75,7 @@ const tabs = [
   { id: 'library', label: '全库数据管理', icon: Library, colorClass: 'bg-accent-success shadow-[0_0_10px_var(--color-accent-success)]' },
   { id: 'workshop', label: '创意工坊检索', icon: Globe, colorClass: 'bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]' },
   { id: 'collection', label: '合集订阅管理', icon: FolderArchive, colorClass: 'bg-accent-warn shadow-[0_0_10px_var(--color-accent-warn)]' },
-  { id: 'github', label: 'GitHub订阅', icon: Github, colorClass: 'bg-text-main shadow-[0_0_10px_rgba(255,255,255,0.8)]' } 
+  { id: 'github', label: 'Git 仓库订阅', icon: Github, colorClass: 'bg-text-main shadow-[0_0_10px_rgba(255,255,255,0.8)]' }
 ]
 
 const currentTab = ref('library')

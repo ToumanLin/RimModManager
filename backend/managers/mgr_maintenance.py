@@ -284,9 +284,11 @@ class MaintenanceManager:
             updates.append(
                 {
                     "source": "github",
-                    "source_label": "GitHub",
+                    "source_label": "Git 仓库",
                     "repo_url": str(record.get("repo_url") or "").strip(),
-                    "title": repo_name or "GitHub 模组",
+                    "provider": str(record.get("provider") or "github").strip() or "github",
+                    "host": str(record.get("host") or "github.com").strip() or "github.com",
+                    "title": repo_name or "Git 仓库模组",
                     "install_type": install_type,
                     "installed_version": installed_version,
                     "latest_version": latest_version,

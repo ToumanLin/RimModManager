@@ -7,6 +7,8 @@ from zipfile import ZipFile
 
 from backend.managers.mgr_download import DownloadTask
 from backend.managers.mgr_github import (
+    GIT_PROVIDER_GITHUB,
+    GIT_PROVIDER_GITLAB,
     GITHUB_ARTIFACT_RELEASE_ASSET,
     GITHUB_ARTIFACT_SOURCE_ARCHIVE,
     GITHUB_INSTALL_EXTRACT,
@@ -68,6 +70,25 @@ class TestGithubManager(unittest.TestCase):
         self.assertIsNotNone(asset)
         self.assertEqual(asset["name"], "modbundle-1.2.3.zip")
 
+    def test_parse_git_repo_url_supports_gitlab_multilevel_namespace(self):
+        identity = self.manager.parse_git_repo_url("https://gitgud.io/group/subgroup/rjw/-/tree/Dev")
+
+        self.assertIsNotNone(identity)
+        self.assertEqual(identity.provider, GIT_PROVIDER_GITLAB)
+        self.assertEqual(identity.host, "gitgud.io")
+        self.assertEqual(identity.owner, "group/subgroup")
+        self.assertEqual(identity.repo, "rjw")
+        self.assertEqual(identity.path, "group/subgroup/rjw")
+
+    def test_parse_git_repo_url_keeps_github_compatibility(self):
+        identity = self.manager.parse_git_repo_url("https://github.com/user/repo.git")
+
+        self.assertIsNotNone(identity)
+        self.assertEqual(identity.provider, GIT_PROVIDER_GITHUB)
+        self.assertEqual(identity.host, "github.com")
+        self.assertEqual(identity.owner, "user")
+        self.assertEqual(identity.repo, "repo")
+
     def test_resolve_source_archive_uses_default_branch_when_missing_ref(self):
         request = GithubInstallRequest(
             owner="user",
@@ -89,7 +110,7 @@ class TestGithubManager(unittest.TestCase):
 
     def test_fetch_repo_info_includes_source_version_for_target_branch(self):
         with patch.object(self.manager, "fetch_repo", return_value={"default_branch": "main"}), \
-             patch.object(self.manager, "fetch_latest_release", return_value={"tag_name": "v1.2.3", "name": "v1.2.3"}), \
+             patch.object(self.manager, "fetch_latest_release", return_value={"tag_name": "v1.2.3", "name": "v1.2.3", "published_at": "2026-04-15T10:00:00Z"}), \
              patch.object(
                  self.manager,
                  "fetch_commit",
@@ -104,8 +125,237 @@ class TestGithubManager(unittest.TestCase):
         self.assertEqual(info["latest_source_commit_sha"], "abcdef123456")
         self.assertEqual(info["latest_source_commit_at"], "2026-04-16T03:22:11Z")
         self.assertEqual(info["latest_source_version"], "dev@2026-04-16T03:22:11Z")
+        self.assertEqual(info["latest_release_published_at"], "2026-04-15T10:00:00Z")
         self.assertEqual(info["info_source"], "api")
         self.assertFalse(info["is_degraded"])
+
+    def test_fetch_gitlab_repo_info_maps_to_common_payload(self):
+        identity = self.manager.parse_git_repo_url("https://gitgud.io/Ed86/rjw")
+        self.assertIsNotNone(identity)
+
+        with patch.object(self.manager, "fetch_gitlab_project", return_value={"default_branch": "Dev"}), \
+             patch.object(
+                 self.manager,
+                 "fetch_gitlab_release",
+                 return_value={
+                     "tag_name": "v1.2.3",
+                     "name": "v1.2.3",
+                     "released_at": "2026-04-15T10:00:00Z",
+                     "assets": {
+                         "sources": [
+                             {"format": "zip", "url": "https://gitgud.io/Ed86/rjw/-/archive/v1.2.3/rjw-v1.2.3.zip"}
+                         ],
+                         "links": [],
+                     },
+                 },
+             ), \
+             patch.object(
+                 self.manager,
+                 "fetch_gitlab_commit",
+                 return_value={
+                     "id": "abcdef123456",
+                     "committed_date": "2026-04-16T03:22:11Z",
+                 },
+             ):
+            info = self.manager.fetch_repo_info("https://gitgud.io/Ed86/rjw", source_branch="Dev")
+
+        self.assertEqual(info["provider"], GIT_PROVIDER_GITLAB)
+        self.assertEqual(info["host"], "gitgud.io")
+        self.assertEqual(info["owner"], "Ed86")
+        self.assertEqual(info["repo"], "rjw")
+        self.assertEqual(info["default_branch"], "Dev")
+        self.assertEqual(info["latest_release_tag"], "v1.2.3")
+        self.assertEqual(info["latest_release_published_at"], "2026-04-15T10:00:00Z")
+        self.assertEqual(info["latest_source_version"], "Dev@2026-04-16T03:22:11Z")
+
+    def test_provider_catalog_normalizes_rjw_git_and_zip_items(self):
+        catalog = self.manager._normalize_provider_catalog_payload(
+            {
+                "version": 1,
+                "authors": {
+                    "author-a": {
+                        "display_name": "Author A",
+                        "donation_urls": [],
+                        "extra_urls": [],
+                    }
+                },
+                "providers": {
+                    "root": {
+                        "rjw": {
+                            "type": "git",
+                            "name": "rjw",
+                            "display_name": "RJW",
+                            "description": "Core mod",
+                            "url": "https://gitgud.io/Ed86/rjw.git",
+                            "branch": "Dev",
+                            "mod_id": "rim.job.world",
+                            "authors": ["author-a"],
+                            "tags": ["core"],
+                        }
+                    },
+                    "bodies": {
+                        "rimnude": {
+                            "type": "zip",
+                            "name": "rimnude",
+                            "description": "Zip package",
+                            "url": "https://gitgud.io/api/v4/projects/1/packages/generic/rimnude/latest/rimnude.zip",
+                            "subdir": "Rimnude-unofficial+",
+                            "depends": ["rim.job.world"],
+                            "disabled": True,
+                        }
+                    },
+                },
+            },
+            source_url="https://example.invalid/providers.json",
+        )
+
+        items = {item["key"]: item for item in catalog["items"]}
+        self.assertEqual(catalog["total"], 2)
+        self.assertEqual(items["rjw"]["url"], "https://gitgud.io/Ed86/rjw")
+        self.assertEqual(items["rjw"]["branch"], "Dev")
+        self.assertEqual(items["rjw"]["name"], "RJW")
+        self.assertEqual(items["rjw"]["package_id"], "rim.job.world")
+        self.assertEqual(items["rjw"]["author"], ["Author A"])
+        self.assertTrue(items["rimnude"]["not_recommended"])
+        self.assertNotIn("is_installable", items["rimnude"])
+        self.assertNotIn("availability", items["rimnude"])
+        self.assertNotIn("availability_reason", items["rimnude"])
+        self.assertNotIn("ecosystem", items["rimnude"])
+        self.assertNotIn("catalog_source", items["rimnude"])
+        self.assertNotIn("source_label", items["rimnude"])
+        self.assertNotIn("display_name", items["rimnude"])
+        self.assertNotIn("mod_id", items["rimnude"])
+        self.assertNotIn("disabled", items["rimnude"])
+        self.assertEqual(items["rimnude"]["subdir"], "Rimnude-unofficial+")
+        self.assertEqual(items["rimnude"]["depends"], ["rim.job.world"])
+        self.assertNotIn("dependency_items", items["rimnude"])
+
+    def test_provider_catalog_sources_support_multiple_rows_and_builtin_owner(self):
+        original_provider_catalog_url = settings.config.git_provider_catalog_url
+        settings.config.git_provider_catalog_url = "RJW|https://example.invalid/rjw.json\nOther|https://example.invalid/other.json"
+        self.addCleanup(setattr, settings.config, "git_provider_catalog_url", original_provider_catalog_url)
+
+        sources = self.manager._provider_catalog_sources()
+
+        self.assertEqual([source["label"] for source in sources], ["RJW", "Other", "Mlie"])
+        self.assertEqual([source["type"] for source in sources], ["provider_json", "provider_json", "github_owner"])
+        self.assertEqual(len({source["id"] for source in sources}), 3)
+        self.assertEqual(sources[2]["owner"], "emipa606")
+
+    def test_provider_catalog_source_ids_do_not_collide_for_same_label(self):
+        sources = self.manager._parse_provider_json_sources(
+            "RJW|https://example.invalid/first.json\nRJW|https://example.invalid/second.json"
+        )
+
+        self.assertEqual([source["label"] for source in sources], ["RJW", "RJW"])
+        self.assertEqual(len({source["id"] for source in sources}), 2)
+
+    def test_github_owner_repo_detects_rimworld_mod_description(self):
+        repo_item, checked_about = self.manager._normalize_github_owner_repo_item(
+            {
+                "name": "ExampleMod",
+                "description": "Repository for the Rimworld mod ExampleMod",
+                "homepage": "",
+                "topics": [],
+                "html_url": "https://github.com/emipa606/ExampleMod",
+                "clone_url": "https://github.com/emipa606/ExampleMod.git",
+                "default_branch": "main",
+                "owner": {"login": "emipa606"},
+                "fork": False,
+                "archived": False,
+            },
+            session=object(),
+            checked_about_count=0,
+        )
+
+        self.assertFalse(checked_about)
+        self.assertIsNotNone(repo_item)
+        self.assertNotIn("ecosystem", repo_item)
+        self.assertNotIn("catalog_source", repo_item)
+        self.assertNotIn("source_label", repo_item)
+        self.assertEqual(repo_item["name"], "ExampleMod")
+        self.assertEqual(repo_item["author"], ["emipa606"])
+        self.assertNotIn("detected_by", repo_item)
+        self.assertEqual(repo_item["url"], "https://github.com/emipa606/ExampleMod")
+
+    def test_github_owner_repo_detects_steam_workshop_link(self):
+        repo_item, checked_about = self.manager._normalize_github_owner_repo_item(
+            {
+                "name": "ExampleMod",
+                "description": "https://steamcommunity.com/sharedfiles/filedetails/?id=1234567890",
+                "homepage": "",
+                "topics": [],
+                "html_url": "https://github.com/emipa606/ExampleMod",
+                "clone_url": "https://github.com/emipa606/ExampleMod.git",
+                "default_branch": "main",
+                "owner": {"login": "emipa606"},
+                "fork": False,
+                "archived": False,
+            },
+            session=object(),
+            checked_about_count=0,
+        )
+
+        self.assertFalse(checked_about)
+        self.assertNotIn("detected_by", repo_item)
+        self.assertEqual(repo_item["workshop_url"], "https://steamcommunity.com/sharedfiles/filedetails/?id=1234567890")
+
+    def test_fetch_github_readme_returns_empty_when_missing(self):
+        class FakeResponse:
+            status_code = 404
+
+        class FakeSession:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def get(self, *_args, **_kwargs):
+                return FakeResponse()
+
+        identity = self.manager.parse_git_repo_url("https://github.com/example/NoReadme")
+        self.assertIsNotNone(identity)
+        with patch.object(self.manager, "fetch_repo", return_value={"default_branch": "main"}), \
+             patch("backend.managers.mgr_github.build_retry_session", return_value=FakeSession()):
+            result = self.manager._fetch_github_readme(identity, ref="", timeout=(1, 1))
+
+        self.assertFalse(result["found"])
+        self.assertEqual(result["content"], "")
+
+    def test_builtin_github_owner_rule_supports_regex_fields(self):
+        source = {
+            "id": "custom",
+            "label": "Custom",
+            "match": {
+                "description": [],
+                "homepage": [],
+                "name": [r"^RW_.+"],
+                "topics": [r"rimworld-mod"],
+                "about_xml": False,
+            },
+        }
+        repo_item, checked_about = self.manager._normalize_github_owner_repo_item(
+            {
+                "name": "RW_Example",
+                "description": "",
+                "homepage": "",
+                "topics": [],
+                "html_url": "https://github.com/example/RW_Example",
+                "clone_url": "https://github.com/example/RW_Example.git",
+                "default_branch": "main",
+                "owner": {"login": "example"},
+                "fork": False,
+                "archived": False,
+            },
+            session=object(),
+            checked_about_count=0,
+            source=source,
+        )
+
+        self.assertFalse(checked_about)
+        self.assertIsNotNone(repo_item)
+        self.assertNotIn("detected_by", repo_item)
 
     def test_fetch_repo_info_falls_back_to_web_sources_when_api_rate_limited(self):
         web_payload = {
@@ -173,6 +423,55 @@ class TestGithubManager(unittest.TestCase):
         self.assertEqual(result.installed_path, str(target))
         self.assertTrue((target / "About" / "About.xml").exists())
         self.assertFalse(zip_path.exists())
+
+    def test_resolve_install_source_accepts_subdir_below_archive_wrapper(self):
+        temp_root = self.temp_root / "unzipped"
+        mod_root = temp_root / "archive-wrapper" / "Rimnude-unofficial+"
+        (mod_root / "About").mkdir(parents=True)
+        (mod_root / "About" / "About.xml").write_text("<ModMetaData />", encoding="utf-8")
+
+        source = self.manager._resolve_install_source(
+            temp_root,
+            GithubInstallPlan(
+                source_resolver=GITHUB_RESOLVER_MOD_ROOT,
+                source_subpath="Rimnude-unofficial+",
+            ),
+        )
+
+        self.assertEqual(source, mod_root)
+
+    def test_refresh_catalog_zip_signature_uses_remote_headers(self):
+        class FakeResponse:
+            status_code = 200
+            headers = {
+                "ETag": '"abc"',
+                "Last-Modified": "Wed, 27 May 2026 01:00:00 GMT",
+                "Content-Length": "123",
+            }
+
+        class FakeSession:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def head(self, *_args, **_kwargs):
+                return FakeResponse()
+
+        item = {
+            "type": "zip",
+            "name": "rimnude",
+            "url": "https://example.invalid/rimnude.zip",
+            "source_id": "rjw",
+        }
+
+        with patch("backend.managers.mgr_github.build_retry_session", return_value=FakeSession()):
+            refreshed = self.manager._refresh_catalog_zip_signature(item)
+
+        self.assertEqual(refreshed["remote_etag"], '"abc"')
+        self.assertEqual(refreshed["remote_content_length"], "123")
+        self.assertNotEqual(refreshed["catalog_signature"], self.manager._catalog_item_signature(item))
 
     def test_release_asset_resolution_uses_direct_fallback_when_api_fails(self):
         request = GithubInstallRequest(
@@ -249,6 +548,83 @@ class TestGithubManager(unittest.TestCase):
         self.assertEqual(resolved.version, "1.6.3")
         self.assertEqual(resolved.filename, "XVIMECHFRAME_1.6.3.zip")
         self.assertIn("/releases/download/1.6.3/", resolved.download_url)
+
+    def test_resolve_gitlab_release_asset_prefers_matching_zip_link(self):
+        request = GithubInstallRequest(
+            repo_url="https://gitgud.io/Ed86/rjw",
+            provider=GIT_PROVIDER_GITLAB,
+            host="gitgud.io",
+            project_path="Ed86/rjw",
+            owner="Ed86",
+            repo="rjw",
+            artifact=GithubArtifactRequest(
+                kind=GITHUB_ARTIFACT_RELEASE_ASSET,
+                release_tag="v1.2.3",
+                asset_name_prefix="rjw",
+                asset_name_suffix=".zip",
+                fallback_download_url="https://gitgud.io/api/v4/projects/Ed86%2Frjw/repository/archive.zip?sha=v1.2.3",
+                fallback_filename="rjw_v1.2.3.zip",
+                fallback_version="v1.2.3",
+            ),
+        )
+
+        with patch.object(
+            self.manager,
+            "fetch_gitlab_release",
+            return_value={
+                "tag_name": "v1.2.3",
+                "assets": {
+                    "links": [
+                        {"name": "readme.txt", "url": "https://example.invalid/readme.txt"},
+                        {"name": "rjw-v1.2.3.zip", "url": "https://example.invalid/rjw-v1.2.3.zip"},
+                    ],
+                    "sources": [
+                        {"format": "zip", "url": "https://example.invalid/source.zip"},
+                    ],
+                },
+            },
+        ):
+            resolved = self.manager._resolve_release_asset(request)
+
+        self.assertEqual(resolved.version, "v1.2.3")
+        self.assertEqual(resolved.filename, "rjw-v1.2.3.zip")
+        self.assertEqual(resolved.download_url, "https://example.invalid/rjw-v1.2.3.zip")
+
+    def test_resolve_gitlab_release_asset_falls_back_to_tag_source_zip(self):
+        request = GithubInstallRequest(
+            repo_url="https://gitlab.com/group/subgroup/repo",
+            provider=GIT_PROVIDER_GITLAB,
+            host="gitlab.com",
+            project_path="group/subgroup/repo",
+            owner="group/subgroup",
+            repo="repo",
+            artifact=GithubArtifactRequest(
+                kind=GITHUB_ARTIFACT_RELEASE_ASSET,
+                release_tag="v2",
+                asset_name_prefix="repo",
+                asset_name_suffix=".zip",
+                fallback_download_url="https://gitlab.com/api/v4/projects/group%2Fsubgroup%2Frepo/repository/archive.zip?sha=v2",
+                fallback_filename="repo_v2.zip",
+                fallback_version="v2",
+            ),
+        )
+
+        with patch.object(
+            self.manager,
+            "fetch_gitlab_release",
+            return_value={
+                "tag_name": "v2",
+                "assets": {
+                    "links": [{"name": "notes.txt", "url": "https://example.invalid/notes.txt"}],
+                    "sources": [{"format": "zip", "url": "https://example.invalid/source.zip"}],
+                },
+            },
+        ):
+            resolved = self.manager._resolve_release_asset(request)
+
+        self.assertEqual(resolved.version, "v2")
+        self.assertEqual(resolved.filename, "repo_v2.zip")
+        self.assertIn("repository/archive.zip?sha=v2", resolved.download_url)
 
     def test_install_repo_mod_builds_release_asset_request_for_release_mode(self):
         captured: dict[str, GithubInstallRequest] = {}

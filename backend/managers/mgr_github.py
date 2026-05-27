@@ -1,3 +1,5 @@
+import json
+import base64
 import os
 import re
 import shutil
@@ -5,6 +7,7 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 import html
+import hashlib
 from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,10 +18,22 @@ import requests
 from backend.database.models import GithubModRecord, GithubTimeline, db
 from backend.managers.mgr_download import DownloadManager, DownloadTask
 from backend.managers.mgr_network import build_retry_session, merge_headers
-from backend.settings import HOME_DIR, settings
+from backend.settings import GIT_PROVIDER_CATALOG_DIR, HOME_DIR, settings
 from backend.utils.event_bus import EventBus
 from backend.utils.logger import logger
 from backend.utils.tools import current_ms, extract_zip
+
+
+@dataclass(frozen=True)
+class GitRepoIdentity:
+    """统一描述一个公开 Git 仓库，避免后续逻辑继续按固定域名猜测。"""
+    provider: str
+    host: str
+    owner: str
+    repo: str
+    path: str
+    url: str
+
 
 GITHUB_API_BASE = "https://api.github.com/repos"
 GITHUB_WEB_BASE = "https://github.com"
@@ -28,6 +43,29 @@ GITHUB_BROWSER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 RimModManager/1.0"
 )
+
+GIT_PROVIDER_GITHUB = "github"
+GIT_PROVIDER_GITLAB = "gitlab"
+GITLAB_SUPPORTED_HOSTS = {"gitlab.com", "gitgud.io"}
+GITLAB_API_CACHE_TTL_SECONDS = 180
+RJW_PROVIDER_CATALOG_URL = "https://gitgud.io/api/v4/projects/AblativeAbsolute%2Flibidinous_loader_providers/packages/generic/provider_nopin/latest/providers.json"
+GITHUB_OWNER_CATALOG_MAX_REPOS = 300
+BUILTIN_GITHUB_OWNER_SOURCES = [
+    {
+        "id": "mlie",
+        "label": "Mlie",
+        "type": "github_owner",
+        "owner": "emipa606",
+        "catalog_kind": "discovery",
+        "match": {
+            "description": [r"Repository for the Rimworld mod", r"https?://steamcommunity\.com/"],
+            "homepage": [r"https?://steamcommunity\.com/"],
+            "name": [],
+            "topics": [],
+            "about_xml": True,
+        },
+    },
+]
 
 GITHUB_ARTIFACT_RELEASE_ASSET = "release_asset"
 GITHUB_ARTIFACT_SOURCE_ARCHIVE = "source_archive"
@@ -95,6 +133,9 @@ class GithubInstallResult:
 class GithubInstallRequest:
     """GitHub 安装总请求：来源、安装计划、提示文案和后置回调都在这里声明。"""
     repo_url: str = ""
+    provider: str = GIT_PROVIDER_GITHUB
+    host: str = "github.com"
+    project_path: str = ""
     owner: str = ""
     repo: str = ""
     artifact: GithubArtifactRequest = field(default_factory=GithubArtifactRequest)
@@ -122,6 +163,9 @@ class GithubResolvedArtifact:
     download_url: str
     filename: str
     asset_name: str = ""
+    provider: str = GIT_PROVIDER_GITHUB
+    host: str = "github.com"
+    project_path: str = ""
 
 
 class GithubApiError(RuntimeError):
@@ -160,6 +204,58 @@ class GithubManager:
         owner = match.group(1)
         repo = match.group(2).replace(".git", "")
         return owner, repo
+
+    def parse_git_repo_url(self, url: str) -> GitRepoIdentity | None:
+        """解析当前支持的 Git 仓库地址。
+
+        第一版只支持公开 GitHub、GitLab.com 和 GitGud；GitLab 支持多级 namespace。
+        """
+        raw_url = str(url or "").strip()
+        if not raw_url:
+            return None
+        try:
+            parsed = urlparse(raw_url if re.match(r"^[a-z]+://", raw_url, re.I) else f"https://{raw_url}")
+        except Exception:
+            return None
+
+        host = parsed.netloc.lower().split("@")[-1].split(":")[0]
+        path = parsed.path.strip("/")
+        if path.endswith(".git"):
+            path = path[:-4]
+        parts = [segment[:-4] if segment.endswith(".git") else segment for segment in path.split("/") if segment]
+        if host == "github.com" and len(parts) >= 2:
+            owner, repo = parts[0], parts[1]
+            return GitRepoIdentity(
+                provider=GIT_PROVIDER_GITHUB,
+                host=host,
+                owner=owner,
+                repo=repo,
+                path=f"{owner}/{repo}",
+                url=f"https://github.com/{owner}/{repo}",
+            )
+        if host in GITLAB_SUPPORTED_HOSTS and len(parts) >= 2:
+            project_parts = parts[:parts.index("-")] if "-" in parts else parts
+            if len(project_parts) < 2:
+                return None
+            repo = project_parts[-1]
+            owner = "/".join(project_parts[:-1])
+            full_path = "/".join(project_parts)
+            return GitRepoIdentity(
+                provider=GIT_PROVIDER_GITLAB,
+                host=host,
+                owner=owner,
+                repo=repo,
+                path=full_path,
+                url=f"https://{host}/{full_path}",
+            )
+        return None
+
+    def detect_repo_provider(self, url: str) -> tuple[str, str]:
+        """返回订阅记录可落库的 provider/host，解析失败时保持旧 GitHub 默认。"""
+        identity = self.parse_git_repo_url(url)
+        if identity:
+            return identity.provider, identity.host
+        return GIT_PROVIDER_GITHUB, "github.com"
 
     def parse_content_url(self, url: str) -> dict[str, str] | None:
         """解析 GitHub 单文件 URL，统一供“外部库检查”等场景复用。"""
@@ -452,13 +548,161 @@ class GithubManager:
             self._store_cached_payload(cache_key, payload, ttl_seconds=120)
             return payload
 
+    def fetch_gitlab_project(self, identity: GitRepoIdentity, *, timeout: tuple[int, int] = (10, 30), missing_ok: bool = False) -> dict[str, Any] | None:
+        """读取 GitLab/GitGud 项目基础信息。"""
+        project_id = quote(identity.path, safe="")
+        cache_key = ("gitlab_project", identity.host, identity.path.lower())
+        cached = self._get_cached_payload(cache_key)
+        if cached is not self._cache_miss: return cached
+
+        with build_retry_session() as session:
+            response = session.get(
+                f"https://{identity.host}/api/v4/projects/{project_id}",
+                headers=self._build_git_headers({"Accept": "application/json"}),
+                timeout=timeout,
+            )
+            if missing_ok and response.status_code == 404:
+                self._store_cached_payload(cache_key, None, ttl_seconds=60)
+                return None
+            self._raise_for_git_status(response, f"{identity.host}/{identity.path}")
+            payload = response.json()
+            self._store_cached_payload(cache_key, payload, ttl_seconds=GITLAB_API_CACHE_TTL_SECONDS)
+            return payload
+
+    def fetch_gitlab_release(self, identity: GitRepoIdentity, *, tag: str = "", timeout: tuple[int, int] = (5, 20), missing_ok: bool = False) -> dict[str, Any] | None:
+        """读取 GitLab/GitGud Release；tag 为空时取 released_at 最新的一条。"""
+        project_id = quote(identity.path, safe="")
+        normalized_tag = str(tag or "").strip()
+        cache_key = ("gitlab_release", identity.host, identity.path.lower(), normalized_tag or "latest")
+        cached = self._get_cached_payload(cache_key)
+        if cached is not self._cache_miss: return cached
+
+        endpoint = f"releases/{quote(normalized_tag, safe='')}" if normalized_tag else "releases"
+        params = None if normalized_tag else {"per_page": 1, "order_by": "released_at", "sort": "desc"}
+        with build_retry_session() as session:
+            response = session.get(
+                f"https://{identity.host}/api/v4/projects/{project_id}/{endpoint}",
+                params=params,
+                headers=self._build_git_headers({"Accept": "application/json"}),
+                timeout=timeout,
+            )
+            if missing_ok and response.status_code == 404:
+                self._store_cached_payload(cache_key, None, ttl_seconds=60)
+                return None
+            self._raise_for_git_status(response, f"{identity.host}/{identity.path}/{endpoint}")
+            payload = response.json()
+            if isinstance(payload, list):
+                payload = payload[0] if payload else None
+            self._store_cached_payload(cache_key, payload, ttl_seconds=GITLAB_API_CACHE_TTL_SECONDS)
+            return payload
+
+    def fetch_gitlab_commit(self, identity: GitRepoIdentity, *, ref: str, timeout: tuple[int, int] = (5, 20), missing_ok: bool = False) -> dict[str, Any] | None:
+        """读取 GitLab/GitGud 分支或标签当前提交，用于 Source 模式版本判断。"""
+        normalized_ref = str(ref or "").strip()
+        if not normalized_ref:
+            return None
+        project_id = quote(identity.path, safe="")
+        ref_id = quote(normalized_ref, safe="")
+        cache_key = ("gitlab_commit", identity.host, identity.path.lower(), normalized_ref)
+        cached = self._get_cached_payload(cache_key)
+        if cached is not self._cache_miss: return cached
+
+        with build_retry_session() as session:
+            response = session.get(
+                f"https://{identity.host}/api/v4/projects/{project_id}/repository/commits/{ref_id}",
+                headers=self._build_git_headers({"Accept": "application/json"}),
+                timeout=timeout,
+            )
+            if missing_ok and response.status_code == 404:
+                self._store_cached_payload(cache_key, None, ttl_seconds=60)
+                return None
+            self._raise_for_git_status(response, f"{identity.host}/{identity.path}/commits/{normalized_ref}")
+            payload = response.json()
+            self._store_cached_payload(cache_key, payload, ttl_seconds=GITLAB_API_CACHE_TTL_SECONDS)
+            return payload
+
+    def fetch_repo_readme(self, url: str, *, ref: str = "", timeout: tuple[int, int] = (8, 25)) -> dict[str, Any]:
+        """读取公开仓库 README，供推荐列表点击详情懒加载。"""
+        identity = self.parse_git_repo_url(url)
+        if not identity:
+            raise ValueError("无效的 Git 仓库链接")
+        normalized_ref = str(ref or "").strip()
+        if identity.provider == GIT_PROVIDER_GITLAB:
+            return self._fetch_gitlab_readme(identity, ref=normalized_ref, timeout=timeout)
+        return self._fetch_github_readme(identity, ref=normalized_ref, timeout=timeout)
+
+    def _fetch_github_readme(self, identity: GitRepoIdentity, *, ref: str, timeout: tuple[int, int]) -> dict[str, Any]:
+        cache_key = ("github_readme", identity.owner.lower(), identity.repo.lower(), ref or "_default")
+        cached = self._get_cached_payload(cache_key)
+        if cached is not self._cache_miss: return cached
+
+        repo_info = self.fetch_repo(identity.owner, identity.repo, missing_ok=True)
+        target_ref = ref or str((repo_info or {}).get("default_branch") or "main").strip() or "main"
+        with build_retry_session() as session:
+            for filename in ("README.md", "Readme.md", "readme.md"):
+                response = session.get(
+                    f"{GITHUB_API_BASE}/{identity.owner}/{identity.repo}/contents/{filename}",
+                    params={"ref": target_ref},
+                    headers=self._build_github_headers({"Accept": GITHUB_ACCEPT_HEADER}),
+                    timeout=timeout,
+                )
+                if response.status_code == 404:
+                    continue
+                self._raise_for_github_status(response, f"{identity.owner}/{identity.repo}/{filename}")
+                payload = response.json()
+                content = base64.b64decode(str(payload.get("content") or "")).decode("utf-8", errors="replace")
+                result = {"content": content, "path": filename, "ref": target_ref, "url": str(payload.get("html_url") or "")}
+                self._store_cached_payload(cache_key, result, ttl_seconds=GITHUB_API_CACHE_TTL_SECONDS)
+                return result
+        logger.warning("未找到 Git 仓库 README: %s ref=%s", identity.url, target_ref)
+        result = {"content": "", "path": "", "ref": target_ref, "url": "", "found": False}
+        self._store_cached_payload(cache_key, result, ttl_seconds=GITHUB_API_CACHE_TTL_SECONDS)
+        return result
+
+    def _fetch_gitlab_readme(self, identity: GitRepoIdentity, *, ref: str, timeout: tuple[int, int]) -> dict[str, Any]:
+        cache_key = ("gitlab_readme", identity.host, identity.path.lower(), ref or "_default")
+        cached = self._get_cached_payload(cache_key)
+        if cached is not self._cache_miss: return cached
+
+        project = self.fetch_gitlab_project(identity, missing_ok=True)
+        target_ref = ref or str((project or {}).get("default_branch") or "main").strip() or "main"
+        project_id = quote(identity.path, safe="")
+        with build_retry_session() as session:
+            for filename in ("README.md", "Readme.md", "readme.md"):
+                response = session.get(
+                    f"https://{identity.host}/api/v4/projects/{project_id}/repository/files/{quote(filename, safe='')}/raw",
+                    params={"ref": target_ref},
+                    headers=self._build_git_headers({"Accept": "text/markdown,text/plain"}),
+                    timeout=timeout,
+                )
+                if response.status_code == 404:
+                    continue
+                self._raise_for_git_status(response, f"{identity.host}/{identity.path}/{filename}")
+                result = {
+                    "content": response.text,
+                    "path": filename,
+                    "ref": target_ref,
+                    "url": f"https://{identity.host}/{identity.path}/-/blob/{quote(target_ref, safe='')}/{filename}",
+                }
+                self._store_cached_payload(cache_key, result, ttl_seconds=GITLAB_API_CACHE_TTL_SECONDS)
+                return result
+        logger.warning("未找到 Git 仓库 README: %s ref=%s", identity.url, target_ref)
+        result = {"content": "", "path": "", "ref": target_ref, "url": "", "found": False}
+        self._store_cached_payload(cache_key, result, ttl_seconds=GITLAB_API_CACHE_TTL_SECONDS)
+        return result
+
     def fetch_repo_info(self, url: str, *, source_branch: str = ""):
         """获取仓库基础信息、默认分支、最新 Release 和源码分支版本信息。
 
         优先使用 GitHub API；如果命中限流或 API 不可用，再退化到网页/直链/本地缓存。
         """
-        owner, repo = self.parse_repo_url(url)
-        if not owner or not repo: return {"error": "无效的 GitHub 链接"}
+        identity = self.parse_git_repo_url(url)
+        if not identity:
+            return {"error": "无效的 Git 仓库链接"}
+        if identity.provider == GIT_PROVIDER_GITLAB:
+            return self._fetch_gitlab_repo_info(identity, source_branch=source_branch)
+
+        owner, repo = identity.owner, identity.repo
         normalized_source_branch = str(source_branch or "").strip()
         cache_key = ("repo_info", owner.lower(), repo.lower(), normalized_source_branch or "_auto")
         cached = self._get_cached_payload(cache_key)
@@ -506,6 +750,45 @@ class GithubManager:
             raise primary_error
         return {"error": "找不到该仓库"}
 
+    def fetch_provider_catalog(self, catalog_url: str = "", *, force_refresh: bool = False) -> dict[str, Any]:
+        """读取全部推荐清单源并合并为前端列表。
+
+        配置仍保持简单文本：provider JSON 每行一个，GitHub owner 每行一个。每个源独立缓存，
+        避免 RJW 清单和 Mlie 动态清单互相污染，也方便以后继续添加清单源。
+        """
+        sources = self._provider_catalog_sources(catalog_url)
+        cache_key = ("provider_catalog", self._provider_catalog_sources_key(sources))
+        if not force_refresh:
+            cached = self._get_cached_payload(cache_key)
+            if cached is not self._cache_miss: return cached
+
+        items: list[dict[str, Any]] = []
+        source_results: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        for source in sources:
+            try:
+                source_catalog = self._fetch_provider_catalog_source(source, force_refresh=force_refresh)
+                items.extend(source_catalog.get("items") or [])
+                source_results.append(source_catalog.get("source") or source)
+                if source_catalog.get("warning"):
+                    warnings.append(str(source_catalog["warning"]))
+            except Exception as exc:
+                warnings.append(f"{source.get('label') or source.get('id')}: {exc}")
+                logger.warning("Git 推荐清单源读取失败: %s", exc, exc_info=True)
+
+        merged_items = self._merge_provider_catalog_items(items)
+        catalog = {
+            "source_url": "",
+            "sources": source_results,
+            "total": len(merged_items),
+            "items": merged_items,
+            "fetched_at": current_ms(),
+            "is_stale": any(bool(source.get("is_stale")) for source in source_results),
+            "warning": "；".join(warnings),
+        }
+        self._store_cached_payload(cache_key, catalog, ttl_seconds=GITLAB_API_CACHE_TTL_SECONDS)
+        return catalog
+
     def record_timeline(self, repo_url: str, action: str, message: str):
         """主动记录操作轨迹"""
         with db.atomic():
@@ -545,33 +828,42 @@ class GithubManager:
         )
 
     def install_repo_mod(self, download_mgr: DownloadManager, repo_url: str, install_type: str = "source", target_version: str = "") -> str:
-        """GitHub 模组安装的便捷封装。
+        """Git 仓库模组安装的便捷封装。
 
         这是一个“薄封装”：只负责把旧的 source/release 语义翻译成通用安装请求，
         真正的下载与安装流程仍走 `install_from_github()`。
         """
-        owner, repo = self.parse_repo_url(repo_url)
-        if not owner or not repo:
-            raise ValueError("无效的 GitHub 仓库链接")
+        identity = self.parse_git_repo_url(repo_url)
+        if not identity:
+            raise ValueError("无效的 Git 仓库链接")
+        owner, repo = identity.owner, identity.repo
 
         is_release_mode = install_type == "release"
         source_ref = str(target_version or "").strip()
         self_mods_path = str(settings.config.self_mods_path or "").strip()
         if not self_mods_path:
-            raise ValueError("未配置管理器 Mod 目录，无法部署 GitHub 模组")
+            raise ValueError("未配置管理器 Mod 目录，无法部署 Git 仓库模组")
         if not source_ref and not is_release_mode:
             # Source 模式默认跟随仓库默认分支，而不是硬编码 main/master。
-            source_ref = self._resolve_default_branch(owner, repo, repo_url=repo_url)
+            if identity.provider == GIT_PROVIDER_GITLAB:
+                project = self.fetch_gitlab_project(identity, missing_ok=True)
+                source_ref = str((project or {}).get("default_branch") or "main").strip() or "main"
+            else:
+                source_ref = self._resolve_default_branch(owner, repo, repo_url=repo_url)
 
         artifact_request = self._build_repo_artifact_request(
             owner,
             repo,
             repo_url=repo_url,
+            identity=identity,
             is_release_mode=is_release_mode,
             target_version=source_ref,
         )
         request = GithubInstallRequest(
             repo_url=repo_url,
+            provider=identity.provider,
+            host=identity.host,
+            project_path=identity.path,
             owner=owner,
             repo=repo,
             artifact=artifact_request,
@@ -593,7 +885,89 @@ class GithubManager:
         )
         return self.install_from_github(download_mgr, request)
 
-    def _build_repo_artifact_request(self, owner: str, repo: str, *, repo_url: str, is_release_mode: bool, target_version: str) -> GithubArtifactRequest:
+    def install_catalog_zip_mod(self, download_mgr: DownloadManager, catalog_url: str) -> str:
+        """部署清单里的 zip 直链项。
+
+        zip 清单项没有仓库 API 可查，部署参数完全来自订阅时保存的清单元数据。
+        """
+        record = GithubModRecord.get_or_none(repo_url=catalog_url)
+        if not record:
+            raise ValueError("未找到对应的清单项订阅")
+        item = self._refresh_catalog_zip_signature(record.online_info_cache or {})
+        download_url = str(item.get("raw_url") or item.get("url") or catalog_url).strip()
+        if not download_url:
+            raise ValueError("清单项缺少下载地址")
+        self_mods_path = str(settings.config.self_mods_path or "").strip()
+        if not self_mods_path:
+            raise ValueError("未配置管理器 Mod 目录，无法部署清单项")
+
+        name = str(item.get("name") or record.repo_name or "catalog_mod").strip()
+        safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", name).strip(" ._") or "catalog_mod"
+        filename = Path(urlparse(download_url).path).name or f"{name}.zip"
+        version = str(item.get("catalog_signature") or current_ms())
+        request = GithubInstallRequest(
+            repo_url=catalog_url,
+            provider=str(item.get("provider") or "catalog_zip"),
+            host=str(item.get("host") or urlparse(download_url).hostname or ""),
+            owner=str(item.get("source_id") or record.owner or ""),
+            repo=safe_name,
+            install=GithubInstallPlan(
+                action=GITHUB_INSTALL_EXTRACT_THEN_MOVE,
+                download_dir=str(HOME_DIR / "Downloads"),
+                move_target_dir=self_mods_path,
+                final_name=f"_GH_{safe_name}",
+                source_resolver=GITHUB_RESOLVER_MOD_ROOT,
+                source_subpath=str(item.get("subdir") or "").strip(),
+                overwrite_existing=True,
+                cleanup_archive=True,
+            ),
+            timeline_repo_url=catalog_url,
+            install_start_message="清单压缩包获取成功，正在解压...",
+            success_toast=f"{name} 部署完成",
+            failure_toast=f"{name} 部署失败",
+            post_install=lambda result: self._update_mod_record(catalog_url, version, f"_GH_{safe_name}"),
+        )
+        resolved = GithubResolvedArtifact(
+            repo_url=catalog_url,
+            owner=request.owner,
+            repo=safe_name,
+            kind=GITHUB_ARTIFACT_SOURCE_ARCHIVE,
+            version=version,
+            download_url=download_url,
+            filename=filename,
+            provider=request.provider,
+            host=request.host,
+        )
+        self.record_timeline(catalog_url, "download", f"开始获取清单压缩包: {filename}")
+
+        def on_download_complete(task: DownloadTask):
+            self._handle_install(task, request, resolved)
+
+        def on_download_error(task: DownloadTask):
+            self._handle_download_error(task, request, resolved)
+
+        return download_mgr.add_task(
+            url=download_url,
+            dest_dir=request.install.download_dir,
+            filename=filename,
+            on_complete=on_download_complete,
+            on_error=on_download_error,
+        )
+
+    def resolve_catalog_subscription_info(self, record: dict[str, Any]) -> dict[str, Any] | None:
+        """从最新清单中找回已订阅 zip 项，用于刷新更新状态。"""
+        cached_info = record.get("online_info_cache") or {}
+        repo_url = str(record.get("repo_url") or "").strip()
+        catalog = self.fetch_provider_catalog(force_refresh=False)
+        for item in catalog.get("items") or []:
+            if str(item.get("url") or "").strip() == repo_url or str(item.get("raw_url") or "").strip() == repo_url:
+                return self._refresh_catalog_zip_signature(item)
+            if cached_info.get("source_id") and cached_info.get("key"):
+                if item.get("source_id") == cached_info.get("source_id") and item.get("key") == cached_info.get("key"):
+                    return self._refresh_catalog_zip_signature(item)
+        return None
+
+    def _build_repo_artifact_request(self, owner: str, repo: str, *, repo_url: str, identity: GitRepoIdentity | None = None, is_release_mode: bool, target_version: str) -> GithubArtifactRequest:
         normalized_version = str(target_version or "").strip()
         if not is_release_mode:
             return GithubArtifactRequest(
@@ -605,7 +979,10 @@ class GithubManager:
         fallback_download_url = ""
         fallback_filename = ""
         if normalized_version:
-            fallback_download_url = f"https://github.com/{owner}/{repo}/archive/refs/tags/{normalized_version}.zip"
+            if identity and identity.provider == GIT_PROVIDER_GITLAB:
+                fallback_download_url = self._build_gitlab_archive_url(identity, normalized_version)
+            else:
+                fallback_download_url = f"https://github.com/{owner}/{repo}/archive/refs/tags/{normalized_version}.zip"
             fallback_filename = f"{repo}_{normalized_version}.zip"
 
         return GithubArtifactRequest(
@@ -631,19 +1008,30 @@ class GithubManager:
         owner = str(request.owner or "").strip()
         repo = str(request.repo or "").strip()
         repo_url = str(request.repo_url or "").strip()
+        identity = self.parse_git_repo_url(repo_url) if repo_url else None
 
-        if (not owner or not repo) and repo_url:
+        if identity:
+            owner = owner or identity.owner
+            repo = repo or identity.repo
+        elif (not owner or not repo) and repo_url:
             owner, repo = self.parse_repo_url(repo_url)
 
         if not owner or not repo:
-            raise ValueError("缺少有效的 GitHub 仓库信息")
+            raise ValueError("缺少有效的 Git 仓库信息")
+
+        provider = str(request.provider or (identity.provider if identity else GIT_PROVIDER_GITHUB)).strip() or GIT_PROVIDER_GITHUB
+        host = str(request.host or (identity.host if identity else "github.com")).strip() or "github.com"
+        project_path = str(request.project_path or (identity.path if identity else f"{owner}/{repo}")).strip()
 
         artifact = request.artifact or GithubArtifactRequest()
         install = request.install or GithubInstallPlan()
         download_dir = str(install.download_dir or HOME_DIR / "Downloads")
 
         return GithubInstallRequest(
-            repo_url=repo_url or f"https://github.com/{owner}/{repo}",
+            repo_url=repo_url or (identity.url if identity else f"https://github.com/{owner}/{repo}"),
+            provider=provider,
+            host=host,
+            project_path=project_path,
             owner=owner,
             repo=repo,
             artifact=GithubArtifactRequest(
@@ -689,13 +1077,16 @@ class GithubManager:
             return self._resolve_release_asset(request)
         if request.artifact.kind == GITHUB_ARTIFACT_SOURCE_ARCHIVE:
             return self._resolve_source_archive(request)
-        raise ValueError(f"不支持的 GitHub 产物类型: {request.artifact.kind}")
+        raise ValueError(f"不支持的 Git 仓库产物类型: {request.artifact.kind}")
 
     def _resolve_release_asset(self, request: GithubInstallRequest) -> GithubResolvedArtifact:
         """解析 Release 资产。
 
         先取 Release，再按名称规则选资产。这样调用方只描述筛选条件，不必自己遍历 assets。
         """
+        if request.provider == GIT_PROVIDER_GITLAB:
+            return self._resolve_gitlab_release_asset(request)
+
         try:
             release = self.fetch_release(
                 request.owner,
@@ -734,11 +1125,28 @@ class GithubManager:
             raise
         raise ValueError("未找到符合条件的 GitHub Release 资产")
 
+    def _resolve_gitlab_release_asset(self, request: GithubInstallRequest) -> GithubResolvedArtifact:
+        """解析 GitLab/GitGud Release 资产，失败时回退到 tag 源码 zip。"""
+        identity = self._identity_from_request(request)
+        release = self.fetch_gitlab_release(identity, tag=request.artifact.release_tag, missing_ok=True)
+        normalized_release = self._normalize_gitlab_release_payload(release, include_sources=False)
+        resolved = self._build_release_asset_from_payload(request, normalized_release)
+        if resolved:
+            return resolved
+
+        fallback = self._build_release_fallback(request, ValueError("未找到符合条件的 GitLab Release 资产"))
+        if fallback:
+            return fallback
+        raise ValueError("未找到符合条件的 GitLab Release 资产")
+
     def _resolve_source_archive(self, request: GithubInstallRequest) -> GithubResolvedArtifact:
         """解析源码包下载链接。
 
         GitHub 对 branch 和 tag 的归档 URL 规则不同，所以这里统一封装掉。
         """
+        if request.provider == GIT_PROVIDER_GITLAB:
+            return self._resolve_gitlab_source_archive(request)
+
         source_ref_type = request.artifact.source_ref_type or GITHUB_SOURCE_BRANCH
         source_ref = str(request.artifact.source_ref or "").strip()
         resolved_version = source_ref
@@ -746,7 +1154,7 @@ class GithubManager:
         if source_ref_type == GITHUB_SOURCE_BRANCH and not source_ref:
             source_ref = self._resolve_default_branch(request.owner, request.repo, repo_url=request.repo_url)
         if not source_ref:
-            raise ValueError("GitHub 源码包缺少目标分支或标签")
+            raise ValueError("Git 仓库源码包缺少目标分支或标签")
 
         if source_ref_type == GITHUB_SOURCE_TAG:
             download_url = f"https://github.com/{request.owner}/{request.repo}/archive/refs/tags/{source_ref}.zip"
@@ -770,6 +1178,38 @@ class GithubManager:
             version=resolved_version,
             download_url=download_url,
             filename=filename,
+            provider=request.provider,
+            host=request.host,
+            project_path=request.project_path,
+        )
+
+    def _resolve_gitlab_source_archive(self, request: GithubInstallRequest) -> GithubResolvedArtifact:
+        """解析 GitLab/GitGud 源码包下载链接。"""
+        identity = self._identity_from_request(request)
+        source_ref = str(request.artifact.source_ref or "").strip()
+        if not source_ref:
+            project = self.fetch_gitlab_project(identity, missing_ok=True)
+            source_ref = str((project or {}).get("default_branch") or "main").strip() or "main"
+
+        resolved_version = source_ref
+        if (request.artifact.source_ref_type or GITHUB_SOURCE_BRANCH) == GITHUB_SOURCE_BRANCH:
+            try:
+                source_commit = self.fetch_gitlab_commit(identity, ref=source_ref, missing_ok=True)
+                resolved_version = self._build_source_version(source_ref, self._extract_commit_timestamp(source_commit))
+            except Exception as exc:
+                logger.warning("Resolve GitLab source commit failed: repo=%s/%s branch=%s error=%s", request.owner, request.repo, source_ref, exc)
+
+        return GithubResolvedArtifact(
+            repo_url=request.repo_url,
+            owner=request.owner,
+            repo=request.repo,
+            kind=GITHUB_ARTIFACT_SOURCE_ARCHIVE,
+            version=resolved_version,
+            download_url=self._build_gitlab_archive_url(identity, source_ref),
+            filename=f"{request.repo}_{source_ref}_source.zip",
+            provider=request.provider,
+            host=request.host,
+            project_path=request.project_path,
         )
 
     def _select_release_asset(self, assets: list[dict[str, Any]], request: GithubArtifactRequest) -> dict[str, Any] | None:
@@ -826,6 +1266,9 @@ class GithubManager:
             download_url=str(asset.get("browser_download_url") or ""),
             filename=str(asset.get("name") or ""),
             asset_name=str(asset.get("name") or ""),
+            provider=request.provider,
+            host=request.host,
+            project_path=request.project_path,
         )
 
     @staticmethod
@@ -885,7 +1328,7 @@ class GithubManager:
             if request.success_toast:
                 EventBus.send_toast(request.success_toast, type="success", duration=4000)
         except Exception as exc:
-            logger.error("GitHub install failed: %s", exc, exc_info=True)
+            logger.error("Git repo install failed: %s", exc, exc_info=True)
             if timeline_repo_url:
                 self.record_timeline(timeline_repo_url, "error", f"部署失败: {exc}")
             if request.failure_toast:
@@ -985,6 +1428,35 @@ class GithubManager:
             download_url=fallback_url,
             filename=fallback_filename,
             asset_name=str(request.artifact.fallback_asset_name or fallback_filename),
+            provider=request.provider,
+            host=request.host,
+            project_path=request.project_path,
+        )
+
+    def _fetch_gitlab_repo_info(self, identity: GitRepoIdentity, *, source_branch: str = "") -> dict[str, Any]:
+        """使用 GitLab API 组装统一仓库信息。
+
+        GitGud 是 GitLab 实例，因此第一版复用同一条链路。
+        """
+        project = self.fetch_gitlab_project(identity, missing_ok=True)
+        if not project:
+            return {"error": "找不到该仓库"}
+
+        default_branch = str(project.get("default_branch") or "main").strip() or "main"
+        resolved_source_branch = str(source_branch or default_branch).strip() or default_branch
+        release_info = self.fetch_gitlab_release(identity, missing_ok=True)
+        source_commit = self.fetch_gitlab_commit(identity, ref=resolved_source_branch, missing_ok=True)
+        return self._build_repo_info_payload(
+            identity.owner,
+            identity.repo,
+            default_branch,
+            resolved_source_branch,
+            self._normalize_gitlab_release_payload(release_info, include_sources=True),
+            source_commit,
+            info_source="api",
+            degraded=False,
+            provider=identity.provider,
+            host=identity.host,
         )
 
     def _fetch_repo_info_via_api(self, owner: str, repo: str, *, source_branch: str = "") -> dict[str, Any]:
@@ -1068,12 +1540,441 @@ class GithubManager:
             degraded=True,
         )
 
-    def _build_repo_info_payload(self, owner: str, repo: str, default_branch: str, resolved_source_branch: str, release_info: dict[str, Any] | None, source_commit: dict[str, Any] | None, *, info_source: str, degraded: bool) -> dict[str, Any]:
+    @staticmethod
+    def _normalize_gitlab_release_payload(release: dict[str, Any] | None, *, include_sources: bool) -> dict[str, Any] | None:
+        """把 GitLab Release 结构映射成内部统一的 Release 结构。"""
+        if not release:
+            return None
+        assets_payload = release.get("assets") if isinstance(release, dict) else {}
+        links = assets_payload.get("links", []) if isinstance(assets_payload, dict) else []
+        sources = assets_payload.get("sources", []) if isinstance(assets_payload, dict) else []
+
+        assets: list[dict[str, Any]] = []
+        for link in links if isinstance(links, list) else []:
+            if not isinstance(link, dict):
+                continue
+            name = str(link.get("name") or "").strip()
+            url = str(link.get("url") or "").strip()
+            if name and url:
+                assets.append({"name": name, "browser_download_url": url})
+
+        zip_source_url = ""
+        if isinstance(sources, list):
+            for source in sources:
+                if not isinstance(source, dict):
+                    continue
+                if str(source.get("format") or "").lower() == "zip":
+                    zip_source_url = str(source.get("url") or "").strip()
+                    if include_sources and zip_source_url:
+                        assets.append({
+                            "name": f"{release.get('tag_name') or 'source'}.zip",
+                            "browser_download_url": zip_source_url,
+                        })
+                    break
+
+        return {
+            "tag_name": str(release.get("tag_name") or "").strip(),
+            "name": str(release.get("name") or release.get("tag_name") or "").strip(),
+            "zipball_url": zip_source_url,
+            "published_at": str(release.get("released_at") or release.get("created_at") or "").strip(),
+            "assets": assets,
+        }
+
+    def _normalize_provider_catalog_payload(self, payload: dict[str, Any], *, source_url: str) -> dict[str, Any]:
+        """把 provider 清单压平为前端推荐列表。
+
+        原始清单按 category -> mod_key 分层，并允许作者信息单独存放。前端更需要一组
+        可搜索的行数据，所以这里保留 category，并把名称、包名、作者和版本字段统一到项目内格式。
+        """
+        if not isinstance(payload, dict):
+            raise ValueError("provider 清单格式错误")
+        providers = payload.get("providers")
+        if not isinstance(providers, dict):
+            raise ValueError("provider 清单缺少 providers")
+        authors = payload.get("authors", {}) if isinstance(payload.get("authors"), dict) else {}
+
+        items: list[dict[str, Any]] = []
+        category_counts: dict[str, int] = {}
+        for category, mods in providers.items():
+            if not isinstance(mods, dict):
+                continue
+            category_name = str(category or "other").strip() or "other"
+            for mod_key, metadata in mods.items():
+                if not isinstance(metadata, dict):
+                    continue
+                item = self._normalize_provider_catalog_item(category_name, str(mod_key or ""), metadata, authors)
+                items.append(item)
+                category_counts[category_name] = category_counts.get(category_name, 0) + 1
+
+        items.sort(key=lambda item: (item["category"].lower(), item["name"].lower()))
+        return {
+            "source_url": source_url,
+            "version": payload.get("version"),
+            "total": len(items),
+            "categories": [{"name": name, "count": count} for name, count in sorted(category_counts.items())],
+            "items": items,
+        }
+
+    def _fetch_provider_catalog_source(self, source: dict[str, Any], *, force_refresh: bool) -> dict[str, Any]:
+        source_id = str(source.get("id") or "").strip()
+        if not source_id:
+            raise ValueError("清单源缺少 id")
+        if not force_refresh:
+            cached = self._load_provider_catalog_source_cache(source_id)
+            if cached:
+                return cached
+
+        try:
+            if source.get("type") == "provider_json":
+                catalog = self._fetch_provider_json_catalog_source(source)
+            elif source.get("type") == "github_owner":
+                catalog = self._fetch_github_owner_catalog_source(source)
+            else:
+                raise ValueError(f"不支持的清单源类型: {source.get('type')}")
+        except Exception:
+            cached = self._load_provider_catalog_source_cache(source_id)
+            if cached:
+                cached["warning"] = f"{source.get('label') or source_id} 远程读取失败，已使用本地缓存"
+                cached["source"]["is_stale"] = True
+                return cached
+            raise
+        self._save_provider_catalog_source_cache(source_id, catalog)
+        return catalog
+
+    def _fetch_provider_json_catalog_source(self, source: dict[str, Any]) -> dict[str, Any]:
+        url = str(source.get("url") or "").strip()
+        if not url:
+            raise ValueError("provider_json 清单源缺少 url")
+        with build_retry_session() as session:
+            response = session.get(
+                url,
+                headers=self._build_git_headers({"Accept": "application/json"}),
+                timeout=(10, 30),
+            )
+            self._raise_for_git_status(response, url)
+            payload = response.json()
+
+        catalog = self._normalize_provider_catalog_payload(payload, source_url=url)
+        for item in catalog["items"]:
+            item["source_id"] = source["id"]
+            if item.get("type") == "zip":
+                item["catalog_signature"] = self._catalog_item_signature(item)
+        return {
+            "source": {
+                "id": source["id"],
+                "label": source["label"],
+                "type": source["type"],
+                "url": url,
+                "count": len(catalog["items"]),
+                "fetched_at": current_ms(),
+                "is_stale": False,
+            },
+            "items": catalog["items"],
+        }
+
+    def _fetch_github_owner_catalog_source(self, source: dict[str, Any]) -> dict[str, Any]:
+        owner = str(source.get("owner") or "").strip()
+        if not owner:
+            raise ValueError("github_owner 清单源缺少 owner")
+        items = self._fetch_github_owner_catalog(owner, source)
+        return {
+            "source": {
+                "id": source["id"],
+                "label": source["label"],
+                "type": source["type"],
+                "owner": owner,
+                "count": len(items),
+                "fetched_at": current_ms(),
+                "is_stale": False,
+            },
+            "items": items,
+        }
+
+    def _fetch_github_owner_catalog(self, owner: str, source: dict[str, Any]) -> list[dict[str, Any]]:
+        """读取某个 GitHub 开发者的公开仓库并筛出 RimWorld Mod 仓库。"""
+        items: list[dict[str, Any]] = []
+        page = 1
+        checked_about_count = 0
+        with build_retry_session() as session:
+            while len(items) < GITHUB_OWNER_CATALOG_MAX_REPOS:
+                response = session.get(
+                    f"https://api.github.com/users/{owner}/repos",
+                    params={"per_page": 100, "page": page, "type": "owner", "sort": "updated", "direction": "desc"},
+                    headers=self._build_github_headers({"Accept": GITHUB_ACCEPT_HEADER}),
+                    timeout=(10, 30),
+                )
+                self._raise_for_github_status(response, f"users/{owner}/repos?page={page}")
+                repos = response.json()
+                if not isinstance(repos, list) or not repos:
+                    break
+                for repo_payload in repos:
+                    item, checked_about = self._normalize_github_owner_repo_item(repo_payload, session=session, checked_about_count=checked_about_count, source=source)
+                    checked_about_count += 1 if checked_about else 0
+                    if item:
+                        items.append(item)
+                    if len(items) >= GITHUB_OWNER_CATALOG_MAX_REPOS:
+                        break
+                page += 1
+        return items
+
+    def _normalize_github_owner_repo_item(self, repo_payload: dict[str, Any], *, session, checked_about_count: int, source: dict[str, Any] | None = None) -> tuple[dict[str, Any] | None, bool]:
+        if not isinstance(repo_payload, dict) or repo_payload.get("fork") or repo_payload.get("archived"):
+            return None, False
+        owner_login = str(((repo_payload.get("owner") or {}).get("login")) or "").strip()
+        repo_name = str(repo_payload.get("name") or "").strip()
+        if not owner_login or not repo_name:
+            return None, False
+
+        description = str(repo_payload.get("description") or "").strip()
+        homepage = str(repo_payload.get("homepage") or "").strip()
+        topics = [str(topic).strip() for topic in repo_payload.get("topics") or [] if str(topic).strip()]
+        steam_url = self._extract_steam_workshop_url(" ".join([description, homepage]))
+        source = source or BUILTIN_GITHUB_OWNER_SOURCES[0]
+        reason = self._match_github_owner_repo(repo_payload, source.get("match") or {})
+
+        checked_about = False
+        if not reason and checked_about_count < 80:
+            checked_about = True
+            match_config = source.get("match") or {}
+            if match_config.get("about_xml") and self._github_repo_has_about_xml(session, owner_login, repo_name, str(repo_payload.get("default_branch") or "main")):
+                reason = "about_xml"
+        if not reason:
+            return None, checked_about
+
+        updated_at = str(repo_payload.get("updated_at") or "").strip()
+        item = {
+            "key": f"github:{owner_login}/{repo_name}",
+            "source_id": source.get("id") or owner_login.lower(),
+            "category": source.get("label") or owner_login,
+            "type": "git",
+            "name": repo_name,
+            "description": description,
+            "info_url": str(repo_payload.get("html_url") or f"https://github.com/{owner_login}/{repo_name}"),
+            "url": f"https://github.com/{owner_login}/{repo_name}",
+            "raw_url": str(repo_payload.get("clone_url") or f"https://github.com/{owner_login}/{repo_name}.git"),
+            "branch": str(repo_payload.get("default_branch") or "").strip(),
+            "tags": topics,
+            "author": [owner_login],
+            "workshop_url": steam_url,
+        }
+        if updated_at:
+            item["updated_at"] = updated_at
+        return item, checked_about
+
+    @staticmethod
+    def _match_github_owner_repo(repo_payload: dict[str, Any], match_config: dict[str, Any]) -> str:
+        """按内置作者规则筛选仓库；规则在常量里配置，避免为单个作者写死判断。"""
+        field_values = {
+            "description": [str(repo_payload.get("description") or "")],
+            "homepage": [str(repo_payload.get("homepage") or "")],
+            "name": [str(repo_payload.get("name") or "")],
+            "topics": [str(topic or "") for topic in repo_payload.get("topics") or []],
+        }
+        for field_name, values in field_values.items():
+            patterns = match_config.get(field_name) or []
+            for pattern in patterns:
+                try:
+                    regex = re.compile(str(pattern), re.I)
+                except re.error:
+                    logger.warning("Git 作者列表规则正则无效: field=%s pattern=%s", field_name, pattern)
+                    continue
+                if any(regex.search(value or "") for value in values):
+                    return field_name
+        return ""
+
+    def _normalize_provider_catalog_item(self, category: str, mod_key: str, metadata: dict[str, Any], authors: dict[str, Any]) -> dict[str, Any]:
+        provider_type = str(metadata.get("type") or "").strip().lower()
+        raw_url = str(metadata.get("url") or "").strip()
+        identity = self.parse_git_repo_url(raw_url) if provider_type == "git" else None
+        author_names = []
+        for author_key in metadata.get("authors") or []:
+            author_meta = authors.get(author_key) if isinstance(authors, dict) else None
+            if isinstance(author_meta, dict):
+                author_names.append(str(author_meta.get("display_name") or author_key).strip())
+            else:
+                author_names.append(str(author_key).strip())
+
+        # RJW 原清单的 display_name 才是用户能识别的名称，name 更接近安装目录名。
+        install_name = str(metadata.get("name") or mod_key).strip() or mod_key
+        display_name = str(metadata.get("display_name") or install_name).strip() or install_name
+        repo_url = identity.url if identity else raw_url
+        item = {
+            "key": mod_key,
+            "category": category,
+            "type": provider_type,
+            "name": display_name,
+            "description": str(metadata.get("description") or "").strip(),
+            "info_url": str(metadata.get("info_url") or raw_url).strip(),
+            "url": repo_url,
+            "raw_url": raw_url,
+            "branch": str(metadata.get("branch") or "").strip(),
+            "subdir": str(metadata.get("subdir") or "").strip(),
+            "package_id": str(metadata.get("mod_id") or "").strip(),
+            "depends": [str(item).strip() for item in metadata.get("depends") or [] if str(item).strip()],
+            "author": [name for name in author_names if name],
+        }
+        if "tags" in metadata:
+            item["tags"] = [str(value).strip() for value in metadata.get("tags") or [] if str(value).strip()]
+        if "rimworld_versions" in metadata:
+            item["game_versions"] = [str(value).strip() for value in metadata.get("rimworld_versions") or [] if str(value).strip()]
+        if metadata.get("disabled") is True:
+            item["not_recommended"] = True
+        return item
+
+    def _load_provider_catalog_source_cache(self, source_id: str) -> dict[str, Any] | None:
+        cache_path = self._provider_catalog_cache_path(source_id)
+        if not cache_path.exists():
+            return None
+        try:
+            with open(cache_path, "r", encoding="utf-8-sig") as handle:
+                payload = json.load(handle)
+            payload["from_file_cache"] = True
+            return payload
+        except Exception as exc:
+            logger.warning("读取 Git 推荐清单缓存失败: %s", exc)
+            return None
+
+    def _save_provider_catalog_source_cache(self, source_id: str, catalog: dict[str, Any]) -> None:
+        cache_path = self._provider_catalog_cache_path(source_id)
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_path, "w", encoding="utf-8") as handle:
+                json.dump(catalog, handle, ensure_ascii=False, indent=2)
+        except Exception as exc:
+            logger.warning("保存 Git 推荐清单缓存失败: %s", exc)
+
+    def _provider_catalog_cache_path(self, source_id: str) -> Path:
+        safe_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(source_id or "catalog")).strip("_") or "catalog"
+        return GIT_PROVIDER_CATALOG_DIR / f"{safe_id}.json"
+
+    def _provider_catalog_sources(self, override_url: str = "") -> list[dict[str, Any]]:
+        provider_text = str(override_url or getattr(settings.config, "git_provider_catalog_url", "") or RJW_PROVIDER_CATALOG_URL)
+        provider_sources = self._parse_provider_json_sources(provider_text)
+        return [*provider_sources, *[dict(source) for source in BUILTIN_GITHUB_OWNER_SOURCES]]
+
+    def _parse_provider_json_sources(self, text: str) -> list[dict[str, Any]]:
+        rows = self._split_catalog_config_rows(text)
+        if not rows:
+            rows = [f"RJW|{RJW_PROVIDER_CATALOG_URL}"]
+        sources = []
+        for idx, row in enumerate(rows):
+            label, url = self._split_catalog_label_value(row, default_label="RJW" if idx == 0 else f"清单{idx + 1}")
+            if not url:
+                continue
+            sources.append({
+                "id": self._catalog_source_id(label, "provider_json", url),
+                "label": label,
+                "type": "provider_json",
+                "url": url,
+            })
+        return sources
+
+    @staticmethod
+    def _split_catalog_config_rows(text: str) -> list[str]:
+        return [part.strip() for part in re.split(r"[\r\n,]+", str(text or "")) if part.strip()]
+
+    @staticmethod
+    def _split_catalog_label_value(row: str, *, default_label: str) -> tuple[str, str]:
+        if "|" in row:
+            label, value = row.split("|", 1)
+            return label.strip() or default_label, value.strip()
+        return default_label, row.strip()
+
+    @staticmethod
+    def _catalog_source_id(label: str, source_type: str, value: str) -> str:
+        base = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(label or value or source_type).strip().lower()).strip("_")
+        digest = hashlib.sha1(str(value or "").strip().encode("utf-8")).hexdigest()[:8]
+        return f"{base or source_type}_{digest}"
+
+    @staticmethod
+    def _provider_catalog_sources_key(sources: list[dict[str, Any]]) -> str:
+        return json.dumps(sources, sort_keys=True, ensure_ascii=False)
+
+    def _github_repo_has_about_xml(self, session, owner: str, repo: str, default_branch: str) -> bool:
+        """轻量检查仓库根目录是否有 RimWorld About/About.xml。"""
+        try:
+            response = session.get(
+                f"{GITHUB_API_BASE}/{owner}/{repo}/contents/About/About.xml",
+                params={"ref": default_branch or "main"},
+                headers=self._build_github_headers({"Accept": GITHUB_ACCEPT_HEADER}),
+                timeout=(5, 15),
+            )
+            if response.status_code == 404:
+                return False
+            self._raise_for_github_status(response, f"{owner}/{repo}/contents/About/About.xml")
+            payload = response.json()
+            return str(payload.get("type") or "").lower() == "file"
+        except Exception as exc:
+            logger.debug("检查 GitHub 仓库 About.xml 失败: %s/%s %s", owner, repo, exc)
+            return False
+
+    @staticmethod
+    def _extract_steam_workshop_url(text: str) -> str:
+        match = re.search(r"https?://steamcommunity\.com/sharedfiles/filedetails/\?id=\d+", str(text or ""), re.I)
+        return match.group(0) if match else ""
+
+    @staticmethod
+    def _catalog_item_signature(item: dict[str, Any]) -> str:
+        # 直链清单通常没有语义版本，使用关键安装字段生成稳定签名作为更新判断依据。
+        payload = {
+            "url": item.get("raw_url") or item.get("url"),
+            "subdir": item.get("subdir"),
+            "branch": item.get("branch"),
+            "name": item.get("name"),
+            "source_id": item.get("source_id"),
+            "updated_at": item.get("updated_at"),
+            "remote_etag": item.get("remote_etag"),
+            "remote_last_modified": item.get("remote_last_modified"),
+            "remote_content_length": item.get("remote_content_length"),
+        }
+        raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+        return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+    def _refresh_catalog_zip_signature(self, item: dict[str, Any]) -> dict[str, Any]:
+        """为已订阅 zip 补充远端文件指纹。
+
+        推荐清单加载时不批量探测直链，避免 UI 被大量 HEAD 请求拖慢；只在订阅刷新/部署时检查。
+        """
+        payload = dict(item or {})
+        download_url = str(payload.get("raw_url") or payload.get("url") or "").strip()
+        if not download_url:
+            return payload
+        try:
+            with build_retry_session() as session:
+                response = session.head(
+                    download_url,
+                    headers=self._build_git_headers({"Accept": "*/*"}),
+                    timeout=(5, 15),
+                    allow_redirects=True,
+                )
+                self._raise_for_git_status(response, download_url)
+            payload["remote_etag"] = str(response.headers.get("ETag") or "").strip()
+            payload["remote_last_modified"] = str(response.headers.get("Last-Modified") or "").strip()
+            payload["remote_content_length"] = str(response.headers.get("Content-Length") or "").strip()
+            payload["catalog_signature"] = self._catalog_item_signature(payload)
+        except Exception as exc:
+            logger.debug("刷新清单 zip 远端指纹失败: %s %s", download_url, exc)
+        return payload
+
+    @staticmethod
+    def _merge_provider_catalog_items(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        merged: dict[str, dict[str, Any]] = {}
+        for group in groups:
+            for item in group or []:
+                url = str(item.get("url") or item.get("raw_url") or item.get("key") or "").strip().lower()
+                if not url:
+                    continue
+                merged[url] = item
+        return sorted(merged.values(), key=lambda item: (str(item.get("source_id") or ""), str(item.get("category") or ""), str(item.get("name") or "").lower()))
+
+    def _build_repo_info_payload(self, owner: str, repo: str, default_branch: str, resolved_source_branch: str, release_info: dict[str, Any] | None, source_commit: dict[str, Any] | None, *, info_source: str, degraded: bool, provider: str = GIT_PROVIDER_GITHUB, host: str = "github.com") -> dict[str, Any]:
         """把不同来源的数据统一整理成前端可消费的结构。"""
-        source_commit_sha = str((source_commit or {}).get("sha") or "")
+        source_commit_sha = str((source_commit or {}).get("sha") or (source_commit or {}).get("id") or "")
         source_commit_at = self._extract_commit_timestamp(source_commit)
         has_release = bool(release_info and str(release_info.get("tag_name") or "").strip())
         return {
+            "provider": provider,
+            "host": host,
             "owner": owner,
             "repo": repo,
             "default_branch": str(default_branch or "main").strip() or "main",
@@ -1081,6 +1982,7 @@ class GithubManager:
             "latest_release_tag": str((release_info or {}).get("tag_name") or "").strip(),
             "latest_release_name": str((release_info or {}).get("name") or "").strip(),
             "release_zip_url": str((release_info or {}).get("zipball_url") or "").strip(),
+            "latest_release_published_at": str((release_info or {}).get("published_at") or (release_info or {}).get("released_at") or "").strip(),
             "latest_source_branch": str(resolved_source_branch or default_branch or "main").strip() or "main",
             "latest_source_commit_sha": source_commit_sha,
             "latest_source_commit_at": source_commit_at,
@@ -1187,6 +2089,10 @@ class GithubManager:
     def _extract_commit_timestamp(commit_payload: dict[str, Any] | None) -> str:
         """从 GitHub commit 响应里提取稳定的 UTC 时间戳字符串。"""
         if not commit_payload: return ""
+        for key in ("committed_date", "authored_date", "created_at"):
+            value = str(commit_payload.get(key) or "").strip()
+            if value:
+                return value
         commit_info = commit_payload.get("commit") if isinstance(commit_payload, dict) else {}
         author_info = commit_info.get("author", {}) if isinstance(commit_info, dict) else {}
         committer_info = commit_info.get("committer", {}) if isinstance(commit_info, dict) else {}
@@ -1215,6 +2121,12 @@ class GithubManager:
         if plan.source_subpath:
             candidate = temp_root / plan.source_subpath
             if candidate.exists(): return candidate
+            # 部分 zip 会多包一层仓库目录，清单里的 subdir 仍按真实 Mod 子目录填写。
+            normalized_subpath = Path(plan.source_subpath)
+            for child in temp_root.iterdir():
+                nested_candidate = child / normalized_subpath
+                if nested_candidate.exists():
+                    return nested_candidate
             raise FileNotFoundError(f"未找到指定的压缩包内部路径: {plan.source_subpath}")
 
         if plan.source_resolver == GITHUB_RESOLVER_MOD_ROOT:
@@ -1279,8 +2191,33 @@ class GithubManager:
             if record:
                 record.installed_version = version
                 record.local_folder = local_folder
+                info = dict(record.online_info_cache or {})
+                info.pop("local_missing_recorded", None)
+                record.online_info_cache = info
                 record.last_sync_time = current_ms()
                 record.save()
+
+    def _identity_from_request(self, request: GithubInstallRequest) -> GitRepoIdentity:
+        """从安装请求恢复 provider 解析结果。"""
+        identity = self.parse_git_repo_url(request.repo_url)
+        if identity:
+            return identity
+        host = str(request.host or "github.com").strip() or "github.com"
+        path = str(request.project_path or f"{request.owner}/{request.repo}").strip()
+        return GitRepoIdentity(
+            provider=str(request.provider or GIT_PROVIDER_GITHUB).strip() or GIT_PROVIDER_GITHUB,
+            host=host,
+            owner=request.owner,
+            repo=request.repo,
+            path=path,
+            url=f"https://{host}/{path}",
+        )
+
+    @staticmethod
+    def _build_gitlab_archive_url(identity: GitRepoIdentity, ref: str) -> str:
+        """构造 GitLab/GitGud 公开源码 zip 下载地址。"""
+        project_id = quote(identity.path, safe="")
+        return f"https://{identity.host}/api/v4/projects/{project_id}/repository/archive.zip?sha={quote(str(ref or '').strip(), safe='')}"
 
     def _build_github_headers(self, headers: dict[str, str] | None = None) -> dict[str, str]:
         """GitHub API 单独使用浏览器风格 UA。
@@ -1288,6 +2225,29 @@ class GithubManager:
         这样做不是为了解决 rate limit，而是为了减少被某些网关按“非浏览器默认脚本”特殊对待的概率。
         """
         return merge_headers(headers, user_agent=GITHUB_BROWSER_USER_AGENT)
+
+    def _build_git_headers(self, headers: dict[str, str] | None = None) -> dict[str, str]:
+        """公开 Git 托管站请求统一使用浏览器风格 UA。"""
+        return merge_headers(headers, user_agent=GITHUB_BROWSER_USER_AGENT)
+
+    def _raise_for_git_status(self, response, request_label: str) -> None:
+        """把 GitLab/GitGud HTTP 错误转换成更可读的异常。"""
+        if response.status_code < 400: return
+
+        if response.status_code == 404:
+            raise GithubApiError(f"Git 仓库资源不存在: {request_label}")
+
+        response_text = ""
+        try:
+            payload = response.json()
+            response_text = str(payload.get("message") or "")
+        except Exception:
+            response_text = response.text or ""
+
+        if response.status_code in (403, 429) and "rate" in response_text.lower():
+            raise GithubRateLimitError(f"Git 仓库 API 限流: {request_label}")
+
+        response.raise_for_status()
 
     def _raise_for_github_status(self, response, request_label: str) -> None:
         """把 GitHub 的 HTTP 错误转换成更可读的异常。"""

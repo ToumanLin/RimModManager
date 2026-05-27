@@ -1029,6 +1029,52 @@ class TestModScanner(unittest.TestCase):
         self.assertEqual(mod_data["package_id"], "ludeon.rimworld")
         self.assertEqual(mod_data["source"], "core")
 
+    def test_gitlab_and_gitgud_urls_use_git_repo_source(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        install_dir = temp_root / "install"
+        mod_dir = install_dir / "Mods" / "_GH_repo"
+        about_file = mod_dir / "About" / "About.xml"
+        about_file.parent.mkdir(parents=True)
+        about_file.write_text("<ModMetaData />", encoding="utf-8")
+        context = ProfileContext(
+            profile_id="profile-a",
+            game_version="1.5.4100",
+            game_install_path=str(install_dir),
+            user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
+            use_workshop_mods=False,
+            use_self_mods=True,
+        )
+
+        for url in ("https://gitlab.com/group/subgroup/repo", "https://gitgud.io/Ed86/rjw"):
+            with self.subTest(url=url):
+                scanner = ModScanner(context)
+                scanner.xml_parser = Mock()
+                scanner.xml_parser.parse.return_value = {"package_id": "author.mod", "url": url, "icon_path": ""}
+                scanner.analyzer = Mock()
+                scanner.analyzer.analyze.return_value = {
+                    "supported_languages": [],
+                    "file_stats": {},
+                    "mod_type": "mod",
+                }
+                scanner._resolve_workshop_id = Mock(return_value=None)
+                scanner._resolve_images = Mock(return_value=("", ""))
+
+                about_state = SimpleNamespace(resolved_path=str(about_file), is_disabled=False)
+                with patch("backend.scanner.mod_scanner.ModAnalyzer.resolve_mod_about_state", return_value=about_state):
+                    mod_data = scanner._process_single_mod(
+                        str(mod_dir),
+                        False,
+                        existing_snapshots={},
+                        dlc_parser=None,
+                        forced_update=False,
+                    )
+
+                self.assertIsNotNone(mod_data)
+                self.assertEqual(mod_data["source"], "github")
+
     def test_finish_scan_normalizes_terminal_payload(self):
         scanner = ModScanner(SimpleNamespace(profile_id="profile-a"))
 

@@ -79,7 +79,7 @@ export const mainGuideSteps = [
     popover: {
       title: "库存枢纽",
       description:
-        "这里集中管理创意工坊、本地模组和管理器下载模组，也包含工坊检索、合集管理和 GitHub 订阅。",
+        "这里集中管理创意工坊、本地模组和管理器下载模组，也包含工坊检索、合集管理和 Git 仓库订阅。",
       side: "bottom",
     },
   },
@@ -374,7 +374,7 @@ export const workspaceGuideSteps = [
     element: '[data-tour="workspace-tabs"]',
     popover: {
       title: "其它工作区页面",
-      description: "顶部标签还能切到创意工坊检索、合集订阅和 GitHub 订阅页面。",
+      description: "顶部标签还能切到创意工坊检索、合集订阅和 Git 仓库订阅页面。",
       side: "left",
     },
   },
@@ -462,8 +462,8 @@ export const githubGuideSteps = [
   {
     element: '[data-tour="workspace-tabs"]',
     popover: {
-      title: "切到 GitHub 页",
-      description: "这里适合订阅那些没有工坊页面、但作者持续在 GitHub 发布源码或 Release 的模组。",
+      title: "切到 Git 仓库页",
+      description: "这里适合订阅那些没有工坊页面、但作者持续在 Git 仓库发布源码或 Release 的模组。",
       side: "bottom",
     },
     onNextBefore: async () => {
@@ -474,7 +474,7 @@ export const githubGuideSteps = [
     element: '[data-tour="workspace-github-input"]',
     popover: {
       title: "解析仓库链接",
-      description: "先粘贴 GitHub 仓库地址。系统会解析仓库信息，然后让你选择 Source 或 Release 模式。",
+      description: "先粘贴 Git 仓库地址。系统会解析仓库信息，然后让你选择 Source 或 Release 模式。",
       side: "bottom",
     },
   },

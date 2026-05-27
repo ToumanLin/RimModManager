@@ -185,7 +185,7 @@ export const allGuides = [
   },
   {
     key: 'workspaceGithub',
-    title: 'GitHub 订阅',
+    title: 'Git 仓库订阅',
     description: '了解如何解析仓库、订阅来源并查看部署时间线。',
     steps: githubGuideSteps,
     beforeStart: () => {

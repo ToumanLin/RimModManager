@@ -139,6 +139,7 @@ export const useAppStore = defineStore('app', () => {
     user_rules_path: '',
     community_rules_url: '',
     community_rules_path: '',
+    git_provider_catalog_url: '',
     community_workshop_db_url: '',
     community_workshop_db_path: '',
     community_instead_db_url: '',
@@ -601,15 +602,15 @@ export const useAppStore = defineStore('app', () => {
     if (!window.pywebview || !item?.repo_url) return false
     const targetVersion = String(item.target_version || item.latest_version || '').trim()
     const res = await window.pywebview.api.github_trigger_download(item.repo_url, item.install_type || 'source', targetVersion)
-    if (!checkResult(res, `更新 GitHub 模组 ${item.title || ''}`.trim())) return false
-    toast.info('GitHub 部署任务已启动，请留意底部状态栏。', { timeout: 4000 })
+    if (!checkResult(res, `更新 Git 仓库模组 ${item.title || ''}`.trim())) return false
+    toast.info('Git 仓库部署任务已启动，请留意底部状态栏。', { timeout: 4000 })
     const workspaceStore = useWorkspaceStore()
     workspaceStore.startGithubTimelinePolling(item.repo_url, { intervalMs: 4000, maxPolls: 15 })
     return true
   }
 
   const updateManagedModItems = async (items = []) => {
-    // 批量动作按来源拆分：SteamCMD 支持合并下载，GitHub 订阅逐项启动部署任务。
+    // 批量动作按来源拆分：SteamCMD 支持合并下载，Git 仓库订阅逐项启动部署任务。
     const normalizedItems = Array.isArray(items) ? items : []
     const workshopIds = [...new Set(
       normalizedItems
@@ -781,7 +782,7 @@ export const useAppStore = defineStore('app', () => {
     return data
   }
 
-  // 管理器负责的模组更新包含 SteamCMD 工坊模组和 GitHub 订阅模组，统一弹窗避免多来源重复打扰。
+  // 管理器负责的模组更新包含 SteamCMD 工坊模组和 Git 仓库订阅模组，统一弹窗避免多来源重复打扰。
   const checkManagedModUpdates = async ({ manual = true, prompt = true } = {}) => {
     const data = await fetchMaintenanceData({
       apiName: 'maintenance_check_managed_mod_updates',

@@ -6,6 +6,7 @@ import time
 import uuid
 import concurrent.futures
 from typing import Any
+from urllib.parse import urlparse
 from backend.managers.mgr_game_logs import GameLogManager
 from backend.managers.mgr_profile import ProfileContext
 from backend.utils.tools import generate_path_hash, get_folder_size
@@ -36,6 +37,15 @@ from backend.settings import TOOL_MODS_DIR, settings
 from backend.utils.constants import normalize_language_codes
 from backend.utils.logger import logger # 引入日志
 from backend.utils.event_bus import EventBus # 引入事件总线
+
+GIT_REPO_SOURCE_HOSTS = {"github.com", "gitlab.com", "gitgud.io"}
+
+def _is_git_repo_source_url(value: str) -> bool:
+    try:
+        host = urlparse(str(value or "")).netloc.lower().split("@")[-1].split(":")[0]
+    except Exception:
+        return False
+    return host in GIT_REPO_SOURCE_HOSTS
 
 class ModScanner:
     def __init__(self, context: ProfileContext, runtime_link_sync_handler=None):
@@ -428,7 +438,7 @@ class ModScanner:
             mod_data['source'] = 'workshop'
         elif is_dlc_dir:
             mod_data['source'] = 'dlc' if pkg_id != 'ludeon.rimworld' else 'core'
-        elif 'github.com' in mod_data.get('url', '').lower():
+        elif _is_git_repo_source_url(mod_data.get('url', '')):
             mod_data['source'] = 'github'
         elif mod_data.get('url', ''):
             mod_data['source'] = 'other'
