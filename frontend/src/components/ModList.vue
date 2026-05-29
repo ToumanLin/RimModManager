@@ -45,7 +45,7 @@
     </div>
     
     <!-- 工具栏 (搜索 & 筛选) -->
-    <div :data-tour="listId=='active'?'list-toolbar':null" class="px-2 py-1 w-full flex flex-col gap-1 shadow-xl bg-bg-deep/20 z-50">
+    <div :data-tour="listId=='active'?'list-toolbar':null" class="px-2 py-1 w-full flex flex-col gap-1 shadow-xl bg-bg-deep/20">
       <div class="flex items-center justify-center gap-1 relative">
         <!-- 搜索定位 (Find) -->
         <TagsSearch :list-color="listColor" v-model="searchQuery" v-model:logic="searchLogic" ref="searchTagsRef"

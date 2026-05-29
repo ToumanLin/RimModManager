@@ -2,12 +2,7 @@
 <template>
   <Teleport to="body">
     <Transition name="popover-fade">
-      <div 
-        v-if="isOpen"
-        ref="popoverRef"
-        class="fixed z-8000" 
-        :style="containerStyle"
-      >
+      <div v-if="isOpen" ref="popoverRef" class="fixed z-8000" :style="containerStyle" >
         <!-- 核心修复：阴影在外层，裁剪和滚动在内层 -->
         <div class="w-full h-full rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl" :style="contentStyle">
           <div class="h-full w-full overflow-y-auto custom-scrollbar">

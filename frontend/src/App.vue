@@ -1,5 +1,5 @@
 <template>
-  <div v-if="appStore.isSuspended" class="relative h-[100vh] w-full overflow-hidden font-sans select-none bg-[#0f172a] text-slate-200">
+  <div v-if="appStore.isSuspended" class="relative h-screen w-full overflow-hidden font-sans select-none bg-bg-deep text-slate-200">
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.12),transparent_28%),linear-gradient(160deg,#0f172a_0%,#111827_100%)]"></div>
     <div class="relative z-10 flex h-full flex-col items-center justify-center px-6 text-center">
       <div class="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/8 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">
@@ -21,8 +21,8 @@
     </div>
   </div>
 
-  <div v-else class="relative h-[100vh] w-full flex flex-col p-1 overflow-hidden font-sans bg-bg-deep text-text-main select-none">
-    <RimHeader class="z-100" />
+  <div v-else class="relative h-screen w-full flex flex-col p-1 overflow-hidden font-sans bg-bg-deep text-text-main select-none">
+    <RimHeader class="z-500" />
     
     <!-- 主工作区 -->
     <div class="flex-1 flex flex-col min-h-0 relative">

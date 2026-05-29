@@ -2,7 +2,7 @@
   <!-- =======================
         顶部功能栏 (Navbar)
       ======================= -->
-  <header class="m-1 h-14 bg-bg-surface/60 backdrop-blur-md rounded-2xl flex items-center px-3 justify-between border border-text-main/5 shadow-lg shrink-0 z-50">
+  <header class="m-1 h-14 bg-bg-surface/60 rounded-2xl flex items-center px-3 justify-between border border-text-main/5 shadow-lg shrink-0 z-50">
     <!-- 标题 -->
     <div class="flex items-center gap-4 mx-1 ">
       <h1 class="font-bold tracking-wider text-lg bg-linear-to-r from-text-main to-gray-400 bg-clip-text text-transparent">

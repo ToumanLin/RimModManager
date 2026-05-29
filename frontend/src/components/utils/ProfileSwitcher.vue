@@ -22,9 +22,8 @@
     </button>
 
     <!-- 下拉列表 -->
-    <Transition name="dropdown">
-      <div v-if="isOpen" 
-        class="absolute top-full mt-2 left-0 w-64 bg-bg-surface/90 backdrop-blur-xl border border-text-main/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-100">
+    <FixedPopover :is-open="isOpen" :trigger-ref="containerRef" :offset="6">
+      <div class="w-64 bg-bg-surface/80 backdrop-blur-2xl  border border-text-main/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-100">
         
         <div class="p-1 space-y-1">
           <button v-for="p in profileStore.profiles" :key="p.id" @click="p.check ? handleSwitch(p.id) : null"
@@ -54,7 +53,7 @@
           </button>
         </div>
       </div>
-    </Transition>
+    </FixedPopover>
   </div>
 </template>
 
@@ -64,6 +63,7 @@ import { ChevronDown, Settings2, Folder, Quote, AlertOctagon } from 'lucide-vue-
 import { useProfileStore } from '../../stores/profileStore'
 import { useAppStore } from '../../stores/appStore'
 import { onClickOutside } from '@vueuse/core'
+import FixedPopover from '../common/FixedPopover.vue'
 
 const appStore = useAppStore()
 const profileStore = useProfileStore()
