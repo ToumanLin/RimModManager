@@ -154,6 +154,8 @@
         
       </div>
 
+      <!-- 引导中心浮动按钮：放在主界面层，后续弹窗按现有层级自然覆盖它 -->
+      <GuideCenter />
     </div>
 
     <!-- 游戏运行中的临时浮动指示器 -->
@@ -232,9 +234,6 @@
     <!-- 缺失项下载管理 -->
     <MissingInstallDialog />
 
-    <!-- 引导中心浮动按钮 -->
-    <GuideCenter />
-    
     <!-- 设置弹窗 -->
     <SettingsModal />
 
@@ -508,7 +507,7 @@ const Resizer = (props, { emit }) => {
   return h('div', {
     // 容器：透明，宽热区，z-index高，负margin抵消宽度以保持布局紧凑
     class: [
-      'w-4 h-full cursor-col-resize z-50 flex justify-center items-center flex-shrink-0 -mx-2 select-none outline-none touch-none', 
+      'w-4 h-full cursor-col-resize z-20 flex justify-center items-center flex-shrink-0 -mx-2 select-none outline-none touch-none', 
       'group' // 用于 hover 状态控制子元素
     ],
     onMousedown: (e) => emit('mousedown', e)

@@ -313,10 +313,17 @@ export const useGuideStore = defineStore('guide', () => {
   const skipGuideByKey = (guideKey) => {
     const uniqueKey = `${guideKey}_${GUIDE_VERSION}`
     markAsDone(uniqueKey)
-    toast.info(`已跳过教程: ${allGuides.find(g=>g.key===guideKey)?.title || ''}`)
+    // toast.info(`已跳过教程: ${allGuides.find(g=>g.key===guideKey)?.title || ''}`)
+  }
+  // 跳过全部引导
+  const skipAllGuides = () => {
+    allGuides.forEach(guide => {
+      skipGuideByKey(guide.key)
+    })
+    toast.info("所有教程引导已跳过！可以随时在界面设置中重置引导。")
   }
 
-  // 重置所有引导状态
+   // 重置所有引导状态
   const resetAllGuides = async () => {
     if (window.pywebview && window.pywebview.api) {
       appStore.closeSettingsPanel()
@@ -326,5 +333,5 @@ export const useGuideStore = defineStore('guide', () => {
     }
   }
 
-  return { startGuideByKey, skipGuideByKey, resetAllGuides }
+  return { startGuideByKey, skipGuideByKey, skipAllGuides, resetAllGuides }
 })

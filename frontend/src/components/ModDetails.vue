@@ -433,17 +433,20 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3"><path d="M12 5v14M5 12h14"/></svg>
                   </button>
                   <FixedPopover :is-open="showGroupDrop" :trigger-ref="groupDropRef">
+                    
                     <!-- 分组选择下拉框 -->
-                    <div class="w-40 max-h-48 overflow-y-auto bg-bg-surface border border-text-main/10 rounded-lg shadow-xl z-50 flex flex-col p-1">
+                    <div class="w-40 max-h-48 bg-bg-surface border border-text-main/10 rounded-sm shadow-xl z-50 flex flex-col p-1">
                       <!-- 搜索过滤 -->
                       <input v-model="groupSearch" :ref="el => groupSearchRef = el" placeholder="搜索分组..." 
                         class="mb-1 px-2 py-1 text-xs bg-black/20 rounded border border-text-main/5 focus:outline-none focus:border-accent-primary" />
-                      <div v-if="availableGroups.length === 0" class="px-2 py-1 text-xs text-text-dim/50 text-center">无可用分组</div>
-                      <button v-for="g in availableGroups" :key="g.group_id" @click="addGroup(g.group_id)"
-                        class="text-left px-2 py-1 text-xs rounded hover:bg-text-main/10 transition-colors truncate flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full shrink-0" :style="{backgroundColor: g.color}"></span>
-                        {{ g.name }}
-                      </button>
+                      <div class="overflow-y-auto">
+                        <div v-if="availableGroups.length === 0" class="px-2 py-1 text-xs text-text-dim/50 text-center">无可用分组</div>
+                        <button v-for="g in availableGroups" :key="g.group_id" @click="addGroup(g.group_id)"
+                          class="text-left min-h-5 px-2 py-1 text-xs rounded hover:bg-text-main/10 transition-colors truncate flex items-center gap-2">
+                          <span class="w-2 h-2 rounded-full shrink-0" :style="{backgroundColor: g.color}"></span>
+                          {{ g.name }}
+                        </button>
+                      </div>
                     </div>
                   </FixedPopover>
                 </div>

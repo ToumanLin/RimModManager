@@ -1,12 +1,11 @@
 <template>
   <Teleport to="body">
     <Transition name="missing-install-fade">
-      <div
-        v-if="missingInstallStore.isVisible"
+      <div v-if="missingInstallStore.isVisible"
         class="fixed inset-0 z-9999 flex items-center justify-center bg-bg-deep/65 backdrop-blur-sm"
         @click.self="missingInstallStore.close()"
       >
-        <div class="relative flex w-[68rem] max-h-[86vh] max-w-[94vw] flex-col overflow-hidden rounded-3xl border border-text-main/10 bg-bg-deep/94 shadow-[0_1.75rem_5.625rem_rgba(0,0,0,0.62)]">
+        <div class="relative flex w-[80vw] max-h-[86vh] max-w-[94vw] flex-col overflow-hidden rounded-3xl border border-text-main/10 bg-bg-deep/94 shadow-[0_1.75rem_5.625rem_rgba(0,0,0,0.62)]">
           <div class="absolute inset-x-0 top-0 h-[0.0625rem] bg-linear-to-r from-transparent via-accent-primary to-transparent opacity-80"></div>
 
           <div class="relative z-10 flex items-start justify-between gap-3 border-b border-text-main/6 px-5 py-4">
@@ -45,12 +44,14 @@
             <div v-if="hasActionableRows" class="flex flex-wrap items-center gap-1.5">
               <button
                 class="rounded-lg border border-text-main/10 bg-text-main/5 px-2.5 py-1.5 text-[0.6875rem] font-bold text-text-dim transition-all hover:bg-text-main/10 hover:text-text-main"
+                :disabled="missingInstallStore.isActionPending"
                 @click="missingInstallStore.selectAll()"
               >
                 全选
               </button>
               <button
                 class="rounded-lg border border-text-main/10 bg-text-main/5 px-2.5 py-1.5 text-[0.6875rem] font-bold text-text-dim transition-all hover:bg-text-main/10 hover:text-text-main"
+                :disabled="missingInstallStore.isActionPending"
                 @click="missingInstallStore.clearSelection()"
               >
                 清空
@@ -62,14 +63,14 @@
             <div class="space-y-3.5">
               <section
                 v-if="isUnknownOnlyMode"
-                class="rounded-2xl border border-text-main/6 bg-text-main/[0.03] px-4 py-4"
+                class="rounded-2xl border border-text-main/6 bg-text-main/3 px-4 py-4"
               >
                 <h4 class="text-sm font-black tracking-wide text-text-main">只有未知项</h4>
                 <p class="mt-1.5 text-[0.6875rem] leading-5 text-text-dim/82">这些项目暂时无法直接处理。</p>
               </section>
               <section
                 v-if="hasUnknownItems"
-                class="rounded-2xl border border-accent-danger/18 bg-accent-danger/[0.04]"
+                class="rounded-2xl border border-accent-danger/18 bg-accent-danger/4"
               >
                 <div class="flex flex-wrap items-start justify-between gap-2 border-b border-accent-danger/12 px-4 py-3">
                   <div class="min-w-0">
@@ -128,7 +129,7 @@
               <section
                 v-for="group in missingInstallStore.state.groups"
                 :key="group.key"
-                class="rounded-2xl border border-text-main/6 bg-text-main/[0.03]"
+                class="rounded-2xl border border-text-main/6 bg-text-main/3"
               >
                 <div class="flex flex-wrap items-start justify-between gap-2 border-b border-text-main/6 px-4 py-3">
                   <div class="min-w-0">
@@ -153,7 +154,7 @@
                     v-for="row in group.rows"
                     :key="row.id"
                     class="flex items-start gap-2 rounded-xl border border-text-main/8 bg-black/8 px-3 py-2 transition-colors"
-                    :class="missingInstallStore.getSelectedSource(row) && missingInstallStore.isSelected(row.id) ? 'border-accent-primary/25 bg-accent-primary/[0.05]' : ''"
+                    :class="missingInstallStore.getSelectedSource(row) && missingInstallStore.isSelected(row.id) ? 'border-accent-primary/25 bg-accent-primary/5' : ''"
                   >
                     <label class="mt-0.5 flex shrink-0 cursor-pointer items-center">
                       <input
@@ -201,8 +202,8 @@
                           :key="`${row.id}:${choice.id}`"
                           class="flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-all"
                           :class="missingInstallStore.getSelectedChoice(row)?.id === choice.id
-                            ? 'border-accent-primary/40 bg-accent-primary/[0.08]'
-                            : 'border-text-main/10 bg-text-main/[0.03]'"
+                            ? 'border-accent-primary/40 bg-accent-primary/3'
+                            : 'border-text-main/10 bg-text-main/3'"
                         >
                           <button
                             type="button"
@@ -263,28 +264,32 @@
 
           <div class="relative z-10 flex items-center justify-end gap-2.5 border-t border-text-main/6 bg-black/14 px-5 py-3.5">
             <button
-              class="rounded-lg border border-text-main/10 bg-text-main/5 px-4 py-2 text-[0.6875rem] font-bold text-text-dim transition-all hover:bg-text-main/10 hover:text-text-main"
+              class="rounded-lg border border-text-main/10 bg-text-main/5 px-4 py-2 text-[0.6875rem] font-bold text-text-dim transition-all hover:bg-text-main/10 hover:text-text-main disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-text-main/5 disabled:hover:text-text-dim"
+              :disabled="missingInstallStore.isActionPending"
               @click="missingInstallStore.close(false)"
             >
               {{ missingInstallStore.state.cancelText }}
             </button>
             <button
               v-if="missingInstallStore.state.cleanupText"
-              class="rounded-lg bg-accent-danger px-5 py-2 text-[0.6875rem] font-black text-black shadow-[0_0.625rem_1.875rem_rgba(239,68,68,0.28)] transition-all hover:brightness-105 active:scale-95"
+              class="rounded-lg bg-accent-danger px-5 py-2 text-[0.6875rem] font-black text-black shadow-[0_0.625rem_1.875rem_rgba(239,68,68,0.28)] transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 disabled:active:scale-100"
+              :disabled="missingInstallStore.isActionPending"
               @click="missingInstallStore.cleanupUnknownItems()"
             >
               {{ missingInstallStore.state.cleanupText }}
             </button>
             <button
               v-if="missingInstallStore.state.disableRelatedText"
-              class="rounded-lg bg-accent-warn px-5 py-2 text-[0.6875rem] font-black text-black shadow-[0_0.625rem_1.875rem_rgba(245,158,11,0.28)] transition-all hover:brightness-105 active:scale-95"
+              class="rounded-lg bg-accent-warn px-5 py-2 text-[0.6875rem] font-black text-black shadow-[0_0.625rem_1.875rem_rgba(245,158,11,0.28)] transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 disabled:active:scale-100"
+              :disabled="missingInstallStore.isActionPending"
               @click="missingInstallStore.disableRelatedOwners()"
             >
               {{ missingInstallStore.state.disableRelatedText }}
             </button>
             <button
               v-if="missingInstallStore.state.continueText"
-              class="rounded-lg bg-accent-danger px-5 py-2 text-[0.6875rem] font-black text-black shadow-[0_0.625rem_1.875rem_rgba(239,68,68,0.28)] transition-all hover:brightness-105 active:scale-95"
+              class="rounded-lg bg-accent-danger px-5 py-2 text-[0.6875rem] font-black text-black shadow-[0_0.625rem_1.875rem_rgba(239,68,68,0.28)] transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 disabled:active:scale-100"
+              :disabled="missingInstallStore.isActionPending"
               @click="missingInstallStore.continueCurrentAction()"
             >
               {{ missingInstallStore.state.continueText }}
@@ -292,18 +297,18 @@
             <button
               v-if="missingInstallStore.state.summary.actionableTotal > 0"
               class="rounded-lg bg-accent-primary px-5 py-2 text-[0.6875rem] font-black text-black shadow-[0_0.625rem_1.875rem_rgba(6,182,212,0.28)] transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 disabled:active:scale-100"
-              :disabled="missingInstallStore.selectedCount === 0"
+              :disabled="missingInstallStore.selectedCount === 0 || missingInstallStore.isActionPending"
               @click="missingInstallStore.subscribeSelected()"
             >
-              订阅选中项
+              {{ missingInstallStore.pendingAction === 'subscribe' ? '订阅中...' : '订阅选中项' }}
             </button>
             <button
               v-if="missingInstallStore.state.summary.actionableTotal > 0"
               class="rounded-lg bg-accent-tip px-5 py-2 text-[0.6875rem] font-black text-black shadow-[0_0.625rem_1.875rem_rgba(234,179,8,0.28)] transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 disabled:active:scale-100"
-              :disabled="missingInstallStore.selectedCount === 0"
+              :disabled="missingInstallStore.selectedCount === 0 || missingInstallStore.isActionPending"
               @click="missingInstallStore.downloadSelected()"
             >
-              下载选中项
+              {{ missingInstallStore.pendingAction === 'download' ? '下载中...' : '下载选中项' }}
             </button>
           </div>
         </div>
