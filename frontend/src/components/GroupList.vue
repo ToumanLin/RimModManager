@@ -2,12 +2,12 @@
   <div data-tour="group-list-panel" class="flex flex-col h-full bg-bg-surface/40 shadow-2xl"
     :class="`border-2 rounded-2xl border-accent-${listColor}/20`">
     <!-- 标题栏 -->
-    <div data-tour="group-list-header" :class="`px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-accent-${listColor}/10`">
+    <div data-tour="group-list-header" :class="`px-3 h-8 border-b rounded-t-2xl border-border-base/5 flex justify-between items-center bg-accent-${listColor}/10`">
       <span :class="`text-sm font-bold text-accent-${listColor} uppercase tracking-wider flex items-center gap-2`">
         <div :class="`w-1.5 h-1.5 rounded-full bg-accent-${listColor} shadow-[0_0_8px_var(--color-accent-${listColor})]`"></div>
         {{ title }}
       </span>
-      <span :class="`text-xs bg-black/30 px-2 py-0.5 rounded text-accent-${listColor}`">
+      <span :class="`text-xs bg-bg-inset/70 px-2 py-0.5 rounded text-accent-${listColor}`">
         {{ safeGroupList.length }}
       </span>
     </div>
@@ -15,12 +15,12 @@
     <div class="px-2 py-1 shadow-xl" >
       <div data-tour="group-list-search" class="w-full inline-flex items-center gap-1">
         <input type="text" placeholder="搜索分组名称、模组名称/包名/作者..." v-model="searchText"
-          :class="`flex-1 px-2 py-1 rounded-lg transition-all bg-bg-deep/30 border border-text-main/10 text-sm 
+          :class="`flex-1 px-2 py-1 rounded-lg transition-all bg-bg-deep/30 border border-border-base/10 text-sm
           text-text-main placeholder:text-text-dim focus:border-accent-${listColor} focus:outline-none focus:bg-bg-deep/90 min-w-0`" />
         <!-- 定位按钮 -->
         <button @click="executeSearch(true)" v-tooltip="'搜索定位下一个符合条件的结果'"
-          :class="`px-3 py-1 relative rounded-lg bg-accent-${listColor}/50 hover:bg-accent-${listColor} 
-          text-text-dim hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10 
+          :class="`px-3 py-1 relative rounded-lg bg-accent-${listColor}/50 hover:bg-accent-${listColor}
+          text-text-dim hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10
           transition-all cursor-pointer hover:scale-105 active:scale-95`">定位
           <div v-if="currentSearchIndex !== -1 && searchText" class="text-[0.55rem] absolute -top-2 -left-1 text-text-main bg-accent-highlight px-1 rounded-lg">{{ currentSearchIndex + 1 }} / {{ searchResults.length }}</div>
         </button>
@@ -44,11 +44,11 @@
     </div>
 
     <!-- 列表区：统一由外层虚拟列表滚动，避免分组内嵌套滚动和拖拽事件互相干扰。 -->
-    <div data-tour="group-list-body" class="relative flex-1 min-h-0 overflow-hidden pb-0.5 after:pointer-events-none 
-        after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10 
+    <div data-tour="group-list-body" class="relative flex-1 min-h-0 overflow-hidden pb-0.5 after:pointer-events-none
+        after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10
         after:bg-linear-to-t after:from-bg-deep/80 after:to-transparent">
       <div class="h-full min-h-0 px-1 relative" @click.self="modStore.clearSelection()">
-        <div v-if="safeGroupList.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center text-gray-600 text-xs select-none pointer-events-none">
+        <div v-if="safeGroupList.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center text-text-subtle/70 text-xs select-none pointer-events-none">
             可点击 “ + ” 按钮新建分组
         </div>
 
@@ -77,25 +77,25 @@
               :style="{ '--rgb-components': hexToRgb(record.group?.color), '--group-row-delay': `${Math.min(record.mod_index || 0, 8) * 10}ms` }">
               <div class="absolute left-1.5 -top-1 bottom-1 w-1 bg-[rgba(var(--rgb-components),0.6)]"></div>
               <div class="h-full" @contextmenu="event => openGroupModContextMenu(event, record)">
-              <GroupModRow :item-id="record.id" :selection-id="record.row_key" :index="record.mod_index" :key="record.row_key" :list-color="listColor" 
-                :is-selected="selectedGroupRowKeySet.has(record.row_key)" 
+              <GroupModRow :item-id="record.id" :selection-id="record.row_key" :index="record.mod_index" :key="record.row_key" :list-color="listColor"
+                :is-selected="selectedGroupRowKeySet.has(record.row_key)"
                 :search-match="currentSearchGroupId === record.group_id && currentSearchModId === normalizeGroupModId(record.id)"
-                :show-index="appStore.settings.ui.show_group_index"  
+                :show-index="appStore.settings.ui.show_group_index"
                 :show-icon="appStore.settings.ui.show_group_icon">
               </GroupModRow>
               </div>
               <!-- 右上角移除按钮（阻止冒泡，避免触发选择） -->
               <button @click.stop="removeMod(record.group_id, [record.id])" @mousedown.stop v-tooltip="`移除`"
-                class="absolute top-1 right-3 w-4 h-4 bg-accent-danger text-text-main rounded-full 
+                class="absolute top-1 right-3 w-4 h-4 bg-accent-danger text-text-main rounded-full
                       opacity-0 group-hover:opacity-80 transition-opacity duration-200
                       flex items-center justify-center text-xs z-10 hover:scale-110">×
               </button>
-              <div v-if="activeCanonicalIds.has(normalizeGroupModId(record.id))" v-tooltip="'已启用'" tabindex="0" class="absolute w-3 h-3 m-1 bg-accent-success text-text-main rounded-full 
+              <div v-if="activeCanonicalIds.has(normalizeGroupModId(record.id))" v-tooltip="'已启用'" tabindex="0" class="absolute w-3 h-3 m-1 bg-accent-success text-text-main rounded-full
                       transition-opacity duration-200 flex items-center justify-center text-xs z-10 hover:scale-110"
                       :class="[appStore.settings.ui.show_group_index?'-top-1.5 left-8.5':'-top-1.5 left-1.5']">
               </div>
               <div class="absolute right-1.5 -top-1 bottom-1 w-1 bg-[rgba(var(--rgb-components),0.6)]"></div>
-              
+
             </div>
             <div v-else class="bg-[rgba(var(--rgb-components),0.3)] h-full py-1 mx-1 rounded-b-md transition-[opacity,transform] duration-180 ease-out"
               :class="[
@@ -103,11 +103,11 @@
                 record.is_collapsing ? 'group-row-collapsing' : ''
               ]"
               :style="{ '--rgb-components': hexToRgb(record.group?.color), '--group-row-delay': '0ms' }">
-              <div class="mx-2 h-full rounded-lg border-2 border-dashed text-gray-600 text-xs bg-bg-deep/80 select-none pointer-events-none flex items-center justify-center transition-colors duration-150 ease-out"
+              <div class="mx-2 h-full rounded-lg border-2 border-dashed text-text-subtle/70 text-xs bg-bg-deep/80 select-none pointer-events-none flex items-center justify-center transition-colors duration-150 ease-out"
                 :class="record.is_collapsing ? '' : ''">
                 可拖拽模组到此
                 <!-- 点阵背景 -->
-                <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+                <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(var(--color-text-main) 1px, transparent 1px); background-size: 20px 20px;"></div>
               </div>
             </div>
           </template>
@@ -576,7 +576,7 @@ const buildGroupModMenuItems = ({ ids, clickedId, groupId, groupName, groupSize 
     }},
     { label: '打包导出' + countText, icon: Package, disabled: ids.length === 1, action: () => openCustomExport(ids, `打包导出分组模组${countText}`, `来源分组：${groupName || '未命名分组'}。`) },
     { label: `从「${groupName || '分组'}」移除` + countText, icon: Eraser, level: 'warn', disabled: ids.length === 0 || !groupId, action: () => groupStore.groupRemoveMods(groupId, ids) },
-    
+
   ]
 }
 const openGroupModContextMenu = async (event, row) => {

@@ -1,8 +1,8 @@
 <!-- src/components/workspace/views/MatrixColumn.vue -->
 <template>
-  <div class="flex-1 flex flex-col bg-black/30 border border-text-main/10 rounded-2xl overflow-hidden shadow-2xl relative"
+  <div class="flex-1 flex flex-col bg-bg-inset/70 border border-border-base/10 rounded-2xl overflow-hidden shadow-2xl relative"
     :class="{ 'brightness-60 grayscale pointer-events-none': disabled }">
-    <div class="px-4 py-3 bg-text-main/5 border-b border-text-main/10 flex flex-col gap-3" :data-tour="'workspace-'+storeType + '-toolbar'">
+    <div class="px-4 py-3 bg-bg-overlay/5 border-b border-border-base/10 flex flex-col gap-3" :data-tour="'workspace-'+storeType + '-toolbar'">
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-bold text-text-main flex items-center gap-2 cursor-help" v-tooltip="tooltip">
           <div class="w-2.5 h-2.5 rounded-full shadow-lg" :class="iconColor.replace('text-', 'bg-')"></div>
@@ -15,10 +15,10 @@
           <CommonSwitch v-if="storeType === 'local'" label="显示官方" mini class="text-text-dim" v-model="showOfficialLocalModsModel" description="默认隐藏 Core/DLC 等官方项目；隐藏时不会进入本地列表和多选范围。" />
           </h3>
         <div class="flex gap-2">
-          <span class="text-[0.65rem] font-mono text-text-dim bg-black/40 px-2 py-0.5 rounded-md border border-text-main/5">
+          <span class="text-[0.65rem] font-mono text-text-dim bg-bg-inset/80 px-2 py-0.5 rounded-md border border-border-base/5">
             {{ formatFileSize(columnSize) }}
           </span>
-          <span class="text-[0.65rem] font-mono text-text-main bg-black/40 px-2 py-0.5 rounded-md border border-text-main/5">
+          <span class="text-[0.65rem] font-mono text-text-main bg-bg-inset/80 px-2 py-0.5 rounded-md border border-border-base/5">
             {{ mods.length }} 项
           </span>
         </div>
@@ -27,7 +27,7 @@
       <div class="flex flex-col items-center gap-2">
         <div class="relative w-full">
           <input v-model="searchQuery" placeholder="在此域检索..."
-            class="w-full bg-black/60 border border-text-main/10 rounded-lg pl-3 pr-2 py-1.5 text-xs text-text-main focus:border-accent-primary outline-none transition-colors"
+            class="w-full bg-bg-inset border border-border-base/10 rounded-lg pl-3 pr-2 py-1.5 text-xs text-text-main focus:border-accent-primary outline-none transition-colors"
           />
         </div>
         <div class="flex items-center w-full justify-end gap-2">
@@ -43,7 +43,7 @@
             ]"
           />
 
-          <Motion :class="`p-1 size-7 rounded-md bg-text-dim/10 border border-text-main/10 hover:text-text-main hover:bg-text-dim/20 text-xs font-bold flex items-center justify-center cursor-pointer `"
+          <Motion :class="`p-1 size-7 rounded-md bg-bg-overlay/5 border border-border-base/10 hover:text-text-main hover:bg-bg-overlay/10 text-xs font-bold flex items-center justify-center cursor-pointer `"
             :initial="{ rotateX: 0, opacity: 1 }"
             :animate="{ rotateX: isSortDsc ? 0 : 180 }"
             :transition="{ type: 'spring', stiffness: 300, damping: 20 }"
@@ -94,7 +94,7 @@
         </div>
       </div>
 
-      <div v-else class="absolute inset-0 flex flex-col items-center justify-center text-text-dim/30">
+      <div v-else class="absolute inset-0 flex flex-col items-center justify-center text-text-disabled">
         <svg class="size-12 mb-2 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
         <span class="text-xs font-bold tracking-widest uppercase">库内暂无数据</span>
       </div>

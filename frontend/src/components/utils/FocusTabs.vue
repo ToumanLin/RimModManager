@@ -1,24 +1,17 @@
 <template>
   <div ref="containerRef" class="relative flex p-0.5 rounded-lg backdrop-blur-[5px]"
-    :class="{'bg-text-main/5 border border-text-main/10 ': showBorder}"
-    >
-    <button
-      v-for="(tab, index) in tabs"
-      :key="tab"
-      :ref="(el) => (itemRefs[index] = el as HTMLButtonElement)"
-      @click="emit('update:modelValue', tab)"
-      class="relative z-10 px-2 py-0 transition-all duration-500 cursor-pointer"
+    :class="{'bg-bg-overlay/5 border border-border-base/10 ': showBorder}" >
+    <button v-for="(tab, index) in tabs" :key="tab" :ref="(el) => (itemRefs[index] = el as HTMLButtonElement)"
+      class="relative z-10 px-2 py-0 transition-all duration-500 cursor-pointer" :class="modelValue === tab ? ' text-accent-highlight' : 'text-text-main'"
       :style="{
         filter: modelValue === tab ? 'blur(0px)' : `blur(${blurAmount}px)`,
         opacity: modelValue === tab ? 1 : 0.4
       }"
-      :class="modelValue === tab ? ' text-accent-highlight' : 'text-text-main'"
-    >
+      @click="emit('update:modelValue', tab)" >
       {{ tab }}
     </button>
 
-    <div
-      class="absolute pointer-events-none transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1)"
+    <div class="absolute pointer-events-none transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1)"
       :style="{
         left: `${focusRect.x}px`,
         top: `${focusRect.y}px`,
@@ -46,7 +39,7 @@ const props = withDefaults(defineProps<{
   blurAmount?: number; // 允许调节模糊程度
   showBorder?: boolean;
 }>(), {
-  borderColor: '#00ffcc',
+  borderColor: 'var(--color-accent-primary)',
   blurAmount: 2 // 默认模糊 2px，不要太大否则看不清字
 });
 

@@ -4,7 +4,7 @@
     <Transition name="popover-fade">
       <div v-if="isOpen" ref="popoverRef" class="fixed z-8000" :style="containerStyle" >
         <!-- 核心修复：阴影在外层，裁剪和滚动在内层 -->
-        <div class="w-full h-full rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl" :style="contentStyle">
+        <div class="w-full h-full rounded-xl overflow-hidden shadow-[0_20px_50px_var(--shadow-color)] backdrop-blur-2xl" :style="contentStyle">
           <div class="h-full w-full overflow-y-auto custom-scrollbar">
             <slot></slot>
           </div>
@@ -161,10 +161,10 @@ onUnmounted(stopListeners)
 
 /* 兼容软件的背景模糊质感（可选，也可在 slot 内容里写） */
 :deep(.fixed) {
-  background: rgba(15, 23, 42, 0.9);
+  background: var(--color-glass-heavy);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border-strong);
   border-radius: 0.75rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 25px -5px var(--shadow-color), 0 8px 10px -6px var(--shadow-color);
 }
 </style>

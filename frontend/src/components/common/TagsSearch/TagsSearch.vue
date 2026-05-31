@@ -36,7 +36,7 @@
     <div class="relative flex-1 z-50 min-w-0 w-6 outline-none">
       <!-- 主输入容器（@keydown.tab.prevent禁止切换焦点功能） -->
       <div @keydown.tab.prevent class="w-full flex items-center gap-1 px-1 pt-0.5 outline-none bg-bg-deep/50 transition-all 
-        border rounded-lg text-text-main border-text-dim/30 fshadow-inner"
+        border rounded-lg text-text-main border-border-base/18 fshadow-inner"
         :class="`hover:border-accent-${listColor} focus:border-accent-${listColor} focus-within:border-accent-${listColor}`">
         <!-- 图标 -->
         <slot name="icon">
@@ -57,7 +57,7 @@
 
           <!-- 输入框 -->
           <input ref="inputRef" v-model="inputValue" type="text" 
-            class="w-full flex-1 min-w-20 truncate bg-transparent border-none outline-none text-xs text-text-main placeholder-text-dim/60 py-0.5"
+            class="w-full flex-1 min-w-20 truncate bg-transparent border-none outline-none text-xs text-text-main placeholder:text-text-disabled py-0.5"
             :placeholder="placeholderText"
             @focus="showSuggestions = true"
             @keydown="handleKeydown" @blur="handleBlur"
@@ -81,18 +81,18 @@
       <!-- 自动补全下拉菜单 -->
       <Transition name="fade-drop">
         <div v-if="showSuggestions && suggestionList.length > 0" ref="suggestionContainer"
-          class="absolute top-full mt-1 max-h-60 w-full overflow-y-auto overflow-x-hidden bg-bg-surface/70 border border-text-main/10 backdrop-blur-md rounded-lg shadow-2xl z-100"
+          class="absolute top-full mt-1 max-h-60 w-full overflow-y-auto overflow-x-hidden bg-bg-surface/70 border border-border-base/10 backdrop-blur-md rounded-lg shadow-2xl z-100"
         >
           <div v-for="(item, index) in suggestionList" :key="index"
             class="pl-1 pr-3 py-1.5 text-xs cursor-pointer flex items-center justify-between group transition-colors"
-            :class="[highlightIndex === index ? 'bg-accent-primary/20 text-text-main' : 'text-text-dim hover:bg-text-main/5']"
+            :class="[highlightIndex === index ? 'bg-accent-primary/20 text-text-main' : 'text-text-dim hover:bg-bg-overlay/5']"
             @mousedown.prevent="applySuggestion(item)"
             @mouseover="highlightIndex = index" v-tooltip="tagTooltip(item)"
           >
             <div class="flex items-center gap-1">
               <!-- 图标/类型指示 -->
-              <span class="text-xs w-8 h-4 flex items-center justify-center rounded bg-text-main/5 font-mono"
-                 :class="item.type === 'key' ? 'text-[rgb(var(--accent-rgb))]' : 'text-green-400'">
+              <span class="text-xs w-8 h-4 flex items-center justify-center rounded bg-bg-overlay/5 font-mono"
+                 :class="item.type === 'key' ? 'text-[rgb(var(--accent-rgb))]' : 'text-accent-success'">
                 {{ item.type === 'key' ? 'KEY' : 'VAL' }}
               </span>
               <!-- 内容 -->
@@ -104,7 +104,7 @@
                       ({{ item.meta.matchInfo }})
                   </span> -->
                 </span>
-                <span :class="highlightIndex === index ? 'text-text-main' : 'text-gray-300'"
+                <span :class="highlightIndex === index ? 'text-text-main' : 'text-text-soft'"
                   :style="{'color': item.color || 'currentColor', 'font-weight': item.color ? 'bold' : 'normal'}">
                   {{ item.type === 'value' ? item.label : '' }}
                 </span>
@@ -119,7 +119,7 @@
       <!-- 标签面板 -->
       <TransitionGroup tag="div" v-if="isExpanded" name="tag-list"
         class="absolute flex flex-wrap p-1.5 gap-1 left-0 right-0 top-full mt-1 ransition-all duration-200 
-        overflow-y-auto overflow-x-hidden bg-bg-deep/70 border border-text-main/10 backdrop-blur-md rounded-lg shadow-2xl z-99"
+        overflow-y-auto overflow-x-hidden bg-bg-deep/70 border border-border-base/10 backdrop-blur-md rounded-lg shadow-2xl z-99"
       >
         <Tag v-for="(tag, index) in modelValue" :key="tag.id || index" :tag="tag" 
             :is-editing="editingIndex===index"

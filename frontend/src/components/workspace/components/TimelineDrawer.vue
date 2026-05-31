@@ -2,19 +2,19 @@
 <template>
   <Teleport to="body">
     <Transition name="slide-right">
-      <div v-if="isOpen" ref="drawerRef" class="fixed top-18 bottom-0 right-0 w-96 bg-bg-deep/95 backdrop-blur-3xl border-l border-text-main/10 shadow-[-10px_0_30px_rgba(0,0,0,0.5)] z-300 flex flex-col">
+      <div v-if="isOpen" ref="drawerRef" class="fixed top-18 bottom-0 right-0 w-96 bg-glass-heavy backdrop-blur-3xl border-l border-border-base/10 shadow-[-10px_0_30px_var(--shadow-color)] z-300 flex flex-col">
         
         <!-- Header -->
-        <div class="px-6 py-5 border-b border-text-main/5 flex justify-between items-start bg-black/20">
+        <div class="px-6 py-5 border-b border-border-base/5 flex justify-between items-start bg-bg-muted/70">
           <div>
             <h3 class="text-xl font-black italic tracking-wider flex items-center gap-2">
               <History class="size-5 text-accent-primary" />
               变动<span class="text-accent-primary">时间线</span>
             </h3>
             <p class="text-xs text-text-dim mt-1 max-w-50 truncate" v-tooltip="modName">{{ modName }}</p>
-            <p class="text-[0.7rem] font-mono text-text-dim/50 mt-0.5">ID: {{ workshopId }}</p>
+            <p class="text-[0.7rem] font-mono text-text-disabled mt-0.5">ID: {{ workshopId }}</p>
           </div>
-          <button @click="$emit('close')" class="p-2 bg-text-main/5 hover:bg-accent-danger/20 hover:text-accent-danger rounded-xl transition-colors">
+          <button @click="$emit('close')" class="p-2 bg-bg-overlay/5 hover:bg-accent-danger/20 hover:text-accent-danger rounded-xl transition-colors">
             <X class="size-5"/>
           </button>
         </div>
@@ -22,17 +22,17 @@
         <!-- 骨架屏 Loading -->
         <div v-if="isLoading" class="flex-1 p-6 space-y-6">
           <div v-for="i in 4" :key="i" class="flex gap-4 animate-pulse">
-            <div class="w-3 h-3 rounded-full bg-text-main/10 mt-1 shrink-0"></div>
+            <div class="w-3 h-3 rounded-full bg-bg-overlay/10 mt-1 shrink-0"></div>
             <div class="space-y-2 flex-1">
-              <div class="h-3 bg-text-main/10 rounded w-1/3"></div>
-              <div class="h-3 bg-text-main/5 rounded w-full"></div>
+              <div class="h-3 bg-bg-overlay/10 rounded w-1/3"></div>
+              <div class="h-3 bg-bg-overlay/5 rounded w-full"></div>
             </div>
           </div>
         </div>
 
         <!-- Timeline 内容区 -->
         <div v-else class="flex-1 overflow-y-auto custom-scrollbar relative p-6 pl-8">
-          <div v-if="!logs || logs.length === 0" class="h-full flex flex-col items-center justify-center text-text-dim/40">
+          <div v-if="!logs || logs.length === 0" class="h-full flex flex-col items-center justify-center text-text-disabled">
             <Activity class="size-12 mb-3 opacity-30" />
             <p class="text-sm font-bold">Steam 本地日志未记录该项目的变动</p>
           </div>
@@ -51,14 +51,14 @@
                 <span class="text-xs font-mono font-bold" :class="getColorClass(log.color, 'text')">
                   {{ formatDate(log.time) }}
                 </span>
-                <span class="px-2 py-0.5 rounded-full text-[0.7rem] font-black uppercase tracking-wider bg-text-main/5 border border-text-main/5"
+                <span class="px-2 py-0.5 rounded-full text-[0.7rem] font-black uppercase tracking-wider bg-bg-overlay/5 border border-border-base/5"
                   :class="getColorClass(log.color, 'text')">
                   {{ log.title }}
                 </span>
               </div>
               
               <!-- 具体描述 -->
-              <div class="text-xs text-text-dim/80 mt-2 leading-relaxed bg-black/20 p-2.5 rounded-lg border border-text-main/5 break-all">
+              <div class="text-xs text-text-dim mt-2 leading-relaxed bg-bg-muted/70 p-2.5 rounded-lg border border-border-base/5 break-all">
                 {{ log.desc }}
               </div>
             </div>

@@ -2,9 +2,9 @@
   <transition name="fade">
     <div v-if="appStore.uiState.showModAliasReviewModal" class="fixed inset-0 z-120 flex items-center justify-center bg-bg-deep/80 backdrop-blur-md">
       <!-- 主容器：批量别名检阅工作台 -->
-      <div class="w-[90%] max-w-7xl h-[86vh] flex flex-col bg-bg-surface/92 border border-accent-special/25 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.6)] overflow-hidden relative">
+      <div class="w-[90%] max-w-7xl h-[86vh] flex flex-col bg-bg-surface/92 border border-accent-special/25 rounded-2xl shadow-[0_0_50px_var(--shadow-color)] overflow-hidden relative">
         <!-- 顶部标题栏：任务总览与关闭入口 -->
-        <div class="px-6 py-4 border-b border-text-main/10 flex items-start justify-between gap-4">
+        <div class="px-6 py-4 border-b border-border-base/10 flex items-start justify-between gap-4">
           <div class="min-w-0">
             <h2 class="text-lg font-black text-text-main">模组别名检阅</h2>
             <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-dim">
@@ -19,13 +19,13 @@
 
         <!-- 主滚动区：按任务组展示待检阅结果 -->
         <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
-          <div v-if="reviewTasks.length === 0" class="h-full flex items-center justify-center text-sm text-text-dim/70">
+          <div v-if="reviewTasks.length === 0" class="h-full flex items-center justify-center text-sm text-text-dim">
             当前没有待检阅的批量结果
           </div>
 
-          <div v-for="group in reviewTasks" :key="group.taskId" class="rounded-2xl border border-text-main/10 bg-black/20 overflow-hidden" >
+          <div v-for="group in reviewTasks" :key="group.taskId" class="rounded-2xl border border-border-base/10 bg-bg-muted/70 overflow-hidden" >
             <!-- 任务组头部：显示生成轮次、输入规模与状态 -->
-            <div class="px-5 py-4 border-b border-text-main/10 bg-black/20">
+            <div class="px-5 py-4 border-b border-border-base/10 bg-bg-muted/70">
               <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
                   <div class="text-base font-black text-text-main">{{ group.title || '模组别名生成任务' }}</div>
@@ -46,18 +46,18 @@
 
             <div class="p-4 space-y-3">
               <div v-for="(item, index) in group.items" :key="`${group.taskId}:${item.package_id}`" class="group rounded-xl border overflow-hidden transition-all flex flex-col relative"
-                :class="item._failed ? 'bg-accent-warn/5 border-accent-warn/50 shadow-[0_0_15px_rgba(var(--color-accent-warn),0.12)]' : 'bg-black/30 border-text-main/10 hover:border-accent-special/40'" >
+                :class="item._failed ? 'bg-accent-warn/5 border-accent-warn/50 shadow-[0_0_15px_rgba(var(--rgb-accent-warn),0.12)]' : 'bg-bg-inset/70 border-border-base/10 hover:border-accent-special/40'" >
                 <!-- 单条检阅卡片：左侧原始模组信息，右侧 AI 结果输入区 -->
                 <div v-if="item._failed" class="absolute bottom-0 right-0 px-3 py-1 bg-accent-warn/20 text-accent-warn text-[0.6rem] z-50 font-bold rounded-tl-lg rounded-br-xl border-t border-l border-accent-warn/30">
                   ⚠ 生成失败，请手填或重试
                 </div>
 
                 <div class="flex flex-1 p-3 gap-4 relative">
-                  <div class="w-4/12 flex gap-3 pr-4 border-r border-text-main/10">
+                  <div class="w-4/12 flex gap-3 pr-4 border-r border-border-base/10">
                     <div class="shrink-0 mt-1">
                       <img v-if="getMod(item.package_id)?.preview_path" :src="appStore.getThumbUrl(item.package_id, getMod(item.package_id).preview_path)"
-                        class="size-10 rounded-lg object-cover border border-text-main/10 shadow-md" >
-                      <div v-else class="size-10 rounded-lg border border-dashed border-text-main/20 flex items-center justify-center bg-black/20 text-text-dim/50">
+                        class="size-10 rounded-lg object-cover border border-border-base/10 shadow-md" >
+                      <div v-else class="size-10 rounded-lg border border-dashed border-border-base/18 flex items-center justify-center bg-bg-muted/70 text-text-disabled">
                         <FolderInput class="size-5" />
                       </div>
                     </div>
@@ -78,8 +78,8 @@
                         AI 别名
                       </label>
                       <input v-model="item.alias_name" placeholder="请输入或点击重试生成..."
-                        class="flex-1 bg-black/40 border rounded-md px-3 py-1.5 text-sm text-accent-cool font-medium focus:outline-none transition-all"
-                        :class="!item.alias_name ? 'border-accent-warn/50 focus:border-accent-warn focus:ring-1 focus:ring-accent-warn/30 placeholder-accent-warn/50' : 'border-text-main/10 focus:border-accent-special focus:ring-1 focus:ring-accent-special/30'" 
+                        class="flex-1 bg-bg-inset/80 border rounded-md px-3 py-1.5 text-sm text-accent-cool font-medium focus:outline-none transition-all"
+                        :class="!item.alias_name ? 'border-accent-warn/50 focus:border-accent-warn focus:ring-1 focus:ring-accent-warn/30 placeholder-accent-warn/50' : 'border-border-base/10 focus:border-accent-special focus:ring-1 focus:ring-accent-special/30'"
                       />
                     </div>
                     <div class="flex items-start gap-2 flex-1">
@@ -87,13 +87,13 @@
                         AI 备注
                       </label>
                       <textarea v-model="item.notes" placeholder="请输入或点击重新生成..."
-                        class="flex-1 h-full bg-black/40 border rounded-md px-3 py-2 text-xs text-text-main leading-relaxed focus:outline-none resize-none transition-all"
-                        :class="!item.notes ? 'border-accent-warn/50 focus:border-accent-warn focus:ring-1 focus:ring-accent-warn/30 placeholder-accent-warn/50' : 'border-text-main/10 focus:border-accent-special focus:ring-1 focus:ring-accent-special/30'">
+                        class="flex-1 h-full bg-bg-inset/80 border rounded-md px-3 py-2 text-xs text-text-main leading-relaxed focus:outline-none resize-none transition-all"
+                        :class="!item.notes ? 'border-accent-warn/50 focus:border-accent-warn focus:ring-1 focus:ring-accent-warn/30 placeholder-accent-warn/50' : 'border-border-base/10 focus:border-accent-special focus:ring-1 focus:ring-accent-special/30'">
                       </textarea>
                     </div>
                   </div>
 
-                  <div class="absolute right-1 top-1 flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-bg-surface/80 backdrop-blur-sm p-1 rounded-lg border border-text-main/10">
+                  <div class="absolute right-1 top-1 flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-glass-medium backdrop-blur-sm p-1 rounded-lg border border-border-base/10">
                     <button class="p-2 rounded-md hover:bg-accent-special/20 text-accent-special transition-colors disabled:opacity-50"
                       :disabled="regeneratingIds.has(item.package_id)" @click="regenerateItem(group.taskId, item)" >
                       <Wand2 v-if="!regeneratingIds.has(item.package_id)" class="size-4" v-tooltip="'重新生成'" />
@@ -107,12 +107,12 @@
               </div>
             </div>
 
-            <div class="px-5 py-3 border-t border-text-main/10 bg-black/15 flex items-center justify-end gap-3">
+            <div class="px-5 py-3 border-t border-border-base/10 bg-bg-muted/60 flex items-center justify-end gap-3">
               <button class="px-4 py-2 rounded-lg text-sm text-accent-danger bg-accent-danger/10 hover:bg-accent-danger/20 transition-colors"
                 @click="removeTaskGroup(group.taskId)" >
                 移除此组
               </button>
-              <button class="px-5 py-2 rounded-lg bg-accent-special text-black text-sm font-black disabled:opacity-40"
+              <button class="px-5 py-2 rounded-lg bg-accent-special text-on-accent-special text-sm font-black disabled:opacity-40"
                 :disabled="!group.items.length" @click="saveTaskGroup(group.taskId)" >
                 应用本组 ({{ group.items.length }})
               </button>
@@ -121,7 +121,7 @@
         </div>
 
         <!-- 底部总操作栏：保留、清空或一次性应用全部结果 -->
-        <div class="px-6 py-4 border-t border-text-main/10 flex items-center justify-between gap-4">
+        <div class="px-6 py-4 border-t border-border-base/10 flex items-center justify-between gap-4">
           <div class="text-xs text-text-dim">
             未确认应用前，结果会一直保留在这里，可随时回来继续检阅。
           </div>
@@ -130,11 +130,11 @@
               :disabled="reviewTasks.length === 0" @click="clearAll" >
               清空全部
             </button>
-            <button class="px-5 py-2 rounded-lg bg-text-main/10 text-text-main text-sm font-bold hover:bg-text-main/15 transition-colors"
+            <button class="px-5 py-2 rounded-lg bg-bg-overlay/10 text-text-main text-sm font-bold hover:bg-bg-overlay/10 transition-colors"
               @click="closeModal" >
               稍后处理
             </button>
-            <button class="px-5 py-2 rounded-lg bg-accent-special text-black text-sm font-black disabled:opacity-40"
+            <button class="px-5 py-2 rounded-lg bg-accent-special text-on-accent-special text-sm font-black disabled:opacity-40"
               :disabled="reviewTasks.length === 0" @click="applyAll" >
               应用全部 ({{ totalPendingItems }})
             </button>
@@ -340,6 +340,6 @@ const clearAll = () => {
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(var(--color-accent-special), 0.5); }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(var(--rgb-accent-special), 0.5); }
 </style>

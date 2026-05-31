@@ -3,7 +3,7 @@
     :class="isHighlight ? 'ring-2 ring-accent-highlight rounded-lg' : ''">
     <!-- 标题区：分组面板现在由外层统一虚拟滚动，标题只负责分组自身操作。 -->
     <div @click="toggle" :class="['list-none select-none px-1 flex text-text-dim hover:text-text-main items-center justify-between gap-0.5 rounded-lg font-medium',
-      'bg-[rgba(var(--rgb-components),0.5)] hover:bg-[rgba(var(--rgb-components),0.6)] border border-text-main/5']">
+      'bg-[rgba(var(--rgb-components),0.5)] hover:bg-[rgba(var(--rgb-components),0.6)] border border-border-base/5']">
       <!-- 抓取图标。真正的拖拽会话由外层 VirtualDragList 接管，避免嵌套列表互相抢事件。 -->
       <div v-tooltip="`移动`" class="select-trigger cursor-move p-1 text-text-dim hover:text-text-main hover:scale-130 transition-all">
         <svg class="size-5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -23,8 +23,8 @@
           取色器内部会创建 Popper/Teleport 和拖拽监听，不适合在虚拟滚动标题行里常驻。
           默认只渲染轻量色块；用户明确点击改色时再挂载真实 ColorPicker，避免滚动穿过大量分组时反复创建重组件。
         -->
-        <button v-if="!isColorPickerOpen" type="button" class="size-4 rounded-full border border-text-main/20 shadow-sm transition-transform hover:scale-125"
-          :style="{ backgroundColor: groupData.color || '#888888' }"
+        <button v-if="!isColorPickerOpen" type="button" class="size-4 rounded-full border border-border-base/18 shadow-sm transition-transform hover:scale-125"
+          :style="{ backgroundColor: groupData.color || 'var(--color-text-subtle)888' }"
           @mousedown.stop
           @click.stop="isColorPickerOpen = true">
         </button>
@@ -36,22 +36,22 @@
 
       <!-- 标题 - 根据编辑状态显示输入框或文本 -->
       <span v-tooltip="groupData.name" :class="`flex-1 flex min-w-0 text-sm px-1 mx-1 text-text-main font-bold tracking-wider items-center gap-2`">
-        <input class="flex-1 px-0 py-0.5 min-w-0 rounded bg-bg-deep/70 border border-text-main/10 text-text-main focus:border-accent-primary focus:outline-none" 
+        <input class="flex-1 px-0 py-0.5 min-w-0 rounded bg-bg-deep/70 border border-border-base/10 text-text-main focus:border-accent-primary focus:outline-none"
           v-if="isEditingName" v-model="editingGroupName" @click.stop @keyup.enter="saveGroupName" @blur="saveGroupName" ref="nameInputRef"/>
         <span v-if="!isEditingName" class="min-w-0 truncate">{{ groupData.name }}</span>
       </span>
 
-      <span :class="`text-xs bg-black/30 px-2 py-0.5 rounded text-[rgba(var(--rgb-components),1)]`">
+      <span :class="`text-xs bg-bg-inset/70 px-2 py-0.5 rounded text-[rgba(var(--rgb-components),1)]`">
         {{ groupModIds.length }}
       </span>
 
       <!-- 编辑/保存 与 删除 -->
       <span class="flex items-center">
-        <button @mousedown.prevent @click.stop="openExportDialog" v-tooltip="`打包导出分组模组`" :class="`rounded-lg p-1 hover:bg-text-dim/30 cursor-pointer text-text-dim text-xs font-bold shadow-lg hover:shadow-bg-deep/50 transition-all`">
+        <button @mousedown.prevent @click.stop="openExportDialog" v-tooltip="`打包导出分组模组`" :class="`rounded-lg p-1 hover:bg-bg-overlay/10 cursor-pointer text-text-dim text-xs font-bold shadow-lg hover:shadow-bg-deep/50 transition-all`">
           <Package class="size-4.5 hover:text-accent-special" />
         </button>
         <!-- 编辑/保存按钮 -->
-        <button @mousedown.prevent @click.stop="toggleEditName" v-tooltip="`编辑分组名称`" :class="`rounded-lg p-1 hover:bg-text-dim/30 cursor-pointer text-text-dim text-xs font-bold shadow-lg hover:shadow-bg-deep/50 transition-all`">
+        <button @mousedown.prevent @click.stop="toggleEditName" v-tooltip="`编辑分组名称`" :class="`rounded-lg p-1 hover:bg-bg-overlay/10 cursor-pointer text-text-dim text-xs font-bold shadow-lg hover:shadow-bg-deep/50 transition-all`">
           <svg v-if="!isEditingName" class="hover:text-accent-secondary size-4.5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M7 42H43" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
             <path d="M11 26.7199V34H18.3172L39 13.3081L31.6951 6L11 26.7199Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" />
@@ -62,8 +62,8 @@
           </svg>
         </button>
         <!-- 删除按钮 -->
-        <button @click.stop="deleteGroup" v-tooltip="`删除分组`" :class="`rounded-lg p-1 hover:bg-text-dim/30 cursor-pointer 
-          text-text-dim hover:text-accent-danger text-xs font-bold shadow-lg hover:shadow-bg-deep/50 
+        <button @click.stop="deleteGroup" v-tooltip="`删除分组`" :class="`rounded-lg p-1 hover:bg-bg-overlay/10 cursor-pointer
+          text-text-dim hover:text-accent-danger text-xs font-bold shadow-lg hover:shadow-bg-deep/50
           transition-all`">
           <svg class="size-4.5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M8 11L40 11" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />

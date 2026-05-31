@@ -1,6 +1,6 @@
 <template>
   <div v-if="theme" class="flex shrink-0 items-center gap-1">
-    <span v-for="color in colors" :key="color" class="size-4 rounded-full border border-black/20 shadow-sm"
+    <span v-for="color in colors" :key="color" class="size-4 rounded-full border border-border-base/18 shadow-sm"
       :style="{ backgroundColor: color }"
     ></span>
   </div>

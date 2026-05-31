@@ -11,7 +11,7 @@
     <!-- 主输入区域 -->
     <div class="relative group min-w-0 max-w-full flex items-center" :class="{ 'flex-1': mini }" >
       <input ref="inputRef" type="text" :value="inputValue" :placeholder="placeholder" :readonly="!editable"
-        :class="[ 'input-glass min-w-0 w-full bg-text-main/5 border truncate border-text-main/10 rounded-lg text-sm text-text-main transition-all duration-200 focus:outline-none focus:border-accent-primary/50 focus:shadow-[0_0_15px_rgba(6,182,212,0.15)] placeholder:text-text-main/20 placeholder:italic',
+        :class="[ 'input-glass min-w-0 w-full bg-bg-elevated/70 border truncate border-border-base/10 rounded-lg text-sm text-text-main transition-all duration-200 focus:outline-none focus:border-accent-primary/50 focus:shadow-[0_0_15px_rgba(var(--rgb-accent-primary),0.15)] placeholder:text-text-disabled placeholder:italic',
           mini ? 'py-1 pl-2 pr-7 text-xs' : 'w-full h-9 px-3',
           { 'cursor-pointer': !editable, 'cursor-text': editable }
         ]"
@@ -34,11 +34,11 @@
 
     <!-- 下拉面板 -->
     <FixedPopover :triggerRef="inputRef" :isOpen="isOpen">
-      <div @mousedown.prevent class="p-1 bg-bg-surface backdrop-blur-xl border border-text-main/10 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
+      <div @mousedown.prevent class="p-1 bg-bg-surface backdrop-blur-xl border border-border-base/10 rounded-xl shadow-[0_10px_40px_-10px_var(--shadow-color)] max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
         <!-- 有选项时 -->
         <!-- 体验优化：当有自定义输入且未完全匹配时，提示用户可以作为新值 -->
         <button v-if="showCustomHint" type="button" @click="commitInputValue"
-          class="w-full flex items-center px-2 py-1.5 rounded-lg text-xs text-left bg-text-main/5 border border-dashed border-text-main/20 text-accent-primary mb-1 hover:bg-accent-primary/10 transition-colors"
+          class="w-full flex items-center px-2 py-1.5 rounded-lg text-xs text-left bg-bg-overlay/5 border border-dashed border-border-base/18 text-accent-primary mb-1 hover:bg-accent-primary/10 transition-colors"
           :class="{'ring-1 ring-accent-primary/50': highlightedIndex === -1}"
         >
           <span class="mr-1.5 opacity-70">↵</span>
@@ -49,9 +49,9 @@
             class="w-full flex items-center px-2 py-1 rounded-lg text-xs text-left transition-all duration-150"
             :class="[
               // 1. 选中状态
-              isActive(opt.value) ? 'bg-accent-primary/20 text-accent-primary font-medium' : 'text-gray-300 hover:bg-text-main/10 hover:text-text-main',
+              isActive(opt.value) ? 'bg-accent-primary/20 text-accent-primary font-medium' : 'text-text-soft hover:bg-bg-overlay/10 hover:text-text-main',
               // 2. 键盘导航高亮
-              { 'bg-text-main/10 ring-1 ring-text-main/20': index === highlightedIndex },
+              { 'bg-bg-overlay/10 ring-1 ring-border-base/18': index === highlightedIndex },
               // 3. 搜索匹配视觉区分：不匹配的项降低透明度
               isMatch(opt) ? 'opacity-100' : 'opacity-40 grayscale hover:opacity-80 hover:grayscale-0'
             ]"

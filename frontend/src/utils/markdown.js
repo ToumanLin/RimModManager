@@ -10,10 +10,10 @@ const md = new MarkdownIt({
   highlight: (str, lang) => {
     if (lang && hljs.getLanguage(lang)) {
       try {
-        return `<pre class="hljs p-3 rounded-lg text-xs overflow-x-auto custom-scrollbar my-2 border border-white/5 bg-black/50"><code>${hljs.highlight(str, { language: lang, ignoreIllegals: true }).value}</code></pre>`
+        return `<pre class="hljs p-3 rounded-lg text-xs overflow-x-auto custom-scrollbar my-2 border border-border-base/10 bg-bg-inset/90"><code>${hljs.highlight(str, { language: lang, ignoreIllegals: true }).value}</code></pre>`
       } catch {}
     }
-    return `<pre class="hljs p-3 rounded-lg text-xs overflow-x-auto custom-scrollbar my-2 border border-white/5 bg-black/50"><code>${md.utils.escapeHtml(str)}</code></pre>`
+    return `<pre class="hljs p-3 rounded-lg text-xs overflow-x-auto custom-scrollbar my-2 border border-border-base/10 bg-bg-inset/90"><code>${md.utils.escapeHtml(str)}</code></pre>`
   },
 })
 
@@ -39,7 +39,7 @@ const rewriteMarkdownImages = (html, resolveImageUrl) => {
 }
 
 export const renderMarkdownContent = (text, options = {}) => {
-  const rendered = md.render(String(text || '')).replace(/<code>/g, '<code class="bg-black/30 text-accent-special px-1.5 py-0.5 rounded text-sm font-mono border border-white/5">')
+  const rendered = md.render(String(text || '')).replace(/<code>/g, '<code class="bg-bg-inset/70 text-accent-special px-1.5 py-0.5 rounded text-sm font-mono border border-border-base/10">')
   const withCachedImages = rewriteMarkdownImages(rendered, options.resolveImageUrl)
   return sanitizeRenderedHtml(withCachedImages)
 }

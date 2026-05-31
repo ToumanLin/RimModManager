@@ -1,28 +1,28 @@
 <template>
   <div class="space-y-3">
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-xs font-bold uppercase tracking-wide text-text-dim/75">批量处理</span>
+      <span class="text-xs font-bold uppercase tracking-wide text-text-dim">批量处理</span>
       <label v-for="option in strategyOptions" :key="option.value" class="rounded-full flex items-center border px-2 py-1 text-xs"
-        :class="strategy === option.value ? 'border-accent-primary/35 bg-accent-primary/10 text-accent-primary' : 'border-text-main/10 bg-black/15 text-text-dim'" >
+        :class="strategy === option.value ? 'border-accent-primary/35 bg-accent-primary/10 text-accent-primary' : 'border-border-base/10 bg-bg-muted/60 text-text-dim'" >
         <input class="mr-1 accent-accent-primary" type="radio" :checked="strategy === option.value" @change="strategy = option.value" >
         {{ option.label }}
       </label>
     </div>
 
-    <div v-for="row in rows" :key="row.folder_name" class="rounded-xl border border-text-main/10 bg-black/15 p-3" >
+    <div v-for="row in rows" :key="row.folder_name" class="rounded-xl border border-border-base/10 bg-bg-muted/60 p-3" >
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="text-sm font-bold text-text-main">{{ row.folder_name }}</div>
-        <div class="text-[0.68rem] text-text-dim/75">{{ row.existing_path }}</div>
+        <div class="text-[0.68rem] text-text-dim">{{ row.existing_path }}</div>
       </div>
 
       <div class="mt-3 grid grid-cols-3 gap-3">
-        <div class="text-xs text-text-dim/75">
+        <div class="text-xs text-text-dim">
           <CommonSelect v-model="row.mode" label="处理方式" :options="modeOptions" />
         </div>
-        <div v-if="row.mode === 'rename'" class="col-span-2 text-xs text-text-dim/75">
+        <div v-if="row.mode === 'rename'" class="col-span-2 text-xs text-text-dim">
           <CommonInput v-model="row.rename_to" label="新文件夹名" placeholder="留空会自动补一个新名字" />
         </div>
-        <div v-else class="col-span-2 rounded-lg border border-text-main/8 bg-black/10 px-3 py-2 text-xs text-text-dim/75">
+        <div v-else class="col-span-2 rounded-lg border border-border-base/10 bg-bg-muted/50 px-3 py-2 text-xs text-text-dim">
           {{ row.mode === 'overwrite' ? '导入后会直接替换本地同名文件夹。' : '这项将跳过。' }}
         </div>
 

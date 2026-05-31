@@ -6,7 +6,7 @@
       @contextmenu.prevent="openContextMenu"
       @mouseenter="handleMouseEnter"
       @mouseleave="handleMouseLeave"
-      class="matrix-select-trigger flex items-center gap-2 p-1.5 rounded-lg border transition-all cursor-pointer group bg-text-dim/10"
+      class="matrix-select-trigger flex items-center gap-2 p-1.5 rounded-lg border transition-all cursor-pointer group bg-bg-overlay/5"
       :class="[
         mod.is_missing ? 'opacity-70 grayscale border-dashed border-accent-danger/50 bg-accent-danger/5 hover:bg-accent-danger/10 hover:border-accent-danger/30' :
         storeType === 'workshop' ? 'border-accent-primary/10 hover:bg-accent-primary/10 hover:border-accent-primary/30' :
@@ -16,14 +16,14 @@
       ]">
       
       <!-- 图标 -->
-      <img v-if="mod.preview_path" :src="appStore.getThumbUrl(mod.package_id, mod.preview_path)" loading="lazy" class="size-10 rounded object-cover border border-text-main/10 shadow-sm opacity-80 group-hover:opacity-100" />
-      <div v-else class="size-10 rounded bg-black/40 border border-text-main/10 flex items-center justify-center">
-        <span class="text-[0.6rem] text-text-dim/50 font-bold uppercase">NO IMG</span>
+      <img v-if="mod.preview_path" :src="appStore.getThumbUrl(mod.package_id, mod.preview_path)" loading="lazy" class="size-10 rounded object-cover border border-border-base/10 shadow-sm opacity-80 group-hover:opacity-100" />
+      <div v-else class="size-10 rounded bg-bg-inset/80 border border-border-base/10 flex items-center justify-center">
+        <span class="text-[0.6rem] text-text-disabled font-bold uppercase">NO IMG</span>
       </div>
 
       <!-- 信息 -->
       <div class="flex-1 min-w-0">
-        <div class="text-xs font-bold text-text-main truncate group-hover:text-white transition-colors">
+        <div class="text-xs font-bold text-text-main truncate group-hover:text-text-inverse transition-colors">
           {{ mod.name || mod.package_id }}
         </div>
         <div v-if="mod.package_id" title="包名" class="text-[0.65rem] truncate text-text-dim font-mono mt-0.5 opacity-60">
@@ -45,41 +45,41 @@
         <span class="text-[0.65rem] font-mono" :class="matrixState.isNew ? 'text-accent-primary font-black' : 'text-text-dim'">
           创建：{{ formatTime(mod.file_create_time) }}
         </span>
-        <span class="text-[0.6rem] font-mono text-text-dim opacity-50 bg-black/40 px-1 rounded">
+        <span class="text-[0.6rem] font-mono text-text-dim opacity-50 bg-bg-inset/80 px-1 rounded">
           {{ formatFileSize(mod.file_size) }}
         </span>
       </div>
 
       <!-- 状态角标 -->
       <div class="absolute top-0 left-1 z-100 scale-90 flex items-center justify-center gap-1">
-        <span v-if="matrixState.isNew" title="新增" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-primary animate-pulse">
+        <span v-if="matrixState.isNew" title="新增" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-primary bg-accent-primary animate-pulse">
           NEW
         </span>
-        <span v-if="matrixState.isChange" title="变更" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-success animate-pulse">
+        <span v-if="matrixState.isChange" title="变更" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-success bg-accent-success animate-pulse">
           CHANGE
         </span>
-        <span v-if="matrixState.isUpdate" title="可更新" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-warn animate-pulse">
+        <span v-if="matrixState.isUpdate" title="可更新" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-warn bg-accent-warn animate-pulse">
           UPDATE
         </span>
-        <span v-if="matrixState.isSame" :title="sameItemsTooltip" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-special animate-pulse">
+        <span v-if="matrixState.isSame" :title="sameItemsTooltip" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-special bg-accent-special animate-pulse">
           SAME
         </span>
-        <span v-if="matrixState.isConflict" :title="conflictItemsTooltip" class="px-1.5 py-0.5 rounded-md text-[0.55rem] font-black text-black bg-accent-danger animate-pulse">
+        <span v-if="matrixState.isConflict" :title="conflictItemsTooltip" class="px-1.5 py-0.5 rounded-md text-[0.55rem] font-black text-on-accent-danger bg-accent-danger animate-pulse">
           CONFLICT
         </span>
-        <span v-if="matrixState.isReplace" :title="replacementItemsTooltip" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-tip animate-pulse">
+        <span v-if="matrixState.isReplace" :title="replacementItemsTooltip" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-tip bg-accent-tip animate-pulse">
           REPLACE
         </span>
-        <span v-if="matrixState.isDisabled" title="已禁用" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-warning animate-pulse">
+        <span v-if="matrixState.isDisabled" title="已禁用" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-warn bg-accent-warning animate-pulse">
           DISABLED
         </span>
-        <span v-if="matrixState.isMissing" title="文件缺失" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-danger animate-pulse">
+        <span v-if="matrixState.isMissing" title="文件缺失" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-danger bg-accent-danger animate-pulse">
           MISSING
         </span>
-        <span v-if="matrixState.isWorkshopUnavailable" title="Steam 已无法获取该工坊项目详情，可能已下架或不可访问" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-danger animate-pulse">
+        <span v-if="matrixState.isWorkshopUnavailable" title="Steam 已无法获取该工坊项目详情，可能已下架或不可访问" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-danger bg-accent-danger animate-pulse">
           失效
         </span>
-        <span v-if="matrixState.isDeleted" title="已删除" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-black bg-accent-danger animate-pulse">
+        <span v-if="matrixState.isDeleted" title="已删除" class="px-1.5 py-0.5 rounded-md text-[0.6rem] font-black text-on-accent-danger bg-accent-danger animate-pulse">
           DELETED
         </span>
       </div>
@@ -92,11 +92,11 @@
         <div v-if="showPopover" 
           @mouseenter="clearHideTimer"
           @mouseleave="hidePopover"
-          class="fixed z-9999 w-72 bg-bg-deep/95 backdrop-blur-3xl border border-text-main/10 rounded-xl shadow-2xl p-4 flex flex-col gap-3"
+          class="fixed z-9999 w-72 bg-glass-heavy backdrop-blur-3xl border border-border-base/10 rounded-xl shadow-2xl p-4 flex flex-col gap-3"
           :style="popoverStyle">
           
           <!-- 详细内容区 -->
-          <div class="flex items-center gap-3 border-b border-text-main/10 pb-2">
+          <div class="flex items-center gap-3 border-b border-border-base/10 pb-2">
             <component :is="sourceIcon" class="size-5" :class="sourceColor" />
             <div class="min-w-0">
               <div class="text-sm font-black text-text-main truncate">{{ mod.name }}</div>
@@ -118,11 +118,11 @@
               <div class="flex justify-between"><span class="opacity-60">替代项:</span> <span>{{ replacementTargets.length || '无' }}</span></div>
             </div>
 
-          <div v-if="mod.path" class="mt-2 p-2 bg-black/40 rounded-lg border border-text-main/5 text-[0.7rem] text-text-dim break-all cursor-text select-text">
+          <div v-if="mod.path" class="mt-2 p-2 bg-bg-inset/80 rounded-lg border border-border-base/5 text-[0.7rem] text-text-dim break-all cursor-text select-text">
             {{ mod.path }}
           </div>
           
-          <div class="text-[0.65rem] text-text-dim/50 mt-1 italic text-center">右键点击卡片可查看变动时间线与更多操作</div>
+          <div class="text-[0.65rem] text-text-disabled mt-1 italic text-center">右键点击卡片可查看变动时间线与更多操作</div>
         </div>
 
       </Transition>

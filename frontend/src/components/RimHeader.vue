@@ -2,13 +2,13 @@
   <!-- =======================
         顶部功能栏 (Navbar)
       ======================= -->
-  <header class="m-1 h-14 bg-bg-surface/60 rounded-2xl flex items-center px-3 justify-between border border-text-main/5 shadow-lg shrink-0 z-50">
+  <header class="m-1 h-14 bg-bg-surface/60 rounded-2xl flex items-center px-3 justify-between border border-border-base/5 shadow-lg shrink-0 z-50">
     <!-- 标题 -->
     <div class="flex items-center gap-4 mx-1 ">
-      <h1 class="font-bold tracking-wider text-lg bg-linear-to-r from-text-main to-gray-400 bg-clip-text text-transparent">
+      <h1 class="font-bold tracking-wider text-lg bg-linear-to-r from-text-main to-text-dim bg-clip-text text-transparent">
         <span class="text-accent-primary animate-breathe ">RIM</span> MODMANAGER
       </h1>
-      <span class="px-2 py-0.5 rounded text-xs bg-text-main/5 text-text-dim border border-text-main/5 ">v {{ appStore.appVersion }}</span>
+      <span class="px-2 py-0.5 rounded text-xs bg-bg-overlay/5 text-text-dim border border-border-base/5 ">v {{ appStore.appVersion }}</span>
       <!-- 环境切换器 -->
       <div data-tour="profile-switcher">
         <ProfileSwitcher />
@@ -22,7 +22,7 @@
       </button>
 
       <button data-tour="workspace-btn" @click="appStore.uiState.showWorkspace = true" v-tooltip="`库存管理中枢`"
-          class="px-4 py-1.5 rounded-xl bg-accent-special/10 hover:bg-accent-special/20 border border-accent-special/30 text-accent-special text-sm font-bold shadow-[0_0_10px_rgba(16,185,129,0.2)] transition-all flex items-center gap-2">
+          class="px-4 py-1.5 rounded-xl bg-accent-special/10 hover:bg-accent-special/20 border border-accent-special/30 text-accent-special text-sm font-bold shadow-[0_0_10px_rgba(var(--rgb-accent-special),0.2)] transition-all flex items-center gap-2">
         <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         库存枢纽
       </button>
@@ -59,7 +59,7 @@
 
       <div v-tooltip="`加载序列`" class="p-2 rounded-full group/folder relative hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
         <ClipboardList class="size-6" />
-        <div class="absolute top-full right-0 w-35 overflow-hidden rounded-md flex flex-col items-center justify-center bg-glass-medium border border-text-main/10 shadow-2xl backdrop-blur-lg opacity-0 
+        <div class="absolute top-full right-0 w-35 overflow-hidden rounded-md flex flex-col items-center justify-center bg-glass-medium border border-border-base/10 shadow-2xl backdrop-blur-lg opacity-0
           invisible transform origin-top-right group-hover/folder:opacity-100 group-hover/folder:visible transition-all duration-300">
           <button @click="loadOrder('0')" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent"
             v-tooltip="'导入加载序列（支持 ModsConfig.xml / ModList.xml / .rml / 存档.rws / RimPy XML / RimSort JSON / 文本列表 / Workshop ID 列表）'" >
@@ -87,10 +87,10 @@
           </button>
         </div>
       </div>
-      
+
       <div v-tooltip="`打开文件夹`" class="p-2 rounded-full group/folder relative hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
         <svg class="size-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
-        <div class="absolute top-full right-0 w-35 overflow-hidden rounded-md flex flex-col items-center justify-center bg-glass-medium border border-text-main/10 shadow-2xl backdrop-blur-sm opacity-0 
+        <div class="absolute top-full right-0 w-35 overflow-hidden rounded-md flex flex-col items-center justify-center bg-glass-medium border border-border-base/10 shadow-2xl backdrop-blur-sm opacity-0
           invisible transform origin-top-right group-hover/folder:opacity-100 group-hover/folder:visible transition-all duration-300">
           <button @click="appStore.openPath(profileStore.activeContext.user_data_path)" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent">用户数据目录</button>
           <button @click="appStore.openPath(profileStore.activeContext.game_saves_path)" class="m-0.5 p-1 rounded-md hover:bg-accent-primary/10 text-text-dim hover:text-text-main transition bg-transparent">游戏存档目录</button>
@@ -104,7 +104,7 @@
       </div>
 
 
-      <button data-tour="rulePanel-btn" @click="appStore.toggleUiState('showRuleDrawer')" v-tooltip="`规则页面`" 
+      <button data-tour="rulePanel-btn" @click="appStore.toggleUiState('showRuleDrawer')" v-tooltip="`规则页面`"
         class="p-2 rounded-full hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
         <svg class="size-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13"/><path d="m8 6 2-2"/><path d="m18 16 2-2"/><path d="m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
       </button>
@@ -170,13 +170,13 @@ const refresh = async () => {
 
 <style scoped>
 .read-the-docs {
-  color: #888;
+  color: var(--color-text-subtle);
 }
 
 /* 文本呼吸光晕 */
 @keyframes breathe {
-    0%, 100% { text-shadow: 0 0 5px rgba(59, 130, 246, 0.7), 0 0 10px rgba(59, 130, 246, 0.5); }
-    50% { text-shadow: 0 0 15px rgba(59, 130, 246, 0.9), 0 0 30px rgba(59, 130, 246, 0.7), 0 0 45px rgba(59, 130, 246, 0.5); }
+    0%, 100% { text-shadow: 0 0 5px rgba(var(--rgb-accent-primary), 0.7), 0 0 10px rgba(var(--rgb-accent-primary), 0.5); }
+    50% { text-shadow: 0 0 15px rgba(var(--rgb-accent-primary), 0.9), 0 0 30px rgba(var(--rgb-accent-primary), 0.7), 0 0 45px rgba(var(--rgb-accent-primary), 0.5); }
 }
 .animate-breathe { animation: breathe 8s ease-in-out infinite; }
 
@@ -190,7 +190,7 @@ const refresh = async () => {
     content: '';
     position: absolute;
     inset: 0;
-    background-image: radial-gradient(circle, rgba(59, 130, 246, 0.8) 0%, rgba(59, 130, 246, 0) 70%);
+    background-image: radial-gradient(circle, rgba(var(--rgb-accent-primary), 0.8) 0%, rgba(var(--rgb-accent-primary), 0) 70%);
     filter: blur(5px);
     z-index: -1;
     opacity: 0;

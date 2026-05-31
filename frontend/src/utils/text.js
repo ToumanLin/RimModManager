@@ -40,7 +40,7 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
 
   // 1. 先统一换行格式，后面的正则处理都按 `\n` 进行。
   let htmlText = unityText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\\n/g, '\n')
-  const tableCellClass = 'p-2 border border-text-main/10'
+  const tableCellClass = 'p-2 border border-border-base/10'
   const tableHeaderClass = `${tableCellClass} text-left align-top font-semibold`
   const protectedBlocks = []
 
@@ -93,7 +93,7 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
         : align === 'inline'
           ? 'inline-block align-middle mx-1'
           : 'mx-auto'
-    const classes = [sizeClasses, alignClasses, 'rounded-lg', 'border', 'border-text-main/10', extraClasses]
+    const classes = [sizeClasses, alignClasses, 'rounded-lg', 'border', 'border-border-base/10', extraClasses]
       .filter(Boolean)
       .join(' ')
     const altText = escapeHtml(alt || 'preview-image')
@@ -109,11 +109,11 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
 
   // `noparse` 需要最先保护，否则内部标记会被后续规则提前消费。
   htmlText = htmlText.replace(/\[noparse\]([\s\S]*?)\[\/noparse\]/gi, (_, content) => (
-    protectBlock(`<code class="bg-black/30 px-1 rounded font-mono text-xs">${escapeHtml(content)}</code>`)
+    protectBlock(`<code class="bg-bg-inset/70 px-1 rounded font-mono text-xs">${escapeHtml(content)}</code>`)
   ))
   // `code` 也必须在前面保护，否则内部链接、列表或其它标签会被继续解析。
   htmlText = htmlText.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, (_, content) => (
-    protectBlock(`<pre class="bg-black/30 rounded font-mono text-xs block p-2 my-2 overflow-x-auto"><code>${escapeHtml(content)}</code></pre>`)
+    protectBlock(`<pre class="bg-bg-inset/70 rounded font-mono text-xs block p-2 my-2 overflow-x-auto"><code>${escapeHtml(content)}</code></pre>`)
   ))
 
   htmlText = htmlText.replace(/\[table([^\]]*)\]\s*/gi, (_, rawAttrs = '') => {
@@ -150,7 +150,7 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
     { regex: /\[\/i\]/gi, replace: '</em>' },
     // 表格相关 (添加了 tailwind 边框类)
     { regex: /\[\/table\]\s*/gi, replace: '</table>' },
-    { regex: /\[tr\]\s*/gi, replace: '<tr class="border-b border-text-main/10">' },
+    { regex: /\[tr\]\s*/gi, replace: '<tr class="border-b border-border-base/10">' },
     { regex: /\[\/tr\]\s*/gi, replace: '</tr>' },
     { regex: /\[th\]\s*/gi, replace: `<th class="${tableHeaderClass}">` },
     { regex: /\[\/th\]\s*/gi, replace: '</th>' },
@@ -164,7 +164,7 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
     { regex: /\[\*\]\s*/gi, replace: '</li><li>' },
     { regex: /<li><\/li>/gi, replace: '' },
     // 分割线 
-    { regex: /\[hr\]\s*/gi, replace: '<div class="w-3/4 mx-auto border-t border-text-main/10 my-4"></div>' },
+    { regex: /\[hr\]\s*/gi, replace: '<div class="w-3/4 mx-auto border-t border-border-base/10 my-4"></div>' },
     { regex: /\[\/hr\]\s*/gi, replace: '' },
     { regex: /\[br\]/gi, replace: '<br>' },
     { regex: /\[p\]/gi, replace: '<p class="mb-2">' },
@@ -184,7 +184,7 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
 
     if (flags.has('noborder')) {
       nextContent = nextContent
-        .replace(/<tr class="border-b border-text-main\/10">/gi, '<tr>')
+        .replace(/<tr class="border-b border-border-base\/10">/gi, '<tr>')
         .replace(new RegExp(`<th class="${tableHeaderClass.replace(/\//g, '\\/')}"`, 'g'), '<th class="p-2 text-left align-top font-semibold"')
         .replace(new RegExp(`<td class="${tableCellClass.replace(/\//g, '\\/')}"`, 'g'), '<td class="p-2"')
     }
@@ -218,19 +218,19 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
   htmlText = htmlText
     .replace(
       /\[quote=([^\]]+)\]([\s\S]*?)\[\/quote\]/gi,
-      (_, author, content) => `<blockquote class="my-3 rounded-lg border-l-4 border-text-main/15 bg-black/15 px-4 py-3"><div class="mb-2 text-xs text-text-dim">Originally posted by ${escapeHtml(author)}:</div><div>${content}</div></blockquote>`,
+      (_, author, content) => `<blockquote class="my-3 rounded-lg border-l-4 border-border-base/10 bg-bg-muted/60 px-4 py-3"><div class="mb-2 text-xs text-text-dim">Originally posted by ${escapeHtml(author)}:</div><div>${content}</div></blockquote>`,
     )
     .replace(
       /\[quote\]([\s\S]*?)\[\/quote\]/gi,
-      (_, content) => `<blockquote class="my-3 rounded-lg border-l-4 border-text-main/15 bg-black/15 px-4 py-3">${content}</blockquote>`,
+      (_, content) => `<blockquote class="my-3 rounded-lg border-l-4 border-border-base/10 bg-bg-muted/60 px-4 py-3">${content}</blockquote>`,
     )
     .replace(
       /\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi,
-      (_, content) => `<details class="inline-block max-w-full align-middle rounded-md border border-text-main/10 bg-black/20 px-2 py-1"><summary class="cursor-pointer select-none text-xs text-text-dim">剧透内容</summary><div class="mt-2">${content}</div></details>`,
+      (_, content) => `<details class="inline-block max-w-full align-middle rounded-md border border-border-base/10 bg-bg-muted/70 px-2 py-1"><summary class="cursor-pointer select-none text-xs text-text-dim">剧透内容</summary><div class="mt-2">${content}</div></details>`,
     )
     .replace(
       /\[pullquote\]([\s\S]*?)\[\/pullquote\]/gi,
-      (_, content) => `<blockquote class="my-3 rounded-lg border-l-4 border-accent-primary/40 bg-black/10 px-4 py-3 italic text-text-main/90">${content}</blockquote>`,
+      (_, content) => `<blockquote class="my-3 rounded-lg border-l-4 border-accent-primary/40 bg-bg-muted/50 px-4 py-3 italic text-text-soft">${content}</blockquote>`,
     )
 
   // 6. 显式 URL 标签转成链接。
@@ -269,7 +269,7 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
           ? 'inline-block align-middle mx-1'
           : 'mx-auto'
     const clearFloat = align === 'left' || align === 'right' ? '<div class="clear-both"></div>' : ''
-    return `<video class="${sizeClasses} ${alignClasses} rounded-lg border border-text-main/10 my-2" controls ${autoplayOff ? '' : 'autoplay'} preload="metadata" muted playsinline ${resolvedPosterUrl ? `poster="${encodeURI(resolvedPosterUrl)}"` : ''} src="${encodeURI(resolvedVideoUrl)}"></video>${clearFloat}`
+    return `<video class="${sizeClasses} ${alignClasses} rounded-lg border border-border-base/10 my-2" controls ${autoplayOff ? '' : 'autoplay'} preload="metadata" muted playsinline ${resolvedPosterUrl ? `poster="${encodeURI(resolvedPosterUrl)}"` : ''} src="${encodeURI(resolvedVideoUrl)}"></video>${clearFloat}`
   })
   htmlText = htmlText.replace(/\[previewyoutube=([^;\]]+)(?:;([^\]]+))?\]\[\/previewyoutube\]/gi, (_, videoId, mode = '') => {
     const youtubeId = String(videoId || '').trim()
@@ -282,13 +282,13 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
         : previewMode.includes('left')
           ? 'w-full max-w-sm aspect-video float-left mr-4 mb-2'
           : 'w-full max-w-2xl aspect-video mx-auto'
-    return `<iframe class="${layoutClass} my-2 rounded-lg border border-text-main/10" src="https://www.youtube.com/embed/${encodeURIComponent(youtubeId)}" title="YouTube preview" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>`
+    return `<iframe class="${layoutClass} my-2 rounded-lg border border-border-base/10" src="https://www.youtube.com/embed/${encodeURIComponent(youtubeId)}" title="YouTube preview" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>`
   })
   htmlText = htmlText.replace(/\[(previewimg|previewicon|screenshot)=([^\]]+)\]([\s\S]*?)\[\/\1\]/gi, (_, tagName, rawArgs, altText) => {
     const args = String(rawArgs || '').split(';').map(item => item.trim()).filter(Boolean)
     const sourceArg = [...args].reverse().find(item => /^https?:\/\//i.test(item))
     if (!sourceArg) {
-      return `<span class="inline-block rounded-md border border-text-main/10 bg-black/20 px-2 py-1 text-xs text-text-dim">${tagName}</span>`
+      return `<span class="inline-block rounded-md border border-border-base/10 bg-bg-muted/70 px-2 py-1 text-xs text-text-dim">${tagName}</span>`
     }
     const extraClasses = tagName === 'previewicon' ? 'max-w-20 max-h-20' : ''
     return buildPreviewFigure({ src: sourceArg, alt: altText, rawAttrs, extraClasses })
@@ -308,10 +308,10 @@ export const parseUnityRichText = (unityText, removeImg = true, remoteImageResol
     // match: 完整匹配字符串；symbol: 捕获的符号 (如 '=')；content: 捕获的标题内容 (如 '更新')
     const text = content ? content.trim() : ''
     if (text) { // --- 带标题的分割线 ---
-      return `<div class="flex w-3/4 items-center mx-auto my-4"><div class="grow border-t border-text-main/10"></div><span class="text-xs mx-1 text-text-main/40 font-bold whitespace-nowrap">${text}</span><div class="grow border-t border-text-main/10"></div></div>`
+      return `<div class="flex w-3/4 items-center mx-auto my-4"><div class="grow border-t border-border-base/10"></div><span class="text-xs mx-1 text-text-disabled font-bold whitespace-nowrap">${text}</span><div class="grow border-t border-border-base/10"></div></div>`
     } else {// --- 纯分割线 ---
       // (为了保持高度一致，也可以用 Flex 写法，或者用之前的 simple div)
-      return '<div class="w-3/4 mx-auto border-t border-text-main/10 my-4"></div>'
+      return '<div class="w-3/4 mx-auto border-t border-border-base/10 my-4"></div>'
     }
   })
 

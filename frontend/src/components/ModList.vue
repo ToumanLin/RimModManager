@@ -2,17 +2,17 @@
   <div class="flex flex-col relative h-full bg-bg-surface/40  shadow-2xl"
       :class="`border-2 rounded-2xl border-accent-${listColor}/20 overflow-hidden`">
     <!-- 标题栏 -->
-    <div :data-tour="listId=='active'?'list-header':null" :class="`px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-accent-${listColor}/10`">
+    <div :data-tour="listId=='active'?'list-header':null" :class="`px-3 h-8 border-b rounded-t-2xl border-border-base/5 flex justify-between items-center bg-accent-${listColor}/10`">
       <span :class="`text-sm font-bold text-accent-${listColor} uppercase tracking-wider flex items-center gap-1`">
         <div :class="`w-1.5 h-1.5 mr-1 rounded-full bg-accent-${listColor} shadow-lg shadow-accent-primary`"></div>
         <span class="mr-1">{{ title }}</span>
         <!-- 状态提示 -->
         <span v-if="isFiltered" v-tooltip="filterTooltip" @click="clearFilter"
-          class="text-xs text-text-main/80 bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
+          class="text-xs text-text-soft bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
           已筛选
         </span>
         <span v-if="sortMode !== 'default' || !isSortAsc" v-tooltip="sortTooltip" @click="clearSort"
-          class="text-xs text-text-main/80 bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
+          class="text-xs text-text-soft bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
           已排序
         </span>
       </span>
@@ -36,10 +36,10 @@
         </button>
 
         <!-- 列表总数 / 筛选数 -->
-        <span v-if="isFiltered" :class="`text-xs bg-black/30 px-2 py-0.5 rounded text-accent-${listColor}`">
+        <span v-if="isFiltered" :class="`text-xs bg-bg-inset/70 px-2 py-0.5 rounded text-accent-${listColor}`">
           {{ displayList.length }} / {{ modelValue.length }}
         </span>
-        <span v-else :class="`text-xs bg-black/30 px-2 py-0.5 rounded text-accent-${listColor}`">{{ modelValue.length }}</span>
+        <span v-else :class="`text-xs bg-bg-inset/70 px-2 py-0.5 rounded text-accent-${listColor}`">{{ modelValue.length }}</span>
       </span>
 
     </div>
@@ -90,8 +90,8 @@
                 text-text-dim hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10 
                 transition-all relative`">
                 {{ sortIcon }}
-                <div v-show="isSortChange" class="absolute min-w-20 h-auto p-0.5 top-full mt-1 right-1/2 left-1/2 transform -translate-x-1/2 size-4 rounded-md bg-bg-highlight/80 border border-text-main/10 shadow-2xl backdrop-blur-sm text-xs text-center text-text-dim flex flex-col gap-0.5">
-                  <div v-for="(icon, mode) in SORT_MODE_MAP" :key="mode" @click="sortMode = mode" class="w-full rounded-md hover:bg-text-dim/30 hover:text-text-main">{{ icon }}</div>
+                <div v-show="isSortChange" class="absolute min-w-20 h-auto p-0.5 top-full mt-1 right-1/2 left-1/2 transform -translate-x-1/2 size-4 rounded-md bg-bg-highlight/80 border border-border-base/10 shadow-2xl backdrop-blur-sm text-xs text-center text-text-dim flex flex-col gap-0.5">
+                  <div v-for="(icon, mode) in SORT_MODE_MAP" :key="mode" @click="sortMode = mode" class="w-full rounded-md hover:bg-bg-overlay/10 hover:text-text-main">{{ icon }}</div>
                 </div>
               </button>
           </template>
@@ -129,10 +129,10 @@
       <!-- 列表主体部分 -->
       <div @click.self="modStore.clearSelection()" class="flex-1 h-full min-h-0 pl-1 pr-1 min-w-0 relative" :data-tour="listId=='active'?'list-modItem':null">
         <!-- 列表为空时的提示 -->
-        <div v-show="modelValue.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed border-text-dim/60 text-gray-600 text-xs bg-bg-deep/90 select-none pointer-events-none">
+        <div v-show="modelValue.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed border-border-base/18 text-text-subtle/70 text-xs bg-bg-deep/90 select-none pointer-events-none">
           可拖拽模组到此
           <!-- 点阵背景 -->
-          <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+          <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(var(--color-text-main) 1px, transparent 1px); background-size: 20px 20px;"></div>
         </div>
         <!-- 列表 -->
           <!-- :size="isSimpleView ? 34 : 54" -->
@@ -198,7 +198,7 @@
           <!-- 移除所有无效Mod -->
           <button v-if="invalidModsToRemove.length > 0" @click="removeInvalidMod" 
             v-tooltip="`^^一键移除共计 ${invalidModsToRemove.length} 个无效Mod^^`"
-            class="px-1 py-1 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
+            class="px-1 py-1 bg-accent-danger/80 text-text-disabled rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
             <Trash2 />
           </button>
         </div>
@@ -454,15 +454,15 @@ const missingInstallTooltip = computed(() => {
 })
 const missingInstallButtonClass = computed(() => {
   if (missingInstallSummary.value.dangerTotal > 0 || missingInstallSummary.value.unknownTotal > 0) {
-    return 'bg-accent-danger/80 text-text-main/60 hover:bg-accent-danger hover:text-text-main'
+    return 'bg-accent-danger/80 text-text-disabled hover:bg-accent-danger hover:text-text-main'
   }
   const hasWarnOnly = missingInstallSummary.value.warnTotal > 0
     && missingInstallSummary.value.dangerTotal === 0
     && missingInstallSummary.value.unknownTotal === 0
   if (hasWarnOnly) {
-    return 'bg-accent-warn/80 text-text-main/60 hover:bg-accent-warn hover:text-text-main'
+    return 'bg-accent-warn/80 text-text-disabled hover:bg-accent-warn hover:text-text-main'
   }
-  return 'bg-accent-primary/80 text-text-main/60 hover:bg-accent-primary hover:text-text-main'
+  return 'bg-accent-primary/80 text-text-disabled hover:bg-accent-primary hover:text-text-main'
 })
 const supplementSummary = computed(() => {
   if (props.listId !== 'active') {
@@ -472,12 +472,12 @@ const supplementSummary = computed(() => {
 })
 const supplementButtonClass = computed(() => {
   if (supplementSummary.value.urgency === 'danger') {
-    return 'bg-accent-danger/80 text-text-main/60 hover:bg-accent-danger hover:text-text-main'
+    return 'bg-accent-danger/80 text-text-disabled hover:bg-accent-danger hover:text-text-main'
   }
   if (supplementSummary.value.urgency === 'warn') {
-    return 'bg-accent-warn/80 text-text-main/60 hover:bg-accent-warn hover:text-text-main'
+    return 'bg-accent-warn/80 text-text-disabled hover:bg-accent-warn hover:text-text-main'
   }
-  return 'bg-accent-warn/80 text-text-main/60 hover:bg-accent-warn hover:text-text-main'
+  return 'bg-accent-warn/80 text-text-disabled hover:bg-accent-warn hover:text-text-main'
 })
 const supplementTooltip = computed(() => {
   if (supplementSummary.value.visibleCount === 0) return '当前没有可补齐的未启用模组'

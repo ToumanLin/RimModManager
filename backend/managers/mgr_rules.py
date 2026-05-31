@@ -84,6 +84,7 @@ class RuleManager:
         self.user_mod_rules: Dict[str, Any] = {}
         self.user_dynamic_rules: List[Dict[str, Any]] = []
         self.workshop_rules_cache: Dict[str, List[str]] = {} 
+        self.workshop_rules_update_time: int = 0
         self.context = context
         self.settings = self._build_default_settings()
         self._save_lock = threading.Lock()
@@ -278,7 +279,7 @@ class RuleManager:
         try:
             if not WorkshopManifest.table_exists(): return
             # 1. 【核心过滤】从主数据库获取所有已安装/存在的 package_id (去重且转小写)
-            # 只有这些 Mod 才需要我们去查询它们的依赖关系
+            # 只有这些 Mod 才需要查询它们的依赖关系
             installed_pids = [
                 m.package_id.lower() 
                 for m in ModAsset.select(ModAsset.package_id).distinct() 
@@ -297,7 +298,7 @@ class RuleManager:
                 self.workshop_rules_cache = {}
                 return
             # 3. 收集这些依赖中涉及到的所有目标 Workshop ID
-            # 我们需要把这些 Workshop ID 转换回 Package ID，排序引擎才能识别
+            # 需要把这些 Workshop ID 转换回 Package ID，排序引擎才能识别
             all_target_wids = set()
             for row in active_metas:
                 if row['dependencies_mods']:

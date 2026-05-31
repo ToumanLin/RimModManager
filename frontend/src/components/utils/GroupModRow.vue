@@ -12,7 +12,7 @@
 
     <!-- 分组展开后可能一次出现很多行。行级 backdrop-filter 会放大合成成本，
       因此只使用半透明背景和边框表达层次，把毛玻璃限制在更少的外层面板上。 -->
-    <div class="select-trigger drag-handle flex-1 flex items-center min-w-0 gap-1.5 p-1 rounded-lg border relative group hover:brightness-150 shadow-sm text-text-main/80 transition-colors duration-150"
+    <div class="select-trigger drag-handle flex-1 flex items-center min-w-0 gap-1.5 p-1 rounded-lg border relative group hover:brightness-150 shadow-sm text-text-soft transition-colors duration-150"
       :class="[searchMatch ? 'ring-2 ring-accent-highlight scale-[1.02] z-20' : '', cardClass]"
       :style="cardStyle"
       v-preview="modData">
@@ -20,8 +20,8 @@
       <div v-if="showIcon" class="shrink-0">
         <img v-if="modData?.path && modData?.preview_path" :src="appStore.getThumbUrl(modData.package_id, modData.preview_path)" loading="lazy"
           :class="`size-6 rounded object-cover border border-accent-${listColor}/30 pointer-events-none`">
-        <div v-else-if="!modData?.path" class="size-6 rounded flex items-center justify-center text-red-500 font-bold text-lg bg-red-900/50 border border-red-500/30">!</div>
-        <div v-else :class="`size-6 rounded border-2 border-dashed border-text-main/10 flex items-center justify-center`">
+        <div v-else-if="!modData?.path" class="size-6 rounded flex items-center justify-center text-accent-danger font-bold text-lg bg-accent-danger/15 border border-accent-danger/30">!</div>
+        <div v-else :class="`size-6 rounded border-2 border-dashed border-border-base/10 flex items-center justify-center`">
           <component :is="typeIcon" class="size-5 opacity-50" />
         </div>
       </div>
@@ -29,7 +29,7 @@
       <div class="flex-1 min-w-0">
         <div class="text-sm font-medium truncate">{{ displayName }}</div>
       </div>
-      <div class="absolute top-0 left-0 -z-100 w-full rounded-lg h-full group-hover:bg-white/10"></div>
+      <div class="absolute top-0 left-0 -z-100 w-full rounded-lg h-full group-hover:bg-bg-overlay/10"></div>
     </div>
   </div>
 </template>
@@ -61,10 +61,10 @@ const modType = computed(() => modStore.displayModType(modData.value))
 const typeIcon = computed(() => MOD_TYPE_ICON_MAP[modType.value] || MOD_TYPE_ICON_MAP.Unknown)
 const cardClass = computed(() => {
   const selected = props.isSelected ? 'ring-2 ring-accent-special ' : ''
-  return `${selected} bg-bg-surface/20 border-text-main/10 hover:border-text-main/20 hover:bg-text-dim/20`
+  return `${selected} bg-bg-surface/20 border-border-base/10 hover:border-border-base/18 hover:bg-bg-overlay/10`
 })
 const cardStyle = computed(() => {
-  const base = { height: appStore.scalePx(30) + 'px', backgroundColor: 'rgba(255,255,255,0.05)'  }
+  const base = { height: appStore.scalePx(30) + 'px', backgroundColor: 'rgba(var(--rgb-bg-highlight),0.3)'  }
   const color = modData.value?.sign_color
   if (!color) return base
   // 分组行保留签名色提示，但不计算主列表的问题状态，避免每个分组实例订阅大量额外状态。

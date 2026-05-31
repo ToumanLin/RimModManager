@@ -1,9 +1,9 @@
 <template>
-  <div class="group flex min-h-24 flex-col justify-between border-b border-text-main/5 px-3 py-2 transition-colors hover:bg-text-main/4">
+  <div class="group flex min-h-24 flex-col justify-between border-b border-border-base/5 px-3 py-2 transition-colors hover:bg-bg-overlay/5">
     <div class="flex min-w-0 items-center justify-between gap-4">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
         <span class="truncate text-sm font-bold text-text-main">{{ mod.mod_name }}</span>
-        <span v-if="storeLabel" class="shrink-0 rounded border border-text-main/10 bg-text-main/5 px-1.5 py-0.5 text-[11px] font-bold text-text-dim">
+        <span v-if="storeLabel" class="shrink-0 rounded border border-border-base/10 bg-bg-overlay/5 px-1.5 py-0.5 text-[11px] font-bold text-text-dim">
           {{ storeLabel }}
         </span>
         <span v-if="mod.unsupported_source_count > 0" v-tooltip="unsupportedTooltip"
@@ -23,11 +23,11 @@
           <span>现有 DDS {{ mod.output_total_count || 0 }}</span>
         </div>
         <button v-if="mod.package_id" class="rounded-lg border px-1 py-0.5 text-xs font-bold transition-colors"
-          :class="isExcluded ? 'border-accent-danger/30 bg-accent-danger/10 text-accent-danger' : 'border-text-main/10 bg-text-main/5 text-text-dim hover:text-text-main'"
+          :class="isExcluded ? 'border-accent-danger/30 bg-accent-danger/10 text-accent-danger' : 'border-border-base/10 bg-bg-overlay/5 text-text-dim hover:text-text-main'"
           @click.stop="emit('toggle-mod-exclusion', mod)" >
           {{ isExcluded ? '已排除' : '排除模组' }}
         </button>
-        <button class="rounded-lg p-1.5 text-text-dim transition-colors hover:bg-text-main/10 hover:text-text-main"
+        <button class="rounded-lg p-1.5 text-text-dim transition-colors hover:bg-bg-overlay/10 hover:text-text-main"
           @click.stop="openModPath" v-tooltip="mod.mod_path || '打开模组路径'" >
           <FolderOpen class="w-4 h-4" />
         </button>
@@ -37,7 +37,7 @@
     <div class="items-center text-xs">
       <div class="flex items-center gap-2">
         <div v-show="viewMode === 'ALL' || viewMode === 'PNG'" class="shrink-0 font-bold text-accent-tip/80">PNG</div>
-        <div v-show="viewMode === 'ALL' || viewMode === 'PNG'" class="flex-1 relative h-1.5 overflow-hidden rounded-full bg-black/40">
+        <div v-show="viewMode === 'ALL' || viewMode === 'PNG'" class="flex-1 relative h-1.5 overflow-hidden rounded-full bg-bg-inset/80">
           <div class="absolute left-0 top-0 h-full rounded-full bg-linear-to-r from-accent-tip/60 to-accent-tip transition-all duration-500 ease-out" :style="{ width: pngWidth }"></div>
         </div>
         <div v-show="viewMode === 'ALL' || viewMode === 'PNG'" class="text-right font-mono text-text-dim">总占比：{{ formatPercent(mod.source_bytes_share_pct || 0) }}</div>
@@ -45,7 +45,7 @@
 
       <div class="flex items-center gap-2">
         <div v-show="viewMode === 'ALL' || viewMode === 'DDS'" class="shrink-0 font-bold text-accent-primary/80">DDS</div>
-        <div v-show="viewMode === 'ALL' || viewMode === 'DDS'" class="flex-1 relative h-1.5 overflow-hidden rounded-full bg-black/40">
+        <div v-show="viewMode === 'ALL' || viewMode === 'DDS'" class="flex-1 relative h-1.5 overflow-hidden rounded-full bg-bg-inset/80">
           <div class="absolute left-0 top-0 h-full rounded-full bg-linear-to-r from-accent-primary/60 to-accent-primary transition-all duration-500 ease-out" :style="{ width: ddsWidth }"></div>
         </div>
         <div v-show="viewMode === 'ALL' || viewMode === 'DDS'" class="text-right font-mono text-text-dim">总占比：{{ formatPercent(mod.output_bytes_share_pct || 0) }}</div>
@@ -59,7 +59,7 @@
       <div class="truncate"><span class="font-bold text-text-main">综合体积占比</span> {{ formatPercent(mod.combined_bytes_share_pct || 0) }}</div>
       <div class="truncate"><span class="font-bold text-text-main">显存预估</span> {{ formatBytes(mod.source_vram_bytes_est) }} → {{ formatBytes(mod.output_vram_bytes_est) }}</div>
     </div>
-    <div class="truncate text-[11px] text-text-dim/70">{{ mod.mod_path }}</div>
+    <div class="truncate text-[11px] text-text-dim">{{ mod.mod_path }}</div>
   </div>
 </template>
 
@@ -129,7 +129,7 @@ const scaleTags = computed(() => {
         label,
         text: `不缩放 (${count})`,
         tooltip: '这些图片会保留原来的大小。',
-        className: 'border-text-main/10 bg-text-main/5 text-text-dim',
+        className: 'border-border-base/10 bg-bg-overlay/5 text-text-dim',
       }
     })
 })

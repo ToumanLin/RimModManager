@@ -1,54 +1,54 @@
-﻿<template>
+<template>
   <div class="flex flex-col h-full bg-bg-surface/40 backdrop-blur-sm shadow-2xl"
     :class="`border-2 rounded-2xl border-accent-${listColor}/20`">
     <!-- 标题栏 -->
-    <div :class="`px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-accent-${listColor}/10`">
+    <div :class="`px-3 h-8 border-b rounded-t-2xl border-border-base/5 flex justify-between items-center bg-accent-${listColor}/10`">
       <span :class="`text-sm font-bold text-accent-${listColor} uppercase tracking-wider flex items-center gap-2`">
         <div :class="`w-1.5 h-1.5 rounded-full bg-accent-${listColor} shadow-[0_0_8px_var(--color-accent-${listColor})]`"></div>
         {{ title }}
       </span>
-      <button @click="ruleStore.currentId = null" class="text-xs font-bold text-text-dim/60 hover:text-text-dim transition-colors">关闭</button>
+      <button @click="ruleStore.currentId = null" class="text-xs font-bold text-text-disabled hover:text-text-dim transition-colors">关闭</button>
     </div>
     <!-- 当前选中的MOD -->
     <div class="px-2 py-2 w-full flex items-center gap-2 shadow-xl/10">
-      <div class="w-13 h-13 shrink-0 rounded-lg bg-black/40 border border-text-main/30 flex items-center justify-center overflow-hidden shadow-lg">
+      <div class="w-13 h-13 shrink-0 rounded-lg bg-bg-inset/80 border border-border-base/18 flex items-center justify-center overflow-hidden shadow-lg">
         <img v-if="targetMod?.preview_path" :src="appStore.getThumbUrl(targetMod.package_id, targetMod.preview_path)" class="w-full h-full object-cover">
         <span v-else class="text-xs text-text-dim font-bold font-mono">MOD</span>
       </div>
       <div class="flex-1 truncate">
         <div class="font-bold text-text-main truncate">{{ modStore.displayModName(targetMod) }}</div>
-        <div class="text-xs font-mono text-text-dim/60 truncate">{{ targetMod?.package_id }}</div>
+        <div class="text-xs font-mono text-text-disabled truncate">{{ targetMod?.package_id }}</div>
       </div>
     </div>
 
     <div class="px-1 pb-1">
       <!-- 绝对位置控制板 (Absolute Position) -->
-      <div class="py-1 px-2 bg-text-main/5 border border-text-main/10 rounded-lg flex flex-col items-center justify-center">
+      <div class="py-1 px-2 bg-bg-overlay/5 border border-border-base/10 rounded-lg flex flex-col items-center justify-center">
         <div class="flex items-center justify-between w-full">
-          
+
           <span class="text-sm font-bold text-text-main flex items-center gap-2">
             加载位置
             <label v-tooltip="'强制让此 Mod 在启用列表中前置顶或置底。'" class="text-text-dim cursor-help italic underline hover:text-text-main">?</label>
             <span v-if="absPos.source === 'community'" class="text-[0.6rem] px-1.5 py-0.5 bg-accent-cool/20 text-accent-cool rounded border border-accent-cool/30">社区建议</span>
           </span>
           <!-- 开关组 (Segmented Control) -->
-          <div class="flex items-center bg-black/40 rounded-lg p-1 border border-text-main/10 shadow-inner">
+          <div class="flex items-center bg-bg-inset/80 rounded-lg p-1 border border-border-base/10 shadow-inner">
             <!-- 置顶 -->
             <button @click="handlePosChange('top')"
               class="px-1 py-1 text-xs font-bold rounded-md transition-all flex items-center gap-1"
-              :class="absPos.pos === 'top' ? 'bg-accent-warn text-black shadow-lg' : 'text-text-dim hover:text-text-main'">
+              :class="absPos.pos === 'top' ? 'bg-accent-warn text-on-accent-warn shadow-lg' : 'text-text-dim hover:text-text-main'">
               <ArrowUpToLine class="size-3" /> 置顶
             </button>
             <!-- 默认 -->
             <button @click="handlePosChange('none')"
               class="px-1 py-1 text-xs font-bold rounded-md transition-all"
-              :class="absPos.pos === 'none' ? 'bg-text-main/20 text-text-main shadow-lg' : 'text-text-dim hover:text-text-main'">
+              :class="absPos.pos === 'none' ? 'bg-bg-overlay/10 text-text-main shadow-lg' : 'text-text-dim hover:text-text-main'">
               默认
             </button>
             <!-- 置底 -->
             <button @click="handlePosChange('bottom')"
               class="px-1 py-1 text-xs font-bold rounded-md transition-all flex items-center gap-1"
-              :class="absPos.pos === 'bottom' ? 'bg-accent-primary text-black shadow-lg' : 'text-text-dim hover:text-text-main'">
+              :class="absPos.pos === 'bottom' ? 'bg-accent-primary text-on-accent-primary shadow-lg' : 'text-text-dim hover:text-text-main'">
               <ArrowDownToLine class="size-3" /> 置底
             </button>
           </div>
@@ -58,8 +58,8 @@
     </div>
 
     <!-- 列表区 -->
-    <div class="overflow-y-auto flex-1 pb-0.5 after:pointer-events-none 
-      after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10 
+    <div class="overflow-y-auto flex-1 pb-0.5 after:pointer-events-none
+      after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10
       after:bg-linear-to-t after:from-bg-deep/80 after:to-transparent">
 
       <div v-if="isLanguagePackMod" class="min-h-20 m-1 pb-2 bg-accent-highlight/10 rounded-lg relative">
@@ -73,7 +73,7 @@
               <input type="checkbox" class="sr-only peer" :checked="isLanguagePackOwnerReplaceEnabled" :disabled="!canToggleLanguagePackOwnerOverride"
                 @change="toggleLanguagePackOwnerOverrideMode($event.target.checked)"
               >
-              <div class="w-9 h-5 bg-text-main/10 rounded-full transition-all after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-text-main after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-text-main peer-checked:bg-accent-special peer-disabled:opacity-40"></div>
+              <div class="w-9 h-5 bg-bg-overlay/10 rounded-full transition-all after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-bg-contrast after:border-border-base/18 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-bg-contrast peer-checked:bg-accent-special peer-disabled:opacity-40"></div>
             </div>
             <span class="text-xs font-bold text-text-dim">
               {{ isLanguagePackOwnerReplaceEnabled ? '覆盖默认分析' : '并入默认分析' }}
@@ -85,11 +85,11 @@
           <div class="w-1 h-1 rounded-full bg-accent-tip shadow-[0_0_8px_var(--color-accent-tip)]"></div>
           <span class="text-accent-tip">默认分析所属 ({{ analyzedLanguagePackOwnerRows.length }})</span>
           <div class="flex-1 h-px border-b border-accent-tip/30"></div>
-          <span class="text-[0.65rem] text-text-dim/70">{{ analyzedLanguagePackOwnerSummary }}</span>
+          <span class="text-[0.65rem] text-text-dim">{{ analyzedLanguagePackOwnerSummary }}</span>
         </div>
         <div class="px-2 relative">
           <div class="absolute top-0 left-0 h-full w-full bg-accent-tip/20 blur-lg pointer-events-none"></div>
-          <div v-if="analyzedLanguagePackOwnerRows.length === 0" class="px-2 py-3 text-xs text-text-dim/70">
+          <div v-if="analyzedLanguagePackOwnerRows.length === 0" class="px-2 py-3 text-xs text-text-dim">
             当前未分析出可靠所属
           </div>
           <ModItem v-for="(owner, index) in analyzedLanguagePackOwnerRows" :key="owner.id" :item_id="owner.id" :index="index" simple :showIndex="false" />
@@ -104,7 +104,7 @@
           <div class="absolute top-0 left-0 h-full w-full bg-accent-special/20 blur-lg select-none pointer-events-none"></div>
           <div v-show="languagePackOwnerOverrideRows.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed text-text-dim text-xs select-none pointer-events-none">
             可拖拽模组到此
-            <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+            <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(var(--color-text-main) 1px, transparent 1px); background-size: 20px 20px;"></div>
           </div>
 
           <SimpleDropList :model-value="languagePackOwnerOverrideRows" dataKey="id" class="h-full min-h-15"
@@ -115,9 +115,9 @@
               <div class="relative group">
                 <ModItem :item_id="dataKey" :index="index" :key="dataKey" :show-index="false" :simple="true"></ModItem>
                 <div class="absolute right-1 top-1/2 -translate-y-1/2 mr-1 overflow-visible gap-1 group text-sm font-medium flex flex-row-reverse items-center rtl:space-x-reverse">
-                  <button @click.stop="removeLanguagePackOwner(dataKey)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
-                    inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-                    text-text-dim/70 bg-accent-danger/10 
+                  <button @click.stop="removeLanguagePackOwner(dataKey)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer
+                    inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300
+                    text-text-dim bg-accent-danger/10
                     hover:bg-accent-danger/60 hover:text-text-main hover:scale-110 active:scale-100
                     group-hover:bg-accent-danger/40 group-hover:text-text-dim group-hover:shadow-2xl/20
                     group-hover:h-5 group-hover:w-5 group-hover:translate-x-0 group-hover:opacity-100"
@@ -132,7 +132,7 @@
           </SimpleDropList>
         </div>
       </div>
-      
+
       <RuleRelationSection
         title="前置"
         rule-type="loadAfter"
@@ -362,7 +362,7 @@ const removeLanguagePackOwner = async (otherId) => {
 // 改变位置
 const handlePosChange = async (pos) => {
   if (absPos.value.pos === pos) return // 无变化
-  
+
   let comment = ''
   if (pos !== 'none') {
     // 弹出输入框要求写个备注（可选）
@@ -373,7 +373,7 @@ const handlePosChange = async (pos) => {
     })
     if (comment === null) return // 用户点击了取消
   }
-  
+
   await ruleStore.setAbsolutePosition(targetMod.value?.package_id, pos, comment)
 }
 </script>

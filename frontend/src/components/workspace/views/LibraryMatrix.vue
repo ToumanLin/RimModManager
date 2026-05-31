@@ -24,14 +24,14 @@
     </div>
 
     <!-- 顶部控制栏 -->
-    <div class="h-12 shrink-0 px-6 flex justify-between items-center bg-black/20 border-t border-text-main/5">
-      <div class="text-xs font-mono text-text-dim/60 uppercase tracking-widest">
+    <div class="h-12 shrink-0 px-6 flex justify-between items-center bg-bg-muted/70 border-t border-border-base/5">
+      <div class="text-xs font-mono text-text-disabled uppercase tracking-widest">
         总计数量: {{ visibleTotalCount }} 
         | 总计大小：{{ formatFileSize(visibleTotalSize) }}
         | 状态: {{ workspaceStore.isFetching ? '扫描中...' : '就绪' }}
       </div>
       <button @click="workspaceStore.fetchLibrariesMods" :disabled="workspaceStore.isFetching" v-tooltip="'重新读取当前三域矩阵数据'"
-        class="flex items-center gap-2 px-3 py-2 bg-text-main/5 hover:bg-text-main/10 rounded-lg text-xs font-bold transition-all"
+        class="flex items-center gap-2 px-3 py-2 bg-bg-overlay/5 hover:bg-bg-overlay/10 rounded-lg text-xs font-bold transition-all"
         :class="{'opacity-50 cursor-not-allowed': workspaceStore.isFetching}">
         <RefreshCw class="size-3.5" :class="{'animate-spin': workspaceStore.isFetching}" />
         刷新数据

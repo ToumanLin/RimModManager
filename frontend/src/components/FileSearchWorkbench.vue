@@ -1,11 +1,11 @@
 <template>
   <transition name="fade">
     <div v-if="appStore.uiState.showFileSearchWorkbench"
-      class="fixed inset-0 z-120 flex items-center justify-center bg-black/72 px-2 py-2 backdrop-blur-md"
+      class="fixed inset-0 z-120 flex items-center justify-center bg-overlay-scrim px-2 py-2 backdrop-blur-md"
     >
-      <div class="relative flex h-19/20 w-19/20 flex-col overflow-hidden rounded-3xl border border-accent-primary/18 bg-bg-deep shadow-[0_30px_100px_rgba(0,0,0,0.55)]">
+      <div class="relative flex h-19/20 w-19/20 flex-col overflow-hidden rounded-3xl border border-accent-primary/18 bg-bg-deep shadow-[0_30px_100px_var(--shadow-color)]">
         
-        <div class="relative z-10 border-b border-text-main/8 bg-[linear-gradient(135deg,rgba(15,23,42,0.94),rgba(2,6,23,0.92))] px-4 py-1">
+        <div class="relative z-10 border-b border-border-base/10 bg-[linear-gradient(135deg,rgba(var(--rgb-bg-deep),0.94),rgba(var(--rgb-bg-inset),0.92))] px-4 py-1">
           <div class="flex items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-3">
               <div class="p-2 text-accent-primary">
@@ -17,7 +17,7 @@
             </div>
 
             <div class="flex items-center gap-2">              
-              <button class="rounded-full border border-text-main/12 bg-black/20 p-1.5 text-text-dim transition-colors hover:border-accent-danger/30 hover:text-accent-danger"
+              <button class="rounded-full border border-border-base/10 bg-bg-muted/70 p-1.5 text-text-dim transition-colors hover:border-accent-danger/30 hover:text-accent-danger"
                 @click="fileSearchStore.closeWorkbench()" v-tooltip="'关闭文件搜索窗口'"
               ><X class="size-4" />
               </button>
@@ -25,31 +25,31 @@
           </div>
         </div>
 
-        <div class="relative z-10 border-b border-text-main/8 bg-black/18 px-4 py-3">
+        <div class="relative z-10 border-b border-border-base/10 bg-bg-muted/70 px-4 py-3">
           <div class="flex items-center gap-2">
             <CommonSelect v-model="fileSearchStore.form.scope" :options="scopeOptions" label="范围:" mini />
             <div class="text-xs mx-1.5">
               <label class="flex items-center gap-1 whitespace-nowrap">
                 <input :checked="fileSearchStore.form.use_regex" type="checkbox"
-                  class="size-3.5 rounded border border-text-main/20 bg-black/20 accent-accent-primary"
+                  class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-primary"
                   @change="fileSearchStore.form.use_regex = $event.target.checked"
                 >
                 正则表达式
               </label>
               <label class="inline-flex items-center gap-1 whitespace-nowrap">
                 <input :checked="fileSearchStore.form.case_sensitive" type="checkbox"
-                  class="size-3.5 rounded border border-text-main/20 bg-black/20 accent-accent-primary"
+                  class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-primary"
                   @change="fileSearchStore.form.case_sensitive = $event.target.checked"
                 >
                 大小写敏感
               </label>
             </div>
             <input ref="queryInputRef" v-model="fileSearchStore.form.query" type="text" placeholder="输入搜索词或正则表达式进行搜索"
-              class="h-10 min-w-0 flex-1 rounded-xl border border-text-main/10 bg-black/28 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-primary/45 focus:shadow-[0_0_0_1px_rgba(6,182,212,0.25)]"
+              class="h-10 min-w-0 flex-1 rounded-xl border border-border-base/10 bg-bg-inset/70 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-primary/45 focus:shadow-[0_0_0_1px_rgba(var(--rgb-accent-primary),0.25)]"
               @keydown.enter.prevent="fileSearchStore.startSearch()"
             >
 
-            <button v-show="!fileSearchStore.isBusy" class="flex shrink-0 px-2 py-1.5 items-center justify-center gap-2 rounded-xl bg-accent-primary text-sm font-black text-black transition-colors hover:bg-accent-primary/85 disabled:cursor-not-allowed disabled:opacity-55"
+            <button v-show="!fileSearchStore.isBusy" class="flex shrink-0 px-2 py-1.5 items-center justify-center gap-2 rounded-xl bg-accent-primary text-sm font-black text-on-accent-primary transition-colors hover:bg-accent-primary/85 disabled:cursor-not-allowed disabled:opacity-55"
               :disabled="fileSearchStore.isBusy" @click="fileSearchStore.startSearch()"
             ><Search class="size-4" />搜索
             </button>
@@ -61,19 +61,19 @@
 
           <div class="mt-2 grid grid-cols-[auto_auto_auto_auto_auto_minmax(260px,1fr)_auto] items-center gap-x-4 gap-y-2 text-xs text-text-dim">
             <label class="inline-flex items-center gap-2 whitespace-nowrap" v-tooltip="'部分模组会按照游戏版本或DLC加载不同的文件，开启后仅会搜索当前有效的文件'">
-              <input class="size-3.5 rounded border border-text-main/20 bg-black/20 accent-accent-primary"
+              <input class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-primary"
                 :checked="fileSearchStore.form.effective_only" type="checkbox" @change="fileSearchStore.form.effective_only = $event.target.checked"
               >只限当前有效文件
             </label>
             <label class="inline-flex items-center gap-2 whitespace-nowrap" v-tooltip="'仅搜索 XML 文件'">
-              <input class="size-3.5 rounded border border-text-main/20 bg-black/20 accent-accent-primary"
+              <input class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-primary"
                 :checked="isFileTypeEnabled('.xml')" type="checkbox" @change="toggleFileType('.xml')"
               >XML 文件
             </label>
             <div class="flex items-center gap-2 whitespace-nowrap">
-              <span class="text-text-main/75" v-tooltip="'可自定义搜索限定文件，直接输入文件后缀名即可.号表示全部文件，多文件类型可用英文,;|号分割'">限定文件类型：</span>
+              <span class="text-text-dim" v-tooltip="'可自定义搜索限定文件，直接输入文件后缀名即可.号表示全部文件，多文件类型可用英文,;|号分割'">限定文件类型：</span>
               <input :value="fileSearchStore.form.custom_file_types_text" type="text"
-                class="h-8 min-w-80 rounded-xl border border-text-main/10 bg-black/22 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-primary/45 focus:shadow-[0_0_0_1px_rgba(6,182,212,0.25)]"
+                class="h-8 min-w-80 rounded-xl border border-border-base/10 bg-bg-muted/70 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-primary/45 focus:shadow-[0_0_0_1px_rgba(var(--rgb-accent-primary),0.25)]"
                 placeholder="例如 cs, txt; json | yaml，输入 . 表示全部文件"
                 @input="fileSearchStore.setCustomFileTypesText($event.target.value)"
               >
@@ -81,7 +81,7 @@
             <div class="flex flex-wrap items-center gap-3">
               <label v-for="option in excludeOptions" :key="option.key" class="inline-flex items-center gap-2 whitespace-nowrap" v-tooltip="option.desc" >
                 <input :checked="isExcludeEnabled(option.key)" type="checkbox"
-                  class="size-3.5 rounded border border-text-main/20 bg-black/20 accent-accent-cool"
+                  class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-cool"
                   @change="toggleExcludeOption(option.key)"
                 >
                 {{ option.label }}
@@ -93,22 +93,22 @@
 
         <div class="relative z-10 flex min-h-0 flex-1 flex-col px-4 py-3">
 
-          <div class="min-h-0 flex-1 overflow-hidden rounded-md border border-text-main/8 bg-black/18">
+          <div class="min-h-0 flex-1 overflow-hidden rounded-md border border-border-base/10 bg-bg-muted/70">
             <div class="grid h-full min-h-0 grid-cols-[390px_minmax(0,1fr)]">
-              <div class="flex min-h-0 flex-col overflow-hidden border-r border-text-main/8 bg-black/16">
-                <div class="flex gap-1.5 items-center justify-between border-b border-text-main/8 px-3 py-2">
-                  <div class="text-sm font-black uppercase tracking-[0.18em] text-text-main/60">搜索结果</div>
+              <div class="flex min-h-0 flex-col overflow-hidden border-r border-border-base/10 bg-bg-muted/60">
+                <div class="flex gap-1.5 items-center justify-between border-b border-border-base/10 px-3 py-2">
+                  <div class="text-sm font-black uppercase tracking-[0.18em] text-text-disabled">搜索结果</div>
                   <input v-model="fileSearchStore.resultFilter" type="text" placeholder="筛选模组、文件名、路径、命中内容"
-                    class="h-8 min-w-0 flex-1 rounded-xl border border-text-main/10 bg-black/22 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-cool/45 focus:shadow-[0_0_0_1px_rgba(14,165,233,0.2)]"
+                    class="h-8 min-w-0 flex-1 rounded-xl border border-border-base/10 bg-bg-muted/70 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-cool/45 focus:shadow-[0_0_0_1px_rgba(var(--rgb-accent-cool),0.2)]"
                   >
-                  <span class="rounded-full border border-text-main/10 bg-text-main/5 px-2 py-0.5 text-xs text-text-dim">
+                  <span class="rounded-full border border-border-base/10 bg-bg-overlay/5 px-2 py-0.5 text-xs text-text-dim">
                     {{ fileSearchStore.filteredResults.length }} / {{ fileSearchStore.results.length }}
                   </span>
                 </div>
 
                 <div v-if="flatRows.length === 0" class="flex h-full items-center justify-center px-6 text-center text-sm text-text-dim">
                   <div>
-                    <div class="text-base font-bold text-text-main/80">{{ emptyTitle }}</div>
+                    <div class="text-base font-bold text-text-soft">{{ emptyTitle }}</div>
                     <div class="mt-2 leading-6">{{ emptyDescription }}</div>
                   </div>
                 </div>
@@ -117,7 +117,7 @@
                   <RecycleScroller ref="treeScrollerRef" :items="flatRows" key-field="id" :item-size="TREE_ROW_HEIGHT" class="h-full custom-scrollbar" >
                     <template #default="{ item }">
                       <button v-if="item.type === 'mod'"
-                        class="flex h-8 w-full items-center gap-1 px-2 text-left text-sm transition-colors hover:bg-text-main/6"
+                        class="flex h-8 w-full items-center gap-1 px-2 text-left text-sm transition-colors hover:bg-bg-overlay/5"
                         @click="toggleMod(item.group.id)" @contextmenu="openModMenu($event, item.group)"
                       >
                         <component :is="isExpandedMod(item.group.id) ? ChevronDown : ChevronRight" class="size-3.5 shrink-0 text-text-dim" />
@@ -125,7 +125,7 @@
                           {{ item.group.mod_name }}
                         </span>
                         <span class="ml-auto inline-flex items-center gap-1 shrink-0">
-                          <span class="rounded border border-text-main/10 bg-text-main/6 px-1.5 py-0 text-[0.65rem] leading-4" :class="storeBadgeClass(item.group.store)">
+                          <span class="rounded border border-border-base/10 bg-bg-overlay/5 px-1.5 py-0 text-[0.65rem] leading-4" :class="storeBadgeClass(item.group.store)">
                             {{ storeLabel(item.group.store) }}
                           </span>
                           <span class="text-xs text-text-dim">{{ item.group.count }}</span>
@@ -133,7 +133,7 @@
                       </button>
 
                       <button v-else-if="item.type === 'file'"
-                        class="flex h-7 w-full items-center gap-1 px-2  text-left text-sm transition-colors hover:bg-text-main/6"
+                        class="flex h-7 w-full items-center gap-1 px-2  text-left text-sm transition-colors hover:bg-bg-overlay/5"
                         :style="{ paddingLeft: `${12 + item.depth * 16}px` }"
                         @click="openFileNode(item.file)" @contextmenu="openFileMenu($event, item.group, item.file)"
                       >
@@ -147,7 +147,7 @@
 
                       <button v-else class="flex h-6 w-full items-center gap-2 px-2 text-left text-[0.7rem] transition-colors"
                         :style="{ paddingLeft: `${12 + item.depth * 16}px` }"
-                        :class="fileSearchStore.activeMatchId === item.row._row_id ? 'bg-accent-highlight/18 text-text-main' : 'text-text-dim hover:bg-text-main/6'"
+                        :class="fileSearchStore.activeMatchId === item.row._row_id ? 'bg-accent-highlight/18 text-text-main' : 'text-text-dim hover:bg-bg-overlay/5'"
                         @click="selectTreeMatch(item.row)"
                       >
                         <span class="shrink-0 font-mono text-xs" :class="fileSearchStore.activeMatchId === item.row._row_id ? 'text-accent-highlight' : 'text-accent-cool'">{{ item.row.line_number }}</span>
@@ -161,7 +161,7 @@
                     :style="{ height: `${stickyTreeOverlayHeight}px` }"
                   >
                     <button v-if="stickyTreeRows.mod" :style="stickyTreeRows.mod.style" 
-                      class="pointer-events-auto absolute inset-x-0 z-20 flex h-8 items-center gap-1 border-b border-text-main/8 bg-bg-deep/96 px-2 text-left text-sm shadow-[0_8px_18px_rgba(0,0,0,0.16)] backdrop-blur-sm transition-colors hover:bg-bg-deep"
+                      class="pointer-events-auto absolute inset-x-0 z-20 flex h-8 items-center gap-1 border-b border-border-base/10 bg-bg-deep/96 px-2 text-left text-sm shadow-[0_8px_18px_var(--shadow-color)] backdrop-blur-sm transition-colors hover:bg-bg-deep"
                       @click="toggleMod(stickyTreeRows.mod.group.id)" @contextmenu="openModMenu($event, stickyTreeRows.mod.group)"
                     >
                       <component :is="isExpandedMod(stickyTreeRows.mod.group.id) ? ChevronDown : ChevronRight" class="size-3.5 shrink-0 text-text-dim" />
@@ -169,7 +169,7 @@
                         {{ stickyTreeRows.mod.group.mod_name }}
                       </span>
                       <span class="ml-auto inline-flex items-center gap-1 shrink-0">
-                        <span class="rounded border border-text-main/10 bg-text-main/6 px-1.5 py-0 text-[0.65rem] leading-4" :class="storeBadgeClass(stickyTreeRows.mod.group.store)">
+                        <span class="rounded border border-border-base/10 bg-bg-overlay/5 px-1.5 py-0 text-[0.65rem] leading-4" :class="storeBadgeClass(stickyTreeRows.mod.group.store)">
                           {{ storeLabel(stickyTreeRows.mod.group.store) }}
                         </span>
                         <span class="text-xs text-text-dim">{{ stickyTreeRows.mod.group.count }}</span>
@@ -177,7 +177,7 @@
                     </button>
 
                     <button v-if="stickyTreeRows.file"
-                      class="pointer-events-auto absolute inset-x-0 z-10 flex h-7 items-center gap-1 border-b border-text-main/8 bg-black/92 px-2 text-left text-sm shadow-[0_8px_18px_rgba(0,0,0,0.16)] backdrop-blur-sm transition-colors hover:bg-black/96"
+                      class="pointer-events-auto absolute inset-x-0 z-10 flex h-7 items-center gap-1 border-b border-border-base/10 bg-bg-inset/95 px-2 text-left text-sm shadow-[0_8px_18px_var(--shadow-color)] backdrop-blur-sm transition-colors hover:bg-bg-inset/96"
                       :style="{
                         ...stickyTreeRows.file.style,
                         paddingLeft: `${12 + stickyTreeRows.file.depth * 16}px`,
@@ -196,8 +196,8 @@
                 </div>
               </div>
 
-              <div class="flex min-h-0 flex-col overflow-hidden bg-black/12">
-                <div class="flex items-center justify-between gap-3 border-b border-text-main/8 px-4 py-2">
+              <div class="flex min-h-0 flex-col overflow-hidden bg-bg-muted/50">
+                <div class="flex items-center justify-between gap-3 border-b border-border-base/10 px-4 py-2">
                   <div class="min-w-0">
                     <div class="truncate font-mono text-sm text-text-main" v-tooltip="viewerTitleTooltip">
                       {{ fileSearchStore.viewerState.fileName || '未选择文件' }}
@@ -206,24 +206,24 @@
                   <div class="flex shrink-0 items-center gap-2">
                     <div class="flex items-center gap-1">
                       <input v-model="viewerSearchQuery" type="text"
-                        class="h-8 min-w-50 rounded-lg border border-text-main/10 bg-black/24 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-cool/40 focus:shadow-[0_0_0_1px_rgba(14,165,233,0.18)]"
+                        class="h-8 min-w-50 rounded-lg border border-border-base/10 bg-bg-inset/60 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-cool/40 focus:shadow-[0_0_0_1px_rgba(var(--rgb-accent-cool),0.18)]"
                         placeholder="在当前文件中搜索定位" @keydown.enter.prevent="goToNextViewerMatch()"
                       >
-                      <button class="rounded-lg border border-text-main/10 bg-text-main/5 px-1 py-1 text-text-dim transition-colors hover:bg-text-main/10 hover:text-text-main disabled:opacity-40"
+                      <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 px-1 py-1 text-text-dim transition-colors hover:bg-bg-overlay/10 hover:text-text-main disabled:opacity-40"
                         :disabled="viewerMatchEntries.length === 0" @click="goToPreviousViewerMatch()" v-tooltip="'上一个搜索结果'" ><ChevronUp class="size-5" />
                       </button>
-                      <button class="rounded-lg border border-text-main/10 bg-text-main/5 px-1 py-1 text-text-dim transition-colors hover:bg-text-main/10 hover:text-text-main disabled:opacity-40"
+                      <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 px-1 py-1 text-text-dim transition-colors hover:bg-bg-overlay/10 hover:text-text-main disabled:opacity-40"
                         :disabled="viewerMatchEntries.length === 0" @click="goToNextViewerMatch()" v-tooltip="'下一个搜索结果'" ><ChevronDown class="size-5" />
                       </button>
-                      <span class="rounded-full border border-text-main/10 bg-text-main/5 px-2 py-0.5 text-xs text-text-dim">
+                      <span class="rounded-full border border-border-base/10 bg-bg-overlay/5 px-2 py-0.5 text-xs text-text-dim">
                         {{ viewerMatchCounterLabel }}
                       </span>
                     </div>
                     
 
-                    <label class="inline-flex h-8 items-center gap-2 rounded-lg border border-text-main/10 bg-text-main/5 px-2.5 text-xs text-text-dim transition-colors hover:bg-text-main/10 hover:text-text-main">
+                    <label class="inline-flex h-8 items-center gap-2 rounded-lg border border-border-base/10 bg-bg-overlay/5 px-2.5 text-xs text-text-dim transition-colors hover:bg-bg-overlay/10 hover:text-text-main">
                       <input v-model="wrapViewerLines" type="checkbox"
-                        class="size-3.5 rounded border border-text-main/20 bg-black/20 accent-accent-cool"
+                        class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-cool"
                       >自动换行
                     </label>
                     <span v-if="fileSearchStore.viewerState.truncated"

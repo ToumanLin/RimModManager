@@ -1,21 +1,21 @@
 <!-- frontend/src/components/utils/UnifiedLogPanel.vue -->
 <template>
-  <div class="flex flex-col h-full w-full bg-black/20 font-mono text-sm">
-    
+  <div class="flex flex-col h-full w-full bg-bg-muted/70 font-mono text-sm">
+
     <!-- ================= 1. 顶部工具栏 ================= -->
-    <div class="flex flex-wrap items-center justify-between px-3 py-2 border-b border-text-main/5 bg-text-main/2 gap-2">
-      
+    <div class="flex flex-wrap items-center justify-between px-3 py-2 border-b border-border-base/5 bg-glass-light gap-2">
+
       <!-- A. 文件选择 / 实时切换 与 刷新 -->
       <div class="flex items-center gap-2">
         <div class="relative group/file z-30">
-          <button class="flex items-center gap-2 px-3 py-1.5 bg-black/30 hover:bg-text-main/5 border border-text-main/10 rounded-lg text-xs text-accent-cool transition-colors min-w-40 justify-between shadow-inner">
+          <button class="flex items-center gap-2 px-3 py-1.5 bg-bg-inset/70 hover:bg-bg-overlay/5 border border-border-base/10 rounded-lg text-xs text-accent-cool transition-colors min-w-40 justify-between shadow-inner">
             <span class="truncate">{{ files.length ? selectedFile : '无日志文件' }}</span>
             <svg class="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
           </button>
-          
-          <div class="absolute left-0 top-full mt-1 w-72 bg-bg-deep/95 border border-text-main/10 rounded-lg shadow-2xl backdrop-blur-xl opacity-0 invisible group-hover/file:opacity-100 group-hover/file:visible transition-all duration-200 transform origin-top-left z-50">
+
+          <div class="absolute left-0 top-full mt-1 w-72 bg-glass-heavy border border-border-base/10 rounded-lg shadow-2xl backdrop-blur-xl opacity-0 invisible group-hover/file:opacity-100 group-hover/file:visible transition-all duration-200 transform origin-top-left z-50">
             <div v-for="file in files" :key="file.path" @click="switchFile(file.name)"
-                class="px-3 py-2 hover:bg-text-main/10 cursor-pointer flex items-center justify-between">
+                class="px-3 py-2 hover:bg-bg-overlay/10 cursor-pointer flex items-center justify-between">
               <div class="flex flex-col min-w-0">
                 <span class="text-sm text-text-main truncate" :class="{'font-bold text-accent-primary': file.name === selectedFile}">{{ file.name }}</span>
                 <span class="text-xs text-text-dim">{{ file.mtime }}</span>
@@ -31,21 +31,21 @@
           class="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border transition-all"
           :class="isLiveView
             ? 'bg-accent-success/20 text-accent-success border-accent-success/40'
-            : 'bg-black/10 text-text-dim border-text-main/10 hover:bg-accent-success/10 hover:text-accent-success'">
+            : 'bg-bg-muted/50 text-text-dim border-border-base/10 hover:bg-accent-success/10 hover:text-accent-success'">
           <span
             class="w-2 h-2 rounded-full"
-            :class="isLiveView ? 'bg-accent-success shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-text-dim/60'">
+            :class="isLiveView ? 'bg-accent-success shadow-[0_0_8px_rgba(var(--rgb-accent-success),0.8)]' : 'bg-bg-neutral'">
           </span>
           <span>{{ isLiveView ? '实时模式' : '切到实时' }}</span>
         </button>
 
-        <button @click="reloadAll" class="p-1.5 hover:bg-text-main/10 rounded-lg text-text-dim hover:text-text-main transition-colors" v-tooltip="'强制重新读取'">
+        <button @click="reloadAll" class="p-1.5 hover:bg-bg-overlay/10 rounded-lg text-text-dim hover:text-text-main transition-colors" v-tooltip="'强制重新读取'">
           <svg class="w-4 h-4" :class="{'animate-spin text-accent-primary': loadingFile}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
         </button>
         <!-- 自动刷新开关 -->
-        <button @click="autoScroll = !autoScroll" 
+        <button @click="autoScroll = !autoScroll"
           class="p-1.5 rounded-lg border transition-all"
-          :class="autoScroll ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30' : 'bg-transparent text-text-dim border-transparent hover:bg-text-main/5'"
+          :class="autoScroll ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30' : 'bg-transparent text-text-dim border-transparent hover:bg-bg-overlay/5'"
           v-tooltip="autoScroll ? '禁用自动滚动' : '启用自动滚动到底部'">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
         </button>
@@ -55,15 +55,15 @@
       <div class="flex-1 flex items-center gap-2 max-w-xl">
         <div class="flex-1 relative group/search">
           <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim group-focus-within/search:text-accent-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-          <input v-model="searchQuery" type="text" placeholder="正则搜索 (如 Exception|Crash)..." 
-            class="w-full bg-black/30 border border-text-main/10 rounded-lg py-1.5 pl-8 pr-8 text-xs text-text-main focus:outline-none focus:border-accent-primary/50 transition-all placeholder:text-text-dim/50" />
+          <input v-model="searchQuery" type="text" placeholder="正则搜索 (如 Exception|Crash)..."
+            class="w-full bg-bg-inset/70 border border-border-base/10 rounded-lg py-1.5 pl-8 pr-8 text-xs text-text-main focus:outline-none focus:border-accent-primary/50 transition-all placeholder:text-text-disabled" />
           <button v-if="searchQuery" @click="searchQuery = ''" class="absolute right-2 top-1/2 -translate-y-1/2 text-text-dim hover:text-text-main">
             <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
 
         <!-- 时间段筛选 (简单起见使用原生 time input) -->
-        <div class="flex items-center gap-1 bg-black/30 border border-text-main/10 rounded-lg px-2 py-1">
+        <div class="flex items-center gap-1 bg-bg-inset/70 border border-border-base/10 rounded-lg px-2 py-1">
           <input type="time" v-model="timeFilter.start" class="bg-transparent text-xs text-text-main outline-none w-20" v-tooltip="'开始时间'" />
           <span class="text-text-dim">-</span>
           <input type="time" v-model="timeFilter.end" class="bg-transparent text-xs text-text-main outline-none w-20" v-tooltip="'结束时间'" />
@@ -72,7 +72,7 @@
       </div>
 
       <!-- C. 级别筛选 -->
-      <div class="flex items-center gap-1 bg-black/20 p-1 rounded-lg border border-text-main/5">
+      <div class="flex items-center gap-1 bg-bg-muted/70 p-1 rounded-lg border border-border-base/5">
         <button v-for="lvl in ['INFO','WARNING','ERROR','DEBUG']" :key="lvl"
           @click="filters[lvl] = !filters[lvl]"
           class="px-2 py-0.5 text-xs font-bold rounded transition-all select-none"
@@ -87,16 +87,16 @@
       <div class="text-xs text-accent-primary">
         当前运行的游戏环境是 <span class="font-bold">{{ runtimeProfileName }}</span> ，点击切换到当前实际运行的游戏环境，获取实时日志。
       </div>
-      <button @click="switchToRuntimeProfile" class="px-2 py-1 rounded-lg text-[0.7rem] font-bold bg-accent-primary/15 text-accent-primary hover:bg-accent-primary hover:text-black transition-colors" >
+      <button @click="switchToRuntimeProfile" class="px-2 py-1 rounded-lg text-[0.7rem] font-bold bg-accent-primary/15 text-accent-primary hover:bg-accent-primary hover:text-on-accent-primary transition-colors" >
         切换到当前运行的游戏环境
       </button>
     </div>
 
     <!-- ================= 2. 日志内容区 ================= -->
-    <div class="flex-1 relative min-h-0 bg-[#0a0a0a]" ref="scrollContainer">
-      
+    <div class="flex-1 relative min-h-0 bg-bg-inset" ref="scrollContainer">
+
       <!-- 触顶加载指示器 -->
-      <div v-if="hasMore" class="absolute top-0 left-0 w-full py-2 flex justify-center z-10 bg-linear-to-b from-black/80 to-transparent pointer-events-none">
+      <div v-if="hasMore" class="absolute top-0 left-0 w-full py-2 flex justify-center z-10 bg-linear-to-b from-bg-inset/90 to-transparent pointer-events-none">
         <div class="px-3 py-1 rounded-full bg-accent-primary/20 text-accent-primary text-xs font-bold backdrop-blur-md flex items-center gap-2 shadow-lg">
           <svg v-if="loadingMore" class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           <span v-else>向上滚动加载更多...</span>
@@ -104,25 +104,25 @@
       </div>
 
       <!-- 虚拟滚动容器 -->
-      <DynamicScroller v-if="filteredLogs.length" :items="filteredLogs" :min-item-size="28" class="h-full custom-scrollbar px-2" 
+      <DynamicScroller v-if="filteredLogs.length" :items="filteredLogs" :min-item-size="28" class="h-full custom-scrollbar px-2"
         key-field="id" ref="scrollerRef" @scroll="onScroll" v-selectable-list="selectionConfig" >
         <template v-slot="{ item, index, active }">
           <DynamicScrollerItem :item="item" :active="active" :data-index="index" :size-dependencies="getRowSizeDependencies(item)" >
             <!-- 行容器：绑定 data-id，增加选中高亮背景，增加 swipe-trigger 类名以支持拖拽滑动多选 -->
-            <div class="flex gap-2 group/row rounded-sm border-l-2 transition-colors text-shadow-md wrap-break-word leading-relaxed hover:bg-text-main/5 mb-0.5"
+            <div class="flex gap-2 group/row rounded-sm border-l-2 transition-colors text-shadow-md wrap-break-word leading-relaxed hover:bg-bg-overlay/5 mb-0.5"
                 :class="[ getBorderClass(item.level), selectedIds.includes(item.id) ? 'bg-accent-primary/10 border-accent-primary' : '' ]"
                 :data-id="item.id">
-              
+
               <!-- 多选框区 (click-trigger 支持单点/Shift多选) -->
               <div v-if="sourceType === 'game' || appStore.settings.debug_mode" class="shrink-0 flex items-start pt-1 pl-1 swipe-trigger cursor-pointer">
                 <div class="w-4 h-4 rounded border flex items-center justify-center transition-colors pointer-events-none"
-                    :class="selectedIds.includes(item.id) ? 'bg-accent-primary border-accent-primary text-bg-deep' : 'border-text-dim/40 group-hover/row:border-text-dim'">
+                    :class="selectedIds.includes(item.id) ? 'bg-accent-primary border-accent-primary text-bg-deep' : 'border-border-base/18 group-hover/row:border-border-base/10'">
                   <svg v-if="selectedIds.includes(item.id)" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                 </div>
               </div>
-              
+
               <!-- 时间戳与级别 (紧凑显示) -->
-              <div class="shrink-0 w-fit flex items-start text-text-dim/60 select-none pt-0.5 pl-1">
+              <div class="shrink-0 w-fit flex items-start text-text-disabled select-none pt-0.5 pl-1">
                 <span >{{ formatTime(item.timestamp) }}</span>
               </div>
 
@@ -136,7 +136,7 @@
                   </span>
                   <!-- App 源文件路径 -->
                   <span v-if="item.context.source === 'app' && item.context.path"
-                    class="px-1.5 py-0.5 rounded bg-black/40 text-text-dim text-xs border border-text-main/20 max-w-[18rem] truncate"
+                    class="px-1.5 py-0.5 rounded bg-bg-inset/80 text-text-dim text-xs border border-border-base/18 max-w-[18rem] truncate"
                     v-tooltip="item.context.path">
                     {{ item.context.path }}
                   </span>
@@ -174,12 +174,12 @@
                 </button>
                 <!-- 展开详情 (堆栈) -->
                 <div v-if="item.details" class="mt-1">
-                  <button @click="item._expanded = !item._expanded" 
+                  <button @click="item._expanded = !item._expanded"
                     class="flex items-center gap-1 text-xs text-text-dim hover:text-text-main transition-colors select-none mb-0.5">
                     <svg class="w-3 h-3 transition-transform" :class="item._expanded ? 'rotate-90' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
                     <span>{{ item._expanded ? '收起堆栈详情' : '展开堆栈详情' }}</span>
                   </button>
-                  <div v-if="item._expanded" class="pl-2 border-l border-text-main/10 text-text-dim/70 text-xs bg-black/30 rounded p-1.5 overflow-x-auto whitespace-pre-wrap">
+                  <div v-if="item._expanded" class="pl-2 border-l border-border-base/10 text-text-dim text-xs bg-bg-inset/70 rounded p-1.5 overflow-x-auto whitespace-pre-wrap">
                     {{ item.details }}
                   </div>
                 </div>
@@ -189,11 +189,11 @@
               <!-- 右侧重复计数 -->
               <div class="shrink-0 flex items-start pt-0.5 pr-1 gap-1">
                 <div v-if="item.count && item.count > 1"
-                  class="px-1.5 py-0.5 rounded-full bg-text-main/10 text-text-main text-[0.7rem] font-bold">
+                  class="px-1.5 py-0.5 rounded-full bg-bg-overlay/10 text-text-main text-[0.7rem] font-bold">
                   x{{ item.count }}
                 </div>
                 <!-- 复制按钮 -->
-                <button @click="copyLogContent([item])" class="p-1 rounded opacity-0 group-hover/row:opacity-100 hover:bg-text-main/20 text-text-dim hover:text-text-main transition-all" v-tooltip="'复制日志内容'">
+                <button @click="copyLogContent([item])" class="p-1 rounded opacity-0 group-hover/row:opacity-100 hover:bg-bg-overlay/10 text-text-dim hover:text-text-main transition-all" v-tooltip="'复制日志内容'">
                   <Copy class="w-4 h-4" />
                 </button>
               </div>
@@ -202,7 +202,7 @@
         </template>
       </DynamicScroller>
 
-      <div v-else-if="!loadingFile" class="h-full flex flex-col items-center justify-center text-text-dim/30">
+      <div v-else-if="!loadingFile" class="h-full flex flex-col items-center justify-center text-text-disabled">
         <svg class="w-12 h-12 mb-2 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
         <span>暂无与当前筛选条件匹配的日志。</span>
       </div>
@@ -363,7 +363,7 @@ const copyLogContent = async (logsArray) => {
     const details = l.details ? `\n[Stacktrace]\n${l.details}` : '';
     return `${msg}${details}`;
   }).join('\n\n------\n\n');
-  
+
   try {
     await navigator.clipboard.writeText(textToCopy);
     toast.success(`成功复制 ${logsArray.length} 条日志`);
@@ -377,7 +377,7 @@ defineExpose({
   clearSelection: () => {
     logStore.clearSelection(props.sourceType)
   },
-  copySelection: () => { 
+  copySelection: () => {
     const selectedObjects = logStore.getSelectedLogs(props.sourceType)
     copyLogContent(selectedObjects);
   },
@@ -386,7 +386,7 @@ defineExpose({
     return allLoadedLogs.value.filter(l => l.level === 'ERROR' || l.level === 'WARNING' || l.level === 'EXCEPTION');
   },
   // 暴露当前文件名给父组件调用预检接口
-  selectedFile: selectedFile 
+  selectedFile: selectedFile
 })
 
 
@@ -531,7 +531,7 @@ async function switchFile(filename) {
 
 async function switchFileWithOptions(filename, { preserveSelection = false } = {}) {
   if (!filename) return;
-  
+
   loadingFile.value = true;
   cleanupPanel(); // 清理旧的监听
   if (!preserveSelection) {
@@ -554,7 +554,7 @@ async function switchFileWithOptions(filename, { preserveSelection = false } = {
   if (isLiveView.value) {
     startRealtimeListener();
   }
-  
+
   loadingFile.value = false;
 }
 
@@ -570,10 +570,10 @@ function reloadAll() {
 // isPolling: 定时器后台刷新最新数据 (插入尾部)
 async function fetchPage(page, isScrollUp = false, isInitial = false) {
   if (!window.pywebview || !selectedFile.value) return;
-  
+
   try {
     const res = await window.pywebview.api.read_log_page(String(props.sourceType), String(selectedFile.value), Number(page), 500, 'active');
-    
+
     if (res && res.status === 'success') {
       const newBlocks = res.data.blocks.map(b => normalizeBlock(b));
       hasMore.value = res.data.has_more;
@@ -588,7 +588,7 @@ async function fetchPage(page, isScrollUp = false, isInitial = false) {
         const scroller = scrollerRef.value?.$el;
         const oldScrollHeight = scroller ? scroller.scrollHeight : 0;
         const oldScrollTop = scroller ? scroller.scrollTop : 0;
-        
+
         allLoadedLogs.value = [...newBlocks, ...allLoadedLogs.value];
         _enforceMemoryLimit();
         logStore.refreshSelectedSnapshotsFromLoadedLogs(props.sourceType, allLoadedLogs.value)
@@ -637,7 +637,7 @@ function handleRealtimeLog(e) {
     _enforceMemoryLimit();
   }
   logStore.refreshSelectedSnapshotsFromLoadedLogs(props.sourceType, allLoadedLogs.value)
-  
+
   if (autoScroll.value && isAtBottom) {
     nextTick(() => scrollerRef.value?.scrollToBottom());
   }
@@ -664,7 +664,7 @@ async function onScroll(e) {
 // === 计算属性：过滤与搜索 ===
 const filteredLogs = computed(() => {
   let result = allLoadedLogs.value.filter(l => filters.value[l.level])
-  
+
   // 1. 时间过滤
   if (timeFilter.value.start || timeFilter.value.end) {
     const start = timeFilter.value.start ? timeFilter.value.start + ':00' : '00:00:00'
@@ -706,7 +706,7 @@ const filteredLogs = computed(() => {
       })
     }
   }
-  
+
   return result
 })
 
@@ -812,7 +812,7 @@ const getBorderClass = (lvl) => {
   if (lvl === 'ERROR') return 'border-accent-danger/60 bg-accent-danger/5'
   if (lvl === 'WARNING') return 'border-accent-warn/40 bg-accent-warn/5'
   if (lvl === 'DEBUG') return 'border-accent-primary/40 bg-accent-primary/5'
-  return 'border-text-main/10' 
+  return 'border-border-base/10'
 }
 
 // 根据级别调整正文文字颜色，提高信息对比度
@@ -834,8 +834,8 @@ const openMod = (modId) => {
 <style scoped>
 .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; border: 2px solid #0a0a0a; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 4px; border: 2px solid var(--color-bg-inset); }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--color-accent-primary); }
 
 /* 多行日志默认折叠时使用的渐隐效果，控制高度约为三行左右 */
 .log-body-collapsed {
@@ -850,6 +850,6 @@ const openMod = (modId) => {
   right: 0;
   bottom: 0;
   height: 1.5em;
-  background: linear-gradient(to top, #0a0a0a, rgba(10,10,10,0));
+  background: linear-gradient(to top, var(--color-bg-inset), transparent);
 }
 </style>

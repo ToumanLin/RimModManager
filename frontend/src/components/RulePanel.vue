@@ -4,12 +4,12 @@
       class="fixed inset-0 z-100 flex items-center justify-center bg-bg-deep/60 backdrop-blur-md"
       @click.self="appStore.uiState.showRuleDrawer = false">
 
-      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-md p-10" @click.self="appStore.uiState.showRuleDrawer = false">
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-bg-muted/70 backdrop-blur-md p-10" @click.self="appStore.uiState.showRuleDrawer = false">
         
-        <div class="flex w-full max-w-9/10 h-full max-h-[90vh] bg-bg-deep/95 border border-text-main/10 rounded-2xl shadow-3xl overflow-hidden animate-scale-in">
+        <div class="flex w-full max-w-9/10 h-full max-h-[90vh] bg-bg-deep/95 border border-border-base/10 rounded-2xl shadow-3xl overflow-hidden animate-scale-in">
           
           <!-- ================= 左侧侧边栏 ================= -->
-          <aside class="w-64 bg-black/20 border-r border-text-main/5 flex flex-col">
+          <aside class="w-64 bg-bg-muted/30 border-r border-border-base/5 flex flex-col">
             <div class="p-6">
               <h2 class="text-xl font-bold text-text-main flex items-center gap-2" @click="ruleStore.fetchRules">
                 <svg class="w-6 h-6 text-accent-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
@@ -21,17 +21,17 @@
             <nav class="flex-1 px-2 space-y-1" data-tour="rule-tabs">
               <button v-for="tab in tabs" :key="tab.id" :data-tour="`rule-tab-${tab.id}`" @click="currentTab = tab.id"
                 class="w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-bold transition-all duration-200 group"
-                :class="currentTab === tab.id ? 'bg-accent-primary/10 text-accent-primary border border-accent-primary/20' : 'text-text-dim hover:bg-text-main/5 border border-transparent'">
+                :class="currentTab === tab.id ? 'bg-accent-primary/10 text-accent-primary border border-accent-primary/20' : 'text-text-dim hover:bg-bg-overlay/5 border border-transparent'">
                 <div class="flex items-center gap-2">
                   <component :is="tab.icon" class="w-4 h-4 transition-transform group-hover:scale-110" />
                   {{ tab.label }}
                 </div>
-                <span v-if="tab.count !== undefined" class="bg-black/30 px-2 py-0.5 rounded text-xs opacity-60">{{ tab.count }}</span>
+                <span v-if="tab.count !== undefined" class="bg-bg-inset/70 px-2 py-0.5 rounded text-xs opacity-60">{{ tab.count }}</span>
               </button>
             </nav>
 
             <!-- ================= 优先级排序 (侧边栏) ================= -->
-            <div class="px-4 py-4 bg-bg-highlight/25 border-text-main/5" data-tour="rule-priority">
+            <div class="px-4 py-4 bg-bg-highlight/25 border-border-base/5" data-tour="rule-priority">
               <div class="flex items-center justify-between mb-3 px-2">
                 <span class="text-xs font-bold text-text-dim uppercase tracking-widest">
                   生效优先级
@@ -57,42 +57,42 @@
                     @dragstart="onDragStart($event, idx)"
                     @dragover="onDragOver($event, idx)" 
                     @dragend="onDragEnd"
-                    class="drag-item flex items-center gap-2 px-3 py-2 bg-text-dim/10 border border-text-main/5 rounded-lg cursor-grab active:cursor-grabbing group transition-colors hover:border-accent-primary/30"
+                    class="drag-item flex items-center gap-2 px-3 py-2 bg-bg-overlay/5 border border-border-base/5 rounded-lg cursor-grab active:cursor-grabbing group transition-colors hover:border-accent-primary/30"
                     :class="{ 'opacity-20 bg-accent-primary/5 border-accent-primary/50': dragIndex === idx }">
                     <!-- 内部元素增加 pointer-events-none 防止干扰 dragenter -->
                     <GripVertical class="pointer-events-none w-3.5 h-3.5  group-hover:text-accent-primary transition-colors" :class="[(globalRulesEnableMap[source]||source=='native')?'text-accent-success':'text-text-dim']" />
-                    <span class="pointer-events-none text-xs font-medium text-text-main/80 select-none">{{ sourceNames[source] }}</span>
-                    <span class="pointer-events-none ml-auto text-[0.7rem] font-mono text-text-dim bg-black/40 w-4 h-4 flex items-center justify-center rounded">
+                    <span class="pointer-events-none text-xs font-medium text-text-soft select-none">{{ sourceNames[source] }}</span>
+                    <span class="pointer-events-none ml-auto text-[0.7rem] font-mono text-text-dim bg-bg-inset/80 w-4 h-4 flex items-center justify-center rounded">
                       {{ idx + 1 }}
                     </span>
                   </div>
                 </TransitionGroup>
               </div>
-              <p class="text-[0.7rem] text-text-dim/60 mt-2 px-2 leading-relaxed">
+              <p class="text-[0.7rem] text-text-disabled mt-2 px-2 leading-relaxed">
                 * 生效优先级：从上到下，优先级从高到低。
               </p>
             </div>
 
-            <div class="p-4 border-t border-text-main/5 space-y-2" data-tour="rule-import-export">
-              <button @click="ruleStore.handleImport" class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-text-main/5 hover:bg-text-main/10 text-sm text-text-dim transition-all border border-text-main/5">
+            <div class="p-4 border-t border-border-base/5 space-y-2" data-tour="rule-import-export">
+              <button @click="ruleStore.handleImport" class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-bg-overlay/5 hover:bg-bg-overlay/10 text-sm text-text-dim transition-all border border-border-base/5">
                 <Download class="w-3 h-3" /> 导入配置包
               </button>
-              <button @click="ruleStore.handleExport" class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-text-main/5 hover:bg-text-main/10 text-sm text-text-dim transition-all border border-text-main/5">
+              <button @click="ruleStore.handleExport" class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-bg-overlay/5 hover:bg-bg-overlay/10 text-sm text-text-dim transition-all border border-border-base/5">
                 <Share2 class="w-3 h-3" /> 导出配置包
               </button>
             </div>
           </aside>
 
           <!-- ================= 右侧主内容区 ================= -->
-          <main class="flex-1 flex flex-col min-w-0 bg-text-main/1">
+          <main class="flex-1 flex flex-col min-w-0 bg-bg-deep">
             
             <!-- 顶部工具栏 -->
-            <header class="h-16 border-b border-text-main/5 flex items-center justify-between px-6 bg-black/10">
+            <header class="h-16 border-b border-border-base/5 flex items-center justify-between px-6 bg-bg-muted/30">
               <!-- 搜索 -->
               <div class="relative w-72 group" data-tour="rule-search">
                 <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim group-focus-within:text-accent-primary transition-colors" />
                 <input v-model="searchQuery" placeholder="搜索规则、Mod名称或ID..." 
-                  class="w-full bg-black/20 border border-text-main/10 rounded-full pl-9 pr-4 py-1.5 text-sm text-text-main focus:border-accent-primary focus:bg-black/40 outline-none transition-all" />
+                  class="w-full bg-bg-surface border border-border-base/10 rounded-full pl-9 pr-4 py-1.5 text-sm text-text-main focus:border-accent-primary focus:bg-bg-inset/80 outline-none transition-all" />
               </div>
 
               <!-- 全局开关与操作 -->
@@ -101,7 +101,7 @@
                 <label v-if="currentTab == 'workshop'" class="flex items-center gap-2 cursor-pointer select-none">
                   <div class="relative">
                     <input type="checkbox" v-model="workshopRulesAsDependency" class="sr-only peer" >
-                    <div class="w-9 h-5 bg-text-main/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-text-main after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-text-main after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-highlight"></div>
+                    <div class="w-9 h-5 bg-bg-overlay/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-bg-contrast after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-bg-contrast after:border-border-base/18 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-highlight"></div>
                   </div>
                   <span class="text-sm text-text-dim font-bold">作为强依赖</span>
                 </label>
@@ -109,19 +109,19 @@
                 <label v-if="currentTab !== 'dynamic'" class="flex items-center gap-2 cursor-pointer select-none">
                   <div class="relative">
                     <input type="checkbox" v-model="filterInstalled" class="sr-only peer">
-                    <div class="w-9 h-5 bg-text-main/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-text-main after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-text-main after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-secondary"></div>
+                    <div class="w-9 h-5 bg-bg-overlay/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-bg-contrast after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-bg-contrast after:border-border-base/18 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-secondary"></div>
                   </div>
                   <span class="text-sm text-text-dim font-bold">仅显示已安装</span>
                 </label>
 
                 <button v-if="currentTab === 'dynamic'" data-tour="rule-create" @click="createDynamicRule"
-                  class="flex items-center gap-2 px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-black text-sm font-bold rounded-lg shadow-lg shadow-accent-primary/20 transition-all active:scale-95">
+                  class="flex items-center gap-2 px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-on-accent-primary text-sm font-bold rounded-lg shadow-lg shadow-accent-primary/20 transition-all active:scale-95">
                   <Plus class="w-4 h-4" /> 新建规则
                 </button>
                 <label class="flex items-center gap-2 cursor-pointer select-none" :key="currentTab + 'Enable'">
                   <div class="relative">
                     <input type="checkbox" v-model="globalRulesEnable" class="sr-only peer" >
-                    <div class="w-9 h-5 bg-text-main/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-text-main after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-text-main after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-success"></div>
+                    <div class="w-9 h-5 bg-bg-overlay/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-bg-contrast after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-bg-contrast after:border-border-base/18 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-success"></div>
                   </div>
                   <span class="text-sm text-text-dim font-bold">启用规则</span>
                 </label>
@@ -134,25 +134,27 @@
               <!-- 1. 动态规则列表 -->
               <template v-if="currentTab === 'dynamic'">
                 <div v-for="rule in filteredDynamicRules" :key="rule.rule_id" 
-                  class="group relative bg-text-main/5 border border-text-main/10 hover:border-accent-primary/30 rounded-xl p-4 transition-all duration-200">
+                  class="group relative bg-bg-surface border border-border-base/10 hover:border-accent-primary/30 rounded-xl p-4 transition-all duration-200">
                   
                   <div class="flex justify-between items-start ">
                     <div class="flex-1">
                       <div class="flex items-center gap-2">
                         <span class="text-sm font-bold text-text-main">{{ rule.name }}</span>
-                        <span class="text-xs px-2 py-0.5 rounded bg-black/30 text-text-dim border border-text-main/5">Priority: {{ rule.priority }}</span>
-                        <span v-if="!rule.enabled" class="text-xs px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">已禁用</span>
+                        <span class="text-xs px-2 py-0.5 rounded bg-bg-inset/70 text-text-dim border border-border-base/5">Priority: {{ rule.priority }}</span>
+                        <span v-if="!rule.enabled" class="text-xs px-2 py-0.5 rounded bg-accent-danger/10 text-accent-danger border border-accent-danger/20">已禁用</span>
                         <span v-if="rule.description" :title="rule.description" class="flex-1 text-xs px-1 py-0.5 text-text-dim ">{{ rule.description }}</span>
                       </div>
                       
                       <!-- 逻辑可视化 -->
                       <div class="mt-3 flex flex-wrap gap-2 items-center text-sm">
                         <span class="text-accent-secondary font-bold font-mono">IF</span>
-                        <div class="flex flex-wrap gap-1">
+                        <div class="flex items-center flex-wrap gap-1">
                           <span v-for="(f, i) in rule.filters" :key="i">
                             <span v-if="i>0" class="text-accent-cool mr-1">{{ rule.logic }}</span>
-                            <span class="px-1.5 py-0.5 rounded bg-text-main/10 text-text-main border border-text-main/5">
-                              {{ ruleStore.DYNAMIC_RULE_PROPS[f.field] }} {{ formatOperator(f.operator) }} <span class="text-accent-cool">{{ f.value }}</span>
+                            <span class="px-1.5 py-0.5 flex items-center gap-1 rounded bg-bg-overlay/10 text-text-main border border-border-base/5">
+                              {{ ruleStore.DYNAMIC_RULE_PROPS[f.field] }}
+                              <span class="text-accent-tip">{{ formatOperator(f.operator) }}</span>
+                              <span class="text-accent-cool">{{ f.value }}</span>
                             </span>
                           </span>
                         </div>
@@ -166,21 +168,21 @@
                     <!-- 操作区 -->
                     <div class="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
                       <button @click="ruleStore.toggleDynamicRule(rule)" v-tooltip="rule.enabled ? '禁用规则' : '启用规则'"
-                        class="p-2 rounded-lg hover:bg-text-main/10" :class="rule.enabled ? 'text-accent-success' : 'text-accent-danger'">
+                        class="p-2 rounded-lg hover:bg-bg-overlay/10" :class="rule.enabled ? 'text-accent-success' : 'text-accent-danger'">
                         <CircleCheckBig v-if="rule.enabled" class="w-4 h-4" />
                         <CircleOff v-else class="w-4 h-4" />
                       </button>
-                      <button @click="editDynamicRule(rule)" v-tooltip="'编辑'" class="p-2 rounded-lg hover:bg-text-main/10 text-text-dim hover:text-text-main">
+                      <button @click="editDynamicRule(rule)" v-tooltip="'编辑'" class="p-2 rounded-lg hover:bg-bg-overlay/10 text-text-dim hover:text-text-main">
                         <Edit3 class="w-4 h-4" />
                       </button>
-                      <button @click="deleteDynamicRule(rule, $event)" v-tooltip="'删除'" class="p-2 rounded-lg hover:bg-red-500/10 text-text-dim hover:text-red-400">
+                      <button @click="deleteDynamicRule(rule, $event)" v-tooltip="'删除'" class="p-2 rounded-lg hover:bg-accent-danger/10 text-text-dim hover:text-accent-danger">
                         <Trash2 class="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                 </div>
                 
-                <div v-if="filteredDynamicRules.length === 0" class="flex flex-col items-center justify-center h-64 text-text-dim/30">
+                <div v-if="filteredDynamicRules.length === 0" class="flex flex-col items-center justify-center h-64 text-text-disabled">
                   <Zap class="w-12 h-12 mb-2" />
                   <p class="text-sm">暂无动态规则</p>
                 </div>
@@ -197,7 +199,7 @@
                     <button @click="ruleStore.updateCommunity" class="px-3 py-1.5 bg-accent-secondary/20 hover:bg-accent-secondary/40 text-accent-secondary rounded-lg text-sm font-bold transition-all border border-accent-secondary/30">
                       手动更新库
                     </button>
-                    <span class="text-xs px-2 py-0.5 rounded bg-text-main/5 text-text-dim border border-text-main/5">
+                    <span class="text-xs px-2 py-0.5 rounded bg-bg-overlay/5 text-text-dim border border-border-base/5">
                       更新时间: {{ ruleStore.communityRulesUpdateTime? new Date(ruleStore.communityRulesUpdateTime).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '无' }}
                       <!-- 更新时间: {{ ruleStore.communityRulesUpdateTime }} -->
                     </span>
@@ -213,19 +215,19 @@
                     <button @click="ruleStore.updateCommunity" class="px-3 py-1.5 bg-accent-secondary/20 hover:bg-accent-secondary/40 text-accent-secondary rounded-lg text-sm font-bold transition-all border border-accent-secondary/30">
                       手动更新库
                     </button>
-                    <span class="text-xs px-2 py-0.5 rounded bg-text-main/5 text-text-dim border border-text-main/5">
-                      <!-- 更新时间: {{ ruleStore.communityRulesUpdateTime? new Date(ruleStore.communityRulesUpdateTime).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '无' }} -->
+                    <span class="text-xs px-2 py-0.5 rounded bg-bg-overlay/5 text-text-dim border border-border-base/5">
+                      更新时间: {{ ruleStore.workshopRulesUpdateTime? new Date(ruleStore.workshopRulesUpdateTime).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '无' }}
                       <!-- 更新时间: {{ ruleStore.communityRulesUpdateTime }} -->
                     </span>
                   </div>
                 </div>
 
                 <div v-for="item in filteredStaticRules" :key="item.id" 
-                  class="flex gap-2 p-2 rounded-xl bg-text-main/2 border border-text-main/5 hover:bg-text-main/5 transition-colors">
+                  class="flex gap-2 p-2 rounded-xl bg-bg-surface/80 border border-border-base/5 hover:brightness-125 transition-colors">
                   
                   <!-- Mod 信息 -->
                   <div class="w-64 shrink-0 flex gap-3 items-start" v-preview="modStore.takeModById(item.id)">
-                    <div class="w-10 h-10 rounded-lg bg-black/30 border border-text-main/10 flex items-center justify-center overflow-hidden shrink-0">
+                    <div class="w-10 h-10 rounded-lg bg-bg-inset/70 border border-border-base/10 flex items-center justify-center overflow-hidden shrink-0">
                       <img v-if="item.icon" :src="item.icon" class="w-full h-full object-cover">
                       <div v-else class="text-xs text-text-dim">{{ item.id.substring(0,2) }}</div>
                     </div>
@@ -249,7 +251,7 @@
                   </div>
 
                   <!-- 规则详情 -->
-                  <div class="flex-1 min-w-0 space-y-2 border-l border-text-main/5 pl-4">
+                  <div class="flex-1 min-w-0 space-y-2 border-l border-border-base/5 pl-4">
                     <!-- Dependencies -->
                     <div v-if="item.rules.dependencies && Object.keys(item.rules.dependencies).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
                       <span class="text-xs font-bold text-accent-highlight uppercase mt-0.5">依赖:</span>
@@ -299,19 +301,19 @@
                   <!-- 操作 (仅用户规则有删除) -->
                   <div class="shrink-0 flex items-center flex-col">
                     <button @click="toggleModRule(item.id)" v-tooltip="isModExcluded(item.id) ? '启用规则' : '禁用规则'"
-                      class="p-2 rounded-lg hover:bg-text-main/10" :class="!isModExcluded(item.id) ? 'text-accent-success' : 'text-accent-danger'">
+                      class="p-2 rounded-lg hover:bg-bg-overlay/10" :class="!isModExcluded(item.id) ? 'text-accent-success' : 'text-accent-danger'">
                       <CircleCheckBig v-if="!isModExcluded(item.id)" class="w-4 h-4" />
                       <CircleOff v-else class="w-4 h-4" />
                     </button>
 
-                    <button v-if="currentTab === 'user'" @click="deleteUserModRule(item.id, $event)" class="p-2 text-text-dim hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                    <button v-if="currentTab === 'user'" @click="deleteUserModRule(item.id, $event)" class="p-2 text-text-dim hover:text-accent-danger hover:bg-accent-danger/10 rounded-lg transition-colors">
                       <Trash2 class="w-4 h-4" />
                     </button>
                   </div>
 
                 </div>
                 
-                <div v-if="filteredStaticRules.length === 0" class="flex flex-col items-center justify-center h-64 text-text-dim/30">
+                <div v-if="filteredStaticRules.length === 0" class="flex flex-col items-center justify-center h-64 text-text-disabled">
                   <Shield class="w-12 h-12 mb-2" />
                   <p class="text-sm">没有找到相关规则</p>
                 </div>
@@ -324,9 +326,9 @@
         <!-- ================= 3. 规则编辑器 (Modal) ================= -->
         <Transition name="fade">
           <div v-if="editingRule" class="fixed inset-0 z-60 flex items-center justify-center bg-bg-deep/30 backdrop-blur-sm p-4">
-            <div class="w-full max-w-[70%] bg-bg-surface border border-text-main/10 rounded-2xl shadow-3xl flex flex-col max-h-[90%] animate-scale-in">
+            <div class="w-full max-w-[70%] bg-bg-surface border border-border-base/10 rounded-2xl shadow-3xl flex flex-col max-h-[90%] animate-scale-in">
               
-              <header class="px-6 py-4 border-b border-text-main/5 flex justify-between items-center bg-text-main/2">
+              <header class="px-6 py-4 border-b border-border-base/5 flex justify-between items-center bg-glass-light">
                 <div class="flex items-center gap-3">
                   <div class="w-8 h-8 rounded-lg bg-accent-primary/20 flex items-center justify-center">
                     <Zap class="w-4 h-4 text-accent-primary" />
@@ -336,7 +338,7 @@
                 <button @click="editingRule = null" class="text-text-dim hover:text-text-main"><X class="w-6 h-6"/></button>
               </header>
               
-              <div class="flex-1 overflow-y-auto p-6 space-y-6">
+              <div class="flex-1 overflow-y-auto p-6 space-y-6 bg-bg-muted">
                 
                 <!-- 基础设置 -->
                 <div class="grid grid-cols-12 gap-4">
@@ -347,43 +349,37 @@
 
                 <!-- 条件构建器 -->
                 <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    
+                  <div class="grid grid-cols-4 gap-4 items-center justify-between">
                     <CommonSelect class="min-w-45" v-model="editingRule.logic" label="触发条件" mini :options="[{label:'满足所有 (AND)',value:'AND'}, {label:'满足任一 (OR)',value:'OR'}]"></CommonSelect>
-                    
                     <button @click="addFilter" class="text-accent-primary text-sm hover:underline flex items-center gap-1"><Plus class="w-3 h-3"/>添加条件</button>
                   </div>
                   
-                  <div class="space-y-2 bg-black/20 rounded-xl p-3 border border-text-main/5">
+                  <div class="space-y-2 bg-glass-light rounded-xl p-3 border border-border-base/5">
                     <div v-for="(filter, idx) in editingRule.filters" :key="idx" class="flex gap-2 items-center group">
-                      
                       <CommonSelect class="min-w-20" v-model="filter.field" :options="Object.entries(ruleStore.DYNAMIC_RULE_PROPS).map(([key, value]) => ({label: value, value: key}))"></CommonSelect>
-                      
                       <CommonSelect class="min-w-30" v-model="filter.operator" :options="getOperatorOptions(filter.field)"></CommonSelect>
-                      
+
                       <div v-if="shouldUseSelectableConditionValue(filter)" class="flex-1">
                         <CommonSelect v-model="filter.value" :options="getConditionValueOptions(filter.field)" editable ></CommonSelect>
                       </div>
                       <CommonInput v-else v-model="filter.value" placeholder="值..." class="flex-1" />
                       
-                      <button @click="editingRule.filters.splice(idx, 1)" class="p-1.5 text-text-dim hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"><Trash2 class="w-3.5 h-3.5"/></button>
+                      <button @click="editingRule.filters.splice(idx, 1)" class="p-1.5 text-text-dim hover:text-accent-danger opacity-50 group-hover:opacity-100 transition-opacity"><Trash2 class="w-3.5 h-3.5"/></button>
                     </div>
                     <div v-if="editingRule.filters.length === 0" class="text-center py-2 text-sm text-text-dim italic">点击右上角添加筛选条件</div>
                   </div>
                 </div>
 
                 <!-- 动作设置 -->
-                <div class="space-y-3">
-                  <label class="text-xs uppercase font-bold text-text-dim tracking-wider mb-1">执行动作</label>
-                  <div class="bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3 flex gap-2 items-center">
+                <div class="space-y-3 ">
+                  <label class="text-xs uppercase font-bold text-text-dim tracking-wider">执行动作</label>
+                  <div class="mt-1 bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3 flex gap-2 items-center">
                     <CommonSelect class="min-w-40" v-model="editingRule.action.type" :options="Object.entries(ruleStore.DYNAMIC_RULE_ACTIONS).map(([key, value]) => ({label: value, value: key}))"></CommonSelect>
                     
                     <!-- 根据动作类型显示输入框 -->
                     <div v-if="editingRule.action.type.includes('weight')" class="flex items-center gap-2 flex-1">
-                      <!-- <input type="number" v-model.number="editingRule.action.value" class="bg-bg-deep border border-text-main/10 rounded-lg px-3 py-2 text-sm w-32 text-text-main outline-none focus:border-accent-primary" /> -->
-                      <CommonNumber
-                        v-model.number="editingRule.action.value"
-                        :step="1"
+                      <!-- <input type="number" v-model.number="editingRule.action.value" class="bg-bg-deep border border-border-base/10 rounded-lg px-3 py-2 text-sm w-32 text-text-main outline-none focus:border-accent-primary" /> -->
+                      <CommonNumber v-model.number="editingRule.action.value" :step="1"
                         :min="editingRule.action.type === 'weight_shift' ? DYNAMIC_SHIFT_MIN : DYNAMIC_WEIGHT_MIN"
                         :max="editingRule.action.type === 'weight_shift' ? DYNAMIC_SHIFT_MAX : DYNAMIC_WEIGHT_MAX"
                       />
@@ -406,9 +402,9 @@
 
               </div>
 
-              <footer class="p-4 border-t border-text-main/5 bg-text-main/2 flex justify-end gap-3">
-                <button @click="editingRule = null" class="px-5 py-2 rounded-lg hover:bg-text-main/5 text-sm font-bold text-text-dim transition-colors">取消</button>
-                <button @click="saveDynamicRule" class="px-6 py-2 bg-accent-primary hover:bg-accent-primary/90 text-black rounded-lg text-sm font-bold shadow-lg transition-transform active:scale-95">保存规则</button>
+              <footer class="p-4 border-t border-border-base/5 bg-glass-light flex justify-end gap-3">
+                <button @click="editingRule = null" class="px-5 py-2 rounded-lg hover:bg-bg-overlay/5 text-sm font-bold text-text-dim transition-colors">取消</button>
+                <button @click="saveDynamicRule" class="px-6 py-2 bg-accent-primary hover:bg-accent-primary/90 text-on-accent-primary rounded-lg text-sm font-bold shadow-lg transition-transform active:scale-95">保存规则</button>
               </footer>
             </div>
           </div>

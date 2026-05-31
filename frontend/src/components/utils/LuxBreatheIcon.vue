@@ -10,7 +10,7 @@
       <div class="relative z-10 flex items-center justify-center transition-transform duration-700 ease-in-out group-hover:scale-110">
         
         <!-- SVG 插入点 -->
-        <div class="animate-lux-breathe-icon text-text-dim/30 drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">
+        <div class="animate-lux-breathe-icon text-text-disabled drop-shadow-[0_0_10px_rgba(var(--rgb-accent-primary),0.5)]">
           <slot>
             <!-- 默认占位图标 (奢华菱形) -->
             <svg width="60" height="60" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -36,17 +36,17 @@
   0%, 100% {
     transform: scale(0.90);
     opacity: 0.1;
-    filter: blur(10px) brightness(0.8) drop-shadow(0 0 5px rgba(6, 182, 212, 0.2));
+    filter: blur(10px) brightness(0.8) drop-shadow(0 0 5px rgba(var(--rgb-accent-primary), 0.2));
   }
   50% {
     transform: scale(1);
     opacity: 1;
-    filter: blur(0px) brightness(1.2) drop-shadow(0 0 15px rgba(6, 182, 212, 0.6));
+    filter: blur(0px) brightness(1.2) drop-shadow(0 0 15px rgba(var(--rgb-accent-primary), 0.6));
   }
   60% {
     transform: scale(1);
     opacity: 1;
-    filter: blur(0px) brightness(1.2) drop-shadow(0 0 15px rgba(6, 182, 212, 0.6));
+    filter: blur(0px) brightness(1.2) drop-shadow(0 0 15px rgba(var(--rgb-accent-primary), 0.6));
   }
 }
 

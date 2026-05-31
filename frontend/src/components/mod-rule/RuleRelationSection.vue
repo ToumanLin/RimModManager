@@ -56,7 +56,7 @@
       <div v-show="userRules.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed text-text-dim text-xs select-none pointer-events-none">
         可拖拽模组到此
         <!-- 点阵背景 -->
-        <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+        <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(var(--color-text-main) 1px, transparent 1px); background-size: 20px 20px;"></div>
       </div>
 
       <SimpleDropList :model-value="userRules" dataKey="id" class="h-full min-h-15"
@@ -67,19 +67,19 @@
           <div class="relative group">
             <ModItem :item_id="dataKey" :index="index" :key="dataKey" :show-index="false" :simple="true"></ModItem>
             <div class="absolute right-1 top-1/2 -translate-y-1/2 mr-1 overflow-visible gap-1 group text-sm font-medium flex flex-row-reverse items-center rtl:space-x-reverse">
-              <button @click.stop="$emit('edit-comment', ruleType, dataKey, $event)" class="group z-50 h-5 px-2.5 relative rounded-md whitespace-nowrap cursor-pointer 
-                inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-                text-text-dim/70 bg-accent-primary/10 
-                hover:bg-accent-primary/60 hover:text-text-main hover:scale-110 active:scale-100 
+              <button @click.stop="$emit('edit-comment', ruleType, dataKey, $event)" class="group z-50 h-5 px-2.5 relative rounded-md whitespace-nowrap cursor-pointer
+                inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300
+                text-text-dim bg-accent-primary/10
+                hover:bg-accent-primary/60 hover:text-text-main hover:scale-110 active:scale-100
                 group-hover:bg-accent-primary/40 group-hover:text-text-dim group-hover:shadow-2xl/20"
                 v-tooltip="record.comment || '[[__点击添加说明__]]'">
                 <span class="relative transition duration-300 only:-mx-6">
                   <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
                 </span>
               </button>
-              <button @click.stop="$emit('remove-user-rule', ruleType, dataKey)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
-                inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-                text-text-dim/70 bg-accent-danger/10 
+              <button @click.stop="$emit('remove-user-rule', ruleType, dataKey)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer
+                inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300
+                text-text-dim bg-accent-danger/10
                 hover:bg-accent-danger/60 hover:text-text-main hover:scale-110 active:scale-100
                 group-hover:bg-accent-danger/40 group-hover:text-text-dim group-hover:shadow-2xl/20
                 group-hover:h-5 group-hover:w-5 group-hover:translate-x-0 group-hover:opacity-100"

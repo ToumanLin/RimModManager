@@ -227,8 +227,8 @@ const createDragPreview = (event, item, sourceEl, pointerOffset = null) => {
       'z-index:3',
       'width:100%',
       'opacity:0.99',
-      'background:rgba(150,150,150,0.5)',
-      'filter:drop-shadow(0 14px 22px rgba(0,0,0,0.38))',
+      'background:rgba(var(--rgb-text-dim),0.5)',
+      'filter:drop-shadow(0 14px 22px var(--shadow-color))',
       'transform:scale(1)',
       'transform-origin:top left',
     ].join(';')
@@ -250,8 +250,8 @@ const createDragPreview = (event, item, sourceEl, pointerOffset = null) => {
         `bottom:${-down}px`,
         'z-index:' + (4 - i),
         'border-radius:5px',
-        'background:rgba(255,255,255,0.1)',
-        'border:1px solid rgba(255,255,255,0.14)',
+        'background:var(--color-border-subtle)',
+        'border:1px solid var(--color-border-strong)',
       ].join(';')
       el.insertBefore(layer, el.firstChild)
     }
@@ -269,12 +269,12 @@ const createDragPreview = (event, item, sourceEl, pointerOffset = null) => {
       'height:22px',
       'padding:0 6px',
       'border-radius:999px',
-      'background:var(--color-accent-special,#7c3aed)',
-      'color:white',
+      'background:var(--color-accent-special)',
+      'color:var(--color-on-accent-special)',
       'font-weight:700',
       'font-size:12px',
       'line-height:22px',
-      'box-shadow:0 4px 14px rgba(0,0,0,0.35)',
+      'box-shadow:0 4px 14px var(--shadow-color)',
     ].join(';')
     el.appendChild(badge)
   }

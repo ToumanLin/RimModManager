@@ -1,6 +1,6 @@
 <template>
   <div v-tooltip="item.tooltip || '自定义颜色'"
-    class="context-color-picker relative flex items-center justify-center aspect-square w-[33px] rounded-md border border-text-main/10 bg-text-main/5 hover:border-text-main/30 hover:bg-text-main/10 transition-all duration-200"
+    class="context-color-picker relative flex items-center justify-center aspect-square w-[33px] rounded-md border border-border-base/10 bg-bg-overlay/5 hover:border-border-base/18 hover:bg-bg-overlay/10 transition-all duration-200"
     @click.stop @mousedown.stop>
     <!-- 把弹层挂回当前菜单节点内，避免 Teleport 到 body 后触发父级菜单的 mouseleave 关闭链路。 -->
     <ColorPicker v-model:pureColor="item.color" @pureColorChange="handleColorChange"

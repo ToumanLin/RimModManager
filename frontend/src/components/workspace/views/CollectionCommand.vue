@@ -3,7 +3,7 @@
   <div class="h-full flex gap-4 p-4 overflow-hidden">
     
     <!-- ==================== 左侧：合集内的 Mod ==================== -->
-    <div class="w-[45%] flex flex-col bg-black/40 border border-text-main/10 rounded-2xl overflow-hidden shadow-2xl relative">
+    <div class="w-[45%] flex flex-col bg-bg-inset/80 border border-border-base/10 rounded-2xl overflow-hidden shadow-2xl relative">
       <div v-if="wsStore.collections.activeDetails" class="flex flex-col h-full">
         <!-- 列表表头 -->
         <div class="p-4 bg-accent-warn/10 border-b border-accent-warn/20 flex flex-col gap-3 z-10 relative" data-tour="workspace-collection-actions">
@@ -27,19 +27,19 @@
           <!-- 全局动作区 (一键操作) -->
           <div class="flex gap-2 w-full">
             <button @click="handleUnsubscribeAll" v-tooltip="'将整个合集从 Steam 订阅队列中移除'"
-              class="flex-1 py-1.5 min-w-0 bg-accent-danger/20 hover:bg-accent-danger text-accent-danger hover:text-black text-xs font-black rounded-lg border border-accent-danger/30 transition-all flex items-center justify-center gap-1">
+              class="flex-1 py-1.5 min-w-0 bg-accent-danger/20 hover:bg-accent-danger text-accent-danger hover:text-on-accent-danger text-xs font-black rounded-lg border border-accent-danger/30 transition-all flex items-center justify-center gap-1">
               <Flag class="size-3.5" /> 取订全部
             </button>
             <button @click="handleSubscribeAll" v-tooltip="'将整个合集添加到 Steam 订阅队列'"
-              class="flex-1 py-1.5 min-w-0 bg-accent-primary/20 hover:bg-accent-primary text-accent-primary hover:text-black text-xs font-black rounded-lg border border-accent-primary/30 transition-all flex items-center justify-center gap-1">
+              class="flex-1 py-1.5 min-w-0 bg-accent-primary/20 hover:bg-accent-primary text-accent-primary hover:text-on-accent-primary text-xs font-black rounded-lg border border-accent-primary/30 transition-all flex items-center justify-center gap-1">
               <Flag class="size-3.5" /> 订阅全部
             </button>
             <button v-if="missingCount > 0" @click="handleDownloadMissing" v-tooltip="'使用 SteamCMD 仅下载缺失项到管理器目录'"
-              class="flex-1 py-1.5 bg-accent-success/20 hover:bg-accent-success text-accent-success hover:text-black text-xs font-black rounded-lg border border-accent-success/30 transition-all flex items-center justify-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+              class="flex-1 py-1.5 bg-accent-success/20 hover:bg-accent-success text-accent-success hover:text-on-accent-success text-xs font-black rounded-lg border border-accent-success/30 transition-all flex items-center justify-center gap-1 shadow-[0_0_10px_rgba(var(--rgb-accent-success),0.2)]">
               <DownloadCloud class="size-3.5" /> 补齐下载 ({{ missingCount }})
             </button>
             <button @click="applyAsLoadOrder" v-tooltip="'应用合集列表顺序为加载顺序，请确保全部已下载！'"
-              class="flex-1 px-3 py-1.5 bg-text-main/10 hover:bg-accent-warn hover:text-black text-text-main text-xs font-bold rounded-lg border border-text-main/10 transition-colors flex items-center justify-center gap-1 ">
+              class="flex-1 px-3 py-1.5 bg-bg-overlay/10 hover:bg-accent-warn hover:text-on-accent-warn text-text-main text-xs font-bold rounded-lg border border-border-base/10 transition-colors flex items-center justify-center gap-1 ">
               <ListOrdered class="size-3.5" /> 应用加载顺序
             </button>
           </div>
@@ -52,11 +52,11 @@
           </div>
           <!-- 单个子 Mod 卡片 -->
           <div v-for="mod in wsStore.activeChildrenWithStatus" :key="mod.workshop_id"
-            class="flex items-center gap-3 p-2 rounded-xl border transition-all group hover:bg-text-main/5"
-            :class="(mod.is_workshop || mod.is_self || mod.is_local) ? 'border-text-main/10 bg-text-main/2' : 'border-accent-danger/30 bg-accent-danger/5 opacity-80'">
+            class="flex items-center gap-3 p-2 rounded-xl border transition-all group hover:bg-bg-overlay/5"
+            :class="(mod.is_workshop || mod.is_self || mod.is_local) ? 'border-border-base/10 bg-glass-light' : 'border-accent-danger/30 bg-accent-danger/5 opacity-80'">
             
-            <img v-if="mod.preview_url" :src="appStore.getRemoteUrl(mod.preview_url)" class="size-10 rounded-lg object-cover border border-text-main/10 shadow-sm" />
-            <div v-else class="size-10 rounded-lg bg-black/50 border border-text-main/10 flex items-center justify-center"><Package class="size-4 text-text-dim"/></div>
+            <img v-if="mod.preview_url" :src="appStore.getRemoteUrl(mod.preview_url)" class="size-10 rounded-lg object-cover border border-border-base/10 shadow-sm" />
+            <div v-else class="size-10 rounded-lg bg-bg-inset/90 border border-border-base/10 flex items-center justify-center"><Package class="size-4 text-text-dim"/></div>
             
             <div class="flex-1 min-w-0">
               <div class="text-xs font-bold truncate" :class="(mod.is_workshop || mod.is_self || mod.is_local) ? 'text-text-main' : 'text-accent-danger'">{{ mod.title }}</div>
@@ -75,11 +75,11 @@
               <AlertCircle v-if="(!mod.is_workshop && !mod.is_self && !mod.is_local)" class="size-5 text-accent-danger opacity-50 group-hover:hidden" />
 
               <!-- 操作按钮组 (Hover 显示) -->
-              <div class="hidden group-hover:flex items-center gap-1 bg-bg-surface/80 p-1 rounded-lg backdrop-blur-md border border-text-main/10 shadow-lg">
-                <button @click="appStore.openSteamWorkshopById(mod.workshop_id)" v-tooltip="'访问创意工坊页面'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-black transition-colors"><ExternalLink class="size-3.5" /></button>
-                <button v-if="mod.is_workshop" @click="handleUnsubscribeSingle(mod.workshop_id)" v-tooltip="'取消订阅'" class="p-1.5 rounded-md hover:bg-accent-danger text-text-dim hover:text-black transition-colors"><FlagOff class="size-3.5" /></button>
-                <button v-else @click="handleSubscribeSingle(mod.workshop_id)" v-tooltip="'Steam 订阅'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-black transition-colors"><Flag class="size-3.5" /></button>
-                <button v-if="!mod.is_self" @click="handleDownloadSingle(mod.workshop_id)" v-tooltip="'SteamCMD 下载'" class="p-1.5 rounded-md hover:bg-accent-success text-text-dim hover:text-black transition-colors"><Download class="size-3.5" /></button>
+              <div class="hidden group-hover:flex items-center gap-1 bg-glass-medium p-1 rounded-lg backdrop-blur-md border border-border-base/10 shadow-lg">
+                <button @click="appStore.openSteamWorkshopById(mod.workshop_id)" v-tooltip="'访问创意工坊页面'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-on-accent-primary transition-colors"><ExternalLink class="size-3.5" /></button>
+                <button v-if="mod.is_workshop" @click="handleUnsubscribeSingle(mod.workshop_id)" v-tooltip="'取消订阅'" class="p-1.5 rounded-md hover:bg-accent-danger text-text-dim hover:text-on-accent-danger transition-colors"><FlagOff class="size-3.5" /></button>
+                <button v-else @click="handleSubscribeSingle(mod.workshop_id)" v-tooltip="'Steam 订阅'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-on-accent-primary transition-colors"><Flag class="size-3.5" /></button>
+                <button v-if="!mod.is_self" @click="handleDownloadSingle(mod.workshop_id)" v-tooltip="'SteamCMD 下载'" class="p-1.5 rounded-md hover:bg-accent-success text-text-dim hover:text-on-accent-success transition-colors"><Download class="size-3.5" /></button>
               </div>
             </div>
           </div>
@@ -98,15 +98,15 @@
     <div class="w-[55%] flex flex-col gap-4" data-tour="workspace-collection-browser">
       
       <!-- 搜索/添加栏 -->
-      <div class="bg-black/40 p-3 rounded-2xl border border-text-main/10 flex items-center gap-3 shadow-lg" data-tour="workspace-collection-input">
+      <div class="bg-bg-inset/80 p-3 rounded-2xl border border-border-base/10 flex items-center gap-3 shadow-lg" data-tour="workspace-collection-input">
         <div class="flex-1 relative">
           <Plus class="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-text-dim" />
           <input v-model="newCollectionInput" @keydown.enter="submitAddCollection"
             placeholder="粘贴 Steam 合集 URL 或直接输入 ID..." 
-            class="w-full bg-black/60 border border-text-main/10 rounded-xl pl-10 pr-4 py-2 text-sm text-text-main outline-none focus:border-accent-warn focus:bg-black/80 transition-all" />
+            class="w-full bg-bg-inset border border-border-base/10 rounded-xl pl-10 pr-4 py-2 text-sm text-text-main outline-none focus:border-accent-warn focus:bg-bg-inset transition-all" />
         </div>
         <button @click="submitAddCollection" :disabled="wsStore.collections.isParsing"
-          class="px-6 py-2 bg-accent-warn/10 text-accent-warn hover:bg-accent-warn hover:text-black border border-accent-warn/30 rounded-xl text-sm font-black transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+          class="px-6 py-2 bg-accent-warn/10 text-accent-warn hover:bg-accent-warn hover:text-on-accent-warn border border-accent-warn/30 rounded-xl text-sm font-black transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
           <span v-if="wsStore.collections.isParsing" class="animate-spin">⟳</span> 
           <span v-else>导入合集</span>
         </button>
@@ -119,14 +119,14 @@
           <div v-for="coll in wsStore.collections.savedList" :key="coll.id"
             @click="wsStore.selectCollection(coll)"
             class="group relative aspect-16/8 rounded-2xl overflow-hidden border transition-all cursor-pointer shadow-xl flex flex-col"
-            :class="wsStore.collections.activeId === coll.id ? 'border-accent-warn ring-1 ring-accent-warn shadow-[0_0_25px_rgba(234,179,8,0.2)]' : 'border-text-main/10 hover:border-accent-warn/50 hover:shadow-[0_8px_20px_rgba(0,0,0,0.5)]'">
+            :class="wsStore.collections.activeId === coll.id ? 'border-accent-warn ring-1 ring-accent-warn shadow-[0_0_25px_rgba(var(--rgb-accent-warn),0.2)]' : 'border-border-base/10 hover:border-accent-warn/50 hover:shadow-[0_8px_20px_var(--shadow-color)]'">
             
             <!-- 背景图 -->
             <img v-if="coll.preview_url" :src="appStore.getRemoteUrl(coll.preview_url)" class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-50 group-hover:opacity-70" />
             <div class="absolute inset-0 bg-linear-to-t from-bg-deep/95 via-bg-deep/60 to-transparent"></div>
             <h4 class="absolute inset-2 text-sm font-black text-text-main truncate text-shadow-lg drop-shadow-md leading-tight mb-1" v-tooltip="tooltipFormat(coll)">{{ coll.title || '未知合集' }}</h4>
             <!-- 右上角悬浮动作：删除 -->
-            <button @click.stop="confirmRemove(coll)" class="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-accent-danger text-text-dim hover:text-white opacity-0 group-hover:opacity-100 transition-all z-20 backdrop-blur-sm border border-text-main/10 hover:border-accent-danger/50" v-tooltip="'删除记录'">
+            <button @click.stop="confirmRemove(coll)" class="absolute top-2 right-2 p-1.5 rounded-lg bg-bg-inset hover:bg-accent-danger text-text-dim hover:text-on-accent-danger opacity-0 group-hover:opacity-100 transition-all z-20 backdrop-blur-sm border border-border-base/10 hover:border-accent-danger/50" v-tooltip="'删除记录'">
               <Trash2 class="size-4" />
             </button>
 
@@ -134,17 +134,17 @@
                 
             <!-- 底部信息 -->
             <div class="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end z-10 pointer-events-none">
-              <span class="text-xs font-black text-text-main/80 text-shadow-lg drop-shadow-md leading-tight mb-1" >{{cleanRichText(coll.description,50) || '暂无说明'}}</span>
+              <span class="text-xs font-black text-text-soft text-shadow-lg drop-shadow-md leading-tight mb-1" >{{cleanRichText(coll.description,50) || '暂无说明'}}</span>
               
               <!-- 统计指示条 -->
               <div class="flex items-center justify-between mt-1">
-                <span class="text-[0.6rem] font-mono text-text-dim bg-black/60 px-1.5 py-0.5 rounded border border-white/5 backdrop-blur-sm">ID: {{ coll.id }}</span>
+                <span class="text-[0.6rem] font-mono text-text-dim bg-bg-inset px-1.5 py-0.5 rounded border border-border-base/10 backdrop-blur-sm">ID: {{ coll.id }}</span>
                 
                 <div class="flex gap-1.5">
                   <span v-if="getListMissingCount(coll) > 0" class="px-1.5 py-0.5 rounded bg-accent-danger/20 text-accent-danger text-[0.6rem] font-bold border border-accent-danger/30 flex items-center gap-1">
                     <AlertCircle class="size-2.5"/> 缺 {{ getListMissingCount(coll) }}
                   </span>
-                  <span class="px-1.5 py-0.5 rounded bg-text-main/10 text-text-main/80 text-[0.6rem] font-bold border border-text-main/10 flex items-center gap-1">
+                  <span class="px-1.5 py-0.5 rounded bg-bg-overlay/10 text-text-soft text-[0.6rem] font-bold border border-border-base/10 flex items-center gap-1">
                     <Layers class="size-2.5"/> 共 {{ coll.total || 0 }}
                   </span>
                 </div>
@@ -155,7 +155,7 @@
         </div>
 
         <!-- 空状态 -->
-        <div v-if="!wsStore.collections.isLoading && wsStore.collections.savedList.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-text-dim/40 pointer-events-none">
+        <div v-if="!wsStore.collections.isLoading && wsStore.collections.savedList.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-text-disabled pointer-events-none">
           <FolderArchive class="size-16 mb-4 opacity-50" />
           <span class="text-sm font-bold tracking-widest">您的记录中暂无合集</span>
           <span class="text-xs mt-1">请在上方粘贴链接以接入数据</span>
@@ -313,6 +313,6 @@ const applyAsLoadOrder = async () => {
 
 <style scoped>
 .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; border: 1px solid transparent; background-clip: padding-box; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(234,179,8,0.5); }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 4px; border: 1px solid transparent; background-clip: padding-box; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(var(--rgb-accent-warn),0.5); }
 </style>

@@ -3,20 +3,20 @@
   <div class="h-full flex gap-4 p-4 overflow-hidden">
     
     <!-- 左侧：已订阅仓库阵列 (40%) -->
-    <div class="w-[40%] flex flex-col bg-black/40 border border-text-main/10 rounded-2xl overflow-hidden shadow-2xl" data-tour="workspace-github-list">
-      <div class="px-4 py-3 bg-text-main/10 border-b border-text-main/10 flex items-center justify-between">
+    <div class="w-[40%] flex flex-col bg-bg-inset/80 border border-border-base/10 rounded-2xl overflow-hidden shadow-2xl" data-tour="workspace-github-list">
+      <div class="px-4 py-3 bg-bg-overlay/10 border-b border-border-base/10 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <Github class="size-4 text-text-main" />
           <h3 class="text-sm font-bold text-text-main">Git 仓库订阅</h3>
         </div>
         <div class="flex items-center gap-2">
-          <div class="grid grid-cols-2 gap-1 p-1 bg-black/40 rounded-xl border border-text-main/10">
+          <div class="grid grid-cols-2 gap-1 p-1 bg-bg-inset/80 rounded-xl border border-border-base/10">
             <button @click="setListMode('subscribed')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-              :class="listMode === 'subscribed' ? 'bg-text-main text-black' : 'text-text-dim hover:text-text-main'">
+              :class="listMode === 'subscribed' ? 'bg-bg-contrast text-text-inverse' : 'text-text-dim hover:text-text-main'">
               已订阅
             </button>
             <button @click="setListMode('recommend')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-              :class="listMode === 'recommend' ? 'bg-text-main text-black' : 'text-text-dim hover:text-text-main'">
+              :class="listMode === 'recommend' ? 'bg-bg-contrast text-text-inverse' : 'text-text-dim hover:text-text-main'">
               推荐列表
             </button>
           </div>
@@ -26,7 +26,7 @@
         </div>
       </div>
 
-      <div class="p-2 border-b border-text-main/10 bg-black/20">
+      <div class="p-2 border-b border-border-base/10 bg-bg-muted/70">
         
         <div v-if="listMode === 'recommend'" class="mt-2 flex gap-2">
           <div class="w-32 shrink-0">
@@ -36,10 +36,10 @@
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-text-dim" />
             <input v-model="catalogFilter"
               placeholder="筛选名称、包名、作者或版本"
-              class="w-full bg-black/50 border border-text-main/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-main outline-none focus:border-text-main/40" />
+              class="w-full bg-bg-inset/90 border border-border-base/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-main outline-none focus:border-border-base/18" />
           </div>
         </div>
-        <div v-if="listMode === 'recommend' && workspaceStore.github.catalogMeta.total" class="mt-2 truncate text-[0.6rem] text-text-dim/70">
+        <div v-if="listMode === 'recommend' && workspaceStore.github.catalogMeta.total" class="mt-2 truncate text-[0.6rem] text-text-dim">
           推荐来源: {{ workspaceStore.github.catalogMeta.total || 0 }} 项 / {{ catalogSourceOptions.length - 1 }} 个来源
           <span v-if="workspaceStore.github.catalogMeta.is_stale" class="text-accent-warn">缓存</span>
         </div>
@@ -49,13 +49,13 @@
         <div v-for="repo in workspaceStore.github.subscribedRepos" :key="repo.repo_url"
           @click="selectRepo(repo)"
           class="flex flex-col gap-1 px-3 py-2 rounded-xl border transition-all cursor-pointer group relative overflow-hidden"
-          :class="workspaceStore.github.activeRepo?.repo_url === repo.repo_url ? 'bg-text-main/10 border-text-main/30 shadow-inner' : 'border-text-main/5 bg-black/20 hover:bg-text-main/5'">
+          :class="workspaceStore.github.activeRepo?.repo_url === repo.repo_url ? 'bg-bg-overlay/10 border-border-base/18 shadow-inner' : 'border-border-base/5 bg-bg-muted/70 hover:bg-bg-overlay/5'">
           
           <div class="flex justify-between items-center z-10">
             <div class="font-bold text-sm text-text-main truncate">{{ repo.repo_name }}</div>
             
             <div class="flex items-center gap-1 text-[0.65rem] font-mono">
-              <span class="px-2 py-0.5 text-text-dim bg-black/30 rounded">{{ repo.host || repo.provider || 'github.com' }}</span>
+              <span class="px-2 py-0.5 text-text-dim bg-bg-inset/70 rounded">{{ repo.host || repo.provider || 'github.com' }}</span>
               <span class="px-2 py-0.5 text-accent-primary bg-accent-primary/10 rounded">{{ formatInstallType(repo.install_type) }}</span>
               <span class="px-2 py-0.5 rounded bg-accent-highlight/20 text-[0.6rem] font-mono text-accent-highlight border border-accent-highlight/10">
                 {{ repo.owner }}
@@ -64,19 +64,19 @@
           </div>
           
           <div class="flex items-center mt-0.5 gap-1 text-[0.65rem] font-mono">
-            <span class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono" :class="githubStatus(repo).tone">
+            <span class="px-2 py-1 rounded bg-bg-inset/90 text-[0.65rem] font-mono" :class="githubStatus(repo).tone">
               {{ githubStatus(repo).label }}<template v-if="githubStatus(repo).version"> ({{ githubStatus(repo).version }})</template>
             </span>
           </div>
           
           <div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all z-20">
-            <button @click.stop="openRepoOriginal(repo)" v-tooltip="'打开原始地址'" class="p-2 rounded-lg bg-text-main/10 text-text-dim hover:text-text-main hover:bg-text-main/20 transition-colors">
+            <button @click.stop="openRepoOriginal(repo)" v-tooltip="'打开原始地址'" class="p-2 rounded-lg bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <ExternalLink class="size-4" />
             </button>
-            <button v-if="repo.local_folder" @click.stop="openRepoLocal(repo)" v-tooltip="'打开本地目录'" class="p-2 rounded-lg bg-text-main/10 text-text-dim hover:text-text-main hover:bg-text-main/20 transition-colors">
+            <button v-if="repo.local_folder" @click.stop="openRepoLocal(repo)" v-tooltip="'打开本地目录'" class="p-2 rounded-lg bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <FolderOpen class="size-4" />
             </button>
-            <button @click.stop="removeRepo(repo.repo_url)" v-tooltip="'移除订阅'" class="p-2 rounded-lg bg-accent-danger/20 text-accent-danger hover:bg-accent-danger hover:text-black transition-colors">
+            <button @click.stop="removeRepo(repo.repo_url)" v-tooltip="'移除订阅'" class="p-2 rounded-lg bg-accent-danger/20 text-accent-danger hover:bg-accent-danger hover:text-on-accent-danger transition-colors">
               <Trash2 class="size-4" />
             </button>
           </div>
@@ -100,7 +100,7 @@
           @click="selectRecommendedItem(item)"
           v-tooltip="catalogItemTooltip(item)"
           class="p-3 rounded-xl border transition-colors cursor-pointer"
-          :class="selectedCatalogItem?.key === item.key && selectedCatalogItem?.source_id === item.source_id ? 'bg-text-main/10 border-text-main/30' : 'border-text-main/5 bg-black/20 hover:bg-text-main/5'">
+          :class="selectedCatalogItem?.key === item.key && selectedCatalogItem?.source_id === item.source_id ? 'bg-bg-overlay/10 border-border-base/18' : 'border-border-base/5 bg-bg-muted/70 hover:bg-bg-overlay/5'">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
@@ -109,8 +109,8 @@
                 <span v-if="item.not_recommended || !isInstallable(item)" v-tooltip="availabilityTooltip(item)" class="shrink-0 px-1.5 py-0.5 rounded bg-accent-warn/10 text-[0.6rem] text-accent-warn">{{ formatAvailability(item) }}</span>
               </div>
               <div class="mt-1 flex flex-wrap gap-1 text-[0.6rem] font-mono text-text-dim">
-                <span class="px-1.5 py-0.5 rounded bg-black/50 border border-text-main/10">{{ item.category }}</span>
-                <span class="px-1.5 py-0.5 rounded bg-black/50 border border-text-main/10">{{ catalogHostLabel(item) }}</span>
+                <span class="px-1.5 py-0.5 rounded bg-bg-inset/90 border border-border-base/10">{{ item.category }}</span>
+                <span class="px-1.5 py-0.5 rounded bg-bg-inset/90 border border-border-base/10">{{ catalogHostLabel(item) }}</span>
                 <span v-if="item.branch" class="px-1.5 py-0.5 rounded bg-accent-secondary/10 text-accent-secondary">branch: {{ item.branch }}</span>
                 <span v-for="version in catalogDisplayVersions(item.game_versions)" :key="`${item.key}:${version}`"
                   class="px-1.5 py-0.5 rounded border"
@@ -131,7 +131,7 @@
             </button>
           </div>
           <div class="mt-2 flex items-center justify-between gap-2">
-            <div class="min-w-0 truncate text-[0.65rem] text-text-dim/70">
+            <div class="min-w-0 truncate text-[0.65rem] text-text-dim">
               {{ catalogAuthorText(item) || item.package_id || catalogDisplayName(item) }}
             </div>
             <div class="flex items-center gap-1">
@@ -144,7 +144,7 @@
               </button>
               <button v-if="item.info_url || item.url" @click.stop="openExternal(item.info_url || item.url)"
               v-tooltip="'打开原始地址'"
-              class="shrink-0 p-1.5 rounded-md text-text-dim hover:text-text-main hover:bg-text-main/10 transition-colors">
+              class="shrink-0 p-1.5 rounded-md text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
                 <ExternalLink class="size-3.5" />
               </button>
             </div>
@@ -157,16 +157,16 @@
     <div class="w-[60%] flex flex-col gap-4" data-tour="workspace-github-workspace">
       
       <!-- 顶部：新增仓库解析器 -->
-      <div class="bg-black/40 p-3 rounded-2xl border border-text-main/10 flex items-center gap-3 shadow-lg" data-tour="workspace-github-input">
+      <div class="bg-bg-inset/80 p-3 rounded-2xl border border-border-base/10 flex items-center gap-3 shadow-lg" data-tour="workspace-github-input">
         <div class="flex-1 relative">
           <Link class="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-text-dim" />
           <input v-model="newRepoUrl" @keydown.enter="parseNewRepo"
             v-tooltip="'支持以下仓库：GitHub、GitLab、GitGud。'"
             placeholder="粘贴公开 Git 仓库地址 如: https://github.com/user/repo (支持 GitHub / GitLab / GitGud)"
-            class="w-full bg-black/60 border border-text-main/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-main outline-none focus:border-text-main/50 transition-all" />
+            class="w-full bg-bg-inset border border-border-base/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-main outline-none focus:border-border-base/18 transition-all" />
         </div>
         <button @click="parseNewRepo" :disabled="isParsing"
-          class="px-6 py-2.5 bg-text-main/10 text-text-main hover:bg-text-main hover:text-black border border-text-main/30 rounded-xl text-sm font-black transition-all disabled:opacity-50 flex items-center gap-2">
+          class="px-6 py-2.5 bg-bg-overlay/10 text-text-main hover:bg-bg-contrast hover:text-text-inverse border border-border-base/18 rounded-xl text-sm font-black transition-all disabled:opacity-50 flex items-center gap-2">
           <span v-if="isParsing" class="animate-spin">⟳</span> 解析地址
         </button>
       </div>
@@ -183,15 +183,15 @@
           <!-- Source 模式 -->
           <button @click="confirmSubscribe('source')" class="flex-1 p-4 rounded-xl border border-accent-secondary/30 bg-accent-secondary/10 hover:bg-accent-secondary/20 transition-all text-left">
             <div class="font-bold text-accent-secondary mb-1">同步源码分支 (Source)</div>
-            <div class="text-xs text-text-dim/80">获取分支最新代码。适合频繁更新或未发布 Release 的测试版模组。</div>
+            <div class="text-xs text-text-dim">获取分支最新代码。适合频繁更新或未发布 Release 的测试版模组。</div>
           </button>
 
           <!-- Release 模式 -->
           <button @click="confirmSubscribe('release')" :disabled="!workspaceStore.github.previewInfo.has_release"
             class="flex-1 p-4 rounded-xl border border-accent-success/30 bg-accent-success/10 hover:bg-accent-success/20 transition-all text-left disabled:opacity-30 disabled:cursor-not-allowed">
             <div class="font-bold text-accent-success mb-1">获取发行版 (Release)</div>
-            <div class="text-xs text-text-dim/80 mb-2">获取作者打包的稳定版。</div>
-            <div v-if="workspaceStore.github.previewInfo.has_release" class="inline-block px-2 py-0.5 bg-black/40 rounded text-[0.65rem] font-mono text-text-main">
+            <div class="text-xs text-text-dim mb-2">获取作者打包的稳定版。</div>
+            <div v-if="workspaceStore.github.previewInfo.has_release" class="inline-block px-2 py-0.5 bg-bg-inset/80 rounded text-[0.65rem] font-mono text-text-main">
               Latest: {{ workspaceStore.github.previewInfo.latest_release_tag }}
             </div>
             <div v-else class="text-xs text-accent-warn">该仓库尚未发布任何 Release</div>
@@ -200,22 +200,22 @@
         <div class="mt-4">
           <div v-if="previewReadme.isLoading" class="text-xs text-text-dim">正在读取 README...</div>
           <div v-else-if="previewReadme.error" class="text-xs text-accent-warn">{{ previewReadme.error }}</div>
-          <div v-else-if="previewReadme.content" class="prose prose-sm prose-invert max-w-none text-text-dim/90" v-html="renderMarkdown(previewReadme.content)"></div>
+          <div v-else-if="previewReadme.content" class="prose prose-sm prose-invert max-w-none text-text-dim" v-html="renderMarkdown(previewReadme.content)"></div>
         </div>
       </div>
 
       <!-- 推荐项详情 -->
-      <div v-else-if="selectedCatalogItem" class="flex-1 flex flex-col bg-black/30 border border-text-main/10 rounded-2xl overflow-hidden shadow-xl">
-        <div class="p-6 bg-text-main/5 border-b border-text-main/10 flex items-start justify-between gap-4">
+      <div v-else-if="selectedCatalogItem" class="flex-1 flex flex-col bg-bg-inset/70 border border-border-base/10 rounded-2xl overflow-hidden shadow-xl">
+        <div class="p-6 bg-bg-overlay/5 border-b border-border-base/10 flex items-start justify-between gap-4">
           <div class="min-w-0">
             <h2 class="text-2xl font-black text-text-main truncate">{{ catalogDisplayName(selectedCatalogItem) }}</h2>
             <div class="flex flex-wrap gap-2 mt-2">
-              <span class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-text-dim">{{ catalogSourceName(selectedCatalogItem.source_id) || selectedCatalogItem.category }}</span>
-              <span class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-text-dim">{{ catalogHostLabel(selectedCatalogItem) }}</span>
+              <span class="px-2 py-1 rounded bg-bg-inset/90 text-[0.65rem] font-mono text-text-dim">{{ catalogSourceName(selectedCatalogItem.source_id) || selectedCatalogItem.category }}</span>
+              <span class="px-2 py-1 rounded bg-bg-inset/90 text-[0.65rem] font-mono text-text-dim">{{ catalogHostLabel(selectedCatalogItem) }}</span>
               <span v-if="selectedCatalogItem.workshop_url" class="px-2 py-1 rounded bg-accent-primary/10 text-[0.65rem] text-accent-primary">Workshop</span>
               <span v-if="isOfficialCatalogItem(selectedCatalogItem)" v-tooltip="availabilityTooltip(selectedCatalogItem)" class="px-2 py-1 rounded bg-accent-primary/10 text-[0.65rem] text-accent-primary">官方内容</span>
               <span v-if="selectedCatalogItem.not_recommended" v-tooltip="availabilityTooltip(selectedCatalogItem)" class="px-2 py-1 rounded bg-accent-warn/10 text-[0.65rem] text-accent-warn">当前不建议使用</span>
-              <span v-if="catalogUpdatedText(selectedCatalogItem)" class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-text-dim">{{ catalogUpdatedText(selectedCatalogItem) }}</span>
+              <span v-if="catalogUpdatedText(selectedCatalogItem)" class="px-2 py-1 rounded bg-bg-inset/90 text-[0.65rem] font-mono text-text-dim">{{ catalogUpdatedText(selectedCatalogItem) }}</span>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -235,13 +235,13 @@
             </button>
             <button v-if="selectedCatalogItem.info_url || selectedCatalogItem.url" @click.stop="openExternal(selectedCatalogItem.info_url || selectedCatalogItem.url)"
               v-tooltip="'打开原始地址'"
-              class="p-3 rounded-xl bg-text-main/10 text-text-dim hover:text-text-main hover:bg-text-main/20 transition-colors">
+              class="p-3 rounded-xl bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <ExternalLink class="size-4" />
             </button>
           </div>
         </div>
         <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
-          <p v-if="selectedCatalogItem.description" class="text-sm text-text-dim/90 leading-relaxed mb-4">{{ selectedCatalogItem.description }}</p>
+          <p v-if="selectedCatalogItem.description" class="text-sm text-text-dim leading-relaxed mb-4">{{ selectedCatalogItem.description }}</p>
           <div v-if="selectedCatalogItem.game_versions?.length" class="mb-4 flex flex-wrap items-center gap-1 text-[0.65rem]">
             <span class="text-text-dim mr-1">RimWorld:</span>
             <span v-for="version in catalogDisplayVersions(selectedCatalogItem.game_versions)" :key="version"
@@ -250,7 +250,7 @@
               {{ version }}
             </span>
           </div>
-          <div class="mb-4 rounded-lg bg-black/30 border border-text-main/10 p-3">
+          <div class="mb-4 rounded-lg bg-bg-inset/70 border border-border-base/10 p-3">
             <div class="grid grid-cols-4 gap-3 text-xs">
               <div class="min-w-0 flex items-center gap-2">
                 <div class="text-text-dim shrink-0">来源</div>
@@ -270,7 +270,7 @@
               </div>
             </div>
           </div>
-          <div v-if="catalogDependencies.length" class="mb-4 rounded-lg bg-black/30 border border-text-main/10 p-3">
+          <div v-if="catalogDependencies.length" class="mb-4 rounded-lg bg-bg-inset/70 border border-border-base/10 p-3">
             <div class="text-xs font-bold text-text-dim uppercase tracking-widest mb-2">依赖项</div>
             <div class="flex flex-wrap gap-2">
               <span v-for="dep in catalogDependencies" :key="dep.package_id"
@@ -299,29 +299,29 @@
           </div>
           <div v-if="catalogReadme.isLoading" class="text-xs text-text-dim">正在读取 README...</div>
           <div v-else-if="catalogReadme.error" class="text-xs text-accent-warn">{{ catalogReadme.error }}</div>
-          <div v-else-if="catalogReadme.content" class="prose prose-sm prose-invert max-w-none text-text-dim/90" v-html="renderMarkdown(catalogReadme.content)"></div>
+          <div v-else-if="catalogReadme.content" class="prose prose-sm prose-invert max-w-none text-text-dim" v-html="renderMarkdown(catalogReadme.content)"></div>
         </div>
       </div>
 
       <!-- 选中仓库的操作面板与日志轴 -->
-      <div v-else-if="workspaceStore.github.activeRepo" data-tour="workspace-github-panel" class="flex-1 flex flex-col bg-black/30 border border-text-main/10 rounded-2xl overflow-hidden shadow-xl">
+      <div v-else-if="workspaceStore.github.activeRepo" data-tour="workspace-github-panel" class="flex-1 flex flex-col bg-bg-inset/70 border border-border-base/10 rounded-2xl overflow-hidden shadow-xl">
         
         <!-- 操作头部 -->
-        <div class="px-4 py-4 bg-text-main/5 border-b border-text-main/10 flex gap-3 items-start">
+        <div class="px-4 py-4 bg-bg-overlay/5 border-b border-border-base/10 flex gap-3 items-start">
           <div class="flex-1">
             <div class="flex items-center justify-between gap-0.5">
               <h2 class="text-2xl font-black text-text-main">{{ workspaceStore.github.activeRepo.repo_name }}</h2>
-              <span class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-text-dim">
+              <span class="px-2 py-1 rounded bg-bg-inset/90 text-[0.65rem] font-mono text-text-dim">
                 当前模式: {{ workspaceStore.github.activeRepo.install_type.toUpperCase() }}
               </span>
             </div>
             
             <div class="flex gap-2 mt-2">
               
-              <span class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono text-text-dim border border-text-main/10">
+              <span class="px-2 py-1 rounded bg-bg-inset/90 text-[0.65rem] font-mono text-text-dim border border-border-base/10">
                 已部署版本: {{ workspaceStore.github.activeRepo.installed_version || 'NONE' }}
               </span>
-              <span class="px-2 py-1 rounded bg-black/50 text-[0.65rem] font-mono" :class="githubStatus(workspaceStore.github.activeRepo).tone">
+              <span class="px-2 py-1 rounded bg-bg-inset/90 text-[0.65rem] font-mono" :class="githubStatus(workspaceStore.github.activeRepo).tone">
                 {{ githubStatus(workspaceStore.github.activeRepo).label }}<template v-if="githubStatus(workspaceStore.github.activeRepo).version"> ({{ githubStatus(workspaceStore.github.activeRepo).version }})</template>
               </span>
             </div>
@@ -330,15 +330,15 @@
           <!-- 一键更新/部署按钮 -->
           <div class="flex items-center gap-2">
             <button @click="openRepoOriginal(workspaceStore.github.activeRepo)" v-tooltip="'打开原始地址'"
-              class="p-3 rounded-xl bg-text-main/10 text-text-dim hover:text-text-main hover:bg-text-main/20 transition-colors">
+              class="p-3 rounded-xl bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <ExternalLink class="size-4" />
             </button>
             <button v-if="workspaceStore.github.activeRepo.local_folder" @click="openRepoLocal(workspaceStore.github.activeRepo)" v-tooltip="'打开本地目录'"
-              class="p-3 rounded-xl bg-text-main/10 text-text-dim hover:text-text-main hover:bg-text-main/20 transition-colors">
+              class="p-3 rounded-xl bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <FolderOpen class="size-4" />
             </button>
             <button @click="checkAndUpdate" :disabled="isChecking" v-tooltip="'获取并部署当前订阅'"
-              class="px-4 py-3 rounded-xl bg-accent-success text-black font-black text-sm shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50">
+              class="px-4 py-3 rounded-xl bg-accent-success text-on-accent-success font-black text-sm shadow-[0_0_15px_rgba(var(--rgb-accent-success),0.3)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50">
               <CloudDownload class="size-4" :class="{'animate-bounce': isChecking}" />
               {{ workspaceStore.github.activeRepo.installed_version ? '获取并部署最新' : '立即部署' }}
             </button>
@@ -361,15 +361,15 @@
                 :class="getLogColor(log.type)"></div>
               
               <div class="flex items-center gap-2">
-                <span class="text-xs font-mono text-text-dim/80">{{ formatDate(log.time) }}</span>
+                <span class="text-xs font-mono text-text-dim">{{ formatDate(log.time) }}</span>
                 <span class="px-1.5 py-0.5 rounded text-[0.7rem] font-black uppercase" :class="getLogBgColor(log.type)">
                   {{ log.title }}
                 </span>
               </div>
-              <div class="text-sm text-text-main/90 mt-1 leading-relaxed">{{ log.desc }}</div>
+              <div class="text-sm text-text-soft mt-1 leading-relaxed">{{ log.desc }}</div>
             </div>
             
-            <div v-if="workspaceStore.github.repoTimelines.length === 0" class="text-sm text-text-dim/50 italic">
+            <div v-if="workspaceStore.github.repoTimelines.length === 0" class="text-sm text-text-disabled italic">
               暂无追踪记录
             </div>
           </div>
@@ -378,7 +378,7 @@
       </div>
 
       <!-- 闲置空状态 -->
-      <div v-else class="flex-1 flex flex-col items-center justify-center opacity-20 border-2 border-dashed border-text-main/20 rounded-2xl">
+      <div v-else class="flex-1 flex flex-col items-center justify-center opacity-20 border-2 border-dashed border-border-base/18 rounded-2xl">
         <Github class="size-24 mb-4" />
         <span class="text-sm font-black uppercase tracking-widest">Select or Add a Repository</span>
       </div>
@@ -647,8 +647,8 @@ const catalogVersionMatchesCurrent = (version) => {
 
 const catalogVersionClass = (version) => (
   catalogVersionMatchesCurrent(version)
-    ? 'bg-accent-success/70 text-black border-accent-success'
-    : 'bg-black/40 text-text-dim border-text-main/10'
+    ? 'bg-accent-success/70 text-on-accent-success border-accent-success'
+    : 'bg-bg-inset/80 text-text-dim border-border-base/10'
 )
 
 const githubStatus = (repo) => repo?.status || workspaceStore.getGithubRepoStatus(repo)
@@ -662,13 +662,13 @@ const recommendedActionTooltip = (item) => {
 
 const gitActionButtonClass = (item) => {
   if (subscribedRepoUrls.value.has(item?.url)) return 'bg-accent-primary/10 text-accent-primary'
-  if (!isInstallable(item)) return 'bg-text-main/10 text-text-dim'
-  return 'bg-accent-primary/15 text-accent-primary hover:bg-accent-primary hover:text-black'
+  if (!isInstallable(item)) return 'bg-bg-overlay/10 text-text-dim'
+  return 'bg-accent-primary/15 text-accent-primary hover:bg-accent-primary hover:text-on-accent-primary'
 }
 
 const workshopActionButtonClass = (item) => {
-  if (isWorkshopSubscribed(item)) return 'bg-accent-danger/15 text-accent-danger hover:bg-accent-danger hover:text-black'
-  return 'bg-accent-success/15 text-accent-success hover:bg-accent-success hover:text-black'
+  if (isWorkshopSubscribed(item)) return 'bg-accent-danger/15 text-accent-danger hover:bg-accent-danger hover:text-on-accent-danger'
+  return 'bg-accent-success/15 text-accent-success hover:bg-accent-success hover:text-on-accent-success'
 }
 
 const extractWorkshopId = (url) => {
@@ -798,11 +798,11 @@ const catalogDependencyClass = (dep) => {
   if (dep.kind === 'missing') return 'border-accent-danger/30 bg-accent-danger/10 text-accent-danger'
   if (dep.kind === 'workshop') return isWorkshopSubscribed(dep)
     ? 'border-accent-primary/30 bg-accent-primary/20 text-accent-primary'
-    : 'border-text-main/10 bg-text-main/10 text-text-dim'
+    : 'border-border-base/10 bg-bg-overlay/10 text-text-dim'
   if (dep.kind === 'catalog') return subscribedRepoUrls.value.has(dep.sourceItem?.url)
     ? 'border-accent-primary/30 bg-accent-primary/20 text-accent-primary'
-    : 'border-text-main/10 bg-text-main/10 text-text-dim'
-  return 'border-text-main/10 bg-text-main/10 text-text-dim'
+    : 'border-border-base/10 bg-bg-overlay/10 text-text-dim'
+  return 'border-border-base/10 bg-bg-overlay/10 text-text-dim'
 }
 
 const catalogDependencyTooltip = (dep) => {
@@ -981,14 +981,14 @@ const getLogColor = (action) => {
   if (action === 'error') return 'border-accent-danger'
   if (action === 'success') return 'border-accent-success shadow-[0_0_10px_var(--color-accent-success)]'
   if (action === 'download' || action === 'extract') return 'border-accent-primary animate-pulse'
-  return 'border-text-dim'
+  return 'border-border-base/18'
 }
 
 const getLogBgColor = (action) => {
   if (action === 'error') return 'bg-accent-danger/20 text-accent-danger'
   if (action === 'success') return 'bg-accent-success/20 text-accent-success'
   if (action === 'download' || action === 'extract') return 'bg-accent-primary/20 text-accent-primary'
-  return 'bg-text-main/10 text-text-main'
+  return 'bg-bg-overlay/10 text-text-main'
 }
 </script>
 
@@ -1005,8 +1005,8 @@ const getLogBgColor = (action) => {
   margin: 0.75rem 0;
   padding: 0.75rem;
   overflow-x: auto;
-  background-color: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background-color: var(--color-bg-inset);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.5rem;
 }
 </style>

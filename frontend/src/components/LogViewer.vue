@@ -4,19 +4,19 @@
       class="fixed inset-0 z-100 flex items-center justify-center bg-bg-deep/60 backdrop-blur-md"
       @click.self="appStore.uiState.showLogDrawer = false">
       
-      <div class="fixed top-0 left-0 w-full h-full p-10 bg-black/50 backdrop-blur-2xl rounded-lg z-999 flex gap-4 overflow-hidden" @click.self="appStore.uiState.showLogDrawer = false">
+      <div class="fixed top-0 left-0 w-full h-full p-10 bg-glass-heavy backdrop-blur-2xl rounded-lg z-999 flex gap-4 overflow-hidden" @click.self="appStore.uiState.showLogDrawer = false">
         <!-- ================= 左侧：日志主体区 ================= -->
-        <div data-tour="log-viewer-panel" class="flex-1 flex flex-col h-full bg-bg-surface/40 backdrop-blur-md rounded-2xl border border-text-main/10 shadow-2xl relative group overflow-hidden transition-all duration-300">
+        <div data-tour="log-viewer-panel" class="flex-1 flex flex-col h-full bg-bg-surface/40 backdrop-blur-md rounded-2xl border border-border-base/10 shadow-2xl relative group overflow-hidden transition-all duration-300">
           
           <!-- 1. 顶部控制台 (Header & Toolbar) -->
-          <div class="shrink-0 bg-bg-deep/50 border-b border-text-main/5 backdrop-blur-xl z-20">
+          <div class="shrink-0 bg-bg-deep/50 border-b border-border-base/5 backdrop-blur-xl z-20">
             <div class="flex items-center justify-between px-4 h-12">
               
               <!-- 模式切换 Tabs -->
-              <div data-tour="log-viewer-tabs" class="flex p-1 bg-black/20 rounded-lg border border-text-main/5">
+              <div data-tour="log-viewer-tabs" class="flex p-1 bg-bg-muted/70 rounded-lg border border-border-base/5">
                 <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id" :data-tour="`log-tab-${tab.id}`"
                   class="px-4 py-1 rounded-md text-sm font-bold transition-all duration-300 flex items-center gap-2 relative overflow-hidden"
-                  :class="currentTab === tab.id ? 'text-text-main shadow-lg bg-text-main/10' : 'text-text-dim hover:text-text-main hover:bg-text-main/5'">
+                  :class="currentTab === tab.id ? 'text-text-main shadow-lg bg-bg-overlay/10' : 'text-text-dim hover:text-text-main hover:bg-bg-overlay/5'">
                   <div v-if="currentTab === tab.id" class="absolute bottom-0 left-0 w-full h-0.5 bg-accent-primary shadow-[0_0_8px_var(--color-accent-primary)]"></div>
                   <component :is="tab.icon" class="w-3.5 h-3.5" />
                   {{ tab.label }}
@@ -29,14 +29,14 @@
                 <template v-if="currentTab === 'game' || appStore.settings.debug_mode">
                   <CommonSwitch class="col-span-1" label="使用辅助工具模组" v-model="enable_tool_mods" mini description="开启后，将在保存或自动排序时自动启用辅助工具模组，提供为软件提供更加详细的游戏日志获取功能。" />
                   <!-- 一键分析 -->
-                  <button data-tour="log-viewer-auto-analyze" @click="autoAnalyzeGlobalErrors" class="px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all border bg-accent-danger/10 border-accent-danger/30 text-accent-danger hover:bg-accent-danger hover:text-white shadow-[0_0_10px_rgba(239,68,68,0.1)]">
+                  <button data-tour="log-viewer-auto-analyze" @click="autoAnalyzeGlobalErrors" class="px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all border bg-accent-danger/10 border-accent-danger/30 text-accent-danger hover:bg-accent-danger hover:text-on-accent-danger shadow-[0_0_10px_rgba(var(--rgb-accent-danger),0.1)]">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     <span class="font-bold">一键分析</span>
                   </button>
                   
                   <!-- 手动开关 AI 侧边栏按钮 -->
                   <button data-tour="log-viewer-ai-toggle" @click="showAiSidebar = !showAiSidebar" class="px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all border"
-                          :class="showAiSidebar ? 'bg-accent-special/20 border-accent-special/50 text-accent-special shadow-[0_0_10px_rgba(139,92,246,0.2)]' : 'bg-black/20 border-text-main/10 text-text-dim hover:text-accent-special'">
+                          :class="showAiSidebar ? 'bg-accent-special/20 border-accent-special/50 text-accent-special shadow-[0_0_10px_rgba(var(--rgb-accent-special),0.2)]' : 'bg-bg-muted/70 border-border-base/10 text-text-dim hover:text-accent-special'">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
                     <span class="font-bold">{{ showAiSidebar ? '隐藏 AI 助手' : '打开 AI 助手' }}</span>
                   </button>
@@ -48,7 +48,7 @@
           </div>
 
           <!-- 2. 日志内容区 (Log Stream) -->
-          <div data-tour="log-viewer-stream" class="flex-1 min-h-0 bg-black/20 font-mono text-sm relative">
+          <div data-tour="log-viewer-stream" class="flex-1 min-h-0 bg-bg-muted/70 font-mono text-sm relative">
             <KeepAlive>
               <UnifiedLogPanel :key="currentTab" :source-type="currentTab" ref="logPanelRef" @selection-change="handleSelectedLogsUpdate" />
             </KeepAlive>
@@ -57,7 +57,7 @@
             <!-- 当用户在左侧勾选了日志，且 AI 侧边栏未打开时，在底部弹出提示 -->
             <transition name="fade-up">
               <div v-if="selectedLogs.length > 0 && !showAiSidebar && (currentTab === 'game' || appStore.settings.debug_mode)" 
-                  class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-bg-deep/95 border border-accent-primary/30 shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl rounded-full px-5 py-2.5 flex items-center gap-4 z-30">
+                  class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-glass-heavy border border-accent-primary/30 shadow-[0_10px_30px_var(--shadow-color)] backdrop-blur-xl rounded-full px-5 py-2.5 flex items-center gap-4 z-30">
                 
                 <div class="flex items-center gap-2 text-sm">
                   <span class="w-2.5 h-2.5 rounded-full bg-accent-primary animate-pulse"></span>
@@ -73,19 +73,19 @@
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                   <span>{{ tokenInfo.estimated }} / {{ tokenInfo.limit }} TK</span>
                 </div>
-                <div class="w-px h-4 bg-text-main/20"></div>
+                <div class="w-px h-4 bg-bg-overlay/10"></div>
                 
                 <button @click="showAiSidebar = true" :disabled="tokenInfo.isLoading"
-                  class="text-sm font-bold text-accent-special hover:text-white transition-colors flex items-center gap-1 disabled:opacity-50">
+                  class="text-sm font-bold text-accent-special hover:text-text-inverse transition-colors flex items-center gap-1 disabled:opacity-50">
                   AI 分析 
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                 </button>
                 <!-- 复制内容 -->
-                <button @click="triggerCopy" class="text-text-dim hover:text-text-main p-1.5 rounded-full bg-black/20 ml-2" v-tooltip="'复制选中内容'">
+                <button @click="triggerCopy" class="text-text-dim hover:text-text-main p-1.5 rounded-full bg-bg-muted/70 ml-2" v-tooltip="'复制选中内容'">
                   <Copy class="w-4 h-4" />
                 </button>
                 
-                <button @click="clearLogSelection" class="text-text-dim hover:text-accent-danger p-1.5 rounded-full bg-black/20" v-tooltip="'取消选择'">
+                <button @click="clearLogSelection" class="text-text-dim hover:text-accent-danger p-1.5 rounded-full bg-bg-muted/70" v-tooltip="'取消选择'">
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -325,8 +325,8 @@ const autoAnalyzeGlobalErrors = async () => {
 <style scoped>
 /* 呼吸灯动画 */
 @keyframes pulse-slow {
-  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 15px rgba(139, 92, 246, 0.3); }
-  50% { opacity: 0.8; transform: scale(0.98); box-shadow: 0 0 5px rgba(139, 92, 246, 0.1); }
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 15px rgba(var(--rgb-accent-special), 0.3); }
+  50% { opacity: 0.8; transform: scale(0.98); box-shadow: 0 0 5px rgba(var(--rgb-accent-special), 0.1); }
 }
 .animate-pulse-slow {
   animation: pulse-slow 3s infinite ease-in-out;

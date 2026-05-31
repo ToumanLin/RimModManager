@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
-    <!-- 
-      使用 Motion 组件替换原有的 div 和 Transition 
+    <!--
+      使用 Motion 组件替换原有的 div 和 Transition
       initial: 初始状态
       animate: 目标状态 (位置、旋转、透明度)
       transition: 动画物理参数 (Spring 效果核心)
@@ -24,17 +24,17 @@
       }"
     >
       <!-- 模式 A: 复杂预览卡片 (data 是对象) -->
-      <div v-if="hoverStore.type === 'preview'" 
+      <div v-if="hoverStore.type === 'preview'"
         class="relative flex flex-col h-full overflow-visible select-none"
-        :style="{ 
+        :style="{
           '--accent-rgb': hexToRgb(hoverStore.data.sign_color || DEFAULT_ACCENT_HEX),
           '--accent': hoverStore.data.sign_color || DEFAULT_ACCENT_HEX
         }">
-        
+
         <!-- 悬浮装饰：分组标签 (破格设计，浮在卡片上方) -->
         <div v-if="modGroups.length" class="absolute bottom-full -mb-1 right-4 flex gap-0.5 z-0 opacity-80 ">
-          <div v-for="g in modGroups" :key="g.group_id" 
-               class="px-1 py-0.5 rounded-t-md text-xs font-bold shadow-lg flex items-center gap-1 border-t border-x border-text-main/10"
+          <div v-for="g in modGroups" :key="g.group_id"
+               class="px-1 py-0.5 rounded-t-md text-xs font-bold shadow-lg flex items-center gap-1 border-t border-x border-border-base/10"
                :style="{ backgroundColor: g.color, color: getContrastColor(g.color) }">
              {{ g.name }}
           </div>
@@ -42,7 +42,7 @@
 
         <!-- 背景层：图片 + 模糊 + 渐变 -->
         <div class="absolute inset-0 overflow-hidden rounded-xl bg-bg-deep m-0.5">
-          <img v-if="hoverStore.data.preview_path" :src="appStore.getLocalUrl(hoverStore.data.preview_path)" 
+          <img v-if="hoverStore.data.preview_path" :src="appStore.getLocalUrl(hoverStore.data.preview_path)"
               class="absolute inset-0 w-full h-full object-cover opacity-90 blur-xs scale-100" />
           <!-- 渐变遮罩：底部更黑以显示文字 -->
           <div class="absolute inset-0 bg-linear-to-t from-bg-deep via-bg-deep/70 to-bg-deep/30"></div>
@@ -56,14 +56,14 @@
 
         <!-- 内容层 -->
         <div class="relative z-10 p-4 flex flex-col gap-1 h-full">
-          
+
           <!-- 第一行：元数据 (ID & Ver & Type) -->
-          <div class="flex items-center justify-between text-xs font-mono text-text-main/80 border-b border-text-main/5 pb-1">
+          <div class="flex items-center justify-between text-xs font-mono text-text-soft border-b border-border-base/5 pb-1">
             <span class="truncate opacity-70 tracking-tighter">{{ hoverStore.data.package_id }}</span>
             <div class="flex items-center gap-2 shrink-0">
               <span v-if="hoverStore.data.version" class="text-accent-primary">v{{ hoverStore.data.version }}</span>
               <!-- Mod类型徽章 -->
-              <span class="px-1.5 rounded-sm bg-text-main/5 border border-text-main/10 text-text-main/80">
+              <span class="px-1.5 rounded-sm bg-bg-overlay/5 border border-border-base/10 text-text-soft">
                 {{ MOD_TYPE_MAP[modStore.displayModType(hoverStore.data)] || 'MOD' }}
               </span>
             </div>
@@ -109,15 +109,15 @@
             <p v-if="hoverStore.data.notes" class="text-xs text-accent-warn/90 leading-relaxed line-clamp-3 font-medium italic border-l-2 border-accent-warn pl-2">
               {{ hoverStore.data.notes }}
             </p>
-            <p v-else class="text-xs text-text-dim/80 leading-relaxed line-clamp-4 font-mono">
+            <p v-else class="text-xs text-text-dim leading-relaxed line-clamp-4 font-mono">
               {{ cleanDescription }}
             </p>
           </div>
 
           <!-- 第五行：Tags 流 -->
-          <div v-if="hoverStore.data.tags?.length" class="flex flex-wrap gap-1 mt-auto pt-2 border-t border-text-main/5">
-            <span v-for="tag in hoverStore.data.tags.slice(0, 7)" :key="tag" 
-                  class="text-[0.65rem] px-1.5 py-px rounded-full bg-text-main/5 text-text-main/70 border border-text-main/5 whitespace-nowrap">
+          <div v-if="hoverStore.data.tags?.length" class="flex flex-wrap gap-1 mt-auto pt-2 border-t border-border-base/5">
+            <span v-for="tag in hoverStore.data.tags.slice(0, 7)" :key="tag"
+                  class="text-[0.65rem] px-1.5 py-px rounded-full bg-bg-overlay/5 text-text-dim border border-border-base/5 whitespace-nowrap">
               #{{ tag }}
             </span>
             <span v-if="hoverStore.data.tags.length > 7" class="text-[0.65rem] text-text-dim px-1">...</span>
@@ -169,7 +169,7 @@ watch(() => hoverStore.isHovering, (hovering) => {
   if (hovering) {
     if (hideTimer) clearTimeout(hideTimer) // 如果正在准备销毁，取消销毁
     shouldRender.value = true // 立即渲染 DOM
-    
+
     if (showTimer) clearTimeout(showTimer)
     showTimer = setTimeout(() => {
       isVisible.value = true // 触发 opacity 1 动画
@@ -177,11 +177,11 @@ watch(() => hoverStore.isHovering, (hovering) => {
   } else {
     if (showTimer) clearTimeout(showTimer)
     isVisible.value = false // 触发 opacity 0 动画
-    
+
     // 等待弹簧动画大概结束后再销毁 DOM (避免动画突然截断)
     hideTimer = setTimeout(() => {
       shouldRender.value = false
-    }, 300) 
+    }, 300)
   }
 })
 
@@ -189,14 +189,14 @@ watch(() => hoverStore.isHovering, (hovering) => {
 const containerClasses = computed(() => {
   if (hoverStore.type === 'text') {
     // Tooltip 样式：紧凑、黑底白字、圆角小
-    return 'px-2 py-1.5 max-w-[30dvw] rounded-md break-all text-pretty whitespace-normal bg-black/50 backdrop-blur-sm border border-text-main/20 shadow-lg'
+    return 'px-2 py-1.5 max-w-[30dvw] rounded-md break-all text-pretty whitespace-normal bg-glass-heavy backdrop-blur-sm border border-border-base/18 shadow-lg'
   }
   // 让组件自己决定长什么样
   if (hoverStore.type === 'component') {
     return 'shadow-2xl' // 可能只留个阴影，或者连阴影都不要，完全由组件内部控制
   }
   // Preview 样式：宽大、有背景、圆角大
-  return 'w-[340px] max-h-[240px] rounded-xl shadow-2xl overflow-visible' 
+  return 'w-[340px] max-h-[240px] rounded-xl shadow-2xl overflow-visible'
 })
 // --- 2. 窗口尺寸监听 ---
 const winWidth = ref(window.innerWidth)
@@ -257,10 +257,10 @@ const safeX = computed(() => {
   const x = hoverStore.targetX
   const w = winWidth.value
   const pW = realWidth.value // 使用真实宽度
-  
+
   // 策略：如果鼠标在屏幕右半边，面板就显示在鼠标左侧 (靠右基准)
   const isRightSide = x > w - pW - GAP
-  
+
   if (isRightSide) {
     // 锚点在右侧：鼠标位置 - 面板宽度 - 间距
     // 同时也做一下左侧防溢出 (防止屏幕太窄时出界)
@@ -278,10 +278,10 @@ const safeY = computed(() => {
   const y = hoverStore.targetY
   const h = winHeight.value
   const pH = realHeight.value // 使用真实高度
-  
+
   // 策略：如果鼠标在屏幕下半边，面板就显示在鼠标上方 (底部基准)
   const isBottomSide = y > h - pH - GAP
-  
+
   if (isBottomSide) {
     // 锚点在底部：鼠标位置 - 面板高度 - 间距
     // 这样当 pH 变大时，Y 值变小，面板视觉上是"向上生长"
@@ -312,12 +312,12 @@ watch(() => hoverStore.targetY, (newY) => {
 
   // 参考代码的核心算法: rotate = -velocityY * 0.6
   // 这会产生当鼠标快速向下移动时，卡片顶部向后仰的效果
-  const sensitivity = 0.6 
+  const sensitivity = 0.6
   const maxRotation = 10
-  
+
   // 计算目标角度并限制最大值
   const targetRotation = Math.max(Math.min(-velocityY * sensitivity, maxRotation), -maxRotation)
-  
+
   rotation.value = targetRotation
 
   // 鼠标停止后回正
@@ -349,44 +349,44 @@ const parseMarkup = (text) => {
   // 3. 语法解析规则配置
   const rules = [
     // [Custom Color] {{#hex|text}} -> <span style="color:#hex">text</span>
-    { 
-      regex: /\{\{(#[0-9a-fA-F]{3,6})\|(.*?)\}\}/g, 
-      repl: '<span style="color: $1">$2</span>' 
+    {
+      regex: /\{\{(#[0-9a-fA-F]{3,6})\|(.*?)\}\}/g,
+      repl: '<span style="color: $1">$2</span>'
     },
     // [Bold] **text** -> font-bold
-    { 
-      regex: /\*\*(.*?)\*\*/g, 
-      repl: '<span class="font-bold text-text-main text-base">$1</span>' 
+    {
+      regex: /\*\*(.*?)\*\*/g,
+      repl: '<span class="font-bold text-text-main text-base">$1</span>'
     },
     // [Italic] __text__ -> italic opacity-80
-    { 
-      regex: /__(.*?)__/g, 
-      repl: '<span class="italic opacity-80">$1</span>' 
+    {
+      regex: /__(.*?)__/g,
+      repl: '<span class="italic opacity-80">$1</span>'
     },
-    // [Error/Red] !!text!! -> text-red-400
-    { 
-      regex: /!!(.*?)!!/g, 
-      repl: '<span class="text-red-400 font-bold">$1</span>' 
+    // 错误强调：!!text!!
+    {
+      regex: /!!(.*?)!!/g,
+      repl: '<span class="text-accent-danger font-bold">$1</span>'
     },
-    // [Warn/Yellow] ^^text^^ -> text-yellow-400
-    { 
-      regex: /\^\^(.*?)\^\^/g, 
-      repl: '<span class="text-yellow-400 font-bold">$1</span>' 
+    // 警告强调：^^text^^
+    {
+      regex: /\^\^(.*?)\^\^/g,
+      repl: '<span class="text-accent-warn font-bold">$1</span>'
     },
-    // [Info/Blue] [[text]] -> text-blue-400 (类似链接)
-    { 
-      regex: /\[\[(.*?)\]\]/g, 
-      repl: '<span class="text-accent-primary font-bold">$1</span>' 
+    // 信息强调：[[text]]
+    {
+      regex: /\[\[(.*?)\]\]/g,
+      repl: '<span class="text-accent-primary font-bold">$1</span>'
     },
-    // [Success/Green] ##text## -> text-green-400
-    { 
-      regex: /##(.*?)##/g, 
-      repl: '<span class="text-green-400 font-bold">$1</span>' 
+    // 成功强调：##text##
+    {
+      regex: /##(.*?)##/g,
+      repl: '<span class="text-accent-success font-bold">$1</span>'
     },
-    // [Code/Mono] `text` -> bg-black/30 font-mono
-    { 
-      regex: /··(.*?)··/g, 
-      repl: '<span class="font-mono text-xs bg-text-main/10 px-1 rounded mx-0.5 text-text-main">$1</span>' 
+    // [Code/Mono] `text` -> bg-bg-inset/70 font-mono
+    {
+      regex: /··(.*?)··/g,
+      repl: '<span class="font-mono text-xs bg-bg-overlay/10 px-1 rounded mx-0.5 text-text-main">$1</span>'
     }
   ]
 
@@ -413,7 +413,7 @@ const saveBreakingColor = computed(() => {
   const v = saveBreakingVal.value
   if (v === 1) return 'text-accent-success border-accent-success/30 bg-accent-success/10' // 安全
   if (v === -1) return 'text-accent-danger border-accent-danger/30 bg-accent-danger/10' // 危险
-  return 'text-text-dim border-text-main/5' // 未知
+  return 'text-text-dim border-border-base/5' // 未知
 })
 
 const saveBreakingText = computed(() => {
@@ -479,8 +479,8 @@ const hexToRgb = hexToRgbComponents
   /* 3. 使用灰阶抗锯齿，文字会变细一点但更清晰 */
   /* -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale; */
-  
+
   /* 4. 优化图片和合成层的渲染质量 */
-  image-rendering: -webkit-optimize-contrast; 
+  image-rendering: -webkit-optimize-contrast;
 }
 </style>

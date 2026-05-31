@@ -16,12 +16,12 @@
       </svg>
       <template v-else>{{ index+1 }}</template>
     </button>
-    
+
     <!-- 内容区域 -->
     <!-- 行组件会被虚拟列表频繁复用。这里避免在每一行使用 backdrop-filter，
       否则开启多列列表时浏览器会为大量半透明卡片持续保留合成层，空闲 GPU 占用会明显升高。 -->
-    <div class="select-trigger drag-handle flex-1 flex items-center min-w-0 gap-1.5 p-1 rounded-lg relative group border hover:brightness-150 group shadow-sm text-text-main/80"
-      :class="[searchMatch ? 'ring-2 ring-accent-highlight scale-[1.02] z-20' : '', cardClass]" 
+    <div class="select-trigger drag-handle flex-1 flex items-center min-w-0 gap-1.5 p-1 rounded-lg relative group border hover:brightness-150 group shadow-sm text-text-soft"
+      :class="[searchMatch ? 'ring-2 ring-accent-highlight scale-[1.02] z-20' : '', cardClass]"
       :style="getCardStyle(item_id)"
       v-preview="modData">
       <div v-if="showIcon">
@@ -29,10 +29,10 @@
         <div v-if="simple" class="flex items-center gap-1">
 
           <div v-if="showModIcon">
-            <img v-if="!!modData.path && modData.preview_path" :src="appStore.getThumbUrl(modData.package_id, modData.preview_path)" loading="lazy" 
+            <img v-if="!!modData.path && modData.preview_path" :src="appStore.getThumbUrl(modData.package_id, modData.preview_path)" loading="lazy"
               :class="`size-6 rounded object-cover border border-accent-${listColor}/30 pointer-events-none`">
-            <div v-else-if="!modData.path" :class="`size-6 rounded flex items-center justify-center text-red-500 font-bold text-lg bg-red-900/50 border border-red-500/30`">!</div>
-            <div v-else :class="`size-6 rounded border-2 border-dashed border-text-main/10 flex items-center justify-center`">
+            <div v-else-if="!modData.path" :class="`size-6 rounded flex items-center justify-center text-accent-danger font-bold text-lg bg-accent-danger/15 border border-accent-danger/30`">!</div>
+            <div v-else :class="`size-6 rounded border-2 border-dashed border-border-base/10 flex items-center justify-center`">
               <svg :class="`size-5 opacity-20`" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
             </div>
           </div>
@@ -47,25 +47,25 @@
             <button type="button" class="relative flex items-center justify-center hover:scale-120 transition-transform duration-200" :class="canToggleCoexistSource ? 'cursor-pointer' : 'cursor-default'" tabindex="0" v-tooltip="sourceToggleTooltip" @click.stop="handleSourceToggle">
               <svg v-if="modData.store==='workshop'" class="fill-current -m-0.5 size-4.5" viewBox="0 0 640 640" xmlns="http://www.w3.org/2000/svg"><path d="M261.6 373.1C280.2 380.8 288.9 402 281.2 420.5C273.5 439 252.2 447.7 233.6 439.9L205.1 428.1C210.1 438.7 218.9 447.5 230.5 452.3C255.7 462.8 284.6 450.9 295.1 425.8C300.2 413.7 300.2 400.3 295.2 388.1C290.1 376 280.7 366.5 268.5 361.4C256.4 356.4 243.5 356.6 232.1 360.9L261.6 373.1zM544 160C544 124.7 515.3 96 480 96L160 96C124.7 96 96 124.7 96 160L96 304.7L212.6 352.8C224.6 344.6 238.8 340.7 253.3 341.5L308.7 261.3L308.7 260.2C308.7 212 348 172.7 396.3 172.7C444.6 172.7 483.9 212 483.9 260.2C483.9 309.4 443 348.9 394.3 347.7L315.3 404C316.9 442.5 286.2 472.8 249.6 472.8C217.8 472.8 191.1 450.1 185.1 420.1L96 383.2L96 480C96 515.3 124.7 544 160 544L480 544C515.3 544 544 515.3 544 480L544 160zM337.9 260.2C337.9 292.5 364 318.6 396.3 318.6C428.6 318.6 454.7 292.5 454.7 260.2C454.7 227.9 428.6 201.8 396.3 201.8C364 201.8 337.9 227.9 337.9 260.2zM440.3 260.1C440.3 284.3 420.6 304 396.4 304C372.2 304 352.5 284.3 352.5 260.1C352.5 235.9 372.2 216.2 396.4 216.2C420.6 216.2 440.3 235.9 440.3 260.1z"/></svg>
               <!-- <svg v-else-if="modData.source==='github'"class="fill-current -m-0.5 size-4.5" viewBox="0 0 640 640" xmlns="http://www.w3.org/2000/svg"><path d="M544 160C544 124.7 515.3 96 480 96L160 96C124.7 96 96 124.7 96 160L96 480C96 515.3 124.7 544 160 544L480 544C515.3 544 544 515.3 544 480L544 160zM361.8 471.7C361.8 469.9 361.8 465.7 361.9 460.1C362 448.7 362 431.3 362 416.4C362 400.8 356.8 390.9 350.7 385.7C387.7 381.6 426.7 376.5 426.7 312.6C426.7 294.4 420.2 285.3 409.6 273.6C411.3 269.3 417 251.6 407.9 228.6C394 224.3 362.2 246.5 362.2 246.5C335.6 239 305.6 239 279 246.5C279 246.5 247.2 224.3 233.3 228.6C224.2 251.5 229.8 269.2 231.6 273.6C221 285.3 216 294.4 216 312.6C216 376.2 253.3 381.6 290.3 385.7C285.5 390 281.2 397.4 279.7 408C270.2 412.3 245.9 419.7 231.4 394.1C222.3 378.3 205.9 377 205.9 377C189.7 376.8 204.8 387.2 204.8 387.2C215.6 392.2 223.2 411.4 223.2 411.4C232.9 441.1 279.3 431.1 279.3 431.1C279.3 440.1 279.4 452.8 279.4 461.7C279.4 466.5 279.5 470.3 279.5 471.7C279.5 476 276.5 481.2 268 479.7C202 457.6 155.8 394.8 155.8 321.4C155.8 229.6 226 159.9 317.8 159.9C409.6 159.9 484 229.6 484 321.4C484.1 394.8 439.3 457.7 373.3 479.7C364.9 481.2 361.8 476 361.8 471.7zM271.3 416.9C271.1 415.4 272.4 414.1 274.3 413.7C276.2 413.5 278 414.3 278.2 415.6C278.5 416.9 277.2 418.2 275.2 418.6C273.3 419 271.5 418.2 271.3 416.9zM262.2 420.1C260 420.3 258.5 419.2 258.5 417.7C258.5 416.4 260 415.3 262 415.3C263.9 415.1 265.7 416.2 265.7 417.7C265.7 419 264.2 420.1 262.2 420.1zM247.9 417.9C246 417.5 244.7 416 245.1 414.7C245.5 413.4 247.5 412.8 249.2 413.2C251.2 413.8 252.5 415.3 252 416.6C251.6 417.9 249.6 418.5 247.9 417.9zM235.4 410.6C233.9 409.3 233.5 407.4 234.5 406.5C235.4 405.4 237.3 405.6 238.8 407.1C240.1 408.4 240.6 410.4 239.7 411.2C238.8 412.3 236.9 412.1 235.4 410.6zM226.9 400.6C225.8 399.1 225.8 397.4 226.9 396.7C228 395.8 229.7 396.5 230.6 398C231.7 399.5 231.7 401.3 230.6 402.1C229.7 402.7 228 402.1 226.9 400.6zM220.6 391.8C219.5 390.5 219.3 389 220.2 388.3C221.1 387.4 222.6 387.9 223.7 388.9C224.8 390.2 225 391.7 224.1 392.4C223.2 393.3 221.7 392.8 220.6 391.8zM214.6 385.4C213.3 384.8 212.7 383.7 213.1 382.8C213.5 382.2 214.6 381.9 215.9 382.4C217.2 383.1 217.8 384.2 217.4 385C217 385.9 215.7 386.1 214.6 385.4z"/></svg> -->
-              <svg v-else-if="['core','dlc'].includes(modData.source)" class="fill-current size-3.5" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="90" fill="currentColor" stroke="currentColor" stroke-width="2"/><circle cx="100" cy="100" r="70" fill="#000" /><polygon points="100,48 118.27,74.85 149.46,83.93 129.57,109.61 130.57,142.07 100,131.09 69.43,142.07 70.43,109.61 50.54,83.93 81.73,74.85" fill="currentColor" stroke="currentColor" stroke-width="5"/><circle cx="100" cy="48" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="149.46" cy="83.93" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="130.57" cy="142.07" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="69.43" cy="142.07" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="50.54" cy="83.93" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/></svg>
+              <svg v-else-if="['core','dlc'].includes(modData.source)" class="fill-current size-3.5" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="90" fill="currentColor" stroke="currentColor" stroke-width="2"/><circle cx="100" cy="100" r="70" fill="var(--color-text-inverse)" /><polygon points="100,48 118.27,74.85 149.46,83.93 129.57,109.61 130.57,142.07 100,131.09 69.43,142.07 70.43,109.61 50.54,83.93 81.73,74.85" fill="currentColor" stroke="currentColor" stroke-width="5"/><circle cx="100" cy="48" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="149.46" cy="83.93" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="130.57" cy="142.07" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="69.43" cy="142.07" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="50.54" cy="83.93" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/></svg>
               <!-- <svg v-else-if="modData.source==='other'" class="fill-current -m-0.5 size-4.5" viewBox="100 -20 420 640" xmlns="http://www.w3.org/2000/svg"><path d="M512 512L128 512C92.7 512 64 483.3 64 448L64 160C64 124.7 92.7 96 128 96L266.7 96C280.5 96 294 100.5 305.1 108.8L343.5 137.6C349 141.8 355.8 144 362.7 144L512 144C547.3 144 576 172.7 576 208L576 448C576 483.3 547.3 512 512 512zM248 304C234.7 304 224 314.7 224 328C224 341.3 234.7 352 248 352L392 352C405.3 352 416 341.3 416 328C416 314.7 405.3 304 392 304L248 304z"/></svg> -->
               <!-- <svg viewBox="0 0 96 96" ></svg> -->
               <IconSelf v-else-if="modData.store==='self'" class=" size-4 grayscale-20" />
               <svg v-else class="fill-current -m-0.5 size-4.5" viewBox="100 -20 420 640" xmlns="http://www.w3.org/2000/svg"><path d="M512 512L128 512C92.7 512 64 483.3 64 448L64 160C64 124.7 92.7 96 128 96L266.7 96C280.5 96 294 100.5 305.1 108.8L343.5 137.6C349 141.8 355.8 144 362.7 144L512 144C547.3 144 576 172.7 576 208L576 448C576 483.3 547.3 512 512 512zM248 304C234.7 304 224 314.7 224 328C224 341.3 234.7 352 248 352L392 352C405.3 352 416 341.3 416 328C416 314.7 405.3 304 392 304L248 304z"/></svg>
               <span v-if="canToggleCoexistSource" class="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-accent-primary shadow-sm shadow-accent-primary/60"></span>
             </button>
-              
+
             </div>
         </div>
         <!-- 缩略图 -->
         <div v-else class="relative">
-          <img v-if="!!modData.path && modData.preview_path" :src="appStore.getThumbUrl(modData.package_id, modData.preview_path)" loading="lazy" 
+          <img v-if="!!modData.path && modData.preview_path" :src="appStore.getThumbUrl(modData.package_id, modData.preview_path)" loading="lazy"
             :class="`w-10 h-8 rounded object-cover border border-accent-${listColor}/30 pointer-events-none`">
-          <div v-else-if="!modData.path" class="w-8 h-8 rounded flex items-center justify-center text-red-500 font-bold text-lg bg-red-900/50 border border-red-500/30">!</div>
-          <div v-else class="w-10 h-10 rounded border-2 border-dashed border-text-main/10 flex items-center justify-center">
+          <div v-else-if="!modData.path" class="w-8 h-8 rounded flex items-center justify-center text-accent-danger font-bold text-lg bg-accent-danger/15 border border-accent-danger/30">!</div>
+          <div v-else class="w-10 h-10 rounded border-2 border-dashed border-border-base/10 flex items-center justify-center">
             <svg class="w-6 h-6 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
           </div>
-          
+
           <div class="absolute -top-2 -left-1 flex items-center justify-center ">
             <!-- 类型图标 -->
             <span class="flex items-center justify-center bg-glass-medium/60 rounded-sm mr-0.5 hover:scale-120 transition-transform duration-200" tabindex="0" v-tooltip="`类型：${modType}`">
@@ -75,7 +75,7 @@
             <button type="button" class="relative flex items-center justify-center bg-glass-medium/70 rounded-sm hover:scale-120 transition-transform duration-200" :class="canToggleCoexistSource ? 'cursor-pointer' : 'cursor-default'" tabindex="0" v-tooltip="sourceToggleTooltip" @click.stop="handleSourceToggle">
               <svg v-if="modData.store==='workshop'" class="fill-current -m-0.5 size-4.5" viewBox="0 0 640 640" xmlns="http://www.w3.org/2000/svg"><path d="M261.6 373.1C280.2 380.8 288.9 402 281.2 420.5C273.5 439 252.2 447.7 233.6 439.9L205.1 428.1C210.1 438.7 218.9 447.5 230.5 452.3C255.7 462.8 284.6 450.9 295.1 425.8C300.2 413.7 300.2 400.3 295.2 388.1C290.1 376 280.7 366.5 268.5 361.4C256.4 356.4 243.5 356.6 232.1 360.9L261.6 373.1zM544 160C544 124.7 515.3 96 480 96L160 96C124.7 96 96 124.7 96 160L96 304.7L212.6 352.8C224.6 344.6 238.8 340.7 253.3 341.5L308.7 261.3L308.7 260.2C308.7 212 348 172.7 396.3 172.7C444.6 172.7 483.9 212 483.9 260.2C483.9 309.4 443 348.9 394.3 347.7L315.3 404C316.9 442.5 286.2 472.8 249.6 472.8C217.8 472.8 191.1 450.1 185.1 420.1L96 383.2L96 480C96 515.3 124.7 544 160 544L480 544C515.3 544 544 515.3 544 480L544 160zM337.9 260.2C337.9 292.5 364 318.6 396.3 318.6C428.6 318.6 454.7 292.5 454.7 260.2C454.7 227.9 428.6 201.8 396.3 201.8C364 201.8 337.9 227.9 337.9 260.2zM440.3 260.1C440.3 284.3 420.6 304 396.4 304C372.2 304 352.5 284.3 352.5 260.1C352.5 235.9 372.2 216.2 396.4 216.2C420.6 216.2 440.3 235.9 440.3 260.1z"/></svg>
               <!-- <svg v-else-if="modData.source==='github'" class="fill-current -m-0.5 size-4.5" viewBox="0 0 640 640" xmlns="http://www.w3.org/2000/svg"><path d="M544 160C544 124.7 515.3 96 480 96L160 96C124.7 96 96 124.7 96 160L96 480C96 515.3 124.7 544 160 544L480 544C515.3 544 544 515.3 544 480L544 160zM361.8 471.7C361.8 469.9 361.8 465.7 361.9 460.1C362 448.7 362 431.3 362 416.4C362 400.8 356.8 390.9 350.7 385.7C387.7 381.6 426.7 376.5 426.7 312.6C426.7 294.4 420.2 285.3 409.6 273.6C411.3 269.3 417 251.6 407.9 228.6C394 224.3 362.2 246.5 362.2 246.5C335.6 239 305.6 239 279 246.5C279 246.5 247.2 224.3 233.3 228.6C224.2 251.5 229.8 269.2 231.6 273.6C221 285.3 216 294.4 216 312.6C216 376.2 253.3 381.6 290.3 385.7C285.5 390 281.2 397.4 279.7 408C270.2 412.3 245.9 419.7 231.4 394.1C222.3 378.3 205.9 377 205.9 377C189.7 376.8 204.8 387.2 204.8 387.2C215.6 392.2 223.2 411.4 223.2 411.4C232.9 441.1 279.3 431.1 279.3 431.1C279.3 440.1 279.4 452.8 279.4 461.7C279.4 466.5 279.5 470.3 279.5 471.7C279.5 476 276.5 481.2 268 479.7C202 457.6 155.8 394.8 155.8 321.4C155.8 229.6 226 159.9 317.8 159.9C409.6 159.9 484 229.6 484 321.4C484.1 394.8 439.3 457.7 373.3 479.7C364.9 481.2 361.8 476 361.8 471.7zM271.3 416.9C271.1 415.4 272.4 414.1 274.3 413.7C276.2 413.5 278 414.3 278.2 415.6C278.5 416.9 277.2 418.2 275.2 418.6C273.3 419 271.5 418.2 271.3 416.9zM262.2 420.1C260 420.3 258.5 419.2 258.5 417.7C258.5 416.4 260 415.3 262 415.3C263.9 415.1 265.7 416.2 265.7 417.7C265.7 419 264.2 420.1 262.2 420.1zM247.9 417.9C246 417.5 244.7 416 245.1 414.7C245.5 413.4 247.5 412.8 249.2 413.2C251.2 413.8 252.5 415.3 252 416.6C251.6 417.9 249.6 418.5 247.9 417.9zM235.4 410.6C233.9 409.3 233.5 407.4 234.5 406.5C235.4 405.4 237.3 405.6 238.8 407.1C240.1 408.4 240.6 410.4 239.7 411.2C238.8 412.3 236.9 412.1 235.4 410.6zM226.9 400.6C225.8 399.1 225.8 397.4 226.9 396.7C228 395.8 229.7 396.5 230.6 398C231.7 399.5 231.7 401.3 230.6 402.1C229.7 402.7 228 402.1 226.9 400.6zM220.6 391.8C219.5 390.5 219.3 389 220.2 388.3C221.1 387.4 222.6 387.9 223.7 388.9C224.8 390.2 225 391.7 224.1 392.4C223.2 393.3 221.7 392.8 220.6 391.8zM214.6 385.4C213.3 384.8 212.7 383.7 213.1 382.8C213.5 382.2 214.6 381.9 215.9 382.4C217.2 383.1 217.8 384.2 217.4 385C217 385.9 215.7 386.1 214.6 385.4z"/></svg> -->
-              <svg v-else-if="['core','dlc'].includes(modData.source)" class="fill-current size-4" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="90" fill="currentColor" stroke="currentColor" stroke-width="2"/><circle cx="100" cy="100" r="70" fill="#000" /><polygon points="100,48 118.27,74.85 149.46,83.93 129.57,109.61 130.57,142.07 100,131.09 69.43,142.07 70.43,109.61 50.54,83.93 81.73,74.85" fill="currentColor" stroke="currentColor" stroke-width="5"/><circle cx="100" cy="48" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="149.46" cy="83.93" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="130.57" cy="142.07" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="69.43" cy="142.07" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="50.54" cy="83.93" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/></svg>
+              <svg v-else-if="['core','dlc'].includes(modData.source)" class="fill-current size-4" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="90" fill="currentColor" stroke="currentColor" stroke-width="2"/><circle cx="100" cy="100" r="70" fill="currentColor" /><polygon points="100,48 118.27,74.85 149.46,83.93 129.57,109.61 130.57,142.07 100,131.09 69.43,142.07 70.43,109.61 50.54,83.93 81.73,74.85" fill="currentColor" stroke="currentColor" stroke-width="5"/><circle cx="100" cy="48" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="149.46" cy="83.93" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="130.57" cy="142.07" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="69.43" cy="142.07" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/><circle cx="50.54" cy="83.93" r="10" fill="currentColor" stroke="currentColor" stroke-width="3"/></svg>
               <!-- <svg v-else-if="modData.source==='other'" class="fill-current -m-0.5 size-4.5" viewBox="100 -20 420 640" xmlns="http://www.w3.org/2000/svg"><path d="M512 512L128 512C92.7 512 64 483.3 64 448L64 160C64 124.7 92.7 96 128 96L266.7 96C280.5 96 294 100.5 305.1 108.8L343.5 137.6C349 141.8 355.8 144 362.7 144L512 144C547.3 144 576 172.7 576 208L576 448C576 483.3 547.3 512 512 512zM248 304C234.7 304 224 314.7 224 328C224 341.3 234.7 352 248 352L392 352C405.3 352 416 341.3 416 328C416 314.7 405.3 304 392 304L248 304z"/></svg> -->
               <!-- <svg v-else-if="modData.store==='self'" class=" size-4 grayscale-20" viewBox="0 0 96 96" > <use href="/icon.svg"></use></svg> -->
               <IconSelf v-else-if="modData.store==='self'" class=" size-4 grayscale-20" />
@@ -113,7 +113,7 @@
             {{ displayName }}
           </div>
           <!-- 标签 -->
-          <div class="overflow-hidden" style="box-shadow: inset 8px 0 10px -8px rgba(0, 0, 0, 0.3), inset -8px 0 10px -8px rgba(0, 0, 0, 0.3);">
+          <div class="overflow-hidden" style="box-shadow: inset 8px 0 10px -8px var(--shadow-color), inset -8px 0 10px -8px var(--shadow-color);">
             <div v-if="modData?.tags && modData.tags.length && !simple" class="flex gap-0.5 w-full overflow-y-hidden overflow-x-scroll custom-scrollbar mt-0.5 outline-none ">
               <span v-for="tag in modData.tags" :key="tag" class="min-w-fit font-mono px-0.5 py-0 my-0 rounded-md bg-accent-primary/10 text-accent-primary text-[0.7rem] font-bold border border-accent-primary/10 drop-shadow-xl/25">
                 {{ tag }}
@@ -125,7 +125,7 @@
 
       <!-- 标题项把“组内数量”放到最右侧，保持左侧图标区与普通项一致。 -->
       <div v-if="sectionHeader" class="shrink-0 flex items-center gap-2">
-        <span :class="`rounded bg-black/30 px-2 py-0.5 text-xs text-accent-${listColor}`">
+        <span :class="`rounded bg-bg-inset/70 px-2 py-0.5 text-xs text-accent-${listColor}`">
           {{ sectionChildCount }}
         </span>
       </div>
@@ -138,7 +138,7 @@
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
         </svg>
       </div>
-      
+
       <!-- 问题警告 -->
       <div v-if="!sectionHeader && issueState" :class="[`rounded-4xl cursor-help text-sm font-bold
         hover:scale-110  text-shadow-2xs text-shadow-black hover:shadow-bg-deep/50 transition-all`,
@@ -157,13 +157,13 @@
         <div v-if="modGroups.length" class="w-full absolute right-0 inset-y-0 flex flex-col scale-95 opacity-60">
           <!-- 悬浮显示分组信息 -->
           <div v-for="(g, index) in modGroups" :key="g.id" @click.prevent.stop=""
-            :class="[`w-full flex-1 hover:scale-120 transition-all hover:border hover:border-text-main`,index===modGroups.length-1?'rounded-br-lg':'',index===0?'rounded-tr-lg':'']" 
+            :class="[`w-full flex-1 hover:scale-120 transition-all hover:border hover:border-border-base/18`,index===modGroups.length-1?'rounded-br-lg':'',index===0?'rounded-tr-lg':'']"
             :style="{'backgroundColor': g.color}" v-tooltip="`分组：${g.name}`">
             <!-- v-preview="{component: GroupItem, props: {id: g.group_id, index: 0, groupData: g, expanded: true}}"> -->
           </div>
         </div>
       </div>
-      <div class="absolute top-0 left-0 -z-100 w-full rounded-lg h-full group-hover:bg-white/10"></div>
+      <div class="absolute top-0 left-0 -z-100 w-full rounded-lg h-full group-hover:bg-bg-overlay/10"></div>
 
     </div>
 
@@ -292,7 +292,7 @@ const getCardClass = computed(() => {
     const select = props.isSelected ? 'ring-2 ring-accent-special ' : ''
     if (issueState.value === 'error') return `${select} border-accent-danger/40 border bg-accent-danger/10 hover:bg-accent-danger/20`
     if (issueState.value === 'warn') return `${select} border-accent-warn/40 border bg-accent-warn/10 hover:bg-accent-warn/20`
-    return `${select} bg-bg-surface/20 border-text-main/10 hover:border-text-main/20 hover:bg-text-dim/20` // 原有的选中样式
+    return `${select} bg-bg-surface/20 border-border-base/10 hover:border-border-base/18 hover:bg-bg-overlay/10` // 原有的选中样式
 })
 const sectionHeaderClass = computed(() => {
   const select = props.isSelected ? 'ring-2 ring-accent-special ' : ''
@@ -364,7 +364,7 @@ const ensureInterlockDetails = async () => {
 }
 
 const getCardStyle = (id) => {
-  const base = { height: (props.simple ? appStore.scalePx(30) : appStore.scalePx(50))+'px', backgroundColor: 'rgba(255,255,255,0.05)' }
+  const base = { height: (props.simple ? appStore.scalePx(30) : appStore.scalePx(50))+'px', backgroundColor: 'rgba(var(--rgb-bg-highlight),0.3)' }
   // 标题项保持固定高度，不参与普通模组的签名色着色逻辑。
   if (props.sectionHeader) return base
   const color = modStore.takeModById(id)?.sign_color
@@ -477,7 +477,7 @@ const handleContextMenu = async (event) => {
     await nextTick()
   }
   await ensureInterlockDetails()
-  const selectedIds = modStore.selectedIds; 
+  const selectedIds = modStore.selectedIds;
   const selectedCountStr = selectedIds.length>1?` (${selectedIds.length}项)`:''
   const coexistSelectedIds = selectedIds.filter(id => modStore.canSwitchCoexistenceSource(id))
   const coexistSelectedCountStr = coexistSelectedIds.length>1?` (${coexistSelectedIds.length}项)`:''
@@ -491,7 +491,7 @@ const handleContextMenu = async (event) => {
   // 通用菜单
   const commnMenuItems = [
     { label: '标签管理'+ selectedCountStr , icon: Tag, disabled: !modStore.allModTags?.length, children: [{type: 'grid', columns: 5, label: '批量分配标签',
-      children: modStore.allModTags.map(tag => ({ state: stats.tags[tag] || null, 
+      children: modStore.allModTags.map(tag => ({ state: stats.tags[tag] || null,
         label: '#'+tag, action: () => modStore.selectModsTag(tag)
       }))}]
     },
@@ -501,7 +501,7 @@ const handleContextMenu = async (event) => {
       }))}]
     },
     { label: '标记颜色'+ selectedCountStr, icon: Palette, children: [{ type: 'grid', columns: 5, label: '批量设置颜色',
-        children:[...Object.entries(MOD_SIGN_COLOR_MAP).map(([c, name]) => ({ tooltip: name, color: c, 
+        children:[...Object.entries(MOD_SIGN_COLOR_MAP).map(([c, name]) => ({ tooltip: name, color: c,
             active: stats.color === c, action: () => modStore.setModsColor(selectedIds, c)
           })), {
             type: 'color-picker',
@@ -513,13 +513,13 @@ const handleContextMenu = async (event) => {
       }]
     },
     { label: '修改类型'+ selectedCountStr, icon: ChessPawn,
-      children: [...Object.entries(MOD_TYPE_MAP).map(([key, value]) => ({ 
+      children: [...Object.entries(MOD_TYPE_MAP).map(([key, value]) => ({
         icon: MOD_TYPE_ICON_MAP[key],
         label: value, action: () => modStore.setModsType(selectedIds, key)
       })),{ label: '恢复默认', icon: SquareX, level: 'warn', action: () => modStore.setModsType(selectedIds, null) }]
     },
-    { label: (isActive.value?'停用':'启用') + selectedCountStr, icon: isActive.value? CircleSlash2:CircleCheckBig, 
-      action: () => modStore.changeModsActive(selectedIds, !isActive.value) 
+    { label: (isActive.value?'停用':'启用') + selectedCountStr, icon: isActive.value? CircleSlash2:CircleCheckBig,
+      action: () => modStore.changeModsActive(selectedIds, !isActive.value)
     },
   ]
   // 文件处理菜单

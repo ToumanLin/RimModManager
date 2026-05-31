@@ -1,10 +1,10 @@
 <template>
   <transition name="slide-right">
-    <div v-if="modelValue" class="w-130 shrink-0 rounded-2xl bg-bg-surface/90 backdrop-blur-xl ring-2 ring-text-main/10 flex flex-col h-full z-40 relative shadow-2xl">
+    <div v-if="modelValue" class="w-130 shrink-0 rounded-2xl bg-bg-surface/90 ring-1 ring-border-base/10 flex flex-col h-full z-40 relative shadow-2xl">
       <!-- 顶部控制栏：标题、会话统计、工具配置与关闭操作 -->
-      <div class="h-14 border-b border-white/5 flex items-center justify-between px-4 shrink-0 bg-black/40">
+      <div class="h-14 border-b border-border-base/10 rounded-t-2xl flex items-center justify-between px-4 shrink-0 bg-bg-inset/60">
         <div class="flex items-center gap-3">
-          <div class="w-7 h-7 rounded-lg bg-linear-to-br from-accent-special to-accent-primary flex items-center justify-center text-white shadow-[0_0_10px_rgba(139,92,246,0.3)]">
+          <div class="w-7 h-7 rounded-lg bg-linear-to-br from-accent-special to-accent-primary flex items-center justify-center text-on-accent-special shadow-[0_0_10px_rgba(var(--rgb-accent-special),0.3)]">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
           </div>
           <div class="flex flex-col">
@@ -17,35 +17,35 @@
         </div>
 
         <div class="flex items-center gap-1.5">
-          <button class="rounded border border-white/10 bg-black/20 px-2.5 py-1 text-xs transition-colors hover:border-accent-special/30 hover:text-accent-special"
+          <button class="rounded border border-border-base/10 bg-bg-muted/70 px-2.5 py-1 text-xs transition-colors hover:border-accent-special/30 hover:text-accent-special"
             v-if="showTraceButton" @click="openTracePanel" >
             查看请求记录
           </button>
           <div class="relative group/tools">
             <button @click="showToolSelector = !showToolSelector" class="p-1.5 transition-all rounded-md relative" v-tooltip="enabledTools.length === 0 ? '当前不会调用工具，只根据现有内容回答。' : '选择本轮允许 AI 使用的工具'"
-              :class="enabledTools.length === 0 ? 'text-accent-warn hover:bg-accent-warn/10' : 'text-text-dim hover:text-accent-special hover:bg-white/5'" >
+              :class="enabledTools.length === 0 ? 'text-accent-warn hover:bg-accent-warn/10' : 'text-text-dim hover:text-accent-special hover:bg-bg-overlay/5'" >
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               <span v-if="enabledTools.length === 0" class="absolute top-1 right-1 w-1.5 h-1.5 bg-accent-warn rounded-full"></span>
             </button>
 
             <transition name="fade-up">
               <!-- 工具选择浮层：控制本轮请求允许使用的工具集合 -->
-              <div v-if="showToolSelector" class="absolute right-0 top-full mt-2 w-64 bg-bg-surface/95 backdrop-blur-2xl border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col">
-                <div class="px-3 py-2 border-b border-white/5 bg-black/40 flex items-center justify-between">
+              <div v-if="showToolSelector" class="absolute right-0 top-full mt-2 w-64 bg-glass-heavy backdrop-blur-2xl border border-border-base/10 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col">
+                <div class="px-3 py-2 border-b border-border-base/10 bg-bg-inset/80 flex items-center justify-between">
                   <span class="text-xs font-bold text-text-main">AI 可用工具</span>
                   <div class="flex gap-2">
-                    <button @click="toggleAllTools(true)" class="text-[0.7rem] text-accent-special hover:text-white transition-colors">全部开启</button>
+                    <button @click="toggleAllTools(true)" class="text-[0.7rem] text-accent-special hover:text-text-inverse transition-colors">全部开启</button>
                     <button @click="toggleAllTools(false)" class="text-[0.7rem] text-text-dim hover:text-accent-warn transition-colors">关闭工具</button>
                   </div>
                 </div>
 
                 <div class="p-2 flex flex-col gap-1 max-h-100 overflow-y-auto custom-scrollbar">
-                  <label v-for="tool in availableTools" :key="tool.id" class="flex items-start gap-2.5 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group">
+                  <label v-for="tool in availableTools" :key="tool.id" class="flex items-start gap-2.5 p-2 rounded-lg hover:bg-bg-overlay/5 cursor-pointer transition-colors group">
                     <input type="checkbox" :value="tool.id" v-model="enabledTools"
-                      class="mt-0.5 accent-accent-special w-3.5 h-3.5 bg-black/50 border border-white/20 rounded cursor-pointer" />
+                      class="mt-0.5 accent-accent-special w-3.5 h-3.5 bg-bg-inset/90 border border-border-base/18 rounded cursor-pointer" />
                     <div class="flex flex-col min-w-0">
-                      <span class="text-xs font-bold transition-colors" :class="enabledTools.includes(tool.id) ? 'text-text-main' : 'text-text-dim/60'">{{ tool.label || tool.id }}</span>
-                      <span class="text-[0.7rem] text-text-dim/50 leading-tight mt-0.5 group-hover:text-text-dim/80 transition-colors">{{ tool.description || '暂无说明' }}</span>
+                      <span class="text-xs font-bold transition-colors" :class="enabledTools.includes(tool.id) ? 'text-text-main' : 'text-text-disabled'">{{ tool.label || tool.id }}</span>
+                      <span class="text-[0.7rem] text-text-disabled leading-tight mt-0.5 group-hover:text-text-dim transition-colors">{{ tool.description || '暂无说明' }}</span>
                     </div>
                   </label>
                 </div>
@@ -53,10 +53,10 @@
             </transition>
           </div>
 
-          <button @click="clearChat" class="p-1.5 text-text-dim hover:text-accent-danger hover:bg-white/5 transition-all rounded-md" v-tooltip="'清空当前会话，重新开始'">
+          <button @click="clearChat" class="p-1.5 text-text-dim hover:text-accent-danger hover:bg-bg-overlay/5 transition-all rounded-md" v-tooltip="'清空当前会话，重新开始'">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
           </button>
-          <button @click="emit('update:modelValue', false)" class="p-1.5 text-text-dim hover:text-white hover:bg-white/5 transition-all rounded-md">
+          <button @click="emit('update:modelValue', false)" class="p-1.5 text-text-dim hover:text-text-main hover:bg-accent-danger/25 transition-all rounded-md">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -68,7 +68,7 @@
           <div class="w-16 h-16 rounded-2xl bg-linear-to-br from-accent-special/20 to-transparent flex items-center justify-center mb-4 border border-accent-special/20">
             <svg class="w-8 h-8 text-accent-special" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
           </div>
-          <p class="text-sm font-bold text-white mb-2">{{ emptyTitle }}</p>
+          <p class="text-sm font-bold text-text-main mb-2">{{ emptyTitle }}</p>
           <p class="text-xs text-text-dim max-w-65 leading-relaxed">{{ emptyDescription }}</p>
         </div>
 
@@ -79,8 +79,8 @@
           </div>
 
           <div class="max-w-[92%] w-full rounded-2xl px-3.5 py-2.5 text-sm shadow-sm group/msg relative"
-              :class="msg.role === 'user' ? 'bg-bg-highlight text-text-main rounded-tr-xs' : 'bg-accent-special/15 backdrop-blur-md border border-white/5 text-text-main rounded-tl-xs'">
-            <div v-if="hasAssistantText(msg)" class="absolute top-2 right-2 flex items-center gap-2 py-0.5 px-1.5 ring-1 ring-text-main/5 bg-text-dim/30 rounded-md shadow-md/20 backdrop-blur-sm opacity-0 group-hover/msg:opacity-100 text-xs transition-opacity">
+              :class="msg.role === 'user' ? 'bg-bg-highlight text-text-main rounded-tr-xs' : 'bg-accent-special/15 backdrop-blur-md border border-border-base/10 text-text-main rounded-tl-xs'">
+            <div v-if="hasAssistantText(msg)" class="absolute top-2 right-2 flex items-center gap-2 py-0.5 px-1.5 ring-1 ring-border-base/5 bg-bg-overlay/10 rounded-md shadow-md/20 backdrop-blur-sm opacity-0 group-hover/msg:opacity-100 text-xs transition-opacity">
               <Copy class="size-3" />
               <button @click="copyMessage(msg, false)" class="text-text-main hover:text-accent-primary transition-colors flex items-center gap-1" v-tooltip="'复制纯文本'">纯文本</button>
               /
@@ -90,41 +90,41 @@
             <div v-if="msg.attachments && msg.attachments.length > 0" class="mb-2 flex flex-wrap gap-2">
               <!-- 附件摘要：展示当前消息随附上下文 -->
               <div v-for="(attachment, attachmentIdx) in msg.attachments" :key="`${idx}-${attachmentIdx}`"
-                class="flex w-fit items-center gap-2 rounded-lg border border-white/10 bg-black/30 p-2 text-xs opacity-90 shadow-inner backdrop-blur-sm">
+                class="flex w-fit items-center gap-2 rounded-lg border border-border-base/10 bg-bg-inset/70 p-2 text-xs opacity-90 shadow-inner backdrop-blur-sm">
                 <svg class="h-3.5 w-3.5 text-accent-special" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 <div class="flex flex-col min-w-0">
                   <span>{{ getAttachmentDisplayMeta(attachment).summary }}</span>
-                  <span v-if="getAttachmentDisplayMeta(attachment).detail" class="text-[0.7rem] text-text-dim/70">{{ getAttachmentDisplayMeta(attachment).detail }}</span>
+                  <span v-if="getAttachmentDisplayMeta(attachment).detail" class="text-[0.7rem] text-text-dim">{{ getAttachmentDisplayMeta(attachment).detail }}</span>
                 </div>
               </div>
             </div>
 
             <div v-if="msg.tools && msg.tools.length > 0" class="mb-3 flex flex-col gap-1.5">
               <!-- 工具调用折叠区：展示参数、摘要和结果 -->
-              <div v-for="t in msg.tools" :key="t.id" class="rounded-md border border-white/5 bg-black/40 overflow-hidden">
-                <button class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-white/5 transition-colors" @click="toggleToolExpanded(t)">
+              <div v-for="t in msg.tools" :key="t.id" class="rounded-md border border-border-base/10 bg-bg-inset/80 overflow-hidden">
+                <button class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-bg-overlay/5 transition-colors" @click="toggleToolExpanded(t)">
                   <div class="flex items-center gap-2 min-w-0">
                     <svg v-if="t.status === 'running'" class="w-3.5 h-3.5 animate-spin text-accent-special shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     <svg v-else-if="t.status === 'error'" class="w-3.5 h-3.5 text-accent-danger shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-7.938 4h15.876c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L2.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                     <svg v-else class="w-3.5 h-3.5 text-accent-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                     <div class="min-w-0">
-                      <div class="text-text-dim/90 font-mono truncate">{{ t.displayName || t.name || '系统工具' }}<span v-if="t.argumentsPreview" class="text-text-dim/60"> {{ t.argumentsPreview }}</span></div>
-                      <div v-if="t.summary" class="text-[0.7rem] text-text-dim/70 truncate">{{ t.summary }}</div>
+                      <div class="text-text-dim font-mono truncate">{{ t.displayName || t.name || '系统工具' }}<span v-if="t.argumentsPreview" class="text-text-disabled"> {{ t.argumentsPreview }}</span></div>
+                      <div v-if="t.summary" class="text-[0.7rem] text-text-dim truncate">{{ t.summary }}</div>
                     </div>
                   </div>
                   <div class="flex items-center gap-2 shrink-0">
-                    <span v-if="t.durationMs != null" class="text-[0.7rem] text-text-dim/60 font-mono">{{ t.durationMs }}ms</span>
+                    <span v-if="t.durationMs != null" class="text-[0.7rem] text-text-disabled font-mono">{{ t.durationMs }}ms</span>
                     <svg class="w-3.5 h-3.5 text-text-dim transition-transform" :class="t.expanded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                   </div>
                 </button>
-                <div v-if="t.expanded" class="px-2.5 pb-2.5 pt-1 border-t border-white/5 bg-black/30 space-y-2">
+                <div v-if="t.expanded" class="px-2.5 pb-2.5 pt-1 border-t border-border-base/10 bg-bg-inset/70 space-y-2">
                   <div>
-                      <div class="text-[0.7rem] text-text-dim/70 mb-1">工具输入</div>
-                    <pre class="text-[0.7rem] select-text leading-relaxed whitespace-pre-wrap break-all bg-black/40 rounded-md p-2 border border-white/5 text-text-main/90">{{ t.argumentsPretty || t.arguments || '无输入内容' }}</pre>
+                      <div class="text-[0.7rem] text-text-dim mb-1">工具输入</div>
+                    <pre class="text-[0.7rem] select-text leading-relaxed whitespace-pre-wrap break-all bg-bg-inset/80 rounded-md p-2 border border-border-base/10 text-text-soft">{{ t.argumentsPretty || t.arguments || '无输入内容' }}</pre>
                   </div>
                   <div>
-                    <div class="text-[0.7rem] text-text-dim/70 mb-1">工具结果</div>
-                    <pre class="text-[0.7rem] select-text leading-relaxed whitespace-pre-wrap break-all bg-black/40 rounded-md p-2 border border-white/5" :class="t.status === 'error' ? 'text-accent-danger' : 'text-text-main/90'">{{ t.resultPretty || t.result || '暂无结果' }}</pre>
+                    <div class="text-[0.7rem] text-text-dim mb-1">工具结果</div>
+                    <pre class="text-[0.7rem] select-text leading-relaxed whitespace-pre-wrap break-all bg-bg-inset/80 rounded-md p-2 border border-border-base/10" :class="t.status === 'error' ? 'text-accent-danger' : 'text-text-soft'">{{ t.resultPretty || t.result || '暂无结果' }}</pre>
                   </div>
                 </div>
               </div>
@@ -151,28 +151,28 @@
                     <span class="text-text-dim">思考过程</span>
                   </template>
                 </summary>
-                <div class="prose prose-sm prose-invert max-w-none select-text text-text-dim/80 mt-2" v-html="renderMarkdown(msg.reasoning)"></div>
+                <div class="prose prose-sm prose-invert max-w-none select-text text-text-dim mt-2" v-html="renderMarkdown(msg.reasoning)"></div>
               </details>
 
               <div class="prose prose-sm prose-invert prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5 max-w-none select-text text-wrap break-all relative">
-                <div v-if="shouldShowAssistantLoading(msg)" class="flex items-center gap-2 py-1 text-text-dim/80">
+                <div v-if="shouldShowAssistantLoading(msg)" class="flex items-center gap-2 py-1 text-text-dim">
                   <LoaderCircle class="w-4 h-4 animate-spin text-accent-special shrink-0"></LoaderCircle>
                   <span class="text-xs font-mono">正在生成回答...</span>
                 </div>
                 <div v-else-if="hasAssistantText(msg)" v-html="renderMarkdown(msg.content)"></div>
               </div>
 
-              <div v-if="shouldShowAssistantUsage(msg)" class="mt-3 pt-3 border-t border-white/5 text-[0.7rem] font-mono text-text-dim/70 space-y-2">
+              <div v-if="shouldShowAssistantUsage(msg)" class="mt-3 pt-3 border-t border-border-base/10 text-[0.7rem] font-mono text-text-dim space-y-2">
                 <div class="flex flex-wrap gap-5">
-                  <div class="flex items-center gap-1 text-text-main/90">
+                  <div class="flex items-center gap-1 text-text-soft">
                     <span>消息输出 {{ formatTokenCount(getAssistantMessageTokenTotal(msg)) }} token</span>
-                    <button class="text-text-dim/70 hover:text-accent-special transition-colors" :data-no-copy="true" v-tooltip="assistantMessageUsageTooltip(msg)">
+                    <button class="text-text-dim hover:text-accent-special transition-colors" :data-no-copy="true" v-tooltip="assistantMessageUsageTooltip(msg)">
                       <CircleHelp class="w-3 h-3" />
                     </button>
                   </div>
-                  <div class="flex items-center gap-1 text-text-main/90">
+                  <div class="flex items-center gap-1 text-text-soft">
                     <span>本轮总请求 {{ formatTokenCount(msg.tokenUsage.estimated_total_tokens || 0) }} token</span>
-                    <button class="text-text-dim/70 hover:text-accent-special transition-colors" :data-no-copy="true" v-tooltip="requestTotalUsageTooltip(msg)">
+                    <button class="text-text-dim hover:text-accent-special transition-colors" :data-no-copy="true" v-tooltip="requestTotalUsageTooltip(msg)">
                       <CircleHelp class="w-3 h-3" />
                     </button>
                   </div>
@@ -182,17 +182,17 @@
 
             <template v-else-if="msg.content">
               <div class="whitespace-pre-wrap select-text leading-relaxed text-sm">{{ msg.content }}</div>
-              <div v-if="shouldShowUserUsage(msg)" class="mt-3 pt-3 border-t border-white/5 text-[0.7rem] font-mono text-text-dim/70">
-                <div class="flex items-center gap-1 text-text-main/90">
+              <div v-if="shouldShowUserUsage(msg)" class="mt-3 pt-3 border-t border-border-base/10 text-[0.7rem] font-mono text-text-dim">
+                <div class="flex items-center gap-1 text-text-soft">
                   <span>消息输入 {{ formatTokenCount(getUserMessageTokenTotal(msg)) }} token</span>
-                  <button class="text-text-dim/70 hover:text-accent-special transition-colors" :data-no-copy="true" v-tooltip="userMessageUsageTooltip(msg)">
+                  <button class="text-text-dim hover:text-accent-special transition-colors" :data-no-copy="true" v-tooltip="userMessageUsageTooltip(msg)">
                     <CircleHelp class="w-3 h-3" />
                   </button>
                 </div>
               </div>
             </template>
 
-            <div v-if="getRenderableActions(msg).length > 0" class="mt-4 pt-3 border-t border-white/10 flex flex-col gap-2.5">
+            <div v-if="getRenderableActions(msg).length > 0" class="mt-4 pt-3 border-t border-border-base/10 flex flex-col gap-2.5">
               <p class="text-xs text-text-dim font-bold flex items-center gap-1.5 mb-1">
                 <svg class="w-3.5 h-3.5 text-accent-special" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                 可直接操作
@@ -212,8 +212,9 @@
         </div>
       </div>
 
-      <div class="p-3 bg-black/60 backdrop-blur-xl border-t border-white/5 shrink-0 z-50">
-        <div class="relative bg-white/5 border border-white/10 rounded-xl transition-all duration-300 focus-within:border-accent-special/50 focus-within:bg-black/50 flex flex-col shadow-inner">
+      <!-- 底部操作栏 -->
+      <div class="p-3 bg-bg-inset/60 rounded-b-2xl border-t border-border-base/10 shrink-0 z-50">
+        <div class="relative bg-bg-overlay/5 border border-border-base/10 rounded-xl transition-all duration-300 focus-within:border-accent-special/50 focus-within:bg-bg-inset/90 flex flex-col shadow-inner">
           <slot name="composer-context" :attachments="composerAttachments"></slot>
 
           <transition name="fade-up">
@@ -225,7 +226,7 @@
                     <span class="text-xs text-accent-special font-bold">{{ getAttachmentDisplayMeta(entry.draft).summary }}</span>
                     <span v-if="getAttachmentDisplayMeta(entry.draft).detail" class="text-[0.7rem] text-text-dim">{{ getAttachmentDisplayMeta(entry.draft).detail }}</span>
                   </div>
-                  <button @click="removeComposerAttachment(entry.key)" class="text-text-dim hover:text-accent-danger p-0.5 rounded-full bg-white/5 transition-colors" v-tooltip="'本轮不发送这条附件'">
+                  <button @click="removeComposerAttachment(entry.key)" class="text-text-dim hover:text-accent-danger p-0.5 rounded-full bg-bg-overlay/5 transition-colors" v-tooltip="'本轮不发送这条附件'">
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -234,17 +235,17 @@
           </transition>
 
           <textarea v-model="userInput" :placeholder="inputPlaceholder"
-            class="w-full bg-transparent border-none py-3 px-3.5 text-sm text-text-main focus:outline-none resize-none h-14 placeholder:text-text-dim/40"
+            class="w-full bg-transparent border-none py-3 px-3.5 text-sm text-text-main focus:outline-none resize-none h-14 placeholder:text-text-disabled"
             @keydown.enter.exact.prevent="sendMessage">
           </textarea>
 
           <div class="absolute right-2 bottom-2 flex items-center gap-2">
             <button v-if="isThinking" @click="cancelCurrentRequest()"
-              class="p-1.5 rounded-lg bg-accent-danger/15 text-accent-danger hover:bg-accent-danger hover:text-white transition-all duration-300 flex items-center justify-center">
+              class="p-1.5 rounded-lg bg-accent-danger/15 text-accent-danger hover:bg-accent-danger hover:text-text-inverse transition-all duration-300 flex items-center justify-center">
               <Square class="w-4 h-4 fill-current" />
             </button>
             <button v-else @click="sendMessage" :disabled="isSendDisabled" class="p-1.5 rounded-lg transition-all duration-300 flex items-center justify-center"
-              :class="isSendDisabled ? 'text-text-dim/30 bg-transparent' : 'bg-linear-to-b from-accent-special to-accent-primary text-white hover:shadow-[0_0_15px_rgba(139,92,246,0.5)]'">
+              :class="isSendDisabled ? 'text-text-disabled bg-transparent' : 'bg-linear-to-b from-accent-special to-accent-primary text-on-accent-special hover:shadow-[0_0_15px_rgba(var(--rgb-accent-special),0.5)]'">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
@@ -857,7 +858,7 @@ const sessionTokenTotal = computed(() => {
 })
 const sessionTokenIndicatorClass = computed(() => {
   if (sessionTokenTotal.value <= 0) {
-    return isThinking.value ? 'bg-accent-warn animate-pulse' : 'bg-text-dim/40'
+    return isThinking.value ? 'bg-accent-warn animate-pulse' : 'bg-bg-overlay/10'
   }
   return sessionTokenTotal.value > 16000 ? 'bg-accent-danger animate-pulse' : 'bg-accent-success'
 })
@@ -1035,8 +1036,8 @@ const cancelCurrentRequest = async ({ keepBubble = true, silent = false } = {}) 
 :deep(.prose pre) {
   margin: 0.5rem 0;
   padding: 0.75rem;
-  background-color: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background-color: var(--shadow-color);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.5rem;
 }
 :deep(.prose code) {
@@ -1046,18 +1047,18 @@ const cancelCurrentRequest = async ({ keepBubble = true, silent = false } = {}) 
 
 /* --- 思考过程折叠区 (Reasoning) --- */
 :deep(details) {
-  background-color: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--shadow-color);
+  border: 1px solid var(--color-border-strong);
   border-radius: 0.5rem;
   padding: 0.75rem;
   margin: 0.75rem 0;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: inset 0 2px 4px 0 var(--shadow-color);
 }
 :deep(summary) {
   font-weight: 700;
-  color: var(--color-accent-special, #b92a0a);
+  color: var(--color-accent-special);
   outline: none;
   display: flex;
   align-items: center;
@@ -1065,11 +1066,11 @@ const cancelCurrentRequest = async ({ keepBubble = true, silent = false } = {}) 
   font-size: 0.75rem;
 }
 :deep(summary::marker), :deep(summary::-webkit-details-marker) {
-  color: var(--color-accent-special, #b92a0a);
+  color: var(--color-accent-special);
   margin-right: 0.5rem;
 }
 :deep(details[open] summary) {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--color-border-strong);
   padding-bottom: 0.5rem;
   margin-bottom: 0.5rem;
 }

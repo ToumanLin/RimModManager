@@ -7,11 +7,11 @@
         <!-- 内部流光层 -->
         <div class="capsule-shimmer"></div>
         <span class="relative flex h-2.5 w-2.5 z-10">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/80 opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-bg-overlay/10 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-bg-contrast"></span>
         </span>
         <!-- 给文字加上跳动类 -->
-        <span class="guide-text text-sm font-black text-black z-10 uppercase tracking-tight">
+        <span class="guide-text text-sm font-black text-on-accent-primary z-10 uppercase tracking-tight">
           {{ uncompletedCount > 0 ? `使用指引 (${uncompletedCount})` : '教程中心' }}
         </span>
       </div>
@@ -19,10 +19,10 @@
       <transition name="guide-panel-fade">
         <!-- 2. 展开状态 (教程列表) -->
         <div v-if="isPanelOpen" ref="panelRef"
-          class="absolute w-80 p-2 rounded-xl bg-glass-light/90 backdrop-blur-lg border border-text-main/10 shadow-2xl pointer-events-auto"
+          class="absolute w-80 p-2 rounded-xl bg-glass-medium/90 backdrop-blur-lg border border-border-base/10 shadow-2xl pointer-events-auto"
           :class="panelPositionClass" >
           <!-- Header -->
-          <div class="px-2 pb-2 mb-2 border-b border-text-main/10">
+          <div class="px-2 pb-2 mb-2 border-b border-border-base/10">
             <h4 class="font-bold text-text-main">使用引导中心</h4>
             <p class="text-xs text-text-dim">点击下方条目开始了解软件操作。</p>
           </div>
@@ -58,7 +58,7 @@
 
               <transition name="list-fade">
                 <div v-if="showCompleted" class="pl-4 space-y-1 mt-1">
-                  <div v-for="guide in completedGuides" :key="guide.key" class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-accent-secondary/10 text-text-dim/70 cursor-pointer transition-colors"
+                  <div v-for="guide in completedGuides" :key="guide.key" class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-accent-secondary/10 text-text-dim cursor-pointer transition-colors"
                     @click="startGuide(guide.key, true)" >
                     <Check class="size-3 text-accent-success" />
                     <span class="text-xs">{{ guide.title }}</span>
@@ -69,7 +69,7 @@
           </div>
 
           <!-- Footer (可选) -->
-          <div class="mt-2 pt-2 border-t border-text-main/10 flex items-center justify-between gap-3">
+          <div class="mt-2 pt-2 border-t border-border-base/10 flex items-center justify-between gap-3">
             <button class="text-xs text-text-dim hover:text-accent-warn transition-colors"
               @click="skipAllGuides" >
               全部跳过
@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
   width: max-content;
   min-width: 0;
   background-size: 200% auto;
-  background-image: linear-gradient(325deg, #eab308 0%, #fde047 45%, #ca8a04 90%);
+  background-image: linear-gradient(325deg, var(--color-accent-warn) 0%, var(--color-accent-tip) 45%, var(--color-accent-secondary) 90%);
   /* 动态光晕效果 (外阴影呼吸) */
   animation:
     gradient-flow 3s ease infinite,
@@ -298,7 +298,7 @@ onBeforeUnmount(() => {
   background: linear-gradient(
     to right,
     transparent 0%,
-    rgba(255, 255, 255, 0.4) 50%,
+    rgba(var(--rgb-text-main),0.4) 50%,
     transparent 100%
   );
   transform: translateX(-100%) skewX(-30deg);
@@ -321,10 +321,10 @@ onBeforeUnmount(() => {
 
 @keyframes halo-breathe {
   from {
-    box-shadow: 0 0 10px rgba(234, 179, 8, 0.4), 0 5px 15px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 10px rgba(var(--rgb-accent-warn), 0.4), 0 5px 15px var(--shadow-color);
   }
   to {
-    box-shadow: 0 0 25px rgba(234, 179, 8, 0.7), 0 5px 20px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 25px rgba(var(--rgb-accent-warn), 0.7), 0 5px 20px var(--shadow-color);
     transform: translateY(-1px);
   }
 }

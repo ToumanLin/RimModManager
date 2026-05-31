@@ -11,18 +11,37 @@
 @source inline('{hover:,focus:,}{bg,text,shadow,border}-accent-{primary,danger,highlight,special,cool,success,tip,warn,secondary,warning}');
 @source inline('{hover:,focus:,}{bg}-accent-{primary,danger,highlight,special,cool,success,tip,warn,secondary,warning}/{10,20,30,40,50,60}');
 @source inline('{hover:,focus:,}{border,text}-accent-{primary,danger,highlight,special,cool,success,tip,warn,secondary,warning}/{10,20,30,40,50}');
+@source inline('{hover:,}{text}-on-accent-{primary,danger,highlight,special,cool,success,tip,warn,secondary,warning}');
+@source inline('{hover:,focus:,group-hover:,selection:,disabled:,}{bg}-bg-overlay/{5,10}');
+@source inline('{disabled:after:}{bg}-bg-overlay/10');
+@source inline('{after:,after:hover:,peer-checked:after:}{bg}-bg-{contrast,neutral}');
+@source inline('{hover:,focus:,group-hover:,}{bg}-bg-{contrast,neutral}');
+@source inline('{ring,border}-bg-{contrast,neutral}');
+@source inline('{peer-checked:after:}{border}-bg-{contrast}');
+@source inline('{hover:,focus:,}{border,ring}-border-base/{5,10,18}');
+@source inline('{hover:,focus:,}{text}-text-{main,soft,dim,subtle,disabled,inverse}');
+@source inline('{hover:,focus:,}{bg}-text-{disabled}');
 
 /* 这里定义主题颜色 */
 @theme {
   /* 基础背景色 - 深邃的蓝黑 */
   --color-bg-deep: #0f172a; 
   --color-bg-surface: #1e293b;
+  --color-bg-elevated: #263449;
   --color-bg-highlight: #2d3748;
+  --color-bg-muted: #172033;
+  --color-bg-inset: #0b1120;
+  --color-bg-overlay: #f1f5f9;
+  --color-bg-hover: rgba(241, 245, 249, 0.05);
+  --color-bg-active: rgba(241, 245, 249, 0.10);
+  --color-bg-selected: rgba(241, 245, 249, 0.10);
+  --color-bg-contrast: #f1f5f9;
+  --color-bg-neutral: #94a3b8;
 
   /* 玻璃拟态背景 (带透明度) */
-  --color-glass-light: rgba(255, 255, 255, 0.03);
-  --color-glass-medium: rgba(30, 41, 59, 0.7);
-  --color-glass-heavy: rgba(15, 23, 42, 0.9);
+  --color-glass-light: rgba(241, 245, 249, 0.05);
+  --color-glass-medium: rgba(30, 41, 59, 0.74);
+  --color-glass-heavy: rgba(15, 23, 42, 0.92);
 
   /* 强调色 - 赛博朋克风格 */
   --color-accent-danger:    rgb(239,68,68);  /* 红色 - 错误/删除 */
@@ -38,7 +57,29 @@
 
   /* 字体颜色 */
   --color-text-main: #f1f5f9;
+  --color-text-soft: rgba(241, 245, 249, 0.82);
   --color-text-dim: #94a3b8;
+  --color-text-subtle: #64748b;
+  --color-text-disabled: rgba(148, 163, 184, 0.50);
+  --color-text-inverse: #020617;
+
+  /* 边框、遮罩和强调色背景文字 */
+  --color-border-base: #f1f5f9;
+  --color-border-muted: rgba(241, 245, 249, 0.05);
+  --color-border-default: rgba(241, 245, 249, 0.10);
+  --color-border-subtle: rgba(241, 245, 249, 0.10);
+  --color-border-strong: rgba(241, 245, 249, 0.18);
+  --color-overlay-scrim: rgba(15, 23, 42, 0.70);
+  --color-on-accent-danger: var(--color-text-main);
+  --color-on-accent-highlight: var(--color-text-main);
+  --color-on-accent-special: var(--color-text-main);
+  --color-on-accent-cool: var(--color-text-main);
+  --color-on-accent-primary: #000000;
+  --color-on-accent-success: #000000;
+  --color-on-accent-tip: #000000;
+  --color-on-accent-warn: #000000;
+  --color-on-accent-secondary: #000000;
+  --color-on-accent-warning: #000000;
 
   /* 动效曲线 */
   --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -61,7 +102,7 @@
 }
 /* 滚动条滑块 */
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-border-strong);
   border-radius: 4px;
   -webkit-border-radius: 4px;
   -moz-border-radius: 4px;
@@ -69,7 +110,7 @@
   -o-border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-accent-primary);
 }
 /* 滚动条两端按钮 */
 ::-webkit-scrollbar-button {
@@ -80,7 +121,7 @@
 }
 /* 滚动条角落 */
 ::-webkit-scrollbar-corner {
-  background: rgb(255, 0, 251);
+  background: transparent;
 }
 
 /* 玻璃模糊工具类 */
@@ -117,20 +158,20 @@ body {
   color: var(--color-text-main) !important;
   backdrop-filter: blur(12px) saturate(120%); /*模糊+饱和度增强*/
   -webkit-backdrop-filter: blur(12px) saturate(120%);
-  box-shadow: 5px 8px 20px rgba(0, 0, 0, 0.5); /*柔和阴影*/
+  box-shadow: 5px 8px 20px var(--shadow-color); /*柔和阴影*/
   border-radius: 16px !important;
 }
 /* 取色器容器（边框调整） */
 .vc-colorpicker--container {
   padding: 15px !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border: 1px solid var(--color-border-strong) !important;
   border-radius: 16px !important;
 }
 /* 取色器输入框（背景边框调整） */
 .vc-display .vc-color-input input {
   background-color: var(--color-glass-medium) !important;
   color: var(--color-text-main) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border: 1px solid var(--color-border-strong) !important;
 }
 /* 取色器切换按钮（禁用点击事件-切换颜色格式） */
 .vc-display .vc-input-toggle {
@@ -146,88 +187,6 @@ body {
 .vc-colorPicker__record .color-list .color-item.transparent {
   background-image: none !important;
 }
-
-/* 
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-.card {
-  padding: 2em;
-}
-
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-} 
-*/
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -348,18 +307,19 @@ button:focus-visible {
 @layer components {
   /* 统一的输入框玻璃质感 */
   .input-glass {
-    @apply bg-black/30 border border-text-main/10 rounded-lg transition-all duration-200;
+    @apply bg-bg-inset/80 border border-border-base/10 rounded-lg transition-all duration-200;
   }
   .input-glass:hover {
-    @apply border-text-main/20 bg-black/60;
+    @apply border-border-base/18 bg-bg-inset;
   }
   .input-glass:focus-within {
-    @apply border-accent-primary/50 ring-1 ring-accent-primary/20 shadow-[0_0_15px_rgba(6,182,212,0.1)];
+    @apply border-accent-primary/50 ring-1 ring-accent-primary/20 shadow-[0_0_15px_rgba(var(--rgb-accent-primary),0.1)];
   }
 }
 
 :root {
   --highlight-color: 234,179,8; 
+  --shadow-color: var(--shadow-color);
 }
 
 /* 1. 剧烈颤抖 (Shake) - 适合错误或强提醒 */
@@ -446,18 +406,18 @@ button:focus-visible {
   z-index: 99998 !important; 
 }
 .driver-popover {
-  --driver-popover-bg: rgba(30, 41, 59, 0.95); /* bg-bg-surface 颜色 */
-  --driver-popover-text: #e2e8f0; /* text-main */
-  --driver-popover-border: rgba(59, 130, 246, 0.3); /* accent-primary/30 */
-  --driver-popover-btn-bg: rgba(0, 0, 0, 0.4);
-  --driver-popover-btn-text: #94a3b8;
-  --driver-popover-btn-hover-bg: rgba(59, 130, 246, 0.2);
-  --driver-popover-btn-hover-text: #38bdf8;
-  --driver-popover-title-text: #38bdf8; /* 标题用高亮色 */
+  --driver-popover-bg: var(--color-glass-heavy);
+  --driver-popover-text: var(--color-text-main);
+  --driver-popover-border: var(--color-border-strong);
+  --driver-popover-btn-bg: var(--color-bg-inset);
+  --driver-popover-btn-text: var(--color-text-dim);
+  --driver-popover-btn-hover-bg: rgba(var(--rgb-accent-primary), 0.18);
+  --driver-popover-btn-hover-text: var(--color-accent-primary);
+  --driver-popover-title-text: var(--color-accent-primary);
   z-index: 99999 !important;
   backdrop-filter: blur(12px);
   border: 1px solid var(--driver-popover-border) !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(59, 130, 246, 0.1) !important;
+  box-shadow: 0 10px 40px var(--shadow-color), 0 0 20px rgba(var(--rgb-accent-primary), 0.12) !important;
   border-radius: 12px !important;
 }
 
@@ -469,14 +429,14 @@ button:focus-visible {
 
 /* 突出显示下一步按钮 */
 .driver-popover-next-btn {
-  background-color: rgba(59, 130, 246, 0.8) !important;
-  color: #000 !important;
+  background-color: var(--color-accent-primary) !important;
+  color: var(--color-on-accent-primary) !important;
   font-weight: bold !important;
   text-shadow: none !important;
 }
 .driver-popover-next-btn:hover {
-  background-color: rgba(59, 130, 246, 1) !important;
-  color: #000 !important;
+  background-color: var(--color-accent-primary) !important;
+  color: var(--color-on-accent-primary) !important;
 }
 /* 如果元素被高亮时，z-index没有被拉上来，可以用这个强制拉高 */
 
