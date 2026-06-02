@@ -273,10 +273,10 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, defineAsyncComponent, h } from 'vue'
-import { useModStore } from '../features/mod/store/modStore'
+import { useModStore } from '../features/mod/stores/modStore'
 import { useAppStore } from './stores/appStore'
 import { useRuleStore } from '../features/rules/ruleStore'
-import { useGroupStore } from '../features/mod/groupStore'
+import { useGroupStore } from '../features/mod/stores/groupStore'
 import { useOrderStore } from '../features/load-order/orderStore'
 import { useGuideStore } from '../features/guide/guideStore'
 import RimHeader from './shell/RimHeader.vue'

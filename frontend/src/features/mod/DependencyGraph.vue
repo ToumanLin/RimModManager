@@ -13,7 +13,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
-import { useModStore } from './store/modStore'
+import { useModStore } from './stores/modStore'
 import { useHoverStore } from '../../shared/components/popover/hoverStore'
 
 const props = defineProps({

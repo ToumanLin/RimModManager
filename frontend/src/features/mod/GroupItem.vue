@@ -83,7 +83,7 @@ import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { ColorPicker } from "vue3-colorpicker";
 import { useAppStore } from '../../app/stores/appStore';
-import { useGroupStore } from './groupStore';
+import { useGroupStore } from './stores/groupStore';
 import { hexToRgbComponents } from '../../shared/lib/color'
 import { toast } from '../../shared/lib/common';
 import { Package } from 'lucide-vue-next'

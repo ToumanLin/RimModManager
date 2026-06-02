@@ -1,5 +1,5 @@
 import { toast, checkResult } from '../../../shared/lib/common'
-import { useModStore } from '../../../features/mod/store/modStore'
+import { useModStore } from '../../../features/mod/stores/modStore'
 import { useConfirmStore } from '../../../shared/components/modal/confirmStore'
 import { isBrowserRuntime, openManagedSubBrowserUrl } from '../../bridge/runtimeBridge'
 

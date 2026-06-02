@@ -1,5 +1,5 @@
 import { toast, checkResult } from '../../../shared/lib/common'
-import { useModStore } from '../../../features/mod/store/modStore'
+import { useModStore } from '../../../features/mod/stores/modStore'
 import { useWorkspaceStore } from '../../../features/workspace/workspaceStore'
 import { normalizeInstallSource, normalizeInstallSources } from '../../../features/mod/lib/modIdentity'
 

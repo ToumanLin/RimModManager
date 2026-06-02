@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { checkResult, toast } from '../../shared/lib/common'
-import { useAppStore } from '../../app/stores/appStore'
-import { normalizePackageId } from './lib/modIdentity'
+import { checkResult, toast } from '../../../shared/lib/common'
+import { useAppStore } from '../../../app/stores/appStore'
+import { normalizePackageId } from '../lib/modIdentity'
 
 export const useGroupStore = defineStore('groups', () => {
   const appStore = useAppStore()

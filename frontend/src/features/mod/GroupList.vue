@@ -119,8 +119,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
-import { useModStore } from './store/modStore'
-import { useGroupStore } from './groupStore'
+import { useModStore } from './stores/modStore'
+import { useGroupStore } from './stores/groupStore'
 import { useContextMenuStore } from '../../shared/components/context-menu/contextMenuStore'
 import VirtualDragList from '../../shared/components/list/VirtualDragList.vue'
 import GroupItem from './GroupItem.vue'

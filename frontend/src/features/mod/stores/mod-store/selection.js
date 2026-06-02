@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { useGroupStore } from '../../groupStore'
+import { useGroupStore } from '../groupStore'
 
 export const useModSelection = ({
   interlocksMap,
