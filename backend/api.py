@@ -1070,6 +1070,7 @@ class API:
         # 4. 获取当前激活的加载顺序
         active_load_order = self.load_order_mgr.read_active_mods() if self.load_order_mgr else {'active_mods': [], 'modify_time': 0}
         inactive_mods_order = self.active_context.inactive_mods_order if getattr(self.active_context, 'inactive_mods_order', []) else []
+        temp_mods_order = self.active_context.temp_mods_order if getattr(self.active_context, 'temp_mods_order', []) else []
         
         replacements = self.workshop_db_mgr.get_replacements()
         replacements_map = {r['old_workshop_id']: r for r in replacements}
@@ -1119,6 +1120,7 @@ class API:
             "interlocks": interlock_map,
             "active_load_order": active_load_order.get('active_mods', []),
             "inactive_load_order": inactive_mods_order,
+            "temp_load_order": temp_mods_order,
             "active_load_modify_time": active_load_order.get('modify_time', 0),
             "active_load_version_token": active_load_order.get('version_token', {}),
         })
@@ -2196,14 +2198,21 @@ class API:
         return ApiResponse.success(result)
     
     @log_api_call
-    def load_order_inactive_save(self, inactive_ids: List[str]):
+    def load_order_inactive_save(self, inactive_ids: List[str], temp_ids: List[str] | None = None):
         """
-        保存用户自定义的停用列表顺序 (包含清空后的 Temp 列表)
+        保存用户自定义的停用列表顺序，按设置决定是否单独保存临时列表。
         """
         if not self.active_context: return ApiResponse.error("环境配置上下文缺失")
         try:
-            result = self.profile_mgr.update_profile( self.active_context.profile_id, {"inactive_mods_order": inactive_ids})
-            if result: return ApiResponse.success()
+            payload = {"inactive_mods_order": inactive_ids}
+            if temp_ids is not None:
+                payload["temp_mods_order"] = temp_ids
+            result = self.profile_mgr.update_profile(self.active_context.profile_id, payload)
+            if result:
+                object.__setattr__(self.active_context, "inactive_mods_order", list(inactive_ids or []))
+                if temp_ids is not None:
+                    object.__setattr__(self.active_context, "temp_mods_order", list(temp_ids or []))
+                return ApiResponse.success()
             return ApiResponse.error("更新配置失败")
         except Exception as e:
             return ApiResponse.error(f"保存停用列表顺序时出错: {e}")

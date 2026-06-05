@@ -52,7 +52,7 @@ class TestProfileManager(unittest.TestCase):
 
         mock_settings_set.assert_called_once_with("current_profile_id", "default")
 
-    def test_build_profile_context_keeps_inactive_order(self):
+    def test_build_profile_context_keeps_inactive_and_temp_order(self):
         manager = ProfileManager.__new__(ProfileManager)
         manager.get_profile = Mock(
             return_value=SimpleNamespace(
@@ -63,6 +63,7 @@ class TestProfileManager(unittest.TestCase):
                 use_workshop_mods=True,
                 use_self_mods=False,
                 inactive_mods_order=["mod.b", "mod.a"],
+                temp_mods_order=["mod.temp"],
             )
         )
 
@@ -71,6 +72,26 @@ class TestProfileManager(unittest.TestCase):
 
         self.assertEqual(context.profile_id, "profile-a")
         self.assertEqual(context.inactive_mods_order, ["mod.b", "mod.a"])
+        self.assertEqual(context.temp_mods_order, ["mod.temp"])
+
+    def test_load_order_inactive_save_persists_temp_order_when_provided(self):
+        api = API.__new__(API)
+        api.active_context = SimpleNamespace(profile_id="profile-a")
+        api.profile_mgr = Mock()
+        api.profile_mgr.update_profile.return_value = True
+
+        result = API.load_order_inactive_save(api, ["mod.a"], ["mod.temp"])
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(api.active_context.inactive_mods_order, ["mod.a"])
+        self.assertEqual(api.active_context.temp_mods_order, ["mod.temp"])
+        api.profile_mgr.update_profile.assert_called_once_with(
+            "profile-a",
+            {
+                "inactive_mods_order": ["mod.a"],
+                "temp_mods_order": ["mod.temp"],
+            },
+        )
 
     def test_build_profile_context_allows_empty_paths(self):
         manager = ProfileManager.__new__(ProfileManager)

@@ -108,6 +108,7 @@ export const useModStore = defineStore('mods', () => {
 
   const interlocksMap = ref(new Map()) // 联锁字典: Map<String(interlock_id), Array<String(package_ids)>>
   const savedInactiveIds = ref([])   // 从后端拉取的历史停用顺序
+  const savedTempIds = ref([])       // 从后端拉取的临时列表顺序
   const savedActiveIds = ref([])      // 原始已激活列表快照（用于判断 列表变化）
   const activeLoadModifyTime = ref(0) // 已激活列表最后修改时间戳
   const activeLoadVersionToken = ref({})
@@ -474,7 +475,12 @@ export const useModStore = defineStore('mods', () => {
       data.active_load_modify_time || 0,
       data.active_load_version_token || {}
     )
+    const persistTempList = !!appStore.settings.ui?.persist_temp_mod_list
     savedInactiveIds.value = normalizeHistoryModIds(data.inactive_load_order || []) // 接收持久化停用顺序
+    savedTempIds.value = normalizeHistoryModIds(data.temp_load_order || [])
+    if (!persistTempList && savedTempIds.value.length > 0) {
+      savedInactiveIds.value = normalizeHistoryModIds([...savedTempIds.value, ...savedInactiveIds.value])
+    }
     interlocksMap.value = data.interlocks || {}             // 接收联锁字典
     // 创建一个 Set 用于 O(1) 快速查找
     const activeSet = buildCanonicalIdSet(activeIds.value)
@@ -499,6 +505,9 @@ export const useModStore = defineStore('mods', () => {
       tempMap.set(normalizeCanonicalId(mod.package_id), mod)
     })
     allModsMap.value = tempMap
+    tempIds.value = persistTempList
+      ? savedTempIds.value.filter(id => !activeSet.has(normalizeCanonicalId(id)) && hasRealModById(id))
+      : []
     // 重新计算 Inactive列表 (排除 Active 和 Temp)（本质上 Temp列表 与 Inactive列表 一样，但在前端分出差异方便整理）
     updateInactiveIds()
     dataVersion.value++    // 更新数据版本号（刷新标记）
@@ -513,6 +522,8 @@ export const useModStore = defineStore('mods', () => {
     inactiveIds.value = []
     tempIds.value = []
     savedActiveIds.value = []
+    savedInactiveIds.value = []
+    savedTempIds.value = []
     activeLoadModifyTime.value = 0
     activeLoadVersionToken.value = {}
     clearInstallSourceHints()
@@ -578,7 +589,7 @@ export const useModStore = defineStore('mods', () => {
       if(active) {
         await smartInsertMods(nextIds)
       } else {
-        inactiveIds.value.push(...nextIds)
+        inactiveIds.value.unshift(...nextIds)
       }
       takeModListByIds(nextIds).forEach(mod => {
         mod.last_moved_time = Date.now()
@@ -620,6 +631,7 @@ export const useModStore = defineStore('mods', () => {
       inactiveIds.value = replaceCoexistenceTokensInList(inactiveIds.value, switchableIds, targetSource)
       tempIds.value = replaceCoexistenceTokensInList(tempIds.value, switchableIds, targetSource)
       savedInactiveIds.value = replaceCoexistenceTokensInList(savedInactiveIds.value, switchableIds, targetSource)
+      savedTempIds.value = replaceCoexistenceTokensInList(savedTempIds.value, switchableIds, targetSource)
       selectedIds.value = replaceCoexistenceTokensInList(selectedIds.value, switchableIds, targetSource)
       if (currentTargetId.value && switchableIds.has(normalizeCanonicalId(currentTargetId.value))) {
         currentTargetId.value = buildCoexistenceListToken(currentTargetId.value, targetSource)
@@ -1157,7 +1169,7 @@ export const useModStore = defineStore('mods', () => {
 
   return {
     // 状态
-    allModsMap, dataVersion, inactiveIds, tempIds, activeIds, interlocksMap, savedInactiveIds, interlockDetailsMap,
+    allModsMap, dataVersion, inactiveIds, tempIds, activeIds, interlocksMap, savedInactiveIds, savedTempIds, interlockDetailsMap,
     savedActiveIds, activeLoadModifyTime, activeLoadVersionToken, conflictList, coexistenceList,
     selectedIds, lastSelectedMod, currentTargetId, isDraggingMod,
     listHistoryUndoStack, listHistoryRedoStack, isApplyingListHistory,

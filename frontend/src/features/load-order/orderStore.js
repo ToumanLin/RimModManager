@@ -332,14 +332,18 @@ export const useOrderStore = defineStore('order', () => {
     if (!window.pywebview) return false
     appStore.isLoading = true
     try {
-      // Temp 列表如果有关闭软件前未处理的，归入 Inactive 末尾保存
-      const finalInactive = [...modStore.inactiveIds, ...modStore.tempIds]
+      // 未开启临时列表保存时，Temp 列表退出前回到 Inactive 队首。
+      const persistTempList = !!appStore.settings.ui?.persist_temp_mod_list
+      const finalInactive = persistTempList ? [...modStore.inactiveIds] : [...modStore.tempIds, ...modStore.inactiveIds]
+      const finalTemp = persistTempList ? [...modStore.tempIds] : []
       // 过滤掉已经在 Active 里的防止出错
       const activeSet = new Set(modStore.activeIds.map(id => normalizePackageId(id)))
       const cleanInactive = finalInactive.filter(id => !activeSet.has(normalizePackageId(id)))
-      const res = await window.pywebview.api.load_order_inactive_save(cleanInactive)
+      const cleanTemp = finalTemp.filter(id => !activeSet.has(normalizePackageId(id)))
+      const res = await window.pywebview.api.load_order_inactive_save(cleanInactive, cleanTemp)
       if (checkResult(res, "保存停用列表顺序")) {
         modStore.savedInactiveIds = [...cleanInactive] || []
+        modStore.savedTempIds = [...cleanTemp] || []
         modStore.updateInactiveIds()
         return true
       }

@@ -181,6 +181,7 @@ export const useAppStore = defineStore('app', () => {
       show_dependency_graph: true,  // 是否显示依赖关系图
       enable_active_section_collapse: false,  // 是否启用启用列表标题分组折叠（仅 active 列表生效）
       default_collapse_active_sections: false,  // 若当前环境/列表还没有保存过折叠状态，首次是否默认折叠
+      persist_temp_mod_list: false,  // 是否按环境保存临时列表
       show_list_index: true,  // 是否显示列表索引列
       show_list_icon: true,       // 是否显示 Mod 图标
       show_list_mod_icon: true,       // 是否显示 Mod 图标
