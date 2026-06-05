@@ -3,6 +3,10 @@ import { toast, checkResult } from '../../../../shared/lib/common'
 import { ISSUE_LEVEL, ISSUE_TYPE, ISSUE_TITLE_MAP } from '../../../../shared/lib/constants'
 import { useProfileStore } from '../../../profiles/profileStore'
 
+const POSITION_WEIGHT_TOP = 0
+const POSITION_WEIGHT_DEFAULT = 500
+const POSITION_WEIGHT_BOTTOM = 1000
+
 export const useModIssues = ({
   appStore,
   allModsMap,
@@ -141,18 +145,18 @@ export const useModIssues = ({
       const rules = mod.rules || { dependencies: [], load_after: [], load_before: [], incompatible: [] }
 
       const wInfo = rules.weight_info || {}
-      // 直接使用后端统一提供的 final_weight，兜底为 500
-      const finalWeight = wInfo.final_weight !== undefined ? wInfo.final_weight : 500
+      // 直接使用后端统一提供的 final_weight，兜底为普通 Mod 默认位置权重。
+      const finalWeight = wInfo.final_weight !== undefined ? wInfo.final_weight : POSITION_WEIGHT_DEFAULT
       const sourceName = wInfo.absolute_source || '未知规则'
 
-      // 1. 置顶检查 (<= 0)
-      if (finalWeight <= 0 && i > 0) { // 只检查非首位元素
+      // 1. 置顶检查：0 是位置权重域里的置顶哨兵。
+      if (finalWeight <= POSITION_WEIGHT_TOP && i > 0) { // 只检查非首位元素
         const prevId = normalizeCanonicalId(activeIds.value[i - 1])
         const prevToken = activeTokenMap.get(prevId) || prevId
         const prevMod = takeModById(activeIds.value[i - 1])
-        const prevW = prevMod?.rules?.weight_info?.final_weight ?? 500
+        const prevW = prevMod?.rules?.weight_info?.final_weight ?? POSITION_WEIGHT_DEFAULT
         // 如果紧邻的前一个模组不是置顶的
-        if (prevW > 0) {
+        if (prevW > POSITION_WEIGHT_TOP) {
           // 【关键豁免】：检查是否存在规则要求 prevId 必须在 currentId 之前
           const isAllowedByRule = isMustBefore.get(prevId)?.has(currentId)
           if (!isAllowedByRule) {
@@ -161,14 +165,14 @@ export const useModIssues = ({
           }
         }
       }
-      // 2. 置底检查 (>= 10000)
-      if (finalWeight >= 10000 && i < len - 1) { // 只检查非末位元素
+      // 2. 置底检查：1000 是位置权重域里的置底哨兵。
+      if (finalWeight >= POSITION_WEIGHT_BOTTOM && i < len - 1) { // 只检查非末位元素
         const nextId = normalizeCanonicalId(activeIds.value[i + 1])
         const nextToken = activeTokenMap.get(nextId) || nextId
         const nextMod = takeModById(activeIds.value[i + 1])
-        const nextW = nextMod?.rules?.weight_info?.final_weight ?? 500
+        const nextW = nextMod?.rules?.weight_info?.final_weight ?? POSITION_WEIGHT_DEFAULT
         // 如果紧邻的后一个模组不是置底的
-        if (nextW < 10000) {
+        if (nextW < POSITION_WEIGHT_BOTTOM) {
           // 【关键豁免】：检查是否存在规则要求 currentId 必须在 nextId 之前
           const isAllowedByRule = isMustBefore.get(currentId)?.has(nextId)
           if (!isAllowedByRule) {

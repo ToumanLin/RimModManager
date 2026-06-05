@@ -17,7 +17,7 @@ const DYNAMIC_RULE_PROPS = {
 // 动态规则动作映射
 const DYNAMIC_RULE_ACTIONS = {
   'weight_shift': '权重偏移 (Shift)',
-  'weight_set': '强制权重 (Set)',
+  'weight_set': '设定权重 (Set)',
   'load_after': '必须在某ID后',
   'load_before': '必须在某ID前',
   'top': '强制置顶',

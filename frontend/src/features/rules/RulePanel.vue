@@ -387,13 +387,13 @@
                     <div v-if="editingRule.action.type.includes('weight')" class="flex items-center gap-2 flex-1">
                       <!-- <input type="number" v-model.number="editingRule.action.value" class="bg-bg-deep border border-border-base/10 rounded-lg px-3 py-2 text-sm w-32 text-text-main outline-none focus:border-accent-primary" /> -->
                       <CommonNumber v-model.number="editingRule.action.value" :step="1"
-                        :min="editingRule.action.type === 'weight_shift' ? DYNAMIC_SHIFT_MIN : DYNAMIC_WEIGHT_MIN"
-                        :max="editingRule.action.type === 'weight_shift' ? DYNAMIC_SHIFT_MAX : DYNAMIC_WEIGHT_MAX"
+                        :min="editingRule.action.type === 'weight_shift' ? POSITION_SHIFT_MIN : POSITION_WEIGHT_MIN"
+                        :max="editingRule.action.type === 'weight_shift' ? POSITION_SHIFT_MAX : POSITION_WEIGHT_MAX"
                       />
                       <span class="text-sm text-text-dim">
                         {{ editingRule.action.type === 'weight_shift'
-                          ? `(${DYNAMIC_SHIFT_MIN} 到 ${DYNAMIC_SHIFT_MAX}；负数向前，正数向后，最终结果仍会限制在 ${DYNAMIC_WEIGHT_MIN}-${DYNAMIC_WEIGHT_MAX})`
-                          : `(${DYNAMIC_WEIGHT_MIN}-${DYNAMIC_WEIGHT_MAX}，越小越靠前)` }}
+                          ? `(${POSITION_SHIFT_MIN} 到 ${POSITION_SHIFT_MAX}；负数向前，正数向后，最终结果仍会限制在 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX})`
+                          : `(${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}，越小越靠前)` }}
                       </span>
                       <label class="text-sm text-text-dim italic hover:text-text-main cursor-help" v-tooltip="weightTooltip">?</label>
                     </div>
@@ -700,10 +700,14 @@ const formatTooltip = (targetId, info) => {
   return text
 }
 
-const DYNAMIC_WEIGHT_MIN = 1
-const DYNAMIC_WEIGHT_MAX = 9999
-const DYNAMIC_SHIFT_MIN = -9999
-const DYNAMIC_SHIFT_MAX = 9999
+// 位置权重只影响自动排序中的先后倾向；规则冲突强度由后端的约束边权重单独处理。
+const POSITION_WEIGHT_TOP = 0
+const POSITION_WEIGHT_MIN = 1
+const POSITION_WEIGHT_DEFAULT = 500
+const POSITION_WEIGHT_MAX = 999
+const POSITION_WEIGHT_BOTTOM = 1000
+const POSITION_SHIFT_MIN = -POSITION_WEIGHT_MAX
+const POSITION_SHIFT_MAX = POSITION_WEIGHT_MAX
 // 不同字段允许的运算符不同：
 // 例如类型只适合做“等于/不等于”，分组和标签更适合“等于/包含”。
 const ALL_OPERATOR_KEYS = ['equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 'ends_with', 'regex']
@@ -726,13 +730,13 @@ const clampInt = (value, min, max, fallback = min) => {
 const normalizeDynamicRuleAction = (rule) => {
   if (!rule?.action || typeof rule.action !== 'object') return false
   if (rule.action.type === 'weight_set') {
-    const clamped = clampInt(rule.action.value, DYNAMIC_WEIGHT_MIN, DYNAMIC_WEIGHT_MAX, 500)
+    const clamped = clampInt(rule.action.value, POSITION_WEIGHT_MIN, POSITION_WEIGHT_MAX, POSITION_WEIGHT_DEFAULT)
     const changed = clamped !== rule.action.value
     rule.action.value = clamped
     return changed
   }
   if (rule.action.type === 'weight_shift') {
-    const clamped = clampInt(rule.action.value, DYNAMIC_SHIFT_MIN, DYNAMIC_SHIFT_MAX, 0)
+    const clamped = clampInt(rule.action.value, POSITION_SHIFT_MIN, POSITION_SHIFT_MAX, 0)
     const changed = clamped !== rule.action.value
     rule.action.value = clamped
     return changed
@@ -742,22 +746,27 @@ const normalizeDynamicRuleAction = (rule) => {
 
 // 权重说明
 const weightTooltip = `**MOD权重设置规则**
-动态规则中的强制权重只允许 ${DYNAMIC_WEIGHT_MIN}-${DYNAMIC_WEIGHT_MAX}，数值越低，加载优先级越高（越靠前）。
-动态规则中的权重偏移允许 ${DYNAMIC_SHIFT_MIN} 到 ${DYNAMIC_SHIFT_MAX}，但后端会把最终生效结果限制在 ${DYNAMIC_WEIGHT_MIN}-${DYNAMIC_WEIGHT_MAX}。
-如果需要真正的列表最前或最后，请使用“置顶 / 置底”动作，而不是把动态权重调到极值。
+普通 MOD 默认权重为 ${POSITION_WEIGHT_DEFAULT}。
+“设定权重”只能填 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}，数值越小，自动排序时越靠前。
+“权重偏移”可以填 ${POSITION_SHIFT_MIN} 到 ${POSITION_SHIFT_MAX}，负数向前、正数向后，生效结果会限制在 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}。
+“置顶 / 置底”本质上等于${POSITION_WEIGHT_TOP} 和 ${POSITION_WEIGHT_BOTTOM} ，拥有较高优先级。需要 MOD 排在列表最前或最后时使用。
 
-普通 MOD 的默认权重为 500，若设置权重偏移，将以当前已设定的权重为基准进行偏移调整。
+注意：置顶/置底权重会覆盖其他权重设置，包括默认权重、偏移权重等。
+      权重偏移默认以普通MOD的权重为基准；如果设定了其他权重，会以该设定权重为基准进行偏移；并且多项偏移效果会叠加。总权重会限制在 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}。
 
 建议按照以下权重区间对 MOD 进行分类设置，具体如下：
 
 [[权重区间]]		[[类别描述]]						[[典型例子]]
-1 - 50			绝对底层框架				Harmony 附近的前段框架权重
-51 - 100		官方内容						Core, Royalty, Ideology, Anomaly
-101 - 200		通用基础库					Vanilla Expanded Framework
+0				强制置顶						Harmony 或手动置顶
+1 - 49			极早期底层框架			Harmony 附近的前段框架权重
+50 - 99			官方内容						Core, Royalty, Ideology, Anomaly
+100 - 199		通用基础库					Vanilla Expanded Framework
 201 - 700		普通功能/内容模组		大多数内容 Mod (物品、种族、派系)
 701 - 800		UI与界面增强				RimHUD, Numbers, InventoryTab
-801 - 950		视觉/汉化/补丁			汉化包 (LanguagePack), 纹理替换
-951 - 1000	末端优化/逻辑处理		Rocketman, Performance Optimize
+801 - 899		视觉/音频/补丁			纹理替换、音频替换
+900 - 949		语言包/本地化				LanguagePack
+950 - 999		末端优化/逻辑处理		Rocketman, Performance Optimize
+1000			强制置底						手动置底
 `
 
 // --- 操作逻辑 ---
@@ -799,7 +808,7 @@ const saveDynamicRule = async () => {
   }
   const wasAdjusted = normalizeDynamicRuleAction(editingRule.value)
   if (wasAdjusted) {
-    toast.info(`动态权重已自动限制到允许范围内（权重 ${DYNAMIC_WEIGHT_MIN}-${DYNAMIC_WEIGHT_MAX}，偏移 ${DYNAMIC_SHIFT_MIN} 到 ${DYNAMIC_SHIFT_MAX}）。`)
+    toast.info(`动态权重已自动限制到允许范围内（权重 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}，偏移 ${POSITION_SHIFT_MIN} 到 ${POSITION_SHIFT_MAX}）。`)
   }
   const res = await ruleStore.saveDynamicRules(editingRule.value)
   if (res) { editingRule.value = null }
