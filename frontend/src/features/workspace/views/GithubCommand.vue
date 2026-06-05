@@ -399,11 +399,13 @@ import { checkResult } from '../../../shared/lib/common'
 import { renderMarkdownContent } from '../../../shared/lib/markdown'
 import { isOfficialPackageId } from '../../mod/lib/packageScope'
 import CommonSelect from '../../../shared/components/input/CommonSelect.vue'
+import { useConfirmStore } from '../../../shared/components/modal/confirmStore'
 
 const toast = useToast()
 const appStore = useAppStore()
 const workspaceStore = useWorkspaceStore()
 const profileStore = useProfileStore()
+const confirmStore = useConfirmStore()
 
 const newRepoUrl = ref('')
 const isParsing = ref(false)
@@ -919,6 +921,13 @@ const selectRepo = async (repo) => {
 
 // 移除仓库订阅
 const removeRepo = async (url) => {
+  const repo = workspaceStore.github.subscribedRepos.find(item => item.repo_url === url)
+  const ok = await confirmStore.confirmAction(
+    '移除订阅',
+    `确定要移除 Git 订阅「${repo?.repo_name || url}」吗？\n本地已下载文件不会被删除。`,
+    { type: 'error', confirmText: '移除' }
+  )
+  if (!ok) return
   const res = await window.pywebview.api.github_remove_subscription(url)
   if (checkResult(res, "移除订阅")) {
     if (workspaceStore.github.activeRepo?.repo_url === url) {

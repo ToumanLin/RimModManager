@@ -752,12 +752,6 @@ const handleLocalize = async (mod) => {
 
 const handleUnsubscribe = async (mod) => {
   if (!mod?.workshop_id || !mod?.path_hash) return
-  const ok = await confirmStore.confirmAction(
-    '取消订阅',
-    `确定要取消订阅并删除 [${mod.name || mod.workshop_id}] 的当前工坊副本吗？\n这样会立即移除该冲突副本，并同时向 Steam 发送退订请求。`,
-    { type: 'warning', confirmText: '确认取消订阅' }
-  )
-  if (!ok) return
   await appStore.unsubscribeWorkshopIds([mod.workshop_id], [mod.path_hash])
 }
 </script>

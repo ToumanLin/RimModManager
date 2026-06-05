@@ -139,6 +139,7 @@ import { useModStore } from '../mod/stores/modStore'
 import { useToast } from 'vue-toastification'
 import { normalizeText } from '../../shared/lib/common'
 import CommonModalShell from '../../shared/components/modal/CommonModalShell.vue'
+import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 
 // -----------------------------------------------------------------
 // Store 依赖 (Stores)
@@ -147,6 +148,7 @@ const appStore = useAppStore()
 const aiStore = useAiStore()
 const modStore = useModStore()
 const toast = useToast()
+const confirmStore = useConfirmStore()
 
 // -----------------------------------------------------------------
 // 状态定义 (State / Refs)
@@ -208,8 +210,15 @@ const closeModal = () => {
   appStore.uiState.showModAliasReviewModal = false
 }
 
-const removeTaskGroup = (taskId) => {
+const removeTaskGroup = async (taskId) => {
   /** 从待审池中移除整组任务结果。 */
+  const group = aiStore.getModAliasReviewTask(taskId)
+  const ok = await confirmStore.confirmAction(
+    '移除此组',
+    `确定要移除「${group?.title || '模组别名生成任务'}」吗？\n这组未应用的别名和备注结果会被丢弃。`,
+    { type: 'error', confirmText: '移除' }
+  )
+  if (!ok) return
   aiStore.removeModAliasReviewTask(taskId)
   if (reviewTasks.value.length === 0) {
     closeModal()
@@ -314,8 +323,14 @@ const applyAll = async () => {
   }
 }
 
-const clearAll = () => {
+const clearAll = async () => {
   /** 清空全部待审结果并关闭弹窗。 */
+  const ok = await confirmStore.confirmAction(
+    '清空全部',
+    `确定要清空全部 ${totalTaskCount.value} 组待审结果吗？\n所有未应用的别名和备注结果都会被丢弃。`,
+    { type: 'error', confirmText: '清空' }
+  )
+  if (!ok) return
   aiStore.clearModAliasReviewTaskPool()
   closeModal()
 }

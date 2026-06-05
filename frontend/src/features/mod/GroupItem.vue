@@ -62,7 +62,7 @@
           </svg>
         </button>
         <!-- 删除按钮 -->
-        <button @click.stop="deleteGroup" v-tooltip="`删除分组`" :class="`rounded-lg p-1 hover:bg-bg-overlay/10 cursor-pointer
+        <button @click.stop="deleteGroup($event)" v-tooltip="`删除分组`" :class="`rounded-lg p-1 hover:bg-bg-overlay/10 cursor-pointer
           text-text-dim hover:text-accent-danger text-xs font-bold shadow-lg hover:shadow-bg-deep/50
           transition-all`">
           <svg class="size-4.5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -117,8 +117,8 @@ const toggle = () => {
   emit('toggle', props.id)
 }
 // 删除分组
-const deleteGroup = () => {
-  emit('delete-group', props.id)
+const deleteGroup = (event) => {
+  emit('delete-group', props.id, event)
 }
 // 生成唯一分组名
 const resolveUniqueGroupName = (rawName: string) => {

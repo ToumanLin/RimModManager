@@ -190,11 +190,10 @@ import { useModStore } from './stores/modStore'
 import { useGroupStore } from './stores/groupStore'
 import { useRuleStore } from '../rules/ruleStore'
 import { useContextMenuStore } from '../../shared/components/context-menu/contextMenuStore'
-import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 import { DEFAULT_ACCENT_HEX, hexToRgba, hexToRgb, normalizeHexColor } from '../../shared/lib/color'
 import { isSectionHeaderTitle } from '../../shared/lib/common'
 import { normalizePackageId, normalizePackageToken } from './lib/modIdentity'
-import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Download, Eraser, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight, LockOpen, SquaresExclude, Package } from 'lucide-vue-next';
+import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Download, Eraser, FolderMinus, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight, LockOpen, SquaresExclude, Package } from 'lucide-vue-next';
 
 
 const props = defineProps({
@@ -226,7 +225,6 @@ const modStore = useModStore()
 const groupStore = useGroupStore()
 const menuStore = useContextMenuStore()
 const ruleStore = useRuleStore()
-const confirmStore = useConfirmStore()
 const queueSetModsColor = useDebounceFn((modIds, color) => {
   modStore.setModsColor(modIds, color)
 }, 120)
@@ -458,13 +456,10 @@ const unsubscribeWorkshopIds = async (delete_file = false) => {
       workshop_ids.push(m.workshop_id);
     }
   });
-  const check = await confirmStore.confirmAction('警告',`确定要取消订阅选中项${delete_file?'并删除文件':''}（${workshop_ids.length} 项）吗？${delete_file?'软件将主动删除Mod文件':'Steam 会自动删除已取消订阅的文件！'}`,{type:'error'})
-  if(check) {
-    const res = await appStore.unsubscribeWorkshopIds(workshop_ids, delete_file ? path_hashes : null)
-    if (res && delete_file) {
-      modStore.selectMods([])
-      modStore.removeIdsOnAllList(selectedIds)
-    }
+  const res = await appStore.unsubscribeWorkshopIds(workshop_ids, delete_file ? path_hashes : null)
+  if (res && delete_file) {
+    modStore.selectMods([])
+    modStore.removeIdsOnAllList(selectedIds)
   }
 }
 
@@ -529,18 +524,17 @@ const handleContextMenu = async (event) => {
       disabled: !modStore.selectedMods.some(m => m.store === 'workshop'),
       action: () => modStore.localizeSelectedMods('workshop'),
     },
-    { label: '删除'+ selectedCountStr, disabled: !modData.value.path, icon: Trash2, level: 'danger', action: () => deleteModFiles() },
-  ]
-  if (coexistSelectedIds.length > 0) {
-    fileMenuItems.push({
+    {
       label: '切换共存版本',
       icon: SquaresExclude,
+      disabled: !coexistSelectedIds.length,
       children: [
-        { label: '切换为工坊版' + coexistSelectedCountStr, action: () => modStore.switchCoexistenceSource(coexistSelectedIds, 'steam') },
-        { label: '切换为本地版' + coexistSelectedCountStr, action: () => modStore.switchCoexistenceSource(coexistSelectedIds, 'local') },
+        { label: '切换为工坊版' + coexistSelectedCountStr, icon: IconSteam, action: () => modStore.switchCoexistenceSource(coexistSelectedIds, 'steam') },
+        { label: '切换为本地版' + coexistSelectedCountStr, icon: FolderMinus, action: () => modStore.switchCoexistenceSource(coexistSelectedIds, 'local') },
       ]
-    })
-  }
+    },
+    { label: '删除'+ selectedCountStr, disabled: !modData.value.path, icon: Trash2, level: 'danger', action: () => deleteModFiles() },
+  ]
   // 单选菜单
   const singleMenuItems = [
     { divider: true },

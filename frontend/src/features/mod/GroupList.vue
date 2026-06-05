@@ -122,6 +122,7 @@ import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useModStore } from './stores/modStore'
 import { useGroupStore } from './stores/groupStore'
 import { useContextMenuStore } from '../../shared/components/context-menu/contextMenuStore'
+import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 import VirtualDragList from '../../shared/components/list/VirtualDragList.vue'
 import GroupItem from './GroupItem.vue'
 import GroupModRow from './GroupModRow.vue'
@@ -141,6 +142,7 @@ const appStore = useAppStore()
 const modStore = useModStore()
 const groupStore = useGroupStore()
 const menuStore = useContextMenuStore()
+const confirmStore = useConfirmStore()
 
 const vListRef = ref(null)
 const listKey = ref(0)
@@ -487,7 +489,16 @@ const createGroup = async () => {
   await groupStore.createGroup();
 }
 // 删除分组
-const deleteGroup = (groupId: string) => {
+const deleteGroup = async (groupId: string, event?: Event) => {
+  const group = groupStore.takeGroupById(groupId)
+  const ok = await confirmStore.open({
+    title: '删除分组',
+    message: `确定要删除分组「${group?.name || '未命名分组'}」吗？\n分组记录会被移除，模组文件不会删除。`,
+    mode: 'confirm',
+    type: 'error',
+    confirmText: '删除',
+  }, event)
+  if (!ok) return
   groupStore.deleteGroup(groupId);
 }
 // 更新分组信息
@@ -608,7 +619,14 @@ const openGroupContextMenu = async (event, row) => {
     { label: expandedIds.value.has(row?.group_id) ? '收缩分组' : '展开分组', icon: expandedIds.value.has(row?.group_id) ? ChevronsDownUp : ChevronsUpDown, action: () => toggle(row.group_id) },
     { label: '打包导出整组', icon: Package, disabled: ids.length === 0, action: () => openCustomExport(ids, `打包导出分组: ${groupName}`, '可按需附带依赖、联锁项和语言包。') },
     { divider: true },
-    { label: '清空分组模组', icon: Eraser, level: 'danger', disabled: ids.length === 0, action: () => groupStore.groupRemoveMods(row.group_id, ids) },
+    { label: '清空分组模组', icon: Eraser, level: 'danger', disabled: ids.length === 0, action: async () => {
+      const ok = await confirmStore.confirmAction(
+        '清空分组模组',
+        `确定要从「${groupName}」移除全部 ${ids.length} 个模组吗？\n只会清空分组内容，不会删除模组文件。`,
+        { type: 'error', confirmText: '清空' }
+      )
+      if (ok) await groupStore.groupRemoveMods(row.group_id, ids)
+    } },
   ], { groupId: row?.group_id })
 }
 const getFlatRowDragMeta = (row) => {

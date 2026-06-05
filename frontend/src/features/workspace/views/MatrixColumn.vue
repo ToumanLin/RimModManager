@@ -321,13 +321,6 @@ const unsubscribeWorkshopIds = async (pathHashes, deleteFile = false) => {
   const workshopIds = getModsData(pathHashes, 'workshop_id')
   if (!workshopIds.length) return
 
-  const check = await confirmStore.confirmAction(
-    '警告',
-    `确定要取消订阅选中项${deleteFile ? '并删除文件' : ''}（${workshopIds.length} 项）吗？${deleteFile ? '软件将主动删除Mod文件' : 'Steam 会自动删除已取消订阅的文件！'}`,
-    { type: 'error' }
-  )
-  if (!check) return
-
   const ok = await appStore.unsubscribeWorkshopIds(workshopIds, deleteFile ? pathHashes : null)
   if (ok) await workspaceStore.fetchLibrariesMods()
 }
@@ -344,7 +337,7 @@ const unsubscribeAndClearMissingWorkshopRecords = async (mods) => {
   )
   if (!check) return false
 
-  const ok = await appStore.unsubscribeWorkshopIds(workshopIds)
+  const ok = await appStore.unsubscribeWorkshopIds(workshopIds, null, { skipConfirm: true })
   if (!ok) return false
 
   const recordHashes = targets

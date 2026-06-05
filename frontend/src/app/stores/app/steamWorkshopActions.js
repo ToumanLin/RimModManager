@@ -2,6 +2,7 @@ import { toast, checkResult } from '../../../shared/lib/common'
 import { useModStore } from '../../../features/mod/stores/modStore'
 import { useWorkspaceStore } from '../../../features/workspace/workspaceStore'
 import { normalizeInstallSource, normalizeInstallSources } from '../../../features/mod/lib/modIdentity'
+import { useConfirmStore } from '../../../shared/components/modal/confirmStore'
 
 export const useSteamWorkshopActions = ({
   openUrl,
@@ -135,13 +136,25 @@ export const useSteamWorkshopActions = ({
   const unsubscribeWorkshopIds = async (workshop_ids, deletePathHashes = null, deleteOptions = {}) => {
     if (!window.pywebview) return false
     if (!workshop_ids || workshop_ids.length === 0) return
+    const options = deleteOptions || {}
+    const normalizedDeleteHashes = Array.isArray(deletePathHashes)
+      ? deletePathHashes.filter(Boolean)
+      : []
+    if (!options.skipConfirm) {
+      const confirmStore = useConfirmStore()
+      const message = normalizedDeleteHashes.length > 0
+        ? `确定要取消订阅 ${workshop_ids.length} 个创意工坊项目，并删除本地文件吗？\n删除的文件会移入回收站。`
+        : `确定要取消订阅 ${workshop_ids.length} 个创意工坊项目吗？\nSteam 会自动删除已取订项目的本地文件。`
+      const ok = await confirmStore.confirmAction('取消订阅', message, {
+        type: normalizedDeleteHashes.length > 0 ? 'error' : 'warning',
+        confirmText: '确认取消订阅',
+      })
+      if (!ok) return false
+    }
     const res = await window.pywebview.api.steam_unsubscribe(workshop_ids)
     if (res?.status === 'success') {
-      const normalizedDeleteHashes = Array.isArray(deletePathHashes)
-        ? deletePathHashes.filter(Boolean)
-        : []
       if (normalizedDeleteHashes.length > 0) {
-        const deleteRes = await window.pywebview.api.mods_delete(normalizedDeleteHashes, !!deleteOptions.force)
+        const deleteRes = await window.pywebview.api.mods_delete(normalizedDeleteHashes, !!options.force)
         if (deleteRes?.status !== 'success') {
           toast.error(`取消订阅成功，但删除副本失败: ${deleteRes?.message || '未知错误'}`)
           return false
