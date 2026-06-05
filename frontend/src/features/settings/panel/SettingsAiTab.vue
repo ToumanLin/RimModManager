@@ -82,7 +82,7 @@
                         </button>
                       </div>
 
-                      <div v-if="testResponse" class="p-4 rounded-xl text-text-soft bg-accent-special/10 border border-border-base/10 relative">
+                      <div v-if="testResponse" class="p-4 mt-2 rounded-xl text-text-soft bg-accent-special/10 border border-border-base/10 relative">
                         <button @click="clearTestResult" class="absolute top-2 right-2 text-text-dim hover:text-text-main">×</button>
                         <div class="text-xs text-text-dim mb-1 font-bold">AI 响应结果：</div>
                         <div class="text-sm whitespace-pre-wrap leading-relaxed">{{ testResponse }}</div>

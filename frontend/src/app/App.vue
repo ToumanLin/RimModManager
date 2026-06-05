@@ -1,6 +1,6 @@
 <template>
   <div v-if="appStore.isSuspended" class="relative h-screen w-full overflow-hidden font-sans select-none bg-bg-deep text-text-main">
-    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(var(--rgb-accent-cool),0.12),_transparent_28%)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(var(--rgb-accent-cool),0.12),transparent_28%)]"></div>
     <div class="relative z-10 flex h-full flex-col items-center justify-center px-6 text-center">
       <div class="mb-5 inline-flex items-center gap-2 rounded-full border border-accent-cool/20 bg-accent-cool/8 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.22em] text-accent-cool">
         <span class="h-2 w-2 rounded-full bg-accent-cool shadow-[0_0_12px_rgba(var(--rgb-accent-cool),0.8)] animate-pulse"></span>
@@ -168,7 +168,7 @@
       leave-to-class="-translate-y-full opacity-0"
     >
       <div v-if="appStore.isGameRunning"
-        class="fixed top-5 left-1/2 -translate-x-1/2 z-9999 flex items-center bg-bg-inset backdrop-blur-md border border-accent-tip/30 p-1.5 pl-4 rounded-full shadow-[0_10px_30px_var(--shadow-color)]">
+        class="fixed bottom-2 left-1/2 -translate-x-1/2 z-9999 flex items-center bg-bg-inset backdrop-blur-md border border-accent-tip/30 p-1.5 pl-4 rounded-full shadow-[0_10px_30px_var(--shadow-color)]">
 
         <div class="flex items-center gap-2 mr-4 text-sm font-bold text-text-main">
           <span class="relative flex h-3 w-3">

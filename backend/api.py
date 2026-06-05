@@ -6,6 +6,7 @@ from enum import Enum
 import gc
 import json
 import os
+import shutil
 import sys
 import threading
 import time
@@ -42,6 +43,7 @@ from backend._version import __version__, __build__, get_all_changelogs
 from backend.utils.tools import normalize_package_id
 from backend.utils.tools import current_ms, generate_path_hash
 from backend.utils.logger import logger, app_log_reader
+from backend.utils.shortcuts import get_desktop_directory
 from backend.managers.mgr_network import network_mgr
 
 # 2. 引入数据库层
@@ -517,6 +519,51 @@ class API:
         profile = self.profile_mgr.get_profile(target_profile_id)
         return context, profile
 
+    @staticmethod
+    def _path_inside(root: Path, path: Path) -> bool:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _build_unique_copy_path(target_dir: Path, filename: str) -> Path:
+        candidate = target_dir / filename
+        if not candidate.exists():
+            return candidate
+
+        stem = candidate.stem
+        suffix = candidate.suffix
+        index = 1
+        while True:
+            next_candidate = target_dir / f"{stem}-{index}{suffix}"
+            if not next_candidate.exists():
+                return next_candidate
+            index += 1
+
+    @staticmethod
+    def _sanitize_backup_filename(name: str) -> tuple[str, bool]:
+        normalized = str(name or '').strip()
+        invalid_chars = set('\\/:*?"<>|')
+        sanitized = ''.join('_' if char in invalid_chars else char for char in normalized)
+        sanitized = sanitized.strip().strip('.')
+        return sanitized, sanitized != normalized
+
+    def _resolve_profile_backup_file(self, path: str, profile_id: str | None = None) -> tuple[Path, Path, ProfileContext]:
+        context, _ = self._resolve_load_order_scope(profile_id)
+        source_path = Path(path or '').resolve()
+        backup_root = Path(context.backup_dir).resolve()
+
+        if not source_path.is_file():
+            raise FileNotFoundError(f"备份文件不存在：{path}")
+        if not self._path_inside(backup_root, source_path):
+            raise ValueError("只能操作当前环境的备份文件")
+        if source_path.suffix.lower() not in {'.xml', '.rml'}:
+            raise ValueError("仅支持处理 XML 或 RML 备份文件")
+
+        return source_path, backup_root, context
+
     def _handle_app_version_upgrade(self):
         """实例初始化时运行的升级逻辑"""
         from backend.database.models import SystemInfo
@@ -763,6 +810,16 @@ class API:
         if self.active_context:
             return self._ensure_directory(str(Path(self.active_context.backup_dir) / "other"))
         return ""
+
+    def _get_default_backup_save_as_dir(self) -> str:
+        """
+        备份文件“另存为”的默认入口使用桌面，更符合把文件拿出去使用的预期。
+        """
+        try:
+            return self._normalize_existing_dir(get_desktop_directory())
+        except Exception:
+            logger.warning("无法解析桌面目录，将交给系统选择窗口决定初始位置", exc_info=True)
+            return ""
 
     def _resolve_dialog_initial_dir(
         self,
@@ -2308,6 +2365,88 @@ class API:
             })
         except Exception as e:
             return ApiResponse.error(f"获取备份文件时出错: {e}")
+
+    @log_api_call
+    def backup_file_save_as_pick_dir(self):
+        """选择备份另存为目录，默认走桌面，非默认模式跟随导出起始目录设置。"""
+        try:
+            initial_dir = self._resolve_dialog_initial_dir(
+                self._get_default_backup_save_as_dir(),
+                settings.config.load_order_export_dir_mode,
+                settings.config.load_order_export_custom_path,
+                settings.config.load_order_export_last_path,
+            )
+            selected = FileManager.select_folder_dialog(initial_dir)
+            if not selected:
+                return ApiResponse.warning("未选择保存目录")
+            return ApiResponse.success({"path": selected})
+        except Exception as e:
+            return ApiResponse.error(f"选择保存目录时出错: {e}")
+
+    @log_api_call
+    def backup_file_save_as(self, path: str, target_dir: str, profile_id: str | None = None):
+        """把指定备份另存到用户选择的目录。"""
+        try:
+            source_path, _, context = self._resolve_profile_backup_file(path, profile_id)
+            export_dir = Path(target_dir or '').resolve()
+            if not export_dir.is_dir():
+                return ApiResponse.error("请选择有效的保存目录")
+
+            target_path = self._build_unique_copy_path(export_dir, source_path.name)
+            shutil.copy2(source_path, target_path)
+            self._remember_load_order_dialog_dir("export", str(target_path))
+            return ApiResponse.success({
+                "path": str(target_path),
+                "source_path": str(source_path),
+                "profile_id": context.profile_id,
+            })
+        except Exception as e:
+            logger.error(f"另存备份时出错: {e}", exc_info=True)
+            return ApiResponse.error(f"另存备份时出错: {e}")
+
+    @log_api_call
+    def backup_manual_rename(self, path: str, new_name: str, profile_id: str | None = None):
+        """重命名手动备份；自动备份由轮换规则管理，不允许改名。"""
+        try:
+            source_path, backup_root, context = self._resolve_profile_backup_file(path, profile_id)
+            manual_dir = (backup_root / "other").resolve()
+            if source_path.parent.resolve() != manual_dir:
+                return ApiResponse.error("只有手动备份可以重命名")
+
+            sanitized_name, sanitized = self._sanitize_backup_filename(new_name)
+            if not sanitized_name:
+                return ApiResponse.error("请输入新的备份名称")
+
+            source_suffix = source_path.suffix
+            requested_path = Path(sanitized_name)
+            next_name = requested_path.name
+            if Path(next_name).suffix.lower() != source_suffix.lower():
+                next_name = f"{Path(next_name).stem}{source_suffix}"
+
+            target_path = (manual_dir / next_name).resolve()
+            if target_path == source_path:
+                return ApiResponse.success({
+                    "path": str(source_path),
+                    "name": source_path.name,
+                    "sanitized": sanitized,
+                    "profile_id": context.profile_id,
+                })
+            if not self._path_inside(manual_dir, target_path):
+                return ApiResponse.error("备份名称无效")
+            if target_path.exists():
+                return ApiResponse.error("已有同名备份，请换一个名称")
+
+            source_path.rename(target_path)
+            return ApiResponse.success({
+                "path": str(target_path),
+                "old_path": str(source_path),
+                "name": target_path.name,
+                "sanitized": sanitized,
+                "profile_id": context.profile_id,
+            })
+        except Exception as e:
+            logger.error(f"重命名备份时出错: {e}", exc_info=True)
+            return ApiResponse.error(f"重命名备份时出错: {e}")
     
     @log_api_call
     def game_launch(self, profile_id: str):

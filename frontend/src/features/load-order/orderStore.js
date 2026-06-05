@@ -432,6 +432,45 @@ export const useOrderStore = defineStore('order', () => {
     }
     return false
   }
+  const saveBackupAs = async (path, profile_id='') => {
+    if (!window.pywebview || !path) return false
+    const pickRes = await window.pywebview.api.backup_file_save_as_pick_dir()
+    if (pickRes?.status === 'warning') return false
+    if (!checkResult(pickRes, '选择保存目录')) return false
+    const targetDir = pickRes.data?.path || ''
+    if (!targetDir) return false
+
+    const res = await window.pywebview.api.backup_file_save_as(
+      path,
+      targetDir,
+      profile_id || backupProfileId.value || null
+    )
+    if (checkResult(res, '另存备份')) {
+      toast.success(`备份已另存为: \n${res.data?.path || targetDir}`)
+      return true
+    }
+    return false
+  }
+  const renameManualBackup = async (path, new_name, profile_id='') => {
+    if (!window.pywebview || !path || !new_name) return null
+    const res = await window.pywebview.api.backup_manual_rename(
+      path,
+      new_name,
+      profile_id || backupProfileId.value || null
+    )
+    if (checkResult(res, '重命名备份')) {
+      const data = res.data || {}
+      if (data.sanitized) {
+        toast.warning('文件名中的特殊字符已替换为下划线')
+      }
+      if (currentBackupFile.value === path && data.path) {
+        currentBackupFile.value = data.path
+      }
+      toast.success('备份已重命名')
+      return data
+    }
+    return null
+  }
   const copyTextToClipboard = async (text) => {
     const value = String(text || '')
     if (!value) return false
@@ -724,7 +763,7 @@ export const useOrderStore = defineStore('order', () => {
     // 导入检查状态
     backupNameMap, backupDisplayIds, currentImportCheck, importCheckItems, importCheckSummary, importCheckMap, problemImportItems, missingImportItems, replacementImportItems, actionableReplacementImportItems, otherVersionImportItems, unknownImportItems, nonImportableImportItems,
     // 读取、导入与导出
-    getLoadOrder, selectBackupOrder, importExternalOrder, applyBackup, saveInactiveOrder, saveLoadOrder, exportLoadOrder,
+    getLoadOrder, selectBackupOrder, importExternalOrder, applyBackup, saveInactiveOrder, saveLoadOrder, exportLoadOrder, saveBackupAs, renameManualBackup,
     exportLoadOrderShareCode, getFileOrder, importPayloadFile, importShareCode, promptImportShareCode, getImportCheckItem, takeImportCheckItems, getImportCheckTargetSource, openImportCheckWorkshop,
     // 导入检查处理
     subscribeImportCheckItems, downloadImportCheckItems, removeImportCheckItems, confirmImportStripping,

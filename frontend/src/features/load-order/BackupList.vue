@@ -126,6 +126,7 @@
             :key="item.path" :item="item"
             :is-selected="selectedPath === item.path"
             @select="selectItem" @load="handleLoad" @remove="handleRemove"
+            @menu="openBackupItemMenu"
           />
         </div>
       </section>
@@ -139,6 +140,7 @@
           <BackupItem :key="parsedData.last_backup[0]?.path" :item="parsedData.last_backup[0]"
             :is-selected="selectedPath === parsedData.last_backup[0]?.path"
             @select="selectItem" @load="handleLoad" @remove="handleRemove"
+            @menu="openBackupItemMenu"
           />
         </div>
       </section>
@@ -158,6 +160,7 @@
             @select="selectItem"
             @load="handleLoad"
             @delete="handleDelete"
+            @menu="openBackupItemMenu"
           />
         </div>
       </section>
@@ -177,6 +180,7 @@
             @select="selectItem"
             @load="handleLoad"
             @delete="handleDelete"
+            @menu="openBackupItemMenu"
           />
         </div>
       </section>
@@ -194,6 +198,7 @@
             @select="selectItem"
             @load="handleLoad"
             @delete="handleDelete"
+            @menu="openBackupItemMenu"
           />
         </div>
       </section>
@@ -214,10 +219,11 @@ import { toast } from '../../shared/lib/common.js'
 import { useOrderStore } from './orderStore.js'
 import { useAppStore } from '../../app/stores/appStore.js'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore.js'
+import { useContextMenuStore } from '../../shared/components/context-menu/contextMenuStore.js'
 import { useProfileStore } from '../profiles/profileStore.js'
 import { parse, formatDistanceToNow, differenceInCalendarDays } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import { Copy, HelpCircle, ClipboardPlus } from 'lucide-vue-next'
+import { ClipboardPlus, Copy, Download, Edit3, FileInput, FileText, FolderOpen, HelpCircle, Trash2, X } from 'lucide-vue-next'
 import CommonSelect from '../../shared/components/input/CommonSelect.vue'
 import BackupItem from './BackupItem.vue'
 import { isBrowserRuntime as detectBrowserRuntime } from '../../app/bridge/runtimeBridge.js'
@@ -225,6 +231,7 @@ import { isBrowserRuntime as detectBrowserRuntime } from '../../app/bridge/runti
 const appStore = useAppStore()
 const orderStore = useOrderStore()
 const confirmStore = useConfirmStore()
+const contextMenuStore = useContextMenuStore()
 const profileStore = useProfileStore()
 const loading = ref(false)
 const showDropOverlay = ref(false)
@@ -383,6 +390,91 @@ const isEmpty = computed(() => {
           parsedData.value.other.length === 0 &&
           parsedData.value.import.length === 0
 })
+
+const isLocalFilePath = (path) => {
+  const normalizedPath = String(path || '').trim()
+  if (!normalizedPath) return false
+  if (/^[a-z_]+:\/\//i.test(normalizedPath)) return false
+  return /[\\/]/.test(normalizedPath) || /^[A-Za-z]:/.test(normalizedPath)
+}
+
+const getBackupBaseName = (item) => {
+  const name = String(item?.name || item?.displayTitle || '').trim()
+  return name.replace(/\.(xml|rml)$/i, '')
+}
+
+const sanitizeBackupName = (name) => {
+  const normalizedName = String(name || '').trim()
+  const sanitizedName = normalizedName
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/^\.+|\.+$/g, '')
+    .trim()
+  if (sanitizedName && sanitizedName !== normalizedName) {
+    toast.warning('文件名中的特殊字符已替换为下划线')
+  }
+  return sanitizedName
+}
+
+const handleOpenFile = (item) => {
+  appStore.openFile(item.path)
+}
+
+const handleOpenFolder = (item) => {
+  appStore.openPath(item.path)
+}
+
+const handleSaveAs = async (item) => {
+  const success = await orderStore.saveBackupAs(item.path, item.source_profile_id || selectedBackupProfileId.value)
+  if (success) {
+    await refresh(selectedBackupProfileId.value)
+  }
+}
+
+const handleRename = async (event, item) => {
+  const inputName = await confirmStore.open({
+    title: '重命名备份',
+    message: '请输入新的备份名称。',
+    mode: 'prompt',
+    type: 'info',
+    inputValue: getBackupBaseName(item),
+    placeholder: '备份名称',
+    confirmText: '保存',
+    cancelText: '取消',
+  }, event?.target)
+  if (!inputName) return
+
+  const nextName = sanitizeBackupName(inputName)
+  if (!nextName) {
+    toast.warning('请输入新的备份名称')
+    return
+  }
+
+  const renamed = await orderStore.renameManualBackup(item.path, nextName, item.source_profile_id || selectedBackupProfileId.value)
+  if (renamed) {
+    await refresh(selectedBackupProfileId.value)
+  }
+}
+
+const buildBackupMenuItems = (item) => {
+  const canUsePath = isLocalFilePath(item?.path)
+  const isTempImport = item?.type === 'import'
+  const isManualBackup = item?.type === 'other'
+  return [
+    { label: '加载文件', icon: FileInput, action: () => handleLoad(null, item) },
+    { label: '打开文件', icon: FileText, disabled: !canUsePath, action: () => handleOpenFile(item) },
+    { label: '打开所在目录', icon: FolderOpen, disabled: !canUsePath, action: () => handleOpenFolder(item) },
+    { label: '另存为...', icon: Download, disabled: isTempImport || !canUsePath, action: () => handleSaveAs(item) },
+    { label: '重命名', icon: Edit3, disabled: !isManualBackup, action: () => handleRename(null, item) },
+    { divider: true },
+    isTempImport
+      ? { label: '从列表移除', icon: X, level: 'warn', action: () => handleRemove(item) }
+      : { label: '删除文件', icon: Trash2, level: 'danger', action: () => handleDelete(null, item) },
+  ]
+}
+
+const openBackupItemMenu = (event, item) => {
+  contextMenuStore.open(event, buildBackupMenuItems(item), item)
+}
 
 const clearOutOfScopeBackupSelection = (profileId = selectedBackupProfileId.value) => {
   // 只在当前对比文件来自某个环境，且该环境已不再是当前查看对象时清空。
@@ -613,7 +705,7 @@ const handleLoad = async (e, item) => {
     message: `确定要恢复到此备份文件的状态吗？\n当前未保存的更改将丢失。`,
     mode: 'confirm',
     type: 'warning'
-  }, e.target)
+  }, e?.target)
   if (!confirmed) return
   await orderStore.getLoadOrder(item.path, item.source_profile_id || '')
 }
@@ -624,7 +716,7 @@ const handleDelete = async (e, item) => {
     message: '确定要删除此备份文件吗？',
     mode: 'confirm',
     type: 'error'
-  }, e.target)
+  }, e?.target)
   if (!confirmed) return
   // 调用后端删除接口
   await appStore.deletePath(item.path, false)
