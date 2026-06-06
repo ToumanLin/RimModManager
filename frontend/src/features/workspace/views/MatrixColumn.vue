@@ -321,7 +321,7 @@ const unsubscribeWorkshopIds = async (pathHashes, deleteFile = false) => {
   const workshopIds = getModsData(pathHashes, 'workshop_id')
   if (!workshopIds.length) return
 
-  const ok = await appStore.unsubscribeWorkshopIds(workshopIds, deleteFile ? pathHashes : null)
+  const ok = await appStore.unsubscribeWorkshopIds(workshopIds, pathHashes, { deleteFiles: !!deleteFile })
   if (ok) await workspaceStore.fetchLibrariesMods()
 }
 
@@ -344,7 +344,7 @@ const unsubscribeAndClearMissingWorkshopRecords = async (mods) => {
     .map(mod => String(mod.path_hash || '').trim())
     .filter(pathHash => pathHash && !pathHash.startsWith('ghost_'))
   if (recordHashes.length > 0) {
-    const res = await window.pywebview.api.mods_delete(recordHashes, false)
+    const res = await window.pywebview.api.mods_delete(recordHashes, false, false)
     if (!checkResult(res, '清理缺失数据记录')) return false
   }
 
@@ -364,7 +364,7 @@ const clearMissingRecords = async (pathHashes) => {
   )
   if (!check) return false
 
-  const res = await window.pywebview.api.mods_delete(hashes, false)
+  const res = await window.pywebview.api.mods_delete(hashes, false, false)
   if (checkResult(res, '清理缺失数据记录')) {
     toast.success(`已清理 ${res.data?.success_count || hashes.length} 条缺失数据记录`)
     await workspaceStore.fetchLibrariesMods()

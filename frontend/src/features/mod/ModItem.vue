@@ -472,7 +472,11 @@ const unsubscribeWorkshopIds = async (delete_file = false) => {
     .filter(item => item.mod?.workshop_id)
   const path_hashes = workshopItems.map(item => item.mod.path_hash).filter(Boolean)
   const workshop_ids = workshopItems.map(item => item.mod.workshop_id)
-  const res = await appStore.unsubscribeWorkshopIds(workshop_ids, delete_file ? path_hashes : null)
+  const res = await appStore.unsubscribeWorkshopIds(
+    workshop_ids,
+    path_hashes,
+    { deleteFiles: !!delete_file }
+  )
   if (!res) return
 
   const targetDetails = res?.task?.metrics?.target_details || {}

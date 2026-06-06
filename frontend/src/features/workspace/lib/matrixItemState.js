@@ -9,7 +9,6 @@ export const MATRIX_FILTER_STATE_OPTIONS = [
   { label: '仅看同库冲突', value: 'conflict' },
   { label: '仅看替代项', value: 'replace' },
   { label: '仅看已禁用', value: 'disabled' },
-  { label: '仅看已删除', value: 'deleted' },
   { label: '仅看缺失', value: 'missing' },
 ]
 
@@ -54,7 +53,6 @@ export const getMatrixItemState = (mod, lastPlayedTime = 0, workspaceStore) => {
   const isReplace = replacementTargets.length > 0
   const isDisabled = !!mod?.disabled
   const isMissing = !!mod?.is_missing
-  const isDeleted = !isMissing && !mod?.path
   const isWorkshopUnavailable = mod?.workshop_online_status === 'unavailable'
 
   return {
@@ -69,7 +67,6 @@ export const getMatrixItemState = (mod, lastPlayedTime = 0, workspaceStore) => {
       conflict: isConflict,
       replace: isReplace,
       disabled: isDisabled,
-      deleted: isDeleted,
       missing: isMissing,
     },
     isNew,
@@ -79,7 +76,6 @@ export const getMatrixItemState = (mod, lastPlayedTime = 0, workspaceStore) => {
     isConflict,
     isReplace,
     isDisabled,
-    isDeleted,
     isMissing,
     isWorkshopUnavailable,
   }

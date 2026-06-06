@@ -140,15 +140,17 @@ export const useSteamWorkshopActions = ({
     const normalizedDeleteHashes = Array.isArray(deletePathHashes)
       ? deletePathHashes.filter(Boolean)
       : []
+    const shouldDeleteFiles = normalizedDeleteHashes.length > 0 && options.deleteFiles !== false
+    const shouldCleanupRecordsOnly = normalizedDeleteHashes.length > 0 && options.deleteFiles === false
     // 纯取消订阅必须等 Steam 完成处理；主动删除文件的流程由本函数后续删除步骤负责。
-    const shouldWaitForSteamTask = options.waitForTask !== false && normalizedDeleteHashes.length === 0
+    const shouldWaitForSteamTask = options.waitForTask !== false && !shouldDeleteFiles
     if (!options.skipConfirm) {
       const confirmStore = useConfirmStore()
-      const message = normalizedDeleteHashes.length > 0
+      const message = shouldDeleteFiles
         ? `确定要取消订阅 ${workshop_ids.length} 个创意工坊项目，并删除对应的本地文件吗？\n删除的文件会移入回收站。`
         : `确定要取消订阅 ${workshop_ids.length} 个创意工坊项目吗？\nSteam 完成处理后，列表会自动更新。`
       const ok = await confirmStore.confirmAction('取消订阅', message, {
-        type: normalizedDeleteHashes.length > 0 ? 'error' : 'warning',
+        type: shouldDeleteFiles ? 'error' : 'warning',
         confirmText: '确认取消订阅',
       })
       if (!ok) return false
@@ -159,7 +161,7 @@ export const useSteamWorkshopActions = ({
       const taskId = String(res?.data?.task_id || '')
       let task = null
       toast.info(
-        normalizedDeleteHashes.length > 0
+        shouldDeleteFiles
           ? '已向 Steam 提交取消订阅，正在删除本地文件...'
           : '已向 Steam 提交取消订阅，正在等待 Steam 完成处理...',
         { timeout: 3500 }
@@ -173,13 +175,19 @@ export const useSteamWorkshopActions = ({
         }
         toast.success('取消订阅成功，正在更新列表...', { timeout: 2500 })
       }
-      if (normalizedDeleteHashes.length > 0) {
-        const deleteRes = await window.pywebview.api.mods_delete(normalizedDeleteHashes, !!options.force)
+      if (shouldDeleteFiles || shouldCleanupRecordsOnly) {
+        const deleteRes = await window.pywebview.api.mods_delete(normalizedDeleteHashes, !!options.force, shouldDeleteFiles)
         if (deleteRes?.status !== 'success') {
-          toast.error(`已向 Steam 提交取消订阅，但本地文件删除失败：${deleteRes?.message || '未知错误'}`)
+          const actionName = shouldDeleteFiles ? '本地文件删除' : '库存记录清理'
+          toast.error(`已向 Steam 提交取消订阅，但${actionName}失败：${deleteRes?.message || '未知错误'}`)
           return false
         }
-        toast.info(`已发送取消订阅请求，并删除 ${deleteRes.data?.success_count || normalizedDeleteHashes.length} 个本地文件`, { timeout: 2500 })
+        toast.info(
+          shouldDeleteFiles
+            ? `已发送取消订阅请求，并删除 ${deleteRes.data?.success_count || normalizedDeleteHashes.length} 个本地文件`
+            : `已取消订阅，并清理 ${deleteRes.data?.success_count || normalizedDeleteHashes.length} 条库存记录`,
+          { timeout: 2500 }
+        )
         return { success: true, taskId, task }
       }
       return { success: true, taskId, task }

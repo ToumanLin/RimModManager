@@ -62,6 +62,25 @@ class TestModAssetMissingState(unittest.TestCase):
         self.assertEqual(result["errors"], [])
         self.assertIsNone(ModAsset.get_or_none(ModAsset.path_hash == "lost-hash"))
 
+    def test_delete_mod_record_keeps_physical_files(self):
+        mod_dir = Path(self.temp_dir.name) / "Workshop" / "123"
+        mod_dir.mkdir(parents=True)
+        ModAsset.create(
+            path_hash="record-only-hash",
+            package_id="author.recordonly",
+            name="Record Only",
+            path=str(mod_dir),
+            source="steam",
+            store="workshop",
+        )
+
+        result = ModMaintenanceDAO.delete_mod_records(["record-only-hash"])
+
+        self.assertEqual(result["success_count"], 1)
+        self.assertEqual(result["errors"], [])
+        self.assertTrue(mod_dir.exists())
+        self.assertIsNone(ModAsset.get_or_none(ModAsset.path_hash == "record-only-hash"))
+
     def test_restored_missing_snapshot_is_parsed_instead_of_skipped(self):
         temp_root = Path(self.temp_dir.name)
         mod_dir = temp_root / "Mods" / "RestoredMod"

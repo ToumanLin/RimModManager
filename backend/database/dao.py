@@ -1137,6 +1137,29 @@ class ModMaintenanceDAO:
         return {"success_count": success_count, "errors": errors}
 
     @staticmethod
+    def delete_mod_records(path_hashes: List[str] | str):
+        """只删除库存数据库记录，不触碰物理文件；用于取消订阅后清理本地库存显示。"""
+        normalized_hashes = _normalize_path_hashes(path_hashes)
+        if not normalized_hashes: return {"success_count": 0, "errors": []}
+
+        existing_hashes = [
+            row["path_hash"]
+            for row in ModAsset.select(ModAsset.path_hash)
+                .where(ModAsset.path_hash.in_(normalized_hashes))  # type: ignore
+                .dicts()
+        ]
+        if not existing_hashes: return {"success_count": 0, "errors": ["未找到有效的模组记录"]}
+
+        try:
+            with db.atomic():
+                deleted_count = ModAsset.delete().where(ModAsset.path_hash << existing_hashes).execute()  # type: ignore
+        except Exception as exc:
+            logger.error(f"Database record deletion failed: {exc}")
+            return {"success_count": 0, "errors": [f"数据库记录清理失败: {exc}"]}
+
+        return {"success_count": int(deleted_count or 0), "errors": []}
+
+    @staticmethod
     def add_shadow_path(keep_path_hash: str, shadow_path: str):
         """为最终保留的 Mod 记录被遮蔽副本路径。"""
         mod = ModAsset.get_or_none(ModAsset.path_hash == keep_path_hash)

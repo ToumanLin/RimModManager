@@ -1824,15 +1824,20 @@ class API:
             return ApiResponse.error(f"处理出错: {str(e)}")
     
     @log_api_call
-    def mods_delete(self, path_hashes: List[str]|str, force: bool = False):
+    def mods_delete(self, path_hashes: List[str]|str, force: bool = False, delete_files: bool = True):
         """
-        批量物理删除 Mod 并抹除数据库记录
+        批量删除 Mod 库存记录；默认同时删除物理文件。
         :param paths: 绝对路径列表
         """
         try:
             normalized_hashes = self._normalize_str_items(path_hashes)
-            res = ModMaintenanceDAO.delete_mods_physically(normalized_hashes, force=force)
+            res = (
+                ModMaintenanceDAO.delete_mods_physically(normalized_hashes, force=force)
+                if delete_files
+                else ModMaintenanceDAO.delete_mod_records(normalized_hashes)
+            )
             res['force'] = bool(force)
+            res['delete_files'] = bool(delete_files)
             return self._build_delete_response("Mod", len(normalized_hashes), res)
         except Exception as e:
             return ApiResponse.error(f"删除失败: {str(e)}")
