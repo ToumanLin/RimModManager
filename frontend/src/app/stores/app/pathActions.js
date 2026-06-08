@@ -120,25 +120,46 @@ export const usePathActions = ({ settings } = {}) => {
   }
 
   // 批量删除文件/文件夹
-  const deletePaths = async (paths) => {
+  const deletePaths = async (paths, options = {}) => {
     if(!window.pywebview) return
+    const targetPaths = Array.isArray(paths) ? paths.filter(Boolean) : []
+    if (!targetPaths.length) return false
+    const {
+      title = '删除确认',
+      message = `确定要删除这 ${targetPaths.length} 个文件/文件夹吗？`,
+      trashOptionText = '移入回收站',
+      forceOptionText = '强制删除',
+      checkLabel = '批量删除文件/文件夹',
+      successMessage,
+      reScan = true,
+      allowWarning = false,
+    } = options || {}
     const confirmStore = useConfirmStore()
     const decision = await confirmStore.confirmDeleteAction(
-      '删除确认', `确定要删除这 ${paths.length} 个文件/文件夹吗？`,
-      {
-        trashOptionText: '移入回收站',
-        forceOptionText: '强制删除',
-      }
+      title,
+      message,
+      { trashOptionText, forceOptionText }
     );
     if(!decision?.confirmed) return
-    const res = await window.pywebview.api.paths_delete(paths, !!decision.force)
-    if (checkResult(res, "批量删除文件/文件夹")) {
-      toast.success(`${decision.force ? '已彻底删除' : '已移入回收站'} ${paths.length} 个文件/文件夹`)
+    const res = await window.pywebview.api.paths_delete(targetPaths, !!decision.force)
+    if (res?.status !== 'success' && !(allowWarning && res?.status === 'warning')) {
+      checkResult(res, checkLabel)
+      return false
+    }
+    if (res?.status === 'warning') {
+      toast.warning(res?.message || `${checkLabel}完成，但有部分项目需要确认`)
+    } else {
+      const messageText = typeof successMessage === 'function'
+        ? successMessage({ paths: targetPaths, force: !!decision.force, res })
+        : successMessage
+      toast.success(messageText || `${decision.force ? '已彻底删除' : '已移入回收站'} ${targetPaths.length} 个文件/文件夹`)
+    }
+    if (reScan) {
       // 刷新Mod列表
       const modStore = useModStore()
       modStore.scanMods()
-      return true
     }
+    return true
   }
 
   // 打开Url

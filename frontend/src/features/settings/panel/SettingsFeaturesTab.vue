@@ -6,6 +6,7 @@
                     <CommonSwitch class="col-span-1" label="启动时自动扫描 Mod 目录" v-model="formData.enable_auto_scan" description="关闭后，需要手动点击扫描按钮才能更新 Mod 列表。" />
                     <CommonSwitch class="col-span-1" label="环境直启前检查同步" v-model="formData.enable_launch_profile_quick_scan" description="从环境列表直接启动非当前环境时，会先检查并同步运行前所需的链接。开启后会先做一次轻量扫描再同步；关闭后只按当前数据库缓存和环境配置强制同步。" />
                     <CommonSwitch class="col-span-1" label="扫描时检查文件大小" v-model="formData.enable_file_size_scan" description="开启后，扫描时会自动检查 Mod 的文件大小，以此识别新增或更新的内容。该功能会增加扫描耗时，但能显著提高文件变动的识别精度。" />
+                    <CommonSwitch class="col-span-1" label="扫描时检查残留" v-model="formData.enable_mod_residue_scan" description="开启后，扫描完成时会自动识别卸载后留下的文件夹和设置文件；关闭后只在手动打开残留清理时检查。" />
                     <CommonSwitch class="col-span-1" label="自动清理缺失的 Mod 数据" v-model="formData.delete_missing_mods_data" description="关闭后，缺失的 Mod 数据将保留在数据库中，列表内可以重新订阅。" />
                     <CommonSwitch class="col-span-1" label="保存临时列表" v-model="formData.ui.persist_temp_mod_list" description="开启后，临时列表会按当前环境保存，下次进入该环境时自动恢复；关闭后，保存时会把临时列表里的 Mod 放回停用列表顶部。" />
                     <CommonSwitch class="col-span-1" label="关键动作前必要检查" v-model="formData.enable_action_prechecks" description="开启后，保存、运行、自动排序前会检查未安装项和未启用项；关闭后将直接执行，不再弹出检查窗口。" />

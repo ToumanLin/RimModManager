@@ -228,6 +228,9 @@
       @close="appStore.uiState.showModSettingsManager = false"
     />
 
+    <!-- 卸载残留清理弹窗 -->
+    <ModResidueCleanupModal />
+
     <!-- 环境管理抽屉 -->
     <ProfileDrawer />
 
@@ -312,6 +315,7 @@ import UpdateModal from '../features/dialogs/UpdateModal.vue'
 import GuideCenter from '../features/guide/GuideCenter.vue'
 import TextureOptModal from '../features/texture-opt/TextureOptModal.vue'
 import ModSettingsManagerModal from '../features/mod/ModSettingsManagerModal.vue'
+import ModResidueCleanupModal from '../features/mod-residue/ModResidueCleanupModal.vue'
 import SupplementSelectionDialog from '../features/supplement/SupplementSelectionDialog.vue'
 import MissingInstallDialog from '../features/supplement/MissingInstallDialog.vue'
 import PackageTransferDialog from '../features/package-transfer/PackageTransferDialog.vue'

@@ -360,20 +360,17 @@ const deleteItem = async (item) => {
 const deleteUnknownFiles = async () => {
   const paths = unknownCleanupPaths.value
   if (!paths.length || !window.pywebview) return
-  const decision = await confirmStore.confirmDeleteAction(
-    '清理残留配置',
-    `确定要删除 ${paths.length} 个已卸载或未知模组的设置文件吗？`,
-    { trashOptionText: '移入回收站', forceOptionText: '强制删除' }
-  )
-  if (!decision?.confirmed) return
   deleting.value = true
   try {
-    const res = await window.pywebview.api.paths_delete(paths, !!decision.force)
-    if (res?.status !== 'success' && res?.status !== 'warning') {
-      toast.error(res?.message || '清理残留配置失败')
-      return
-    }
-    toast.success(`${decision.force ? '已彻底删除' : '已移入回收站'} ${paths.length} 个设置文件`)
+    const ok = await appStore.deletePaths(paths, {
+      title: '清理残留配置',
+      message: `确定要删除 ${paths.length} 个已卸载或未知模组的设置文件吗？`,
+      checkLabel: '清理残留配置',
+      successMessage: ({ paths, force }) => `${force ? '已彻底删除' : '已移入回收站'} ${paths.length} 个设置文件`,
+      reScan: false,
+      allowWarning: true,
+    })
+    if (!ok) return
     await loadOverview()
   } finally {
     deleting.value = false

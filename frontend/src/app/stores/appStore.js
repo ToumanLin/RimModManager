@@ -11,6 +11,7 @@ import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 import { useProfileStore } from '../../features/profiles/profileStore'
 import { useTextureStore } from '../../features/texture-opt/textureStore'
 import { useWorkspaceStore } from '../../features/workspace/workspaceStore'
+import { useModResidueStore } from '../../features/mod-residue/modResidueStore'
 import { useTaskStore } from './taskStore'
 import { useStartupStore } from './startupStore'
 import { DEFAULT_THEME_ID, applyTheme, findThemeById, mergeThemes } from '../../features/settings/theme/themeManager'
@@ -59,6 +60,7 @@ export const useAppStore = defineStore('app', () => {
     showWorkspace: false,        // 是否显示工坊更新管理中心
     showTextureOptModal: false,  // 是否显示贴图优化弹窗
     showModSettingsManager: false, // 是否显示模组配置弹窗
+    showModResidueCleanup: false, // 是否显示卸载残留清理弹窗
     showFileSearchWorkbench: false, // 是否显示文件内容搜索工作台
     showPackageTransferDialog: false, // 是否显示模组包/数据包传输弹窗
   })
@@ -243,6 +245,7 @@ export const useAppStore = defineStore('app', () => {
     backup_retention_days: 30,
     enable_auto_scan: true,
     enable_file_size_scan: true,         // 扫描时是否检查文件大小
+    enable_mod_residue_scan: true,       // 扫描时是否识别卸载残留
     delete_missing_mods_data: false,
     auto_sort_strategy: "classic_sort_logic",  // 自动排序策略
     sort_mods_by: "name",                 // 自动排序排列方式: name, id, alias
@@ -719,12 +722,17 @@ export const useAppStore = defineStore('app', () => {
       }
       // 扫描完成后的逻辑主要涉及 Mod 数据更新
       const modStore = useModStore()
+      const residuePayload = detail?.residue_cleanup || null
       // 取出并清空本次扫描选项，避免下一次外部扫描误用旧状态。
       const scanRequest = activeModScanRequest.value
       activeModScanRequest.value = null
       await modStore.scanComplete(detail, {
         preserveListState: !!scanRequest?.preserveListState,
       })
+      if (residuePayload?.summary?.item_count > 0) {
+        useModResidueStore().setOverview(residuePayload)
+        uiState.showModResidueCleanup = true
+      }
       if (pendingModScanRequested.value) {
         window.setTimeout(() => {
           void flushQueuedModScan()

@@ -43,6 +43,11 @@
         <FileSliders class="size-6" />
       </button>
 
+      <button @click="openModResidueCleanup" v-tooltip="`清理卸载残留`"
+        class="p-2 rounded-full hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
+        <BrushCleaning class="size-6" />
+      </button>
+
       <button data-tour="log-viewer-entry" @click="appStore.toggleUiState('showLogDrawer')" v-tooltip="`日志页面`"
         class="p-2 rounded-full hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
         <svg class="size-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M16 14v2.2l1.6 1"/><path d="M16 4h2a2 2 0 0 1 2 2v.832"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h2"/><circle cx="16" cy="16" r="6"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
@@ -128,14 +133,16 @@ import { useAttrs } from 'vue'
 import { useAppStore } from '../stores/appStore.js'
 import { useAiStore } from '../../features/ai/aiStore.js'
 import ProfileSwitcher from '../../features/profiles/ProfileSwitcher.vue';
-import { BotMessageSquare, ClipboardList, FileSearch2, FileSliders, Images } from 'lucide-vue-next';
+import { BotMessageSquare, ClipboardList, FileSearch2, FileSliders, BrushCleaning, Images } from 'lucide-vue-next';
 import { useProfileStore } from '../../features/profiles/profileStore.js';
 import { useOrderStore } from '../../features/load-order/orderStore.js';
+import { useModResidueStore } from '../../features/mod-residue/modResidueStore.js';
 
 const appStore = useAppStore()
 const aiStore = useAiStore()
 const orderStore = useOrderStore()
 const profileStore = useProfileStore()
+const modResidueStore = useModResidueStore()
 const attrs = useAttrs()
 
 
@@ -164,6 +171,10 @@ const exportOrder = async (path, format='modsconfig') => {
 }
 const refresh = async () => {
   await orderStore.getBackups(orderStore.backupProfileId)
+}
+const openModResidueCleanup = async () => {
+  appStore.uiState.showModResidueCleanup = true
+  await modResidueStore.loadOverview()
 }
 </script>
 

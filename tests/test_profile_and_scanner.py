@@ -1396,12 +1396,14 @@ class TestApiScanMods(unittest.TestCase):
             profile_id="profile-a",
         )
         api.scanner = Mock()
+        api.load_order_mgr = None
         api.scanner.scan_paths_async.return_value = {"status": "started", "task_id": "task-1"}
 
         config = SimpleNamespace(
             self_mods_path="D:/RMM/SelfMods",
             workshop_mods_path="D:/Steam/workshop/content/294100",
             enable_tool_mods=False,
+            enable_mod_residue_scan=True,
         )
 
         with patch("backend.api.settings.config", config), \
@@ -1417,6 +1419,8 @@ class TestApiScanMods(unittest.TestCase):
                 "D:/Steam/workshop/content/294100",
             ],
             forced_update=False,
+            residue_active_tokens=[],
+            residue_scan_enabled=True,
         )
 
     def test_scan_mods_skips_self_when_current_local_matches_self(self):
@@ -1429,12 +1433,14 @@ class TestApiScanMods(unittest.TestCase):
             profile_id="profile-a",
         )
         api.scanner = Mock()
+        api.load_order_mgr = None
         api.scanner.scan_paths_async.return_value = {"status": "started", "task_id": "task-1"}
 
         config = SimpleNamespace(
             self_mods_path="C:/Games/RimWorld/Mods",
             workshop_mods_path="D:/Steam/workshop/content/294100",
             enable_tool_mods=False,
+            enable_mod_residue_scan=True,
         )
 
         with patch("backend.api.settings.config", config), \
@@ -1449,6 +1455,8 @@ class TestApiScanMods(unittest.TestCase):
                 "D:/Steam/workshop/content/294100",
             ],
             forced_update=False,
+            residue_active_tokens=[],
+            residue_scan_enabled=True,
         )
 
     def test_workspace_classification_treats_current_local_self_path_as_local_only(self):

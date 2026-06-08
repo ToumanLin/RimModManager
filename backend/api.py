@@ -78,6 +78,7 @@ from backend.managers.mgr_update import UpdateManager, UpdateInfo
 from backend.managers.mgr_game_monitor import GameMonitor
 from backend.managers.mgr_profile import ProfileContext, ProfileManager
 from backend.managers.mgr_mod_config import ModSettingsManager
+from backend.managers.mgr_mod_residue import ModResidueManager
 from backend.utils.profile_runtime import resolve_profile_runtime_capabilities
 from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.managers.mgr_github import GithubManager
@@ -1755,7 +1756,12 @@ class API:
             # 2. 识别 Local vs Workshop 冲突
             # 3. 触发当前环境的运行态收敛回调（若仍是当前环境）
             if not self.scanner: return ApiResponse.error("扫描器未初始化")
-            result = self.scanner.scan_paths_async(paths_to_scan, forced_update=forced_update)
+            result = self.scanner.scan_paths_async(
+                paths_to_scan,
+                forced_update=forced_update,
+                residue_active_tokens=self._read_active_mod_tokens(),
+                residue_scan_enabled=bool(getattr(settings.config, "enable_mod_residue_scan", True)),
+            )
         except Exception as e:
             logger.error(f"Scan mods failed: {str(e)}", exc_info=True)
             return ApiResponse.error(f"扫描模组失败：{str(e)}")
@@ -2158,61 +2164,59 @@ class API:
 
     def _read_active_mod_tokens(self) -> list[str]:
         """读取当前启用列表 token；配置文件识别只需要这个轻量输入。"""
-        if not self.load_order_mgr:
+        if not getattr(self, "load_order_mgr", None):
             return []
         return list((self.load_order_mgr.read_active_mods() or {}).get("active_mods", []) or [])
 
     @log_api_call
     def mod_config_workshop_details(self, workshop_ids: List[str]):
         """批量补全模组配置残留文件里猜测出的工坊信息。"""
-        normalized_ids = []
-        seen_ids = set()
-        for raw_id in workshop_ids or []:
-            workshop_id = normalize_workshop_id(raw_id, digits_only=True, min_length=6, max_length=20)
-            if not workshop_id or workshop_id in seen_ids:
-                continue
-            seen_ids.add(workshop_id)
-            normalized_ids.append(workshop_id)
-        if not normalized_ids:
-            return ApiResponse.success({})
         try:
-            cached_details = {}
-            try:
-                cached_details = ExtDAO.get_workshop_details_by_workshop_ids(normalized_ids) or {}
-            except Exception as cache_error:
-                logger.debug("Mod config workshop local detail lookup failed: %s", cache_error, exc_info=True)
-
-            details = {}
-            try:
-                details, _ = SteamWebAPI.fetch_item_details(normalized_ids, trace_label="mod-config")
-            except Exception as online_error:
-                logger.debug("Mod config workshop online detail lookup failed: %s", online_error, exc_info=True)
-            result = {}
-            for workshop_id in normalized_ids:
-                cached = cached_details.get(workshop_id) or {}
-                online = details.get(workshop_id) or {}
-                title = str(online.get("title") or cached.get("name") or "").strip()
-                preview_url = online.get("preview_url") or cached.get("preview_url")
-                time_updated = int(online.get("time_updated") or cached.get("time_updated") or 0)
-                has_online_detail = bool(str(online.get("title") or "").strip() or online.get("preview_url") or online.get("time_updated"))
-                cached_package_id = normalize_package_id(cached.get("package_id"))
-                has_cached_detail = bool(str(cached.get("name") or "").strip() or cached.get("preview_url") or cached_package_id)
-                result[workshop_id] = {
-                    "workshop_id": workshop_id,
-                    "package_id": cached_package_id,
-                    "title": title,
-                    "name": str(cached.get("name") or "").strip(),
-                    "author": cached.get("author") or [],
-                    "preview_url": preview_url,
-                    "url": cached.get("url") or f"https://steamcommunity.com/sharedfiles/filedetails/?id={workshop_id}",
-                    "time_updated": time_updated,
-                    "detail_source": "online" if has_online_detail else ("database" if has_cached_detail else "unavailable"),
-                    "available": bool(has_online_detail or has_cached_detail),
-                }
-            return ApiResponse.success(result)
+            return ApiResponse.success(SteamWebAPI.get_workshop_details(workshop_ids or [], trace_label="mod-config"))
         except Exception as e:
             logger.warning("Mod config workshop detail fetch failed: %s", e, exc_info=True)
             return ApiResponse.error(f"获取工坊信息失败: {e}")
+
+    @log_api_call
+    def mod_residue_get_overview(self):
+        """读取当前扫描范围内的卸载残留目录与关联设置文件。"""
+        if not self.active_context:
+            return ApiResponse.error("当前环境未初始化")
+        try:
+            paths_to_scan = self._build_scan_paths_for_profile(self.active_context)
+            overview = ModResidueManager.get_overview(paths_to_scan, self.active_context, self._read_active_mod_tokens())
+            return ApiResponse.success(overview)
+        except Exception as e:
+            logger.warning("读取卸载残留总览失败: %s", e, exc_info=True)
+            return ApiResponse.error(f"读取卸载残留失败: {e}")
+
+    @log_api_call
+    def mod_residue_whitelist_add(self, paths: List[str] | str):
+        """把残留项加入卸载残留白名单，后续扫描直接跳过。"""
+        if not self.active_context:
+            return ApiResponse.error("当前环境未初始化")
+        try:
+            result = ModResidueManager.add_whitelist_paths(paths)
+            paths_to_scan = self._build_scan_paths_for_profile(self.active_context)
+            result["overview"] = ModResidueManager.get_overview(paths_to_scan, self.active_context, self._read_active_mod_tokens())
+            return ApiResponse.success(result, message="已加入残留白名单")
+        except Exception as e:
+            logger.warning("加入卸载残留白名单失败: %s", e, exc_info=True)
+            return ApiResponse.error(f"加入残留白名单失败: {e}")
+
+    @log_api_call
+    def mod_residue_whitelist_remove(self, paths: List[str] | str):
+        """从卸载残留白名单移除残留项。"""
+        if not self.active_context:
+            return ApiResponse.error("当前环境未初始化")
+        try:
+            result = ModResidueManager.remove_whitelist_paths(paths)
+            paths_to_scan = self._build_scan_paths_for_profile(self.active_context)
+            result["overview"] = ModResidueManager.get_overview(paths_to_scan, self.active_context, self._read_active_mod_tokens())
+            return ApiResponse.success(result, message="已移出残留白名单")
+        except Exception as e:
+            logger.warning("移除卸载残留白名单失败: %s", e, exc_info=True)
+            return ApiResponse.error(f"移除残留白名单失败: {e}")
 
     @log_api_call
     def load_order_file_open(self, mods_config_file_path: str|None = None, profile_id: str | None = None):
@@ -2782,7 +2786,7 @@ class API:
                 return { "ok": False, "message": "目标环境没有可用于启动前检查同步的模组路径。", "mode": "missing-scan-paths" }
             try:
                 # 直启前检查同步要强制刷新目录事实，但不做目录体积统计，避免把启动准备拖慢。
-                temp_scanner._scan_paths_task("launch-prepare", scan_paths, forced_update=True, size_check_override=False, emit_events=False)
+                temp_scanner._scan_paths_task("launch-prepare", scan_paths, forced_update=True, size_check_override=False, emit_events=False, residue_scan_enabled=False)
             finally:
                 try:
                     temp_scanner.executor.shutdown(wait=False, cancel_futures=False)
