@@ -40,7 +40,7 @@ from backend.managers.mgr_steamcmd_core import SteamCMDController
 from backend.settings import DATA_DIR, HOME_DIR, TOOL_MODS_DIR, settings, RULES_DIR
 from backend.utils.event_bus import EventBus
 from backend._version import __version__, __build__, get_all_changelogs
-from backend.utils.tools import normalize_package_id
+from backend.utils.tools import normalize_package_id, normalize_workshop_id
 from backend.utils.tools import current_ms, generate_path_hash
 from backend.utils.logger import logger, app_log_reader
 from backend.utils.shortcuts import get_desktop_directory
@@ -77,7 +77,7 @@ from backend.managers.mgr_workshop_db import WorkshopDBManager
 from backend.managers.mgr_update import UpdateManager, UpdateInfo
 from backend.managers.mgr_game_monitor import GameMonitor
 from backend.managers.mgr_profile import ProfileContext, ProfileManager
-from backend.managers.mgr_mod_config import ModConfigManager
+from backend.managers.mgr_mod_config import ModSettingsManager
 from backend.utils.profile_runtime import resolve_profile_runtime_capabilities
 from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.managers.mgr_github import GithubManager
@@ -2134,11 +2134,8 @@ class API:
         """读取当前环境下官方 ModSettings 配置文件总览。"""
         if not self.active_context:
             return ApiResponse.error("当前环境未初始化")
-        active_tokens = []
-        if self.load_order_mgr:
-            active_tokens = list((self.load_order_mgr.read_active_mods() or {}).get("active_mods", []) or [])
         try:
-            overview = ModConfigManager.get_overview(self.active_context, active_tokens)
+            overview = ModSettingsManager.get_overview(self.active_context, self._read_active_mod_tokens())
             return ApiResponse.success(overview)
         except Exception as e:
             return ApiResponse.error(f"读取模组配置总览失败: {e}")
@@ -2148,19 +2145,74 @@ class API:
         """在同一 package_id 分组内手动覆盖同步配置文件。"""
         if not self.active_context:
             return ApiResponse.error("当前环境未初始化")
-        active_tokens = []
-        if self.load_order_mgr:
-            active_tokens = list((self.load_order_mgr.read_active_mods() or {}).get("active_mods", []) or [])
         try:
-            result = ModConfigManager.sync_group_instance(
+            result = ModSettingsManager.sync_group_instance(
                 self.active_context,
-                active_tokens,
+                self._read_active_mod_tokens(),
                 source_path,
                 target_path,
             )
             return ApiResponse.success(result, message="已完成配置覆盖")
         except Exception as e:
             return ApiResponse.error(f"覆盖配置失败: {e}")
+
+    def _read_active_mod_tokens(self) -> list[str]:
+        """读取当前启用列表 token；配置文件识别只需要这个轻量输入。"""
+        if not self.load_order_mgr:
+            return []
+        return list((self.load_order_mgr.read_active_mods() or {}).get("active_mods", []) or [])
+
+    @log_api_call
+    def mod_config_workshop_details(self, workshop_ids: List[str]):
+        """批量补全模组配置残留文件里猜测出的工坊信息。"""
+        normalized_ids = []
+        seen_ids = set()
+        for raw_id in workshop_ids or []:
+            workshop_id = normalize_workshop_id(raw_id, digits_only=True, min_length=6, max_length=20)
+            if not workshop_id or workshop_id in seen_ids:
+                continue
+            seen_ids.add(workshop_id)
+            normalized_ids.append(workshop_id)
+        if not normalized_ids:
+            return ApiResponse.success({})
+        try:
+            cached_details = {}
+            try:
+                cached_details = ExtDAO.get_workshop_details_by_workshop_ids(normalized_ids) or {}
+            except Exception as cache_error:
+                logger.debug("Mod config workshop local detail lookup failed: %s", cache_error, exc_info=True)
+
+            details = {}
+            try:
+                details, _ = SteamWebAPI.fetch_item_details(normalized_ids, trace_label="mod-config")
+            except Exception as online_error:
+                logger.debug("Mod config workshop online detail lookup failed: %s", online_error, exc_info=True)
+            result = {}
+            for workshop_id in normalized_ids:
+                cached = cached_details.get(workshop_id) or {}
+                online = details.get(workshop_id) or {}
+                title = str(online.get("title") or cached.get("name") or "").strip()
+                preview_url = online.get("preview_url") or cached.get("preview_url")
+                time_updated = int(online.get("time_updated") or cached.get("time_updated") or 0)
+                has_online_detail = bool(str(online.get("title") or "").strip() or online.get("preview_url") or online.get("time_updated"))
+                cached_package_id = normalize_package_id(cached.get("package_id"))
+                has_cached_detail = bool(str(cached.get("name") or "").strip() or cached.get("preview_url") or cached_package_id)
+                result[workshop_id] = {
+                    "workshop_id": workshop_id,
+                    "package_id": cached_package_id,
+                    "title": title,
+                    "name": str(cached.get("name") or "").strip(),
+                    "author": cached.get("author") or [],
+                    "preview_url": preview_url,
+                    "url": cached.get("url") or f"https://steamcommunity.com/sharedfiles/filedetails/?id={workshop_id}",
+                    "time_updated": time_updated,
+                    "detail_source": "online" if has_online_detail else ("database" if has_cached_detail else "unavailable"),
+                    "available": bool(has_online_detail or has_cached_detail),
+                }
+            return ApiResponse.success(result)
+        except Exception as e:
+            logger.warning("Mod config workshop detail fetch failed: %s", e, exc_info=True)
+            return ApiResponse.error(f"获取工坊信息失败: {e}")
 
     @log_api_call
     def load_order_file_open(self, mods_config_file_path: str|None = None, profile_id: str | None = None):

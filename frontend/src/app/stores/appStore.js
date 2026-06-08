@@ -58,7 +58,7 @@ export const useAppStore = defineStore('app', () => {
     showAIDefinitionManager: false,    // 是否显示 AI 定义管理器
     showWorkspace: false,        // 是否显示工坊更新管理中心
     showTextureOptModal: false,  // 是否显示贴图优化弹窗
-    showModConfigManager: false, // 是否显示模组配置弹窗
+    showModSettingsManager: false, // 是否显示模组配置弹窗
     showFileSearchWorkbench: false, // 是否显示文件内容搜索工作台
     showPackageTransferDialog: false, // 是否显示模组包/数据包传输弹窗
   })

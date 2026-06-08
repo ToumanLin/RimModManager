@@ -223,9 +223,9 @@
     <TextureOptModal />
 
     <!-- 模组配置弹窗 -->
-    <ModConfigManagerModal
-      :visible="appStore.uiState.showModConfigManager"
-      @close="appStore.uiState.showModConfigManager = false"
+    <ModSettingsManagerModal
+      :visible="appStore.uiState.showModSettingsManager"
+      @close="appStore.uiState.showModSettingsManager = false"
     />
 
     <!-- 环境管理抽屉 -->
@@ -311,7 +311,7 @@ import WorkspaceOverlay from '../features/workspace/WorkspaceOverlay.vue'
 import UpdateModal from '../features/dialogs/UpdateModal.vue'
 import GuideCenter from '../features/guide/GuideCenter.vue'
 import TextureOptModal from '../features/texture-opt/TextureOptModal.vue'
-import ModConfigManagerModal from '../features/mod/ModConfigManagerModal.vue'
+import ModSettingsManagerModal from '../features/mod/ModSettingsManagerModal.vue'
 import SupplementSelectionDialog from '../features/supplement/SupplementSelectionDialog.vue'
 import MissingInstallDialog from '../features/supplement/MissingInstallDialog.vue'
 import PackageTransferDialog from '../features/package-transfer/PackageTransferDialog.vue'

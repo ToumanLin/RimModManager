@@ -8,7 +8,7 @@
   </div>
 
   <div v-else-if="!hasContent" class="flex h-full items-center justify-center px-6 text-center text-sm text-text-dim">
-    选择左侧文件或命中项后，这里显示只读文件内容。
+    {{ emptyText }}
   </div>
 
   <div v-else class="h-full min-h-0 overflow-hidden" :style="editorCssVars">
@@ -70,6 +70,10 @@ const props = defineProps({
   activeMatch: {
     type: Object,
     default: null,
+  },
+  emptyText: {
+    type: String,
+    default: '选择左侧文件或命中项后，这里显示只读文件内容。',
   },
 })
 

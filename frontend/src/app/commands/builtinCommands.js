@@ -207,13 +207,13 @@ export const registerBuiltinCommands = () => {
       run: ({ appStore }) => appStore.toggleUiState('showTextureOptModal'),
     },
     {
-      id: 'app.openModConfigManager',
+      id: 'app.openModSettingsManager',
       title: '打开模组配置',
       category: '应用',
       scope: 'global',
       defaultKeys: [],
       description: '打开模组配置查看器。',
-      run: ({ appStore }) => appStore.toggleUiState('showModConfigManager'),
+      run: ({ appStore }) => appStore.toggleUiState('showModSettingsManager'),
     },
     {
       id: 'app.launchGame',

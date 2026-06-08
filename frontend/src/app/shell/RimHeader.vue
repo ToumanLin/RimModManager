@@ -38,7 +38,7 @@
         <FileSearch2 class="size-6" />
       </button>
 
-      <button @click="appStore.toggleUiState('showModConfigManager')" v-tooltip="`查看模组配置`"
+      <button @click="appStore.toggleUiState('showModSettingsManager')" v-tooltip="`查看模组配置`"
         class="p-2 rounded-full hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
         <FileSliders class="size-6" />
       </button>

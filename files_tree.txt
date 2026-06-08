@@ -196,7 +196,7 @@
 │   │   │   ├──  LogViewer.vue
 │   │   │   ├──  MissingInstallDialog.vue
 │   │   │   ├──  ModAliasReviewModal.vue
-│   │   │   ├──  ModConfigManagerModal.vue
+│   │   │   ├──  ModSettingsManagerModal.vue
 │   │   │   ├──  ModDetails.vue
 │   │   │   ├──  ModList.vue
 │   │   │   ├──  ModRuleEditor.vue
