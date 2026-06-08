@@ -122,6 +122,7 @@ export const useModStore = defineStore('mods', () => {
   const inactiveIds = ref([])         // 未激活Mod列表
   const tempIds = ref([])             // 临时Mod列表
   const activeIds = ref([])           // 已激活Mod列表
+  const disabledMods = ref([])        // 当前环境路径范围内的物理禁用 Mod 资产
 
   const interlocksMap = ref(new Map()) // 联锁字典: Map<String(interlock_id), Array<String(package_ids)>>
   const savedInactiveIds = ref([])   // 从后端拉取的历史停用顺序
@@ -241,6 +242,7 @@ export const useModStore = defineStore('mods', () => {
     resolveStoredMod,
     beforeUndoListHistory: confirmUndoListHistory,
   })
+  const disabledPathHashes = computed(() => disabledMods.value.map(mod => mod.path_hash).filter(Boolean))
   const setListIds = (listId, ids = []) => {
     const nextIds = normalizeHistoryModIds(ids)
     nextIds.forEach(id => dismissedUnavailableIds.delete(id))
@@ -497,6 +499,11 @@ export const useModStore = defineStore('mods', () => {
       await Promise.allSettled(pendingTasks)
     }
   }
+  const takeDisabledModByPathHash = (pathHash) => {
+    const targetHash = String(pathHash || '').trim()
+    if (!targetHash) return null
+    return disabledMods.value.find(mod => mod?.path_hash === targetHash) || null
+  }
   // 设置 Mod 数据
   const setMods = (data, options = {}) => {
     const { resetHistory = false, preserveListState = false } = options || {}
@@ -550,6 +557,7 @@ export const useModStore = defineStore('mods', () => {
       tempMap.set(canonicalId, mod)
     })
     allModsMap.value = tempMap
+    disabledMods.value = Array.isArray(data.disabled_mods) ? data.disabled_mods.filter(mod => mod?.path_hash) : []
     if (lastSelectedMod.value) {
       const lastToken = lastSelectedMod.value.active_package_token || lastSelectedMod.value.package_id
       lastSelectedMod.value = takeModById(lastToken) || (selectedIds.value.length > 0
@@ -574,6 +582,7 @@ export const useModStore = defineStore('mods', () => {
     activeIds.value = []
     inactiveIds.value = []
     tempIds.value = []
+    disabledMods.value = []
     savedActiveIds.value = []
     savedInactiveIds.value = []
     savedTempIds.value = []
@@ -936,23 +945,58 @@ export const useModStore = defineStore('mods', () => {
     }
   }
   // 批量禁用选中项Mod
-  const disableMods = async (path_hashs, disabled = true) => {
-    if (!path_hashs || path_hashs.length === 0) return;
-    if(disabled) {
+  const disableMods = async (pathHashes, disabled = true, options = {}) => {
+    const hashes = [...new Set((Array.isArray(pathHashes) ? pathHashes : [pathHashes]).map(hash => String(hash || '').trim()).filter(Boolean))]
+    if (hashes.length === 0) return false
+    if (disabled) {
+      const countText = hashes.length > 1 ? `选中的 ${hashes.length} 个 Mod` : '该 Mod'
       const confirm = await confirmStore.confirmAction(
         '禁用确认',
-        `确定要禁用该模组吗？\n禁用后将无法在游戏中使用，直到重新启用。`,
+        `确定要禁用${countText}吗？\n禁用后将无法在游戏中使用，可在“已禁用”列表中重新启用。`,
         { type: 'warning' }
       );
-      if(!confirm) return
+      if (!confirm) return false
     }
     appStore.isLoading = true;
-    const res = await window.pywebview.api.mods_disable(path_hashs, disabled);
-    if (checkResult(res, '禁用选中的模组')) {
-      // 成功后会在完成时刷新数据
-      scanMods()
+    try {
+      const res = await window.pywebview.api.mods_disable(hashes, disabled);
+      const actionText = disabled ? '禁用选中的模组' : '启用选中的模组'
+      if (checkResult(res, actionText)) {
+        const successCount = Number(res.data?.success_count || hashes.length)
+        const errorCount = Number(res.data?.error_count || 0)
+        toast.success(`${disabled ? '已禁用' : '已启用'} ${successCount} 个 Mod${errorCount ? `，${errorCount} 个失败` : ''}`)
+        if (options.finishScan !== false) {
+          await appStore.requestModScan({ preserveListState: !!options.preserveListState })
+        }
+        return res.data || { success_count: successCount, error_count: errorCount }
+      }
+      return false
+    } finally {
+      appStore.isLoading = false;
     }
-    appStore.isLoading = false;
+  }
+  const disableSelectedMods = async (ids = selectedIds.value) => {
+    const items = resolveSelectedActionItems(ids).filter(item => item.mod?.path_hash)
+    const pathHashes = [...new Set(items.map(item => item.mod.path_hash).filter(Boolean))]
+    if (pathHashes.length === 0) return false
+    const result = await disableMods(pathHashes, true, { finishScan: false })
+    if (!result) return false
+    const successPathHashes = new Set((result.success_items || []).map(item => item.path_hash).filter(Boolean))
+    const changedItems = successPathHashes.size > 0
+      ? items.filter(item => successPathHashes.has(item.mod.path_hash))
+      : items
+    if (changedItems.length === 0) return false
+    await runListHistoryTransaction({
+      type: 'disable-mod-files',
+      label: `禁用 ${changedItems.length} 个 Mod`,
+      trackedModIds: changedItems.map(item => item.id).filter(Boolean),
+    }, async () => {
+      removeIdsOnAllList(changedItems.map(item => item.id))
+      selectMods([])
+      return true
+    })
+    await appStore.requestModScan({ preserveListState: true })
+    return true
   }
   // 批量删除Mod文件及数据记录
   const deleteMods = async (path_hashes, finish_scan = true) => {
@@ -1354,7 +1398,7 @@ export const useModStore = defineStore('mods', () => {
 
   return {
     // 状态
-    allModsMap, dataVersion, inactiveIds, tempIds, activeIds, interlocksMap, savedInactiveIds, savedTempIds, interlockDetailsMap,
+    allModsMap, dataVersion, inactiveIds, tempIds, activeIds, disabledMods, disabledPathHashes, interlocksMap, savedInactiveIds, savedTempIds, interlockDetailsMap,
     savedActiveIds, activeLoadModifyTime, activeLoadVersionToken, conflictList, coexistenceList,
     selectedIds, lastSelectedMod, currentTargetId, isDraggingMod,
     listHistoryUndoStack, listHistoryRedoStack, isApplyingListHistory,
@@ -1365,12 +1409,12 @@ export const useModStore = defineStore('mods', () => {
     canUndoListHistory, canRedoListHistory,
 
     // 列表读取与基础写入
-    setMods, reset, setActiveLoadBaseline, captureListHistorySnapshot, takeModById, hasRealModById, hasInstalledWorkshopId, takeModListByIds, displayModName, displayModType, displayModIcon, fetchAndCacheGhostMods,
+    setMods, reset, setActiveLoadBaseline, captureListHistorySnapshot, takeModById, takeDisabledModByPathHash, hasRealModById, hasInstalledWorkshopId, takeModListByIds, displayModName, displayModType, displayModIcon, fetchAndCacheGhostMods,
     // 来源提示与列表选择
     getInstallSourceHints, mergeInstallSourceHintsFromMods, clearInstallSourceHints, clearInstallSourceHintsByOrigin,
     updateInactiveIds, takeInactiveIds, setListIds, removeIdsOnAllList, removeDeletedModsFromLocalData, removeUnavailableIdsCompletely, selectMods, clearSelection, changeModsActive, getModInterlockChain, loadInterlockDetails,
     // 扫描、排序与模组操作
-    scanMods, scanComplete, autoSortMods, localizeSelectedMods, localizeMods, disableMods, deleteMods, deleteSelectedModFiles, unsubscribeSelectedWorkshopMods, smartInsertMods,
+    scanMods, scanComplete, autoSortMods, localizeSelectedMods, localizeMods, disableMods, disableSelectedMods, deleteMods, deleteSelectedModFiles, unsubscribeSelectedWorkshopMods, smartInsertMods,
     canSwitchCoexistenceSource, switchCoexistenceSource, toggleCoexistenceSource, toggleSelectedCoexistenceSource, revealSelectedMod,
     // 用户数据与联锁
     updateModUserData, updateModTime, linkMods, unlinkMods, healInterlock, getInterlockMissingDetails, batchUpdateModsUserData,

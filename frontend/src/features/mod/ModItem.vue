@@ -197,7 +197,7 @@ import { useCommandStore } from '../../shared/commands/commandStore'
 import { DEFAULT_ACCENT_HEX, hexToRgba, hexToRgb, normalizeHexColor } from '../../shared/lib/color'
 import { extractSectionHeaderTitle, isSectionHeaderTitle } from '../../shared/lib/common'
 import { normalizePackageId, normalizePackageToken } from './lib/modIdentity'
-import { X, FolderInput, Tag, Group, Palette, BetweenHorizontalStart, Redo2, ChevronDown, ChevronsDown, ChevronUp, ChevronsUp, ChessPawn, Goal, Download, Eraser, FolderMinus, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight, LockOpen, SquaresExclude, Package, ChevronsDownUp, ChevronsUpDown } from 'lucide-vue-next';
+import { X, FolderInput, Tag, Group, Palette, BetweenHorizontalStart, Redo2, ChevronDown, ChevronsDown, ChevronUp, ChevronsUp, ChessPawn, Goal, Download, Eraser, FolderMinus, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight, Lock, LockOpen, SquaresExclude, Package, ChevronsDownUp, ChevronsUpDown } from 'lucide-vue-next';
 
 
 const props = defineProps({
@@ -450,6 +450,7 @@ const handleContextMenu = async (event) => {
   await ensureInterlockDetails()
   const selectedIds = modStore.selectedIds;
   const selectedCountStr = selectedIds.length>1?` (${selectedIds.length}项)`:''
+  const selectedHasPathHash = modStore.selectedMods.some(m => !!m?.path_hash)
   const coexistSelectedIds = selectedIds.filter(id => modStore.canSwitchCoexistenceSource(id))
   const coexistSelectedCountStr = coexistSelectedIds.length>1?` (${coexistSelectedIds.length}项)`:''
   modStore.lastSelectedMod=modStore.takeModById(props.item_id)  // 记录最后选中的模组
@@ -555,6 +556,7 @@ const handleContextMenu = async (event) => {
         { label: '切换为本地版' + coexistSelectedCountStr, icon: FolderMinus, action: () => modStore.switchCoexistenceSource(coexistSelectedIds, 'local') },
       ]
     },
+    { commandId: 'mods.disableSelectedFiles', args: { modIds: [...selectedIds] }, labelOverride: '禁用'+ selectedCountStr, icon: Lock, level: 'warn', disabled: !selectedHasPathHash },
     { commandId: 'mods.deleteSelectedFiles', args: { modIds: [...selectedIds] }, labelOverride: '删除'+ selectedCountStr, disabled: !modData.value.path, icon: Trash2 },
   ]
 

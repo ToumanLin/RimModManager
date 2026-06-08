@@ -9,6 +9,7 @@ from backend.database.models import MOD_ASSET_STATE_MISSING, MOD_ASSET_STATE_PRE
 from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.managers.mgr_profile import ProfileContext
 from backend.scanner.mod_scanner import ModScanner
+from backend.settings import settings
 from backend.utils.tools import generate_path_hash
 
 
@@ -196,6 +197,62 @@ class TestModAssetMissingState(unittest.TestCase):
         local_hashes = {item["path_hash"] for item in matrix["local"]}
 
         self.assertEqual(local_hashes, {"current-present", "current-missing"})
+
+    def test_profile_disabled_mods_only_use_current_environment_paths(self):
+        temp_root = Path(self.temp_dir.name)
+        current_game = temp_root / "CurrentGame"
+        other_game = temp_root / "OtherGame"
+        workshop_root = temp_root / "Workshop"
+        self_root = temp_root / "SelfMods"
+
+        original_workshop = settings.config.workshop_mods_path
+        original_self = settings.config.self_mods_path
+        original_tool_enabled = settings.config.enable_tool_mods
+        self.addCleanup(setattr, settings.config, "workshop_mods_path", original_workshop)
+        self.addCleanup(setattr, settings.config, "self_mods_path", original_self)
+        self.addCleanup(setattr, settings.config, "enable_tool_mods", original_tool_enabled)
+        settings.config.workshop_mods_path = str(workshop_root)
+        settings.config.self_mods_path = str(self_root)
+        settings.config.enable_tool_mods = False
+
+        rows = [
+            ("current-local-disabled", current_game / "Mods" / "LocalDisabled", "local", True, MOD_ASSET_STATE_PRESENT),
+            ("current-workshop-disabled", workshop_root / "123", "workshop", True, MOD_ASSET_STATE_PRESENT),
+            ("current-self-disabled", self_root / "SelfDisabled", "self", True, MOD_ASSET_STATE_PRESENT),
+            ("other-local-disabled", other_game / "Mods" / "OtherDisabled", "local", True, MOD_ASSET_STATE_PRESENT),
+            ("current-local-enabled", current_game / "Mods" / "LocalEnabled", "local", False, MOD_ASSET_STATE_PRESENT),
+            ("current-local-missing", current_game / "Mods" / "LocalMissing", "local", True, MOD_ASSET_STATE_MISSING),
+        ]
+        for path_hash, path, store, disabled, state in rows:
+            ModAsset.create(
+                path_hash=path_hash,
+                package_id=f"author.{path_hash}",
+                name=path_hash,
+                path=str(path),
+                source=store,
+                store=store,
+                disabled=disabled,
+                state=state,
+            )
+
+        context = ProfileContext(
+            profile_id="current",
+            game_version="1.5.4100",
+            game_install_path=str(current_game),
+            user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
+            use_workshop_mods=False,
+            use_self_mods=False,
+        )
+
+        disabled_mods = ModDAO.get_profile_disabled_mods(context)
+        disabled_hashes = {item["path_hash"] for item in disabled_mods}
+
+        self.assertEqual(disabled_hashes, {
+            "current-local-disabled",
+            "current-workshop-disabled",
+            "current-self-disabled",
+        })
 
     def test_probe_item_availability_marks_empty_details_unavailable(self):
         workshop_id = "2941001234"

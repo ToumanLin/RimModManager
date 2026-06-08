@@ -1044,6 +1044,7 @@ class API:
             "context_healthy": False, 
             "health_report": {},
             "all_mods": [],  # 返回过滤后的列表
+            "disabled_mods": [],
             "groups": [],
             "active_load_order": [],
             "active_load_modify_time": 0,
@@ -1063,6 +1064,7 @@ class API:
         #   - 过滤掉未启用 Workshop 环境下的 Workshop Mod
         #   - 执行 "Local 覆盖 Workshop" 的遮蔽策略
         context_mods = ModDAO.get_profile_mods(self.active_context)
+        disabled_mods = ModDAO.get_profile_disabled_mods(self.active_context)
         # 3. 获取所有分组数据 (结构化)
         # 传入当前的 assets 列表 ID，用于过滤掉分组中存在但当前环境下不可见的 Mod
         current_assets_ids = [m['package_id'] for m in context_mods]
@@ -1112,10 +1114,18 @@ class API:
                 mod['replacement'] = replacements_map[mod['workshop_id']]
             else:
                 mod['replacement'] = None
+        for mod in disabled_mods:
+            if dlc_parser:
+                dlc_parser.translate_record(mod, settings.config.language)
+            if mod['workshop_id'] and mod['workshop_id'] in replacements_map:
+                mod['replacement'] = replacements_map[mod['workshop_id']]
+            else:
+                mod['replacement'] = None
         
         
         result.update({
             "all_mods": context_mods,  # 返回过滤后的列表
+            "disabled_mods": disabled_mods,
             "groups": all_groups,
             "interlocks": interlock_map,
             "active_load_order": active_load_order.get('active_mods', []),
@@ -1846,17 +1856,43 @@ class API:
     def mods_disable(self, path_hashes: List[str], disabled: bool = True):
         """
         禁用或启用指定 Mod。
-        :param package_id: Mod 的 package_id
+        :param path_hashes: Mod 的 path_hash 列表
         :param disabled: 是否禁用 (True) 或启用 (False)
         """
         try:
+            success_items = []
+            failed_items = []
             for path_hash in path_hashes:
                 # 1. 校验 path_hash 是否存在
                 mod = ModAsset.get_or_none(ModAsset.path_hash == path_hash)
-                if not mod: continue
+                if not mod:
+                    failed_items.append({"path_hash": path_hash, "message": "未找到 Mod 记录"})
+                    continue
                 # 2. 执行禁用/启用操作
-                ModMaintenanceDAO.set_mod_disabled_status(mod.path, disabled)
-            return ApiResponse.success(message=f"Mod {'已禁用' if disabled else '已启用'}")
+                success, message = ModMaintenanceDAO.set_mod_disabled_status(mod.path, disabled)
+                item = {
+                    "path_hash": path_hash,
+                    "package_id": mod.package_id,
+                    "name": mod.name,
+                    "message": message,
+                }
+                if success:
+                    success_items.append(item)
+                else:
+                    failed_items.append(item)
+            action_text = "禁用" if disabled else "启用"
+            if not success_items and failed_items:
+                return ApiResponse.error(f"Mod {action_text}失败: {failed_items[0].get('message')}", {
+                    "success_count": 0,
+                    "error_count": len(failed_items),
+                    "errors": failed_items,
+                })
+            return ApiResponse.success({
+                "success_count": len(success_items),
+                "error_count": len(failed_items),
+                "success_items": success_items,
+                "errors": failed_items,
+            }, message=f"Mod 已{action_text} {len(success_items)} 项" + (f"，失败 {len(failed_items)} 项" if failed_items else ""))
         except Exception as e:
             return ApiResponse.error(str(e))
     

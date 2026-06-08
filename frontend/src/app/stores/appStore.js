@@ -91,6 +91,7 @@ export const useAppStore = defineStore('app', () => {
   // 定义侧边栏标签配置 (ID 与 标题绑定)
   const SIDEBAR_TABS = [
     { id: 'temp', title: '临时' },
+    { id: 'disabled', title: '禁用' },
     { id: 'group', title: '分组' },
     { id: 'backup', title: '备份' }
   ]

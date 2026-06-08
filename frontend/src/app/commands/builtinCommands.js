@@ -332,13 +332,24 @@ export const registerBuiltinCommands = () => {
       run: ({ modStore }, args) => modStore.deleteSelectedModFiles(resolveSelectedModIds(modStore, args)),
     },
     {
+      id: 'mods.disableSelectedFiles',
+      title: '禁用选中 Mod',
+      category: 'Mod 列表',
+      scope: 'mod-list',
+      defaultKeys: [],
+      dangerLevel: 'warning',
+      description: '禁用选中 Mod 的 About 文件，避免游戏识别与加载；可在已禁用列表重新启用。',
+      enabled: ({ modStore }, args) => resolveSelectedModIds(modStore, args).some(id => modStore?.takeModById?.(id)?.path_hash),
+      run: ({ modStore }, args) => modStore.disableSelectedMods(resolveSelectedModIds(modStore, args)),
+    },
+    {
       id: 'mods.editSelectedRule',
       title: '编辑选中 Mod 规则',
       category: 'Mod 列表',
       scope: 'mod-list',
       defaultKeys: [],
       displayKeys: ['Alt+MouseLeft'],
-      description: '打开当前选中 Mod 的规则编辑页。',
+      description: '打开最后选中 Mod 的规则编辑页。',
       enabled: ({ modStore }, args) => !!resolvePrimarySelectedMod(modStore, args)?.package_id,
       run: ({ modStore, ruleStore }, args) => {
         const target = resolvePrimarySelectedMod(modStore, args)
