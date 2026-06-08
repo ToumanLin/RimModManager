@@ -590,7 +590,7 @@ async function fetchPage(page, isScrollUp = false, isInitial = false) {
         const oldScrollTop = scroller ? scroller.scrollTop : 0;
 
         allLoadedLogs.value = [...newBlocks, ...allLoadedLogs.value];
-        _enforceMemoryLimit();
+        _enforceMemoryLimit({ keep: 'oldest' });
         logStore.refreshSelectedSnapshotsFromLoadedLogs(props.sourceType, allLoadedLogs.value)
 
         nextTick(() => {
@@ -634,7 +634,7 @@ function handleRealtimeLog(e) {
     allLoadedLogs.value.splice(allLoadedLogs.value.length - 1, 1, { ...lastLog });
   } else {
     allLoadedLogs.value.push(normalizeBlock(entry));
-    _enforceMemoryLimit();
+    _enforceMemoryLimit({ keep: 'latest' });
   }
   logStore.refreshSelectedSnapshotsFromLoadedLogs(props.sourceType, allLoadedLogs.value)
 
@@ -642,10 +642,15 @@ function handleRealtimeLog(e) {
     nextTick(() => scrollerRef.value?.scrollToBottom());
   }
 }
-function _enforceMemoryLimit() {
+function _enforceMemoryLimit({ keep = 'latest' } = {}) {
   if (allLoadedLogs.value.length > MAX_FRONTEND_LOGS) {
-    allLoadedLogs.value.splice(0, allLoadedLogs.value.length - MAX_FRONTEND_LOGS);
-    hasMore.value = true; // 因为切掉了头部，所以理论上又有历史可以加载了
+    const overflowCount = allLoadedLogs.value.length - MAX_FRONTEND_LOGS;
+    if (keep === 'oldest') {
+      allLoadedLogs.value.splice(MAX_FRONTEND_LOGS, overflowCount);
+      return;
+    }
+    allLoadedLogs.value.splice(0, overflowCount);
+    hasMore.value = true; // 实时日志挤掉了旧窗口，顶部仍可重新分段加载历史
   }
 }
 

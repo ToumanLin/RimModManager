@@ -5,6 +5,8 @@ import Toast from "vue-toastification";
 import './styles/toast.scss'
 import VueVirtualScroller from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
+import VueViewer from 'v-viewer'
+import 'viewerjs/dist/viewer.css'
 import 'vue3-colorpicker/style.css'
 import './styles/style.css'
 import App from './App.vue'
@@ -25,6 +27,23 @@ const options = {
 }
 
 app.use(VueVirtualScroller)
+app.use(VueViewer, {
+  defaultOptions: {
+    zIndex: 100000,
+    focus: false,
+    navbar: false,
+    title: false,
+    toolbar: true,
+    tooltip: true,
+    transition: false,
+    hide: () => {
+      const activeElement = document.activeElement
+      if (activeElement?.closest?.('.viewer-container')) {
+        activeElement.blur()
+      }
+    },
+  },
+})
 app.use(Toast, options);
 app.use(pinia) 
 

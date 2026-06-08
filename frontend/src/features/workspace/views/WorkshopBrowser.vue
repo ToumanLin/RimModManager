@@ -44,31 +44,39 @@
           ref="scrollerRef" class="h-full custom-scrollbar p-2 bg-bg-inset/90" :items="workspaceStore.workshopSearch.results" :item-size="itemHeight" key-field="workshop_id"
           @scroll="handleScroll" >
           <template v-slot="{ item }">
-            <div @click="selectMod(item)" v-tooltip="buildResultTooltip(item)"
-              class="h-18 px-3 py-2 rounded-md bg-glass-medium/60 border border-border-base/5 cursor-pointer transition-all hover:bg-accent-primary/10 group flex items-center gap-3"
-              :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'bg-accent-primary/20 border-r-4 border-r-accent-primary shadow-[inset_2px_0_10px_rgba(var(--rgb-accent-cool),0.1)]' : ''">
-              <div v-if="workspaceStore.workshopSearch.sourceMode === 'online'" class="size-12 shrink-0 overflow-hidden rounded-lg border border-border-base/10 bg-bg-inset/90" >
-                <img v-if="item.preview_url" class="h-full w-full object-cover" loading="lazy" :src="appStore.getRemoteUrl(item.preview_url)" />
-                <div v-else class="flex h-full w-full items-center justify-center text-text-disabled">
-                  <Image class="size-4" />
-                </div>
-              </div>
-
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-bold truncate transition-colors" 
-                  :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'text-text-main' : 'text-text-soft group-hover:text-accent-primary'">
-                  {{ item.title || item.name || '未知模组' }}
-                </div>
-                <div class="flex justify-between items-center mt-1 gap-2">
-                  <div class="text-[0.7rem] text-text-dim truncate font-mono opacity-80 max-w-[70%]" :title="item.package_id || item.short_description || item.author_steam_id || ''">
-                    {{ item.package_id || item.short_description || item.author_steam_id || 'N/A' }}
+            <div class="h-full pb-1">
+              <div @click="selectMod(item)" v-tooltip="buildResultTooltip(item)"
+                class="h-full px-3 py-2 rounded-md bg-glass-medium/60 border border-border-base/5 cursor-pointer transition-all hover:bg-accent-primary/10 group flex items-center gap-3"
+                :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'bg-accent-primary/20 border-r-4 border-r-accent-primary shadow-[inset_2px_0_10px_rgba(var(--rgb-accent-cool),0.1)]' : ''">
+                <div v-if="workspaceStore.workshopSearch.sourceMode === 'online'" class="size-12 shrink-0 overflow-hidden rounded-lg border border-border-base/10 bg-bg-inset/90" >
+                  <img v-if="item.preview_url" class="h-full w-full object-cover" loading="lazy" :src="appStore.getRemoteUrl(item.preview_url)" />
+                  <div v-else class="flex h-full w-full items-center justify-center text-text-disabled">
+                    <Image class="size-4" />
                   </div>
-                  <div class="flex items-center gap-1 text-[0.7rem] shrink-0">
-                    <span v-if="item.subscriptions" class="font-bold px-1 rounded bg-accent-primary/10 text-accent-primary border border-accent-primary/20" v-tooltip="'订阅人数'">
-                      {{ formatCount(item.subscriptions) }}
-                    </span>
-                    <div class="font-bold px-1 rounded bg-bg-inset/80 text-text-dim border border-border-base/10" v-tooltip="'工坊ID'">
-                      {{ item.workshop_id }}
+                </div>
+
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-bold truncate transition-colors"
+                    :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'text-text-main' : 'text-text-soft group-hover:text-accent-primary'">
+                    {{ item.title || item.name || '未知模组' }}
+                  </div>
+                  <div class="flex justify-between items-center mt-1 gap-2">
+                    <div class="flex min-w-0 max-w-[70%] items-center gap-1.5">
+                      <span class="min-w-0 truncate text-[0.7rem] font-mono text-text-dim opacity-80" :title="item.package_id || item.short_description || item.author_steam_id || ''">
+                        {{ item.package_id || item.short_description || item.author_steam_id || 'N/A' }}
+                      </span>
+                      <span v-for="version in item.game_versions.slice(0, 3)" :key="`${item.workshop_id}-${version}`"
+                        class="shrink-0 rounded border border-accent-primary/20 bg-accent-primary/10 px-1 text-[0.6rem] font-black text-accent-primary">
+                        {{ version }}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-1 text-[0.7rem] shrink-0">
+                      <span v-if="item.subscriptions" class="font-bold px-1 rounded bg-accent-primary/10 text-accent-primary border border-accent-primary/20" v-tooltip="'订阅人数'">
+                        {{ formatCount(item.subscriptions) }}
+                      </span>
+                      <div class="font-bold px-1 rounded bg-bg-inset/80 text-text-dim border border-border-base/10" v-tooltip="'工坊ID'">
+                        {{ item.workshop_id }}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -168,16 +176,6 @@
                     {{ version }}
                   </span>
                 </div>
-                <div v-else-if="selectedMod?.tags?.length" class="flex flex-wrap gap-1.5 items-center">
-                  <div class="flex items-center gap-1 text-text-dim mr-1">
-                    <Layers class="size-3" />
-                    <span class="text-[0.7rem] font-bold uppercase tracking-tighter">在线标签:</span>
-                  </div>
-                  <span v-for="tag in selectedMod.tags.slice(0, 8)" :key="tag"
-                    class="px-1.5 py-0.5 rounded bg-accent-primary/10 text-accent-primary text-[0.55rem] font-black border border-accent-primary/20">
-                    {{ tag }}
-                  </span>
-                </div>
                 <div v-else class="text-[0.7rem] text-text-disabled italic font-mono flex items-center gap-1">
                   <Layers class="size-3" /> 未标注适用版本
                 </div>
@@ -248,7 +246,7 @@
               <Image class="size-3" /> 截图
             </h4>
             <!-- 使用 flex nowrap 和 overflow-x-auto 实现横向滚动 -->
-            <div class="flex gap-3 overflow-x-auto custom-scrollbar pb-2 snap-x">
+            <div v-viewer.rebuild="screenshotViewerOptions" class="flex gap-3 overflow-x-auto custom-scrollbar pb-2 snap-x">
               <div v-for="(img, idx) in selectedMod.screenshots" :key="idx"
                 class="relative h-32 w-56 shrink-0 snap-start overflow-hidden rounded-lg border border-border-base/10 bg-bg-inset/80"
               >
@@ -344,6 +342,26 @@ let searchTimeout = null
 const scrollerRef = ref(null)
 const isLocalFetching = ref(false)  // 局部硬锁，绝对同步，防穿透
 const loadedScreenshotMap = ref({})
+const blurActiveViewerFocus = () => {
+  const activeElement = document.activeElement
+  if (activeElement?.closest?.('.viewer-container')) {
+    activeElement.blur()
+  }
+}
+const screenshotViewerOptions = {
+  focus: false,
+  navbar: false,
+  title: false,
+  toolbar: true,
+  tooltip: true,
+  movable: true,
+  zoomable: true,
+  rotatable: true,
+  scalable: true,
+  transition: false,
+  zIndex: 100000,
+  hide: blurActiveViewerFocus,
+}
 
 // 仅在用户真正打开工坊页且当前没有任何结果时，才触发默认搜索。
 onMounted(() => {
@@ -355,7 +373,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (searchTimeout) clearTimeout(searchTimeout)
 })
-const itemHeight = computed(() => appStore.scalePx(72)+4 )
+const itemHeight = computed(() => appStore.scalePx(76))
 
 const selectedMod = computed(() => {
   return workspaceStore.workshopSearch.detailData

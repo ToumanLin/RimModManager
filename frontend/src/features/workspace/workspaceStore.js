@@ -570,9 +570,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return false
   }
 
+  const versionTagPattern = /^\d+(?:\.\d+)+$/
+  const normalizeVersionTags = (values = []) => {
+    const seen = new Set()
+    return (Array.isArray(values) ? values : [])
+      .map(value => String(value || '').trim())
+      .filter(value => {
+        if (!value || !versionTagPattern.test(value) || seen.has(value)) return false
+        seen.add(value)
+        return true
+      })
+  }
+
   const normalizeWorkshopSearchItem = (item = {}) => {
-    const tags = Array.isArray(item.tags) ? item.tags.filter(Boolean) : []
-    const gameVersions = Array.isArray(item.game_versions) ? item.game_versions.filter(Boolean) : []
+    const versionTags = normalizeVersionTags(item.tags)
+    const gameVersions = normalizeVersionTags([
+      ...(Array.isArray(item.game_versions) ? item.game_versions : []),
+      ...versionTags,
+    ])
     const author = Array.isArray(item.author)
       ? item.author.filter(Boolean).join(' / ')
       : String(item.author || '').trim()
@@ -588,7 +603,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       description: String(item.description || item.short_description || '').trim(),
       preview_url: String(item.preview_url || '').trim(),
       game_versions: gameVersions,
-      tags,
+      tags: versionTags,
       // 关联项按照 Steam 返回的顺序号稳定排序，避免同一批数据每次展开顺序抖动。
       children: Array.isArray(item.children)
         ? [...item.children]
@@ -602,6 +617,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       time_updated: Number(item.time_updated || 0),
       source: String(item.source || '').trim(),
     }
+  }
+
+  const mergeWorkshopSearchResults = (currentItems = [], nextItems = []) => {
+    const seenIds = new Set()
+    return [...currentItems, ...nextItems].filter(item => {
+      const workshopId = String(item?.workshop_id || '').trim()
+      if (!workshopId || seenIds.has(workshopId)) return false
+      seenIds.add(workshopId)
+      return true
+    })
   }
 
   // 搜索缓存工坊数据库 (支持重置或追加)
@@ -636,9 +661,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (checkResult(res, '工坊检索')) {
         const newItems = (res.data.items || []).map(normalizeWorkshopSearchItem)
         if (isAppend) {
-          workshopSearch.results = [...workshopSearch.results, ...newItems]
+          workshopSearch.results = mergeWorkshopSearchResults(workshopSearch.results, newItems)
         } else {
-          workshopSearch.results = newItems
+          workshopSearch.results = mergeWorkshopSearchResults([], newItems)
           workshopSearch.total = res.data.total
         }
         if (workshopSearch.sourceMode === 'online') {
