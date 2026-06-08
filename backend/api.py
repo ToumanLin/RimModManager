@@ -5907,13 +5907,24 @@ class API:
         """
         request_options = dict(options or {})
         target_scope = str(request_options.get("target_scope") or "active").strip().lower()
-        targets = self.texture_mgr.resolve_targets(package_ids, target_scope, self.active_context)
+        residue_clean_only = action == "clean_generated" and bool(request_options.get("clean_uninstalled_residue_only"))
+        targets = (
+            self.texture_mgr.resolve_clean_targets(
+                package_ids,
+                target_scope,
+                residue_only=residue_clean_only,
+                active_context=self.active_context,
+            )
+            if action == "clean_generated"
+            else self.texture_mgr.resolve_targets(package_ids, target_scope, self.active_context)
+        )
         if not targets:
-            return ApiResponse.error("未能找到指定模组的有效物理路径")
+            message = "未找到包含 DDS 的卸载残留模组目录" if residue_clean_only else "未能找到指定模组的有效物理路径"
+            return ApiResponse.error(message)
 
         try:
             res = self.texture_mgr.start_task(targets, action=action, options=request_options)
-            msg = "清理已生成 DDS" if action == "clean_generated" else "贴图优化"
+            msg = "清理卸载残留 DDS" if residue_clean_only else ("清理已生成 DDS" if action == "clean_generated" else "贴图优化")
             return ApiResponse.success(res, message=f"{msg}任务已加入队列")
         except Exception as e:
             logger.error("贴图优化任务启动失败", exc_info=True)

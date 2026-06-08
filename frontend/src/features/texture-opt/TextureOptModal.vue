@@ -213,8 +213,10 @@
                 <section class="modal-section space-y-2 p-3">
                   <h3 class="text-xs font-black uppercase tracking-widest text-text-main">清理说明</h3>
                   <div class=" text-xs text-text-dim">
-                    清理功能会删除当前选中范围内，存在同名 PNG 源图的 DDS 文件，即所有已生成的 DDS 文件，不清理独立DDS文件。
+                    {{ cleanDescription }}
                   </div>
+                  <CommonSwitch label="只清理卸载残留 DDS" description="开启后只处理已卸载残留模组目录；关闭时会清理当前范围，并顺带处理残留目录。"
+                    v-model="cleanResidueOnly" mini />
                 </section>
               </div>
             </div>
@@ -229,7 +231,7 @@
                   </button>
                   <button data-tour="texture-opt-clean" @click="handleCleanGenerated" :disabled="!toolStatus.available || isBusy"
                     class="flex w-full items-center justify-center gap-2 rounded-xl border border-accent-warning/30 bg-accent-warning/10 py-2.5 font-bold text-accent-warning transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
-                    <BrushCleaning class="w-4 h-4" /> 清理已生成 DDS
+                    <BrushCleaning class="w-4 h-4" /> {{ cleanButtonLabel }}
                   </button>
                 </div>
 
@@ -421,6 +423,13 @@ const maxSizeDescription = computed(() => (
   isNoCompressionMode.value
     ? '当前为不压缩，最小清晰度不会参与处理。'
     : '缩放时会尽量保证最短边不低于这个目标，避免图片被压得过小。'
+))
+const cleanResidueOnly = ref(false)
+const cleanButtonLabel = computed(() => cleanResidueOnly.value ? '清理卸载残留 DDS' : '清理已生成 DDS')
+const cleanDescription = computed(() => (
+  cleanResidueOnly.value
+    ? '只清理已卸载残留模组目录中的 DDS 文件，包括没有同名 PNG 的独立 DDS。'
+    : '清理当前范围内存在同名 PNG 源图的 DDS；选择全部已安装模组时，会一并清理卸载残留目录中的 DDS。'
 ))
 const resultHistory = computed(() => textureStore.resultHistory)
 const textureExclusions = computed(() => textureStore.textureExclusions)
@@ -767,7 +776,9 @@ const handleOptimize = async () => {
 
 const handleCleanGenerated = async () => {
   const ids = getTargetIds()
-  await textureStore.startOptimization(ids, 'clean_generated', targetScope.value)
+  await textureStore.startOptimization(ids, 'clean_generated', targetScope.value, {
+    clean_uninstalled_residue_only: cleanResidueOnly.value,
+  })
 }
 
 const handleCancel = async () => {

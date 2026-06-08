@@ -23,10 +23,6 @@ export const useTextureStore = defineStore('texture', () => {
     output_total_bytes: 0,
     current_output_count: 0,
     current_output_bytes: 0,
-    managed_output_count: 0,
-    managed_output_bytes: 0,
-    external_output_count: 0,
-    external_output_bytes: 0,
     external_orphan_output_count: 0,
     external_orphan_output_bytes: 0,
     generate_required_count: 0,
@@ -80,10 +76,6 @@ export const useTextureStore = defineStore('texture', () => {
       output_total_bytes: outputTotalBytes,
       current_output_count: currentOutputCount,
       current_output_bytes: currentOutputBytes,
-      managed_output_count: toInt(raw.managed_output_count ?? base.managed_output_count),
-      managed_output_bytes: toInt(raw.managed_output_bytes ?? base.managed_output_bytes),
-      external_output_count: toInt(raw.external_output_count ?? base.external_output_count),
-      external_output_bytes: toInt(raw.external_output_bytes ?? base.external_output_bytes),
       external_orphan_output_count: toInt(raw.external_orphan_output_count ?? base.external_orphan_output_count),
       external_orphan_output_bytes: toInt(raw.external_orphan_output_bytes ?? base.external_orphan_output_bytes),
       generate_required_count: toInt(raw.generate_required_count ?? raw.pending_count ?? base.generate_required_count),
@@ -365,10 +357,6 @@ export const useTextureStore = defineStore('texture', () => {
         output_total_bytes: 0,
         current_output_count: 0,
         current_output_bytes: 0,
-        managed_output_count: 0,
-        managed_output_bytes: 0,
-        external_output_count: 0,
-        external_output_bytes: 0,
         external_orphan_output_count: 0,
         external_orphan_output_bytes: 0,
         output_vram_bytes_est: 0,
@@ -487,8 +475,8 @@ export const useTextureStore = defineStore('texture', () => {
   }
 
   // 4. 启动优化/清理
-  const startOptimization = async (packageIds, action = 'optimize', targetScope = 'active') => {
-    if (!window.pywebview || (targetScope !== 'all' && packageIds.length === 0)) return
+  const startOptimization = async (packageIds, action = 'optimize', targetScope = 'active', extraOptions = {}) => {
+    if (!window.pywebview || (action !== 'clean_generated' && targetScope !== 'all' && packageIds.length === 0)) return
     isOptimizing.value = true
     lastTargetPackageIds.value = [...packageIds]
     lastTargetScope.value = targetScope
@@ -497,6 +485,7 @@ export const useTextureStore = defineStore('texture', () => {
     try {
       const res = await window.pywebview.api.texture_start_task(packageIds, action, {
         ...appStore.settings.texture_opt,
+        ...extraOptions,
         target_scope: targetScope,
       })
       if (checkResult(res, "启动优化任务", false)) {
