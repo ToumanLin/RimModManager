@@ -33,4 +33,5 @@ dependencies = [
     "setuptools<70.0.0",
     "steam-vdf>=0.1.10",
     "steamworkspy>=0.0.2",
+    "zstandard>=0.25.0",
 ]

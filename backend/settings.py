@@ -190,6 +190,7 @@ class UIConfig:
 class TextureOptConfig:
     texture_tools_path: str = str(TOOLS_DIR / "texture_tools")  # 贴图工具目录
     process_mode: str = "scaled_only_overwrite"
+    output_format: str = "dds"                 # 输出格式：dds 或 zstd
     generate_mipmaps: bool = True            # 是否生成 Mipmap
     scale_factor: float = 1.0                # 缩放倍率，小于1时会缩小贴图
     max_size: int = 128                      # 最低清晰度
@@ -197,6 +198,8 @@ class TextureOptConfig:
     min_dimension: int = 128                 # 最短边低于该值时不参与缩放
     max_source_dimension: int = 2048         # 最长边高于该值时不参与缩放
     encode_batch_timeout_seconds: int = 480  # todds 批处理超时
+    zstd_clean_old_dds: bool = False         # ZSTD 生成成功后是否清理旧 DDS
+    clean_output_format: str = "dds"         # 清理格式：dds 或 zstd
 
 
 @dataclass

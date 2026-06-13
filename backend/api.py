@@ -5999,9 +5999,11 @@ class API:
         """
         request_options = dict(options or {})
         target_scope = str(request_options.get("target_scope") or "active").strip().lower()
-        if not package_ids and target_scope != "all":
+        single_mod_target = request_options.get("single_mod_target")
+        direct_targets = [single_mod_target] if isinstance(single_mod_target, dict) else None
+        if not direct_targets and not package_ids and target_scope != "all":
             return ApiResponse.error("未指定要分析的模组")
-        targets = self.texture_mgr.resolve_targets(package_ids, target_scope, self.active_context)
+        targets = direct_targets or self.texture_mgr.resolve_targets(package_ids, target_scope, self.active_context)
         if not targets:
             return ApiResponse.error("未能找到指定模组的有效物理路径")
 
@@ -6020,24 +6022,44 @@ class API:
         """
         request_options = dict(options or {})
         target_scope = str(request_options.get("target_scope") or "active").strip().lower()
+        single_mod_target = request_options.get("single_mod_target")
+        direct_targets = [single_mod_target] if isinstance(single_mod_target, dict) else None
         residue_clean_only = action == "clean_generated" and bool(request_options.get("clean_uninstalled_residue_only"))
+        clean_output_format = "dds"
+        clean_without_source = False
+        if action == "clean_generated":
+            clean_output_format = str(request_options.get("clean_output_format") or "").strip().lower()
+            if clean_output_format not in {"dds", "zstd"}:
+                clean_output_format = "dds"
+            request_options["clean_output_format"] = clean_output_format
+            clean_without_source = bool(request_options.get("clean_without_source"))
         targets = (
-            self.texture_mgr.resolve_clean_targets(
+            direct_targets or self.texture_mgr.resolve_clean_targets(
                 package_ids,
                 target_scope,
                 residue_only=residue_clean_only,
+                include_zstd=clean_output_format == "zstd",
                 active_context=self.active_context,
             )
             if action == "clean_generated"
-            else self.texture_mgr.resolve_targets(package_ids, target_scope, self.active_context)
+            else (direct_targets or self.texture_mgr.resolve_targets(package_ids, target_scope, self.active_context))
         )
         if not targets:
-            message = "未找到包含 DDS 的卸载残留模组目录" if residue_clean_only else "未能找到指定模组的有效物理路径"
+            residue_label = "ZSTD" if clean_output_format == "zstd" else "DDS"
+            message = f"未找到包含 {residue_label} 的卸载残留模组目录" if residue_clean_only else "未能找到指定模组的有效物理路径"
             return ApiResponse.error(message)
 
         try:
             res = self.texture_mgr.start_task(targets, action=action, options=request_options)
-            msg = "清理卸载残留 DDS" if residue_clean_only else ("清理已生成 DDS" if action == "clean_generated" else "贴图优化")
+            clean_output_label = "ZSTD" if clean_output_format == "zstd" else "DDS"
+            if clean_without_source:
+                msg = f"删除无源 {clean_output_label}"
+            else:
+                msg = (
+                    f"清理卸载残留 {clean_output_label}"
+                    if residue_clean_only
+                    else (f"清理已生成 {clean_output_label}" if action == "clean_generated" else "贴图优化")
+                )
             return ApiResponse.success(res, message=f"{msg}任务已加入队列")
         except Exception as e:
             logger.error("贴图优化任务启动失败", exc_info=True)

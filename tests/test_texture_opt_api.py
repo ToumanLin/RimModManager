@@ -256,6 +256,67 @@ class TestTextureOptApiHelpers(unittest.TestCase):
         api.texture_mgr.resolve_targets.assert_called_once_with([], "all", getattr(api, "active_context", None))
         api.texture_mgr.start_analysis_task.assert_called_once_with(targets, {"target_scope": "all"})
 
+    def test_texture_start_task_uses_direct_single_mod_target(self):
+        api = API.__new__(API)
+        api.active_context = None
+        target = {
+            "mod_path": str(self.local_root / "LocalA"),
+            "mod_name": "Local A",
+            "package_id": "local.mod",
+            "path_hash": "local-hash",
+            "mod_instance_key": "local-hash",
+            "store": "local",
+        }
+        api.texture_mgr = SimpleNamespace(
+            resolve_targets=Mock(return_value=[]),
+            resolve_clean_targets=Mock(return_value=[]),
+            start_task=Mock(return_value={"task_id": "task-single"}),
+        )
+
+        response = api.texture_start_task([], "optimize", {
+            "target_scope": "single",
+            "single_mod_target": target,
+        })
+
+        self.assertEqual(response["status"], "success")
+        api.texture_mgr.resolve_targets.assert_not_called()
+        api.texture_mgr.start_task.assert_called_once_with([target], action="optimize", options={
+            "target_scope": "single",
+            "single_mod_target": target,
+        })
+
+    def test_texture_start_task_clean_format_controls_residue_scan(self):
+        api = API.__new__(API)
+        api.active_context = None
+        targets = [{
+            "mod_path": str(self.local_root / "LocalA"),
+            "mod_name": "Local A",
+            "package_id": "local.mod",
+            "path_hash": "local-hash",
+            "mod_instance_key": "local-hash",
+            "store": "local",
+        }]
+        api.texture_mgr = SimpleNamespace(
+            resolve_targets=Mock(return_value=[]),
+            resolve_clean_targets=Mock(return_value=targets),
+            start_task=Mock(return_value={"task_id": "task-clean"}),
+        )
+
+        response = api.texture_start_task([], "clean_generated", {
+            "target_scope": "all",
+            "clean_output_format": "dds",
+        })
+
+        self.assertEqual(response["status"], "success")
+        self.assertIn("清理已生成 DDS", response["message"])
+        api.texture_mgr.resolve_clean_targets.assert_called_once_with(
+            [],
+            "all",
+            residue_only=False,
+            include_zstd=False,
+            active_context=None,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

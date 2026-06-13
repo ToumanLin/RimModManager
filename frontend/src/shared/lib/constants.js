@@ -162,10 +162,19 @@ export const SOURCE_TYPE_MAP = {
   'dlc': 'DLC',
   'github': 'Git 仓库',
   'workshop': 'Steam 创意工坊',
-  'local': '本地文件',
+  'local': '本地模组',
   'self': '管理器下载',
   'other': '其它来源'
 }
+export const STORE_TYPE_MAP = {
+  'core': '本体',
+  'dlc': 'DLC',
+  'workshop': '工坊',
+  'local': '本地',
+  'self': '管理器',
+  'other': '其它'
+}
+
 
 export const RUN_COMMAND_TAGS = [
   { value: '-popupwindow', label: '无边框窗口模式' },

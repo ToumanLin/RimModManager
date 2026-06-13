@@ -20,8 +20,11 @@
                 </div>
                 <div class="min-w-0">
                   <span class="text-accent-primary/80">DDS</span>
-                  <span class="ml-1 text-text-dim">{{ summary.output_total_count || 0 }} 张</span>
-                  <span class="ml-1 font-mono font-bold text-accent-primary">{{ formatFileSize(summary.output_total_bytes || 0) }}</span>
+                  <span class="ml-1 text-text-dim">{{ summary.dds_output_count || 0 }} 张</span>
+                  <span class="ml-1 font-mono font-bold text-accent-primary">{{ formatFileSize(summary.dds_output_bytes || 0) }}</span>
+                  <span v-if="summary.zstd_output_count" class="ml-2 text-accent-secondary/80">ZSTD</span>
+                  <span v-if="summary.zstd_output_count" class="ml-1 text-text-dim">{{ summary.zstd_output_count }} 张</span>
+                  <span v-if="summary.zstd_output_count" class="ml-1 font-mono font-bold text-accent-secondary">{{ formatFileSize(summary.zstd_output_bytes || 0) }}</span>
                 </div>
                 <div class="min-w-0 truncate text-accent-highlight">
                   显存占用预估
@@ -74,9 +77,9 @@
               <div class="flex items-center gap-2">
 
                 <div class="flex items-center gap-1 rounded-lg bg-bg-overlay/5 p-1">
-                  <button v-for="mode in ['ALL', 'PNG', 'DDS']" :key="mode" @click="textureStore.viewMode = mode" class="px-3 py-1 rounded-md text-xs font-bold transition-all"
-                    :class="textureStore.viewMode === mode ? 'bg-bg-overlay/10 text-text-main shadow-sm' : 'text-text-dim hover:text-text-main'" >
-                    {{ mode === 'ALL' ? '综合视图' : (mode === 'PNG' ? '仅看 PNG' : '仅看 DDS') }}
+                  <button v-for="mode in viewModes" :key="mode.value" @click="textureStore.viewMode = mode.value" class="px-3 py-1 rounded-md text-xs font-bold transition-all"
+                    :class="textureStore.viewMode === mode.value ? 'bg-bg-overlay/10 text-text-main shadow-sm' : 'text-text-dim hover:text-text-main'" >
+                    {{ mode.label }}
                   </button>
                 </div>
                 <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 px-1 py-2 text-xs font-bold text-text-dim transition-colors hover:text-text-main"
@@ -109,6 +112,7 @@
                     <TextureModCard :mod="item" :view-mode="textureStore.viewMode" :max-bytes="maxBytesInCurrentView"
                       :is-excluded="textureStore.isModExcluded(item.package_id)"
                       @toggle-mod-exclusion="handleToggleModExclusion"
+                      @open-mod-menu="openTextureModMenu"
                     />
                   </div>
                 </DynamicScrollerItem>
@@ -179,6 +183,28 @@
                       { label: '只生成压缩贴图（覆盖）', value: 'scaled_only_overwrite' }
                     ]"
                   />
+                  <CommonSelect label="输出格式" v-model="config.output_format" @change="saveConfig"
+                    description="DDS 可直接配合当前贴图优化使用；ZSTD 只生成 .dds.zstd，需要 Image Opt 在当前列表中启用后才能被游戏读取。"
+                    :options="[
+                      { label: 'DDS', value: 'dds' },
+                      { label: 'ZSTD（Image Opt）', value: 'zstd' }
+                    ]"
+                  />
+                  <div v-if="isZstdMode && !isImageOptEnabled" class="rounded-lg border border-accent-warning/25 bg-accent-warning/10 p-2 text-xs text-accent-warning">
+                    <div class="flex items-start gap-2">
+                      <AlertTriangle class="mt-0.5 size-4 shrink-0" />
+                      <div class="min-w-0 flex-1">
+                        <div class="font-bold">{{ isImageOptInstalled ? 'Image Opt 未在当前列表启用' : '未安装 Image Opt' }}</div>
+                        <div class="mt-1 text-text-dim">{{ imageOptWarningText }}</div>
+                      </div>
+                      <button v-if="!isImageOptInstalled" class="shrink-0 rounded-md border border-accent-warning/30 px-2 py-1 font-bold text-accent-warning hover:bg-accent-warning/10"
+                        @click="openImageOptWorkshop">
+                        打开工坊
+                      </button>
+                    </div>
+                  </div>
+                  <CommonSwitch v-if="isZstdMode" label="生成后清理旧 DDS" description="ZSTD 生成成功后删除同名 DDS；默认关闭，避免误删已有 DDS 贴图。"
+                    v-model="config.zstd_clean_old_dds" @change="saveConfig" mini />
                   <CommonSwitch label="生成 Mipmap" description="Mipmap 是给远距离显示准备的缩小层级。开启后远看更平滑、闪烁更少，但生成时间和文件体积会增加一些。" v-model="config.generate_mipmaps"
                     @change="saveConfig" mini />
                 </section>
@@ -215,8 +241,20 @@
                   <div class=" text-xs text-text-dim">
                     {{ cleanDescription }}
                   </div>
-                  <CommonSwitch label="只清理卸载残留 DDS" description="开启后只处理已卸载残留模组目录；关闭时会清理当前范围，并顺带处理残留目录。"
-                    v-model="cleanResidueOnly" mini />
+                  <CommonSwitch label="清理 ZSTD" description="关闭时只清理 DDS；开启时只清理 .dds.zstd，两种输出不会混合清理。"
+                    v-model="cleanZstdMode" @change="saveConfig" mini />
+                  <div class="grid grid-cols-2 gap-2">
+                    <button type="button" class="inline-flex min-w-0 items-center justify-center gap-1 rounded-md border border-accent-warning/25 px-2 py-1 text-xs font-bold text-accent-warning transition-colors hover:bg-accent-warning/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="!toolStatus.available || isBusy" @click="handleCleanResidue" v-tooltip="residueCleanButtonLabel">
+                      <BrushCleaning class="size-3.5 shrink-0" />
+                      <span class="truncate">{{ residueCleanButtonLabel }}</span>
+                    </button>
+                    <button type="button" class="inline-flex min-w-0 items-center justify-center gap-1 rounded-md border border-accent-danger/25 px-2 py-1 text-xs font-bold text-accent-danger transition-colors hover:bg-accent-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="isBusy" @click="handleCleanWithoutSource" v-tooltip="orphanCleanButtonLabel">
+                      <Trash2 class="size-3.5 shrink-0" />
+                      <span class="truncate">{{ orphanCleanButtonLabel }}</span>
+                    </button>
+                  </div>
                 </section>
               </div>
             </div>
@@ -226,18 +264,24 @@
               <div data-tour="texture-opt-actions" class="space-y-2">
                 <div class="flex gap-2">
                   <button data-tour="texture-opt-analyze" @click="handleAnalyze" :disabled="isBusy"
-                    class="flex w-full items-center justify-center gap-2 rounded-xl border border-accent-secondary/30 bg-accent-secondary/10 py-2.5 font-bold text-accent-secondary transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
-                    <ScanSearch class="w-4 h-4" /> 扫描统计
+                    class="flex min-w-0 flex-1 basis-0 @container items-center justify-center gap-2 rounded-xl border border-accent-secondary/30 bg-accent-secondary/10 py-2.5 font-bold text-accent-secondary transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    v-tooltip="'扫描统计'">
+                    <ScanSearch class="w-4 h-4 shrink-0" />
+                    <span class="min-w-0 truncate whitespace-nowrap text-[clamp(0.7rem,9cqw,1rem)]">扫描统计</span>
                   </button>
                   <button data-tour="texture-opt-clean" @click="handleCleanGenerated" :disabled="!toolStatus.available || isBusy"
-                    class="flex w-full items-center justify-center gap-2 rounded-xl border border-accent-warning/30 bg-accent-warning/10 py-2.5 font-bold text-accent-warning transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
-                    <BrushCleaning class="w-4 h-4" /> {{ cleanButtonLabel }}
+                    class="flex min-w-0 flex-1 basis-0 @container items-center justify-center gap-2 rounded-xl border border-accent-warning/30 bg-accent-warning/10 py-2.5 font-bold text-accent-warning transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    v-tooltip="cleanButtonLabel">
+                    <BrushCleaning class="w-4 h-4 shrink-0" />
+                    <span class="min-w-0 truncate whitespace-nowrap text-[clamp(0.7rem,9cqw,1rem)]">{{ cleanButtonLabel }}</span>
                   </button>
                 </div>
 
                 <button v-if="!isBusy" data-tour="texture-opt-generate" @click="handleOptimize" :disabled="!toolStatus.available"
-                  class="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-primary py-3 font-black text-on-accent-primary shadow-[0_0_15px_rgba(var(--rgb-accent-cool),0.3)] transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
-                  <Rocket class="w-5 h-5" /> {{ processModeLabel }}
+                  class="flex min-w-0 w-full @container items-center justify-center gap-2 rounded-xl bg-accent-primary py-3 font-black text-on-accent-primary shadow-[0_0_15px_rgba(var(--rgb-accent-cool),0.3)] transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  v-tooltip="processModeLabel">
+                  <Rocket class="w-5 h-5 shrink-0" />
+                  <span class="min-w-0 truncate whitespace-nowrap text-[clamp(0.8rem,8cqw,1.15rem)]">{{ processModeLabel }}</span>
                 </button>
 
                 <button v-else @click="handleCancel" class="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-danger py-3 font-black text-on-accent-danger shadow-[0_0_15px_rgba(var(--rgb-accent-danger),0.3)] transition-all hover:scale-102 active:scale-95 cursor-pointer">
@@ -283,7 +327,7 @@
                       <span class="font-bold">{{ item.action === 'clean_generated' ? '清理任务' : '生成任务' }}</span>
                       <span class="font-mono">{{ formatDateTime(item.updated_at) }}</span>
                     </div>
-                    <div class="mt-1 text-[11px] opacity-80">
+                    <div class="mt-1 text-[0.8rem] opacity-80">
                       成功 {{ item.summary?.current_output_count || 0 }} / 失败 {{ item.failed_items?.length || 0 }}
                     </div>
                   </button>
@@ -338,7 +382,7 @@
                       <div class="min-w-0">
                         <div class="truncate font-bold text-text-main">{{ item.mod_name }}</div>
                         <div class="truncate font-mono text-text-dim">{{ item.package_id }}</div>
-                        <div v-if="item.mod_path" class="truncate text-[11px] text-text-dim">{{ item.mod_path }}</div>
+                        <div v-if="item.mod_path" class="truncate text-[0.8rem] text-text-dim">{{ item.mod_path }}</div>
                       </div>
                       <button class="shrink-0 rounded-lg border border-accent-danger/20 bg-accent-danger/10 p-1.5 text-accent-danger transition-colors hover:bg-accent-danger/20"
                         @click="handleRemoveModExclusion(item)" v-tooltip="'移除模组排除'" >
@@ -398,13 +442,15 @@
 import { computed, ref, watch } from 'vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import { useNow } from '@vueuse/core'
-import { Ban, BrushCleaning, CheckCircle2, Cpu, FileText, FolderOpen, Images, Inbox, Loader2, Plus, Rocket, ScanSearch, ScrollText, Search, Trash2, X } from 'lucide-vue-next'
+import { AlertTriangle, Ban, BrushCleaning, CheckCircle2, Cpu, FileText, FolderOpen, Images, Inbox, Loader2, Plus, Rocket, ScanSearch, ScrollText, Search, Trash2, X } from 'lucide-vue-next'
 import { useAppStore } from '../../app/stores/appStore'
 import { useTextureStore } from './textureStore'
 import { useModStore } from '../mod/stores/modStore'
 import CommonSwitch from '../../shared/components/input/CommonSwitch.vue'
 import CommonSelect from '../../shared/components/input/CommonSelect.vue'
 import CommonModalShell from '../../shared/components/modal/CommonModalShell.vue'
+import { useConfirmStore } from '../../shared/components/modal/confirmStore'
+import { useContextMenuStore } from '../../shared/components/context-menu/contextMenuStore'
 import TextureModCard from './TextureModCard.vue'
 import { formatFileSize } from '../../shared/lib/format'
 import { toast } from '../../shared/lib/common'
@@ -412,6 +458,11 @@ import { toast } from '../../shared/lib/common'
 const appStore = useAppStore()
 const textureStore = useTextureStore()
 const modStore = useModStore()
+const confirmStore = useConfirmStore()
+const contextMenuStore = useContextMenuStore()
+
+const IMAGE_OPT_PACKAGE_ID = 'dev.soeur.imageopt'
+const IMAGE_OPT_WORKSHOP_ID = '3543873568'
 
 const config = computed(() => appStore.settings.texture_opt)
 const summary = computed(() => textureStore.globalSummary || {})
@@ -419,17 +470,39 @@ const progressState = computed(() => textureStore.progressState)
 const toolStatus = computed(() => textureStore.toolStatus)
 const isBusy = computed(() => textureStore.isAnalyzing || textureStore.isOptimizing)
 const isNoCompressionMode = computed(() => Math.abs(Number(config.value?.scale_factor || 1) - 1) <= 1e-6)
+const isZstdMode = computed(() => String(config.value?.output_format || 'dds') === 'zstd')
+const isImageOptInstalled = computed(() => (
+  getInstalledMods().some(mod => String(mod?.package_id || '').trim().toLowerCase() === IMAGE_OPT_PACKAGE_ID)
+))
+const isImageOptEnabled = computed(() => (
+  modStore.activeIds.some(id => {
+    const mod = modStore.takeModById(id)
+    return String(mod?.package_id || id || '').trim().toLowerCase() === IMAGE_OPT_PACKAGE_ID
+  })
+))
+const imageOptWarningText = computed(() => (
+  isImageOptInstalled.value
+    ? 'ZSTD 贴图需要 Image Opt 在当前启用列表中生效；未启用时仍可生成，但游戏可能不会读取这些文件。'
+    : 'ZSTD 贴图需要 Image Opt 才能被游戏读取；未安装时仍可生成，但游戏会继续使用原图或其它可读输出。'
+))
 const maxSizeDescription = computed(() => (
   isNoCompressionMode.value
     ? '当前为不压缩，最小清晰度不会参与处理。'
     : '缩放时会尽量保证最短边不低于这个目标，避免图片被压得过小。'
 ))
-const cleanResidueOnly = ref(false)
-const cleanButtonLabel = computed(() => cleanResidueOnly.value ? '清理卸载残留 DDS' : '清理已生成 DDS')
+const cleanZstdMode = computed({
+  get: () => String(config.value?.clean_output_format || 'dds') === 'zstd',
+  set: value => {
+    config.value.clean_output_format = value ? 'zstd' : 'dds'
+  },
+})
+const cleanOutputFormat = computed(() => cleanZstdMode.value ? 'zstd' : 'dds')
+const cleanOutputLabel = computed(() => cleanZstdMode.value ? 'ZSTD' : 'DDS')
+const cleanButtonLabel = computed(() => `清理已生成 ${cleanOutputLabel.value}`)
+const residueCleanButtonLabel = computed(() => `清理卸载残留 ${cleanOutputLabel.value}`)
+const orphanCleanButtonLabel = computed(() => `删除无源 ${cleanOutputLabel.value}`)
 const cleanDescription = computed(() => (
-  cleanResidueOnly.value
-    ? '只清理已卸载残留模组目录中的 DDS 文件，包括没有同名 PNG 的独立 DDS。'
-    : '清理当前范围内存在同名 PNG 源图的 DDS；选择全部已安装模组时，会一并清理卸载残留目录中的 DDS。'
+  `主清理会删除当前范围内存在同名 PNG 源图的 ${cleanOutputLabel.value}；卸载残留和无源输出需要单独触发。`
 ))
 const resultHistory = computed(() => textureStore.resultHistory)
 const textureExclusions = computed(() => textureStore.textureExclusions)
@@ -442,7 +515,13 @@ const excludeModQuery = ref('')
 const excludeFileQuery = ref('')
 const pathExclusionInput = ref('')
 const textureOptHelpText = '把 PNG贴图提前转换成更适合游戏读取的 DDS 格式。通常能减少显存压力、加快加载，以及大型模组环境下更少的卡顿和爆显存风险；但会占据更多磁盘空间，生成需要一定时间。'+'\n\n缩放功能部分感谢贴吧老哥 ##贴吧用户_0CWt68M## 提供的帮助'
-const textureListMinItemSize = computed(() => Math.max(88, Math.round(Number(appStore.settings.ui.font_size || 14) * 7.2)))
+const textureListMinItemSize = computed(() => appStore.scalePx(101, 14))
+const viewModes = [
+  { label: '综合视图', value: 'ALL' },
+  { label: '仅看 PNG', value: 'PNG' },
+  { label: '仅看 DDS', value: 'DDS' },
+  { label: '仅看 ZSTD', value: 'ZSTD' },
+]
 
 const sortOptions = [
   { label: '按总体积占比', value: 'impact' },
@@ -460,6 +539,13 @@ const resolvedRows = computed(() => (
   }))
 ))
 
+const getViewMetricBytes = (item) => {
+  if (textureStore.viewMode === 'PNG') return Number(item.source_total_bytes || 0)
+  if (textureStore.viewMode === 'DDS') return Number(item.dds_output_bytes || 0)
+  if (textureStore.viewMode === 'ZSTD') return Number(item.zstd_output_bytes || 0)
+  return Number(item.combined_total_bytes || 0)
+}
+
 const sortRows = (rows) => {
   rows.sort((a, b) => {
     if (sortMetric.value === 'name') {
@@ -474,16 +560,8 @@ const sortRows = (rows) => {
       return Number(b.vram_saved || 0) - Number(a.vram_saved || 0)
     }
 
-    const aMetric = textureStore.viewMode === 'PNG'
-      ? Number(a.source_total_bytes || 0)
-      : textureStore.viewMode === 'DDS'
-        ? Number(a.output_total_bytes || 0)
-        : Number(a.combined_total_bytes || 0)
-    const bMetric = textureStore.viewMode === 'PNG'
-      ? Number(b.source_total_bytes || 0)
-      : textureStore.viewMode === 'DDS'
-        ? Number(b.output_total_bytes || 0)
-        : Number(b.combined_total_bytes || 0)
+    const aMetric = getViewMetricBytes(a)
+    const bMetric = getViewMetricBytes(b)
     return bMetric - aMetric
       || Number(b.generate_required_count || 0) - Number(a.generate_required_count || 0)
       || Number(b.unsupported_source_count || 0) - Number(a.unsupported_source_count || 0)
@@ -505,11 +583,7 @@ const maxBytesInCurrentView = computed(() => {
   const list = displayRows.value
   if (list.length === 0) return 1
   return list.reduce((maxBytes, item) => {
-    const currentBytes = textureStore.viewMode === 'PNG'
-      ? Number(item.source_total_bytes || 0)
-      : textureStore.viewMode === 'DDS'
-        ? Number(item.output_total_bytes || 0)
-        : Number(item.combined_total_bytes || 0)
+    const currentBytes = getViewMetricBytes(item)
     return Math.max(maxBytes, currentBytes)
   }, 1)
 })
@@ -525,6 +599,8 @@ const getRowSizeDependencies = (item) => [
   Number(item?.output_total_count || 0),
   Number(item?.source_total_bytes || 0),
   Number(item?.output_total_bytes || 0),
+  Number(item?.dds_output_bytes || 0),
+  Number(item?.zstd_output_bytes || 0),
 ]
 const unsupportedSummaryTooltip = computed(() => {
   const preview = Array.isArray(summary.value.engine_unsupported_preview) ? summary.value.engine_unsupported_preview : []
@@ -764,12 +840,19 @@ const getTargetIds = () => {
     .map(mod => mod.package_id)
 }
 
+const warnImageOptIfNeeded = () => {
+  if (isZstdMode.value && !isImageOptEnabled.value) {
+    toast.warning('当前启用列表未检测到 Image Opt。ZSTD 贴图仍会生成，但游戏可能不会读取这些文件。')
+  }
+}
+
 const handleAnalyze = async () => {
   const ids = getTargetIds()
   await textureStore.startAnalysis(ids, targetScope.value)
 }
 
 const handleOptimize = async () => {
+  warnImageOptIfNeeded()
   const ids = getTargetIds()
   await textureStore.startOptimization(ids, 'optimize', targetScope.value)
 }
@@ -777,8 +860,121 @@ const handleOptimize = async () => {
 const handleCleanGenerated = async () => {
   const ids = getTargetIds()
   await textureStore.startOptimization(ids, 'clean_generated', targetScope.value, {
-    clean_uninstalled_residue_only: cleanResidueOnly.value,
+    clean_output_format: cleanOutputFormat.value,
   })
+}
+
+const handleCleanResidue = async () => {
+  const ids = getTargetIds()
+  await textureStore.startOptimization(ids, 'clean_generated', targetScope.value, {
+    clean_uninstalled_residue_only: true,
+    clean_output_format: cleanOutputFormat.value,
+  })
+}
+
+const handleCleanWithoutSource = async () => {
+  const ok = await confirmStore.confirmAction(
+    `删除无源 ${cleanOutputLabel.value}`,
+    `将删除当前范围内没有同名 PNG 源图的 ${cleanOutputLabel.value}。部分模组会直接使用纯 DDS 贴图，这类文件可能被误删；建议确认目标范围后再继续。`,
+    {
+      type: 'error',
+      confirmText: '确认删除',
+      cancelText: '取消',
+    },
+  )
+  if (!ok) return
+  const ids = getTargetIds()
+  await textureStore.startOptimization(ids, 'clean_generated', targetScope.value, {
+    clean_output_format: cleanOutputFormat.value,
+    clean_without_source: true,
+  })
+}
+
+const buildSingleModTarget = (item) => ({
+  mod_path: String(item?.mod_path || ''),
+  mod_name: String(item?.mod_name || ''),
+  package_id: String(item?.package_id || ''),
+  store: String(item?.store || ''),
+  path_hash: String(item?.path_hash || ''),
+  mod_instance_key: String(item?.mod_instance_key || item?.path_hash || item?.mod_path || ''),
+})
+
+const getSingleTargetIds = (item) => {
+  const packageId = String(item?.package_id || '').trim()
+  return packageId ? [packageId] : []
+}
+
+const handleOptimizeSingleMod = async (item) => {
+  if (!item?.mod_path) return
+  warnImageOptIfNeeded()
+  await textureStore.startOptimization(getSingleTargetIds(item), 'optimize', 'single', {
+    single_mod_target: buildSingleModTarget(item),
+  })
+}
+
+const handleAnalyzeSingleMod = async (item) => {
+  if (!item?.mod_path) return
+  await textureStore.startAnalysis(getSingleTargetIds(item), 'single', {
+    single_mod_target: buildSingleModTarget(item),
+  })
+}
+
+const handleCleanSingleMod = async (item, outputFormat = cleanOutputFormat.value) => {
+  if (!item?.mod_path) return
+  await textureStore.startOptimization(getSingleTargetIds(item), 'clean_generated', 'single', {
+    clean_uninstalled_residue_only: false,
+    clean_output_format: outputFormat,
+    single_mod_target: buildSingleModTarget(item),
+  })
+}
+
+const handleCleanSingleModWithoutSource = async (item, outputFormat = cleanOutputFormat.value) => {
+  if (!item?.mod_path) return
+  const outputLabel = outputFormat === 'zstd' ? 'ZSTD' : 'DDS'
+  const ok = await confirmStore.confirmAction(
+    `删除无源 ${outputLabel}`,
+    `将删除「${item.mod_name || '当前模组'}」中没有同名 PNG 源图的 ${outputLabel}。部分模组会直接使用纯 DDS 贴图，这类文件可能被误删。`,
+    { type: 'error', confirmText: '确认删除', cancelText: '取消' },
+  )
+  if (!ok) return
+  await textureStore.startOptimization(getSingleTargetIds(item), 'clean_generated', 'single', {
+    clean_output_format: outputFormat,
+    clean_without_source: true,
+    single_mod_target: buildSingleModTarget(item),
+  })
+}
+
+const openTextureModMenu = (event, item) => {
+  contextMenuStore.open(event, [
+    { label: '刷新该模组统计', icon: ScanSearch, disabled: isBusy.value || !item?.mod_path, action: () => handleAnalyzeSingleMod(item) },
+    { label: `生成${isZstdMode.value ? ' ZSTD' : ' DDS'}（当前配置）`, icon: Rocket, disabled: isBusy.value || !toolStatus.value.available || !item?.mod_path, action: () => handleOptimizeSingleMod(item) },
+    {
+      label: '清理已生成',
+      icon: BrushCleaning,
+      disabled: isBusy.value || !toolStatus.value.available || !item?.mod_path,
+      children: [
+        { label: '只清理 DDS', icon: BrushCleaning, action: () => handleCleanSingleMod(item, 'dds') },
+        { label: '只清理 ZSTD', icon: BrushCleaning, action: () => handleCleanSingleMod(item, 'zstd') },
+      ],
+    },
+    {
+      label: '删除无源',
+      icon: Trash2,
+      level: 'danger',
+      disabled: isBusy.value || !item?.mod_path,
+      children: [
+        { label: '只删除无源 DDS', icon: Trash2, level: 'danger', action: () => handleCleanSingleModWithoutSource(item, 'dds') },
+        { label: '只删除无源 ZSTD', icon: Trash2, level: 'danger', action: () => handleCleanSingleModWithoutSource(item, 'zstd') },
+      ],
+    },
+    { divider: true },
+    { label: textureStore.isModExcluded(item?.package_id) ? '取消排除模组' : '排除模组', icon: Ban, disabled: !item?.package_id, action: () => handleToggleModExclusion(item) },
+    { label: '打开模组目录', icon: FolderOpen, disabled: !item?.mod_path, action: () => appStore.openPath(item.mod_path) },
+  ], item)
+}
+
+const openImageOptWorkshop = () => {
+  appStore.openSteamWorkshopById(IMAGE_OPT_WORKSHOP_ID)
 }
 
 const handleCancel = async () => {
@@ -924,16 +1120,16 @@ function formatDateTime(value) {
 .panel-slide-enter-from,
 .panel-slide-leave-to {
   opacity: 0;
-  transform: translateX(24px);
+  transform: translateX(1.5rem);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 0.375rem;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
-  border-radius: 10px;
+  border-radius: 0.625rem;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
