@@ -27,14 +27,14 @@
                     <div class="text-xs ">
                       <h4 class="text-sm font-bold text-text-main">Steamworks Web API</h4>
                       <p class="mt-1 leading-relaxed text-text-dim">
-                        仅用于在线搜索创意工坊模组，该 Key 仅保存在本地配置，不会上传到任何服务器，如有顾虑可以不用填写。
+                        开启并填写 Key 后，会使用 Steam Web API 获取更完整的工坊搜索、合集搜索、作者作品和依赖关联信息。关闭时仍可使用本地缓存工坊数据库。
                       </p>
                       <span class="text-accent-warn">注意！“API 密钥（API Key）相当于你的 Steam 账号后门钥匙”。可以读取账号公开数据/库存信息 以及 管理与监听交易报价。</span>
                       <p>任何人一旦获取了此 Key，就可以在不触发 Steam 令牌的情况下，暗中取消玩家的真实交易，并替换为发给骗子的假交易。绝对不要将 API 密钥分享给任何人或任何未经验证的第三方网站。</p>
                     </div>
-                    <div class="flex items-end gap-2">
-                      <CommonInput class="flex-1" label="Steam Web API Key" v-model="formData.steam_web_api_key" is-password placeholder="填写后可启用在线搜索" description="在线搜索需要填写该 Key，否则将无法使用该功能。" />
-                    
+                    <CommonSwitch label="启用工坊增强信息" v-model="formData.enable_steam_enhanced_api" description="开启并填写 Key 后，工坊页会优先使用在线增强信息；没有 Key 或关闭此项时会自动使用本地缓存搜索。" />
+                    <div v-if="formData.enable_steam_enhanced_api" class="flex items-end gap-2">
+                      <CommonInput class="flex-1" label="Steam Web API Key" v-model="formData.steam_web_api_key" is-password placeholder="填写后启用增强搜索" description="Key 只保存在本地配置。没有 Key 时会自动回到缓存搜索。" />
                       <button @click="openUrlOnSteam('https://steamcommunity.com/dev/apikey')"
                         class="px-2 py-2 m-0.5 bg-bg-overlay/5 hover:bg-bg-overlay/10 border border-border-base/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
                         <span class="flex items-center gap-2">

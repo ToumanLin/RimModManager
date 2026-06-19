@@ -4,16 +4,19 @@
     :class="{ 'brightness-60 grayscale pointer-events-none': disabled }">
     <div class="px-4 py-3 bg-bg-overlay/5 border-b border-border-base/10 flex flex-col gap-3" :data-tour="'workspace-'+storeType + '-toolbar'">
       <div class="flex items-center justify-between">
-        <h3 class="text-sm font-bold text-text-main flex items-center gap-2 cursor-help" v-tooltip="tooltip">
-          <div class="w-2.5 h-2.5 rounded-full shadow-lg" :class="iconColor.replace('text-', 'bg-')"></div>
-          {{ title }}
-          <CommonSwitch v-if="storeType === 'workshop' && canToggleWorkshopMods" label="" mini class="w-22 -ml-4"
-            :disabled="workshopSwitchDisabled"
-            v-model="use_workshop_mods" description="适用于非 Steam 版环境。为当前环境使用创意工坊模组，启用后将通过链接方式自动为游戏添加创意工坊模组。（前提是账号拥有游戏，或创意工坊内容本身可正常使用。）" />
-          <CommonSwitch v-else-if="storeType === 'self'" label="" mini class="w-22 -ml-4"
-            v-model="use_self_mods" description="为当前环境使用管理器Mod，启用后将通过链接方式自动为游戏添加管理器 Mod。" />
-          <CommonSwitch v-if="storeType === 'local'" label="显示官方" mini class="text-text-dim" v-model="showOfficialLocalModsModel" description="默认隐藏 Core/DLC 等官方项目；隐藏时不会进入本地列表和多选范围。" />
+        <div class="flex gap-1">
+          <h3 class="text-sm font-bold text-text-main flex items-center gap-2 cursor-help" v-tooltip="tooltip">
+            <div class="w-2.5 h-2.5 rounded-full shadow-lg" :class="iconColor.replace('text-', 'bg-')"></div>
+            {{ title }}
           </h3>
+          <CommonSwitch v-if="storeType === 'workshop' && canToggleWorkshopMods" label="" mini class="text-text-dim" :disabled="workshopSwitchDisabled"
+            v-model="use_workshop_mods" description="适用于非 Steam 版环境。为当前环境使用创意工坊模组，启用后将通过链接方式自动为游戏添加创意工坊模组。（前提是账号拥有游戏，或创意工坊内容本身可正常使用。）" />
+          <CommonSwitch v-else-if="storeType === 'self'" label=" " mini class="text-text-dim" 
+            v-model="use_self_mods" description="为当前环境使用管理器Mod，启用后将通过链接方式自动为游戏添加管理器 Mod。" />
+          <CommonSwitch v-if="storeType === 'local'" label="· 显示官方" mini class="text-text-dim" 
+            v-model="showOfficialLocalModsModel" description="默认隐藏 Core/DLC 等官方项目；隐藏时不会进入本地列表和多选范围。" />
+        </div>
+
         <div class="flex gap-2">
           <span class="text-[0.65rem] font-mono text-text-dim bg-bg-inset/80 px-2 py-0.5 rounded-md border border-border-base/5">
             {{ formatFileSize(columnSize) }}

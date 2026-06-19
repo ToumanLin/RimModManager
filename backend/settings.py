@@ -269,6 +269,7 @@ class AppConfig:
     community_rules_path: str = str(COMMUNITY_RULES_PATH)
     git_provider_catalog_url: str = "RJW|https://gitgud.io/api/v4/projects/AblativeAbsolute%2Flibidinous_loader_providers/packages/generic/provider_nopin/latest/providers.json"
     user_rules_path: str = str(USER_RULES_PATH)
+    enable_steam_enhanced_api: bool = False  # 是否启用 Steam Web API 增强工坊搜索
     steam_web_api_key: str = ""  # Steamworks Web API 鉴权密钥，仅供需要受限接口的后端请求使用
     
     # --- 开发与调试设置 ---

@@ -1,6 +1,6 @@
 // frontend/src/stores/workspaceStore.js
 import { defineStore } from 'pinia'
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useAppStore } from '../../app/stores/appStore'
 import { checkResult, toast } from '../../shared/lib/common'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore'
@@ -9,11 +9,13 @@ import {
   dedupeNormalizedPackageIds, normalizeInstallSources,
   normalizePackageId, normalizeUrl, normalizeWorkshopId,
 } from '../mod/lib/modIdentity'
+import { hasWorkshopSearchText, resolveWorkshopDays, resolveWorkshopSort } from './workshopSearchOptions'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const appStore = useAppStore()
   const confirmStore = useConfirmStore()
   const listenersReady = ref(false)
+  const workshopSearchModeTouched = ref(false)
   const loadState = reactive({
     librariesLoaded: false,
     githubLoaded: false,
@@ -99,24 +101,69 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     results.total = results.workshop + results.self + results.local
     return results
   })
-  // 2. 缓存工坊数据库搜索状态
+  // 2. 工坊检索状态
+  // 普通模式走外置缓存库和旧版详情接口；增强模式走 Steam Web API。
+  // 两种模式的请求能力不同，但对前端列表和详情页要归一成同一套字段结构。
+  const hasSteamWebApiKey = () => !!String(appStore.settings.steam_web_api_key || '').trim()
+  // 增强模式必须同时满足“开关已开”和“Key 已填写”；任一条件缺失都回到普通模式。
+  const isEnhancedWorkshopSearchEnabled = () => !!appStore.settings.enable_steam_enhanced_api && hasSteamWebApiKey()
+  const canUseCollectionOnlineSearch = () => !!window.pywebview && hasSteamWebApiKey()
+  const getPreferredWorkshopSearchEnhanced = () => isEnhancedWorkshopSearchEnabled()
+  const getDefaultWorkshopSort = (isEnhancedMode) => (isEnhancedMode ? 'popular' : 'latest')
+  const initialWorkshopEnhanced = appStore.settingsReady ? getPreferredWorkshopSearchEnhanced() : true
   const workshopSearch = reactive({
     query: '',
     page: 1,
     cursor: '*',
     nextCursor: '',
     hasMore: true, // 是否还有下一页
+    hasSearched: false,
     results: [],
     total: 0,
-    sourceMode: 'offline',
-    onlineSort: 'relevance',
+    // 设置由后端异步注入；未就绪时先保持“优先增强”的展示意图，但不发任何请求。
+    isModeReady: !!appStore.settingsReady,
+    isEnhancedMode: initialWorkshopEnhanced,
+    sort: getDefaultWorkshopSort(initialWorkshopEnhanced),
+    advancedOpen: false,
+    queryTokens: [],
+    queryLogic: 'AND',
+    // 增强模式参数：其它搜索条件统一由 TagSearch token 编译，避免隐藏字段影响结果。
+    language: '',
+    days: 7,
+    searchTextTarget: 0,
+    languageOptions: [{ label: '跟随界面语言', value: '', code: '', name: 'Auto' }],
+    isLanguageOptionsLoaded: false,
+    dlcOptions: [],
+    isDlcOptionsLoaded: false,
     isLoading: false,       // 首次加载/搜索加载
     isLoadMore: false,      // 滚动到底部加载更多
     // --- 详情区状态 ---
     selectedId: null,
     detailData: null,
     isDetailLoading: false,
+    relatedLoading: { dependencies: false, dependents: false, same_author: false },
+    relatedErrors: { dependencies: '', dependents: '', same_author: '' },
+    relatedMeta: {
+      dependencies: { total: 0, hasMore: false },
+      dependents: { total: 0, hasMore: false },
+      same_author: { total: 0, hasMore: false },
+    },
     historyStack: [],       // 记录浏览路径: [id1, id2, id3]
+    transientList: {
+      active: false,
+      kind: '',
+      title: '',
+      sourceId: '',
+      authorSteamId: '',
+      items: [],
+      total: 0,
+      cursor: '*',
+      nextCursor: '',
+      hasMore: false,
+      page: 1,
+      isLoading: false,
+      isLoadMore: false,
+    },
   })
   // 3. 时间线抽屉状态
   const timeline = reactive({
@@ -128,13 +175,26 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   })
   // 4. 已订阅合集抽屉状态
   const collections = reactive({
+    activeView: 'saved',
     savedList: [],        // 后端获取的已订阅合集列表
     isLoading: false,     // 整体加载状态
     isParsing: false,     // 解析新合集时的 Loading 状态
     activeId: null,       // 当前选中的合集 ID
     activeDetails: null,  // 当前选中合集的详细信息 (包含 meta)
     activeChildren: [],   // 当前选中合集内的子 Mod 列表
-    isChildrenLoading: false // 子列表加载状态
+    isChildrenLoading: false, // 子列表加载状态
+    searchQuery: '',
+    searchTokens: [],
+    searchLogic: 'AND',
+    searchSort: 'popular',
+    searchDays: 7,
+    searchCursor: '*',
+    searchNextCursor: '',
+    searchHasMore: true,
+    searchResults: [],
+    searchTotal: 0,
+    isSearchLoading: false,
+    isSearchLoadMore: false,
   })
   // 5. Git 仓库订阅状态
   const github = reactive({
@@ -154,6 +214,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const isFetching = ref(false)
   const matrixFocusTarget = ref(null)
+  let workshopSearchReadyPromise = null
 
   const allLibraryMods = computed(() => [
     ...librariesMods.workshop,
@@ -468,12 +529,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (listenersReady.value) return
     listenersReady.value = true
 
-    // 【监听 A】: self 域在线状态静默更新
+    // 【监听 A】: Steam 公开详情静默更新
     // payload 格式: { "12345": { title: "...", time_updated: 17000000, preview_url: "..." }, ... }
     window.addEventListener('workspace-online-update', (e) => {
-      const onlineMap = e.detail
-      console.log("[Workspace] 收到 Steam 在线状态批量推送[self]:", Object.keys(onlineMap).length, "条记录")
-      // 该事件当前只服务 self 预热，避免把 self 的在线时间误覆盖到 workshop 域。
+      const onlineMap = e.detail || {}
+      console.log("[Workspace] 收到 Steam 在线状态批量推送:", Object.keys(onlineMap).length, "条记录")
       const mergeOnlineData = (modList) => {
         modList.forEach(mod => {
           const wid = String(mod.workshop_id)
@@ -487,6 +547,26 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         })
       }
       mergeOnlineData(librariesMods.self)
+      // 普通工坊搜索页也复用这条公开详情推送：只合并展示字段，不改变请求模式。
+      workshopSearch.results = mergeWorkshopOnlineMapIntoItems(workshopSearch.results, onlineMap)
+      workshopSearch.transientList.items = mergeWorkshopOnlineMapIntoItems(workshopSearch.transientList.items, onlineMap)
+      if (workshopSearch.detailData?.workshop_id && onlineMap[workshopSearch.detailData.workshop_id]) {
+        mergeWorkshopDetailData(onlineMap[workshopSearch.detailData.workshop_id])
+      }
+      const current = workshopSearch.detailData || {}
+      const related = current.related || {}
+      if (Object.keys(onlineMap).length && Object.keys(related).length) {
+        workshopSearch.detailData = normalizeWorkshopSearchItem({
+          ...current,
+          related: {
+            ...related,
+            dependencies: mergeWorkshopOnlineMapIntoItems(related.dependencies || [], onlineMap),
+            dependents: mergeWorkshopOnlineMapIntoItems(related.dependents || [], onlineMap),
+            same_author: mergeWorkshopOnlineMapIntoItems(related.same_author || [], onlineMap),
+            collection_children: mergeWorkshopOnlineMapIntoItems(related.collection_children || [], onlineMap),
+          },
+        })
+      }
     })
     // 【监听 A2】: 缺失工坊项可用性探查。只更新运行时标签，不改变库存状态。
     window.addEventListener('workspace-missing-workshop-probe', (e) => {
@@ -582,41 +662,380 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       })
   }
 
+  const normalizeWorkshopQueryValue = (value = '') => String(value ?? '').trim()
+  const mergeUniqueWorkshopTerms = (...groups) => {
+    const seen = new Set()
+    return groups.flat().map(normalizeWorkshopQueryValue).filter(value => {
+      const key = value.toLowerCase()
+      if (!value || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }
+  // Steam 的文本搜索最终只认 AND / OR / NOT；前端输入只暴露 + / | / -。
+  // 这里保留括号并在请求前转换，避免用户输入原始 AND/OR/NOT 时被误识别为运算符。
+  const tokenizeSteamSymbolSearchText = (value = '') => {
+    const text = normalizeWorkshopQueryValue(value)
+    const tokens = []
+    let buffer = ''
+    const flush = () => {
+      const term = buffer.trim()
+      if (term) tokens.push({ type: 'term', value: term })
+      buffer = ''
+    }
+
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index]
+      const prev = index > 0 ? text[index - 1] : ''
+      const next = index < text.length - 1 ? text[index + 1] : ''
+      const prevIsBoundary = index === 0 || /\s/.test(prev) || ['(', '+', '|', '-'].includes(prev)
+      const nextIsBoundary = !next || /\s/.test(next) || ['(', ')', '+', '|', '-'].includes(next)
+      const isMinusOperator = char === '-' && (prevIsBoundary || nextIsBoundary)
+      const isOperator = char === '+' || char === '|' || isMinusOperator
+      if (isOperator || char === '(' || char === ')') {
+        flush()
+        tokens.push({ type: char === '(' || char === ')' ? 'paren' : 'operator', value: char })
+        continue
+      }
+      buffer += char
+    }
+    flush()
+    return tokens
+  }
+  const neutralizeRawSteamOperatorWords = (value = '') => (
+    String(value || '').replace(/\b(AND|OR|NOT)\b/g, matched => matched.toLowerCase())
+  )
+  const convertSteamSymbolSearchText = (value = '') => {
+    const text = normalizeWorkshopQueryValue(value)
+    if (!/[+|()]/.test(text) && !/(^|\s)-\S|-\s+\S/.test(text)) return neutralizeRawSteamOperatorWords(text)
+    const tokens = tokenizeSteamSymbolSearchText(text)
+    const output = []
+    let previousWasOperand = false
+    tokens.forEach(token => {
+      if (token.type === 'term') {
+        output.push(neutralizeRawSteamOperatorWords(token.value))
+        previousWasOperand = true
+        return
+      }
+      if (token.type === 'paren') {
+        output.push(token.value)
+        previousWasOperand = token.value === ')'
+        return
+      }
+      if (token.value === '+') {
+        if (previousWasOperand) output.push('AND')
+        previousWasOperand = false
+        return
+      }
+      if (token.value === '|') {
+        if (previousWasOperand) output.push('OR')
+        previousWasOperand = false
+        return
+      }
+      if (token.value === '-') {
+        if (previousWasOperand) output.push('AND')
+        output.push('NOT')
+        previousWasOperand = false
+      }
+    })
+    return output.join(' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').replace(/\s+/g, ' ').trim()
+  }
+  const buildSteamExcludedText = (value = '') => {
+    const converted = convertSteamSymbolSearchText(value)
+    if (!converted) return ''
+    return /(\s|\(|\)|\bAND\b|\bOR\b|\bNOT\b)/.test(converted) ? `NOT (${converted})` : `NOT ${converted}`
+  }
+  const buildWorkshopSearchTextQuery = (textTerms = [], excludedTextTerms = [], logic = 'AND') => {
+    const positiveTerms = mergeUniqueWorkshopTerms(textTerms).map(convertSteamSymbolSearchText).filter(Boolean)
+    const negativeTerms = mergeUniqueWorkshopTerms(excludedTextTerms).map(buildSteamExcludedText).filter(Boolean)
+    const operator = String(logic || 'AND').toUpperCase() === 'OR' ? ' OR ' : ' AND '
+    const positiveQuery = positiveTerms.join(operator)
+    const negativeQuery = negativeTerms.join(' AND ')
+    return [positiveQuery, negativeQuery].filter(Boolean).join(' ').trim()
+  }
+  const compileWorkshopQueryTokens = () => {
+    const compiled = {
+      textTerms: [],
+      excludedTextTerms: [],
+      requiredTags: [],
+      excludedTags: [],
+      requiredDlcAppids: [],
+      excludedDlcAppids: [],
+      dependencyWorkshopIds: [],
+      excludedDependencyWorkshopIds: [],
+      author: '',
+    }
+
+    for (const token of workshopSearch.queryTokens || []) {
+      const value = normalizeWorkshopQueryValue(token?.value)
+      if (!value) continue
+      if (token.type === 'text') {
+        ;(token.exclude ? compiled.excludedTextTerms : compiled.textTerms).push(value)
+        continue
+      }
+      if (token.key === 'text') {
+        ;(token.exclude ? compiled.excludedTextTerms : compiled.textTerms).push(value)
+      } else if (token.key === 'tag') {
+        ;(token.exclude ? compiled.excludedTags : compiled.requiredTags).push(value)
+      } else if (token.key === 'dlc') {
+        ;(token.exclude ? compiled.excludedDlcAppids : compiled.requiredDlcAppids).push(value)
+      } else if (token.key === 'dependency') {
+        ;(token.exclude ? compiled.excludedDependencyWorkshopIds : compiled.dependencyWorkshopIds).push(value)
+      } else if (token.key === 'author' && !token.exclude) {
+        compiled.author = value
+      }
+    }
+
+    return {
+      ...compiled,
+      query: buildWorkshopSearchTextQuery(compiled.textTerms, compiled.excludedTextTerms, workshopSearch.queryLogic),
+      requiredTags: mergeUniqueWorkshopTerms(compiled.requiredTags),
+      excludedTags: mergeUniqueWorkshopTerms(compiled.excludedTags),
+      requiredDlcAppids: mergeUniqueWorkshopTerms(compiled.requiredDlcAppids),
+      excludedDlcAppids: mergeUniqueWorkshopTerms(compiled.excludedDlcAppids),
+      dependencyWorkshopIds: mergeUniqueWorkshopTerms(compiled.dependencyWorkshopIds),
+      excludedDependencyWorkshopIds: mergeUniqueWorkshopTerms(compiled.excludedDependencyWorkshopIds),
+    }
+  }
+
+  const compileCollectionQueryTokens = () => {
+    const compiled = {
+      textTerms: [],
+      excludedTextTerms: [],
+      requiredTags: [],
+      excludedTags: [],
+    }
+
+    for (const token of collections.searchTokens || []) {
+      const value = normalizeWorkshopQueryValue(token?.value)
+      if (!value) continue
+      if (token.type === 'text') {
+        ;(token.exclude ? compiled.excludedTextTerms : compiled.textTerms).push(value)
+      } else if (token.key === 'text') {
+        ;(token.exclude ? compiled.excludedTextTerms : compiled.textTerms).push(value)
+      } else if (token.key === 'tag') {
+        ;(token.exclude ? compiled.excludedTags : compiled.requiredTags).push(value)
+      }
+    }
+
+    return {
+      ...compiled,
+      query: buildWorkshopSearchTextQuery(compiled.textTerms, compiled.excludedTextTerms, collections.searchLogic),
+      requiredTags: mergeUniqueWorkshopTerms(compiled.requiredTags),
+      excludedTags: mergeUniqueWorkshopTerms(compiled.excludedTags),
+    }
+  }
+
+  const buildWorkshopSearchFilters = (compiledTokens = compileWorkshopQueryTokens()) => {
+    const isEnhancedMode = workshopSearch.isEnhancedMode
+    const tokenMatchAll = String(workshopSearch.queryLogic || 'AND').toUpperCase() !== 'OR'
+    const hasText = hasWorkshopSearchText(workshopSearch.queryTokens)
+    const requestSort = isEnhancedMode ? resolveWorkshopSort(workshopSearch.sort, hasText) : workshopSearch.sort
+    const commonFilters = {
+      sort: requestSort || (isEnhancedMode ? 'popular' : 'latest'),
+      author: compiledTokens.author,
+      required_tags: compiledTokens.requiredTags,
+      excluded_tags: compiledTokens.excludedTags,
+      match_all_tags: tokenMatchAll,
+      required_dlc_appids: compiledTokens.requiredDlcAppids,
+      child_publishedfileid: compiledTokens.dependencyWorkshopIds[0] || '',
+    }
+    if (!isEnhancedMode) return commonFilters
+    const enhancedFilters = {
+      ...commonFilters,
+      language: workshopSearch.language || appStore.settings.language || '',
+      appid: 294100,
+      type: 0,
+      strip_description_bbcode: false,
+      excluded_appids_required_for_use: compiledTokens.excludedDlcAppids,
+    }
+    const resolvedDays = resolveWorkshopDays(workshopSearch.sort, workshopSearch.days, hasText)
+    if (resolvedDays !== undefined) enhancedFilters.days = resolvedDays
+    enhancedFilters.search_text_target = Number(workshopSearch.searchTextTarget || 0)
+    return enhancedFilters
+  }
+
+  const isWorkshopSearchDebugEnabled = () => import.meta.env.DEV || !!appStore.settings.debug_mode
+
+  const logWorkshopSearchDebug = (payload = {}) => {
+    if (!isWorkshopSearchDebugEnabled()) return
+    console.groupCollapsed(`[RMM Workshop Search] ${payload.isEnhancedMode ? 'enhanced' : 'normal'} ${payload.isAppend ? 'append' : 'search'}`)
+    console.info('request', payload.request)
+    console.info('response', payload.response)
+    console.info('items', payload.items)
+    console.groupEnd()
+  }
+
+  const mergeWorkshopItemPatch = (item = {}, patch = {}) => {
+    if (!item?.workshop_id || !patch || typeof patch !== 'object') return item
+    return normalizeWorkshopSearchItem({
+      ...item,
+      ...patch,
+      related: {
+        ...(item.related || {}),
+        ...(patch.related || {}),
+      },
+    })
+  }
+
+  const mergeWorkshopOnlineMapIntoItems = (items = [], onlineMap = {}) => (
+    items.map(item => {
+      const workshopId = String(item?.workshop_id || '').trim()
+      return workshopId && onlineMap[workshopId] ? mergeWorkshopItemPatch(item, onlineMap[workshopId]) : item
+    })
+  )
+
+  const preheatNormalWorkshopPublicDetails = async (items = []) => {
+    if (!window.pywebview || workshopSearch.isEnhancedMode) return
+    const workshopIds = [...new Set(
+      items.map(item => String(item?.workshop_id || '').trim()).filter(Boolean)
+    )]
+    if (!workshopIds.length) return
+    try {
+      await window.pywebview.api.workshop_preheat_public_details(workshopIds)
+    } catch (error) {
+      console.debug('[Workspace] 普通工坊公开详情预热失败:', error)
+    }
+  }
+
+  const normalizeWorkshopRelationItem = (value = {}, fallback = {}) => {
+    if (typeof value === 'string' || typeof value === 'number') {
+      return {
+        workshop_id: String(value || '').trim(),
+        title: String(fallback.title || fallback.name || '').trim(),
+        name: String(fallback.name || fallback.title || '').trim(),
+        preview_url: String(fallback.preview_url || '').trim(),
+      }
+    }
+    return {
+      ...value,
+      workshop_id: String(value.workshop_id || value.publishedfileid || fallback.workshop_id || '').trim(),
+      title: String(value.title || value.name || fallback.title || fallback.name || '').trim(),
+      name: String(value.name || value.title || fallback.name || fallback.title || '').trim(),
+      preview_url: String(value.preview_url || fallback.preview_url || '').trim(),
+    }
+  }
+
+  const dedupeWorkshopRelations = (items = [], currentId = '') => {
+    const seen = new Set()
+    return items
+      .map(item => normalizeWorkshopRelationItem(item))
+      .filter(item => {
+        const workshopId = item.workshop_id
+        if (!workshopId || workshopId === currentId || seen.has(workshopId)) return false
+        seen.add(workshopId)
+        return true
+      })
+  }
+
+  const buildUnifiedWorkshopRelations = (item = {}, currentId = '') => {
+    const manifestDependencies = Object.entries(item.dependencies_mods || {}).map(([workshopId, name]) => (
+      normalizeWorkshopRelationItem(workshopId, { name, title: name })
+    ))
+    const onlineDependencies = Array.isArray(item.dependencies_mods_online) ? item.dependencies_mods_online : []
+    const children = Array.isArray(item.children) ? item.children : []
+    const existingDependencies = Array.isArray(item.related?.dependencies) ? item.related.dependencies : []
+    const existingCollectionChildren = Array.isArray(item.related?.collection_children) ? item.related.collection_children : []
+    const isCollection = item.item_type === 'collection'
+    // Steam 的 children 字段在不同类型下语义不同：
+    // 普通物品表示依赖父项，合集表示包含的子项，因此必须按 item_type 分流。
+    const dependencies = isCollection ? manifestDependencies : [...existingDependencies, ...manifestDependencies, ...onlineDependencies, ...children]
+    return {
+      dependencies: dedupeWorkshopRelations(dependencies, currentId),
+      dependents: dedupeWorkshopRelations(item.related?.dependents || item.dependents_mods || [], currentId),
+      same_author: dedupeWorkshopRelations(item.related?.same_author || item.same_author_mods || [], currentId),
+      collection_children: isCollection ? dedupeWorkshopRelations([...existingCollectionChildren, ...children], currentId) : [],
+    }
+  }
+
+  const resolveWorkshopItemType = (item = {}) => {
+    const itemType = String(item.item_type || '').trim().toLowerCase()
+    return ['mod', 'collection', 'other'].includes(itemType) ? itemType : 'mod'
+  }
+
+  const normalizeWorkshopStats = (item = {}) => {
+    const stats = item.stats && typeof item.stats === 'object' ? item.stats : {}
+    return {
+      subscriptions: Number(stats.subscriptions || 0),
+      favorited: Number(stats.favorited || 0),
+      votes_up: Number(stats.votes_up || 0),
+      votes_down: Number(stats.votes_down || 0),
+      vote_score: Number(stats.vote_score || 0),
+      num_reports: Number(stats.num_reports || 0),
+      num_comments_public: Number(stats.num_comments_public || 0),
+    }
+  }
+
+  const pickWorkshopTranslation = (translations = {}) => {
+    if (!translations || typeof translations !== 'object') return {}
+    const preferred = [
+      workshopSearch.language,
+      appStore.settings.language,
+      String(appStore.settings.language || '').split('-')[0],
+      'zh-CN',
+      'zh',
+      'en',
+    ].map(value => String(value || '').trim()).filter(Boolean)
+    for (const lang of preferred) {
+      const value = translations[lang]
+      if (value && typeof value === 'object' && (value.title || value.description)) return value
+    }
+    return {}
+  }
+
   const normalizeWorkshopSearchItem = (item = {}) => {
-    const versionTags = normalizeVersionTags(item.tags)
+    const rawTags = Array.isArray(item.tags)
+      ? item.tags.map(tag => String(tag || '').trim()).filter(Boolean)
+      : []
+    const versionTags = normalizeVersionTags(rawTags)
     const gameVersions = normalizeVersionTags([
       ...(Array.isArray(item.game_versions) ? item.game_versions : []),
       ...versionTags,
     ])
     const author = Array.isArray(item.author)
       ? item.author.filter(Boolean).join(' / ')
-      : String(item.author || '').trim()
-    return {
+      : String(item.author || item.author_profile?.name || '').trim()
+    const workshopId = String(item.workshop_id || '').trim()
+    const itemType = resolveWorkshopItemType(item)
+    const stats = normalizeWorkshopStats(item)
+    const translations = item.translations && typeof item.translations === 'object' ? item.translations : {}
+    const preferredTranslation = pickWorkshopTranslation(translations)
+    const rawTitle = String(item.title || item.name || '').trim()
+    const rawDescription = String(item.description || item.short_description || '').trim()
+    const children = Array.isArray(item.children)
+      ? [...item.children]
+          .filter(child => child && child.workshop_id)
+          .sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0))
+      : []
+    const normalizedItem = {
       ...item,
-      workshop_id: String(item.workshop_id || '').trim(),
-      title: String(item.title || item.name || '').trim(),
-      name: String(item.name || item.title || '未知模组').trim(),
+      workshop_id: workshopId,
+      title: String(preferredTranslation.title || rawTitle).trim(),
+      name: String(preferredTranslation.title || item.name || rawTitle || '未知模组').trim(),
+      original_title: rawTitle,
       package_id: String(item.package_id || '').trim(),
       author,
       author_steam_id: String(item.author_steam_id || '').trim(),
+      author_profile: item.author_profile || null,
       short_description: String(item.short_description || '').trim(),
-      description: String(item.description || item.short_description || '').trim(),
+      description: String(preferredTranslation.description || rawDescription).trim(),
+      original_description: rawDescription,
       preview_url: String(item.preview_url || '').trim(),
       game_versions: gameVersions,
-      tags: versionTags,
-      // 关联项按照 Steam 返回的顺序号稳定排序，避免同一批数据每次展开顺序抖动。
-      children: Array.isArray(item.children)
-        ? [...item.children]
-            .filter(child => child && child.workshop_id)
-            .sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0))
-        : [],
+      tags: rawTags,
+      children,
       screenshots: Array.isArray(item.screenshots) ? item.screenshots : [],
-      subscriptions: Number(item.subscriptions || 0),
-      favorited: Number(item.favorited || 0),
+      stats,
+      kv_tags: Array.isArray(item.kv_tags) ? item.kv_tags : [],
+      status: item.status && typeof item.status === 'object' ? item.status : {},
+      item_type: itemType,
+      translations,
       time_created: Number(item.time_created || 0),
       time_updated: Number(item.time_updated || 0),
       source: String(item.source || '').trim(),
     }
+    normalizedItem.related = buildUnifiedWorkshopRelations(normalizedItem, workshopId)
+    return normalizedItem
   }
 
   const mergeWorkshopSearchResults = (currentItems = [], nextItems = []) => {
@@ -629,16 +1048,285 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     })
   }
 
+  const findWorkshopListItem = (workshopId) => {
+    const normalizedId = String(workshopId || '').trim()
+    if (!normalizedId) return null
+    const related = workshopSearch.detailData?.related || {}
+    return [
+      ...(workshopSearch.transientList.active ? workshopSearch.transientList.items : []),
+      ...workshopSearch.results,
+      ...(related.dependencies || []),
+      ...(related.dependents || []),
+      ...(related.same_author || []),
+      ...(related.collection_children || []),
+    ].find(item => item.workshop_id === normalizedId) || null
+  }
+
+  const mergeWorkshopDetailData = (nextData = {}) => {
+    const current = workshopSearch.detailData || {}
+    const normalized = normalizeWorkshopSearchItem({
+      ...current,
+      ...nextData,
+      related: {
+        ...(current.related || {}),
+        ...(nextData.related || {}),
+      },
+    })
+    workshopSearch.detailData = normalized
+    return normalized
+  }
+
+  const applyWorkshopRelatedItems = (key, responseData = {}) => {
+    const items = (responseData.items || []).map(normalizeWorkshopSearchItem)
+    const current = workshopSearch.detailData || {}
+    const relationKey = key === 'dependencies' && responseData.source === 'steam_collection_children'
+      ? 'collection_children'
+      : key
+    const related = {
+      ...(current.related || {}),
+      [relationKey]: mergeWorkshopSearchResults([], items),
+    }
+    workshopSearch.detailData = normalizeWorkshopSearchItem({ ...current, related })
+    const total = Number(responseData.total || items.length || 0)
+    workshopSearch.relatedMeta[key] = {
+      total,
+      hasMore: total > items.length,
+    }
+    return items
+  }
+
+  const buildOnlineRelationFilters = () => ({
+    language: workshopSearch.language || appStore.settings.language || '',
+    return_vote_data: true,
+    // 详情页三路关联会在同一批结果收齐后统一补作者信息，避免每路请求都查一次作者。
+    skip_author_profiles: true,
+  })
+
+  const getWorkshopRelationLabel = (kind) => ({
+    dependencies: '依赖项目',
+    dependents: '生态关联',
+    same_author: '同作者作品',
+  }[kind] || '')
+
+  const getWorkshopTransientListTitle = (kind, sourceItem = {}) => {
+    const kindLabel = getWorkshopRelationLabel(kind)
+    if (!kindLabel) return ''
+    if (kind === 'same_author') {
+      const authorName = String(
+        sourceItem.author || sourceItem.author_profile?.name || workshopSearch.detailData?.author || workshopSearch.detailData?.author_profile?.name || ''
+      ).trim()
+      return `${kindLabel}: ${authorName || '未知作者'}`
+    }
+    const title = String(sourceItem.title || sourceItem.name || workshopSearch.detailData?.title || sourceItem.workshop_id || workshopSearch.selectedId || '').trim()
+    return `${kindLabel}: ${title}`
+  }
+
+  const mergeAuthorProfilesIntoWorkshopItems = (items = [], authorMap = {}) => (
+    items.map(item => {
+      const authorId = String(item?.author_steam_id || '').trim()
+      const profile = authorMap[authorId]
+      if (!profile) return item
+      return {
+        ...item,
+        author_profile: profile,
+        author: item.author || profile.name || '',
+      }
+    })
+  )
+
+  const fetchWorkshopAuthorProfilesForItems = async (items = []) => {
+    // 作者资料接口需要 API Key；普通模式只展示外置库作者名，不做在线作者补全。
+    if (!window.pywebview || !workshopSearch.isEnhancedMode) return {}
+    const authorIds = [...new Set(
+      items
+        .map(item => String(item?.author_steam_id || '').trim())
+        .filter(Boolean)
+    )]
+    if (!authorIds.length) return {}
+    const res = await window.pywebview.api.workshop_get_author_profiles(authorIds)
+    return checkResult(res, '获取作者信息', false, { silent: true }) ? (res.data || {}) : {}
+  }
+
+  const syncWorkshopRelatedAuthorProfiles = async (workshopId) => {
+    const current = workshopSearch.detailData || {}
+    const related = current.related || {}
+    const allItems = [
+      ...(related.dependencies || []),
+      ...(related.dependents || []),
+      ...(related.same_author || []),
+      ...(related.collection_children || []),
+    ]
+    const authorMap = await fetchWorkshopAuthorProfilesForItems(allItems)
+    if (workshopSearch.selectedId !== workshopId || Object.keys(authorMap).length === 0) return
+    workshopSearch.detailData = normalizeWorkshopSearchItem({
+      ...current,
+      related: {
+        ...related,
+        dependencies: mergeAuthorProfilesIntoWorkshopItems(related.dependencies || [], authorMap),
+        dependents: mergeAuthorProfilesIntoWorkshopItems(related.dependents || [], authorMap),
+        same_author: mergeAuthorProfilesIntoWorkshopItems(related.same_author || [], authorMap),
+        collection_children: mergeAuthorProfilesIntoWorkshopItems(related.collection_children || [], authorMap),
+      },
+    })
+  }
+
+  const fetchWorkshopRelatedData = async (workshopId) => {
+    if (!window.pywebview) return
+    const currentDetail = workshopSearch.detailData || {}
+    const isEnhancedMode = workshopSearch.isEnhancedMode
+    // 两种模式共用前端展示结构，但请求源严格分离：
+    // 普通模式只走外置缓存库；增强模式走 Steam Web API 的 QueryFiles/GetDetails/GetUserFiles。
+    const relationJobs = [
+      {
+        key: 'dependencies',
+        label: currentDetail.item_type === 'collection' ? '合集子项' : getWorkshopRelationLabel('dependencies'),
+        run: () => isEnhancedMode
+          ? window.pywebview.api.workshop_get_dependencies_enhanced(workshopId, currentDetail)
+          : window.pywebview.api.workshop_get_dependencies(workshopId),
+      },
+      {
+        key: 'dependents',
+        label: getWorkshopRelationLabel('dependents'),
+        run: () => isEnhancedMode
+          ? window.pywebview.api.workshop_search_dependents_enhanced(workshopId, '*', 20, buildOnlineRelationFilters())
+          : window.pywebview.api.workshop_search_dependents(workshopId, 1, 20),
+      },
+      {
+        key: 'same_author',
+        label: getWorkshopRelationLabel('same_author'),
+        run: () => isEnhancedMode
+          ? window.pywebview.api.workshop_get_same_author_enhanced(workshopId, currentDetail.author_steam_id || '', 1, 20, buildOnlineRelationFilters())
+          : window.pywebview.api.workshop_get_same_author(workshopId, 1, 20),
+      },
+    ]
+
+    relationJobs.forEach(job => {
+      workshopSearch.relatedLoading[job.key] = true
+      workshopSearch.relatedErrors[job.key] = ''
+    })
+
+    await Promise.all(relationJobs.map(async (job) => {
+      try {
+        const res = await job.run()
+        if (workshopSearch.selectedId !== workshopId) return
+        if (checkResult(res, `获取${job.label}`, false, { silent: true })) {
+          applyWorkshopRelatedItems(job.key, res.data || {})
+        } else {
+          workshopSearch.relatedErrors[job.key] = res?.message || `${job.label}加载失败`
+        }
+      } catch (error) {
+        if (workshopSearch.selectedId === workshopId) {
+          workshopSearch.relatedErrors[job.key] = String(error?.message || error || `${job.label}加载失败`)
+        }
+      } finally {
+        if (workshopSearch.selectedId === workshopId) {
+          workshopSearch.relatedLoading[job.key] = false
+        }
+      }
+    }))
+    if (isEnhancedMode) {
+      await syncWorkshopRelatedAuthorProfiles(workshopId)
+    } else {
+      const current = workshopSearch.detailData || {}
+      const related = current.related || {}
+      await preheatNormalWorkshopPublicDetails([
+        current,
+        ...(related.dependencies || []),
+        ...(related.dependents || []),
+        ...(related.same_author || []),
+        ...(related.collection_children || []),
+      ])
+    }
+  }
+
+  const syncWorkshopSearchSort = (isEnhancedMode) => {
+    const enhancedSorts = new Set(['relevance', 'popular', 'latest', 'created', 'subscriptions', 'votes_up', 'rating'])
+    const normalSorts = new Set(['latest', 'subscriptions', 'name', 'author'])
+    if (isEnhancedMode) {
+      const hasText = hasWorkshopSearchText(workshopSearch.queryTokens)
+      if (!enhancedSorts.has(workshopSearch.sort) || (workshopSearch.sort === 'relevance' && !hasText)) workshopSearch.sort = hasText ? 'relevance' : 'popular'
+    }
+    if (!isEnhancedMode && !normalSorts.has(workshopSearch.sort)) workshopSearch.sort = 'latest'
+  }
+
+  const applyWorkshopSearchMode = (enabled) => {
+    const isEnhancedMode = !!enabled
+    const changed = workshopSearch.isEnhancedMode !== isEnhancedMode
+    workshopSearch.isEnhancedMode = isEnhancedMode
+    syncWorkshopSearchSort(isEnhancedMode)
+    workshopSearch.isModeReady = true
+    return changed
+  }
+
+  // 排序默认只跟随“是否存在文本搜索”的状态变化：
+  // 无文本进入有文本时切到最相关；有文本清空时切到最热门；其它时候保留用户手动排序。
+  watch(
+    () => hasWorkshopSearchText(workshopSearch.queryTokens),
+    (hasText, hadText) => {
+      if (!workshopSearch.isEnhancedMode || hasText === hadText) return
+      workshopSearch.sort = hasText ? 'relevance' : 'popular'
+    }
+  )
+
+  watch(
+    () => hasWorkshopSearchText(collections.searchTokens),
+    (hasText, hadText) => {
+      if (hasText === hadText) return
+      collections.searchSort = hasText ? 'relevance' : 'popular'
+    }
+  )
+
+  const resetWorkshopSearchResults = () => {
+    workshopSearch.page = 1
+    workshopSearch.cursor = '*'
+    workshopSearch.nextCursor = ''
+    workshopSearch.hasMore = true
+    workshopSearch.results = []
+    workshopSearch.total = 0
+    workshopSearch.selectedId = null
+    workshopSearch.detailData = null
+    closeWorkshopTransientList()
+  }
+
+  const resetWorkshopRelatedState = () => {
+    workshopSearch.relatedLoading = { dependencies: false, dependents: false, same_author: false }
+    workshopSearch.relatedErrors = { dependencies: '', dependents: '', same_author: '' }
+    workshopSearch.relatedMeta = {
+      dependencies: { total: 0, hasMore: false },
+      dependents: { total: 0, hasMore: false },
+      same_author: { total: 0, hasMore: false },
+    }
+  }
+
+  const closeWorkshopTransientList = () => {
+    Object.assign(workshopSearch.transientList, {
+      active: false,
+      kind: '',
+      title: '',
+      sourceId: '',
+      authorSteamId: '',
+      items: [],
+      total: 0,
+      cursor: '*',
+      nextCursor: '',
+      hasMore: false,
+      page: 1,
+      isLoading: false,
+      isLoadMore: false,
+    })
+  }
+
   // 搜索缓存工坊数据库 (支持重置或追加)
   const doWorkshopSearch = async (queryStr = '', isAppend = false) => {
     if (!window.pywebview) return
+    if (!workshopSearch.isModeReady && !(await ensureWorkshopSearchReady())) return
     // 防御性拦截
     if (workshopSearch.isLoading || workshopSearch.isLoadMore) return
     if (isAppend && !workshopSearch.hasMore) return
     // 状态设置
     if (isAppend) {
       workshopSearch.isLoadMore = true
-      if (workshopSearch.sourceMode === 'offline') {
+      if (!workshopSearch.isEnhancedMode) {
         workshopSearch.page += 1
       }
     } else {
@@ -648,16 +1336,29 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       workshopSearch.nextCursor = ''
       workshopSearch.results = [] // 清空旧数据
     }
-    workshopSearch.query = queryStr
+    const compiledTokens = compileWorkshopQueryTokens()
+    const normalizedQuery = queryStr || compiledTokens.query
+    workshopSearch.query = normalizedQuery
+    workshopSearch.hasSearched = true
     try {
-      const res = workshopSearch.sourceMode === 'online'
-        ? await window.pywebview.api.workshop_search_online(
-            queryStr,
-            isAppend ? workshopSearch.nextCursor || workshopSearch.cursor || '*' : '*',
-            25,
-            workshopSearch.onlineSort,
-          )
-        : await window.pywebview.api.workshop_search(queryStr, workshopSearch.page)
+      const isEnhancedMode = workshopSearch.isEnhancedMode
+      if (isEnhancedMode) {
+        await loadSteamLanguageOptions()
+      }
+      const filters = buildWorkshopSearchFilters(compiledTokens)
+      // 主搜索的请求层分界：普通模式不读 API Key，只查缓存库；增强模式才调用 QueryFiles。
+      const request = isEnhancedMode
+        ? {
+            api: 'workshop_search_enhanced',
+            args: [normalizedQuery, isAppend ? workshopSearch.nextCursor || workshopSearch.cursor || '*' : '*', 100, filters.sort, filters],
+          }
+        : {
+            api: 'workshop_search',
+            args: [normalizedQuery, workshopSearch.page, filters],
+          }
+      const res = isEnhancedMode
+        ? await window.pywebview.api.workshop_search_enhanced(...request.args)
+        : await window.pywebview.api.workshop_search(...request.args)
       if (checkResult(res, '工坊检索')) {
         const newItems = (res.data.items || []).map(normalizeWorkshopSearchItem)
         if (isAppend) {
@@ -666,13 +1367,28 @@ export const useWorkspaceStore = defineStore('workspace', () => {
           workshopSearch.results = mergeWorkshopSearchResults([], newItems)
           workshopSearch.total = res.data.total
         }
-        if (workshopSearch.sourceMode === 'online') {
+        if (isEnhancedMode) {
           workshopSearch.cursor = String(res.data.cursor || workshopSearch.cursor || '*')
           workshopSearch.nextCursor = String(res.data.next_cursor || '')
           workshopSearch.hasMore = !!res.data.has_more
         } else {
           workshopSearch.hasMore = workshopSearch.results.length < res.data.total
         }
+        logWorkshopSearchDebug({
+          isEnhancedMode,
+          isAppend,
+          request,
+          response: res,
+          items: newItems,
+        })
+      } else {
+        logWorkshopSearchDebug({
+          isEnhancedMode,
+          isAppend,
+          request,
+          response: res,
+          items: [],
+        })
       }
     } finally {
       workshopSearch.isLoading = false
@@ -680,26 +1396,85 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  const setWorkshopSearchMode = async (mode) => {
-    const normalizedMode = mode === 'online' ? 'online' : 'offline'
-    if (workshopSearch.sourceMode === normalizedMode) return
-    // 在线模式依赖用户本地保存的 Key，没有 Key 时直接阻止切换，避免进入空状态。
-    if (normalizedMode === 'online' && !String(appStore.settings.steam_web_api_key || '').trim()) {
-      toast.warning('请先在设置中填写 Steam Web API Key')
+  const setWorkshopSearchMode = async (enabled, options = {}) => {
+    const isEnhancedMode = !!enabled
+    if (workshopSearch.isModeReady && workshopSearch.isEnhancedMode === isEnhancedMode) return true
+    // 增强模式依赖用户本地保存的 Key，没有 Key 时直接阻止切换，避免进入空状态。
+    if (isEnhancedMode && !isEnhancedWorkshopSearchEnabled()) {
+      toast.warning('请先在设置中启用工坊增强信息并填写 Steam Web API Key')
       return false
     }
-    workshopSearch.sourceMode = normalizedMode
-    workshopSearch.page = 1
-    workshopSearch.cursor = '*'
-    workshopSearch.nextCursor = ''
-    workshopSearch.hasMore = true
-    workshopSearch.results = []
-    workshopSearch.total = 0
-    workshopSearch.selectedId = null
-    workshopSearch.detailData = null
-    await doWorkshopSearch(workshopSearch.query || '', false)
+    if (!options.auto) workshopSearchModeTouched.value = true
+    applyWorkshopSearchMode(isEnhancedMode)
+    resetWorkshopSearchResults()
+    await doWorkshopSearch('', false)
     return true
   }
+
+  const syncWorkshopSearchModeFromSettings = async (options = {}) => {
+    // 设置未从后端注入前，不把默认空 Key 判定为普通模式；否则首屏会先闪出“最近更新”。
+    if (!appStore.settingsReady) return false
+    const wasReady = workshopSearch.isModeReady
+    const shouldRefresh = !!options.refresh || (wasReady && workshopSearch.hasSearched)
+    const preferredEnhanced = getPreferredWorkshopSearchEnhanced()
+    const nextEnhanced = workshopSearchModeTouched.value && !workshopSearch.isEnhancedMode
+      ? false
+      : preferredEnhanced
+    const changed = applyWorkshopSearchMode(nextEnhanced)
+    if (changed) resetWorkshopSearchResults()
+    if (changed && shouldRefresh) await doWorkshopSearch('', false)
+    return true
+  }
+
+  const ensureWorkshopSearchReady = async (options = {}) => {
+    if (workshopSearch.isModeReady) return true
+    if (appStore.settingsReady) return await syncWorkshopSearchModeFromSettings(options)
+    // 工坊页可能早于后端初始设置渲染；这里等待设置到达，避免抢跑到普通模式。
+    if (!workshopSearchReadyPromise) {
+      workshopSearchReadyPromise = new Promise(resolve => {
+        const stop = watch(
+          () => !!appStore.settingsReady,
+          async (ready) => {
+            if (!ready) return
+            stop()
+            workshopSearchReadyPromise = null
+            resolve(await syncWorkshopSearchModeFromSettings(options))
+          },
+          { immediate: true }
+        )
+      })
+    }
+    return await workshopSearchReadyPromise
+  }
+
+  watch(
+    () => [
+      !!appStore.settingsReady,
+      !!appStore.settings?.enable_steam_enhanced_api,
+      String(appStore.settings?.steam_web_api_key || '').trim(),
+    ],
+    () => { void syncWorkshopSearchModeFromSettings() },
+    { immediate: true }
+  )
+
+  const loadSteamLanguageOptions = async () => {
+    if (!window.pywebview || workshopSearch.isLanguageOptionsLoaded) return
+    const res = await window.pywebview.api.workshop_get_language_options()
+    if (checkResult(res, '获取 Steam 语言列表')) {
+      workshopSearch.languageOptions = Array.isArray(res.data) && res.data.length ? res.data : workshopSearch.languageOptions
+      workshopSearch.isLanguageOptionsLoaded = true
+    }
+  }
+
+  const loadWorkshopDlcOptions = async () => {
+    if (!window.pywebview || workshopSearch.isDlcOptionsLoaded) return
+    const res = await window.pywebview.api.workshop_get_dlc_options()
+    if (checkResult(res, '获取 DLC 选项')) {
+      workshopSearch.dlcOptions = Array.isArray(res.data) ? res.data : []
+      workshopSearch.isDlcOptionsLoaded = true
+    }
+  }
+
   // 获取云端详情 (包含网页抓取截图)
   // isNavigate: 是否是通过点击“推荐卡片”触发的内部跳转
   const fetchWorkshopDetails = async (workshop_id, isNavigate = false) => {
@@ -713,15 +1488,105 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
     workshopSearch.selectedId = workshop_id
     workshopSearch.isDetailLoading = true
+    resetWorkshopRelatedState()
+    const currentDetail = findWorkshopListItem(workshop_id)
+    workshopSearch.detailData = normalizeWorkshopSearchItem(currentDetail || { workshop_id, title: String(workshop_id || '') })
     try {
-      const res = await window.pywebview.api.workshop_get_details(workshop_id)
+      // 先加载当前项本体并立即展示，再并发加载依赖项目、生态关联、同作者作品。
+      const res = workshopSearch.isEnhancedMode
+        ? await window.pywebview.api.workshop_get_enhanced_details(workshop_id, currentDetail || null)
+        : await window.pywebview.api.workshop_get_details(workshop_id)
+      if (workshopSearch.selectedId !== workshop_id) return
       if (checkResult(res, '获取云端详情')) {
-        workshopSearch.detailData = normalizeWorkshopSearchItem(res.data)
+        mergeWorkshopDetailData(res.data)
       }
     } finally {
-      workshopSearch.isDetailLoading = false
+      if (workshopSearch.selectedId === workshop_id) {
+        workshopSearch.isDetailLoading = false
+      }
     }
+    void fetchWorkshopRelatedData(workshop_id)
   }
+  const openWorkshopTransientList = async (kind, sourceItem = {}) => {
+    if (!window.pywebview) {
+      return false
+    }
+    const kindLabel = getWorkshopRelationLabel(kind)
+    if (!kindLabel) return false
+    const sourceId = String(sourceItem.workshop_id || workshopSearch.selectedId || '').trim()
+    if (!sourceId) return false
+    Object.assign(workshopSearch.transientList, {
+      active: true,
+      kind,
+      title: getWorkshopTransientListTitle(kind, { ...sourceItem, workshop_id: sourceId }),
+      sourceId,
+      authorSteamId: String(sourceItem.author_steam_id || workshopSearch.detailData?.author_steam_id || '').trim(),
+      items: [],
+      total: 0,
+      cursor: '*',
+      nextCursor: '',
+      hasMore: true,
+      page: 1,
+      isLoading: false,
+      isLoadMore: false,
+    })
+    return await loadWorkshopTransientList(false)
+  }
+
+  const loadWorkshopTransientList = async (isAppend = false) => {
+    const state = workshopSearch.transientList
+    if (!window.pywebview || !state.active || state.isLoading || state.isLoadMore) return false
+    if (isAppend && !state.hasMore) return false
+    if (isAppend) {
+      state.isLoadMore = true
+    } else {
+      state.isLoading = true
+      state.items = []
+      state.page = 1
+      state.cursor = '*'
+      state.nextCursor = ''
+      state.hasMore = true
+    }
+    try {
+      const isEnhancedMode = workshopSearch.isEnhancedMode
+      const kindLabel = getWorkshopRelationLabel(state.kind)
+      let res = null
+      if (state.kind === 'same_author') {
+        res = isEnhancedMode
+          ? await window.pywebview.api.workshop_get_same_author_enhanced(state.sourceId, state.authorSteamId, isAppend ? state.page + 1 : 1, 100, buildOnlineRelationFilters())
+          : await window.pywebview.api.workshop_get_same_author(state.sourceId, isAppend ? state.page + 1 : 1, 100)
+      } else if (state.kind === 'dependents') {
+        res = isEnhancedMode
+          ? await window.pywebview.api.workshop_search_dependents_enhanced(state.sourceId, isAppend ? state.nextCursor || state.cursor || '*' : '*', 100, buildOnlineRelationFilters())
+          : await window.pywebview.api.workshop_search_dependents(state.sourceId, isAppend ? state.page + 1 : 1, 100)
+      } else {
+        return false
+      }
+      if (checkResult(res, `加载${kindLabel}`)) {
+        const items = (res.data.items || []).map(normalizeWorkshopSearchItem)
+        let nextItems = isAppend ? mergeWorkshopSearchResults(state.items, items) : mergeWorkshopSearchResults([], items)
+        if (isEnhancedMode) {
+          const authorMap = await fetchWorkshopAuthorProfilesForItems(nextItems)
+          nextItems = mergeAuthorProfilesIntoWorkshopItems(nextItems, authorMap)
+        }
+        state.items = nextItems
+        state.total = Number(res.data.total || state.items.length || 0)
+        if (state.kind === 'same_author' || !isEnhancedMode) {
+          state.page = Number(res.data.page || (isAppend ? state.page + 1 : 1))
+        } else {
+          state.cursor = String(res.data.cursor || state.cursor || '*')
+          state.nextCursor = String(res.data.next_cursor || '')
+        }
+        state.hasMore = Number(res.data.total || 0) > state.items.length
+        return true
+      }
+    } finally {
+      state.isLoading = false
+      state.isLoadMore = false
+    }
+    return false
+  }
+
   // 详情页后退功能
   const goBackWorkshopDetail = async () => {
     if (workshopSearch.historyStack.length === 0) return
@@ -932,14 +1797,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // 获取并展开选中合集的内部列表 (动态计算缺失状态)
   const selectCollection = async (coll) => {
     if (!window.pywebview) return
-    collections.activeId = coll.id
-    collections.activeDetails = coll || null
+    const collId = String(coll?.id || coll?.workshop_id || '').trim()
+    if (!collId) return
+    collections.activeId = collId
+    collections.activeDetails = { ...(coll || {}), id: collId }
     collections.activeChildren = Array.isArray(coll?.children) ? [...coll.children] : []
     collections.isChildrenLoading = true
 
     // 这步会立即返回数据库里的旧数据 (或者为 null)
     try {
-      const res = await window.pywebview.api.lifecycle_fetch_collection(coll.id)
+      const res = await window.pywebview.api.lifecycle_fetch_collection(collId)
       if (res.status === 'success' && res.data) {
         collections.activeDetails = res.data.collection
         collections.activeChildren = res.data.children
@@ -1058,6 +1925,72 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     window.open(steamUrl, '_blank')
   }
 
+  const searchCollectionsOnline = async (queryStr = '', isAppend = false) => {
+    // 合集搜索当前只提供增强模式入口；没有 Key 时不退回普通物品搜索，避免类型语义混淆。
+    if (!canUseCollectionOnlineSearch()) {
+      toast.warning('合集搜索需要填写 Steam Web API Key')
+      return false
+    }
+    if (collections.isSearchLoading || collections.isSearchLoadMore) return false
+    if (isAppend && !collections.searchHasMore) return false
+    if (isAppend) {
+      collections.isSearchLoadMore = true
+    } else {
+      collections.isSearchLoading = true
+      collections.searchCursor = '*'
+      collections.searchNextCursor = ''
+      collections.searchResults = []
+      collections.searchHasMore = true
+    }
+    const compiledTokens = compileCollectionQueryTokens()
+    const normalizedQuery = String(queryStr || compiledTokens.query || '').trim()
+    collections.searchQuery = normalizedQuery
+    try {
+      await loadSteamLanguageOptions()
+      const filters = {
+        language: workshopSearch.language || appStore.settings.language || '',
+        return_vote_data: true,
+        required_tags: compiledTokens.requiredTags,
+        excluded_tags: compiledTokens.excludedTags,
+        match_all_tags: String(collections.searchLogic || 'AND').toUpperCase() !== 'OR',
+      }
+      const collectionHasText = hasWorkshopSearchText(collections.searchTokens)
+      const resolvedDays = resolveWorkshopDays(collections.searchSort, collections.searchDays, collectionHasText)
+      if (resolvedDays !== undefined) filters.days = resolvedDays
+      const cursor = isAppend ? collections.searchNextCursor || collections.searchCursor || '*' : '*'
+      const requestSort = resolveWorkshopSort(collections.searchSort, collectionHasText)
+      const res = await window.pywebview.api.workshop_search_collections_enhanced(normalizedQuery, cursor, 50, requestSort, filters)
+      if (checkResult(res, '在线合集搜索')) {
+        const items = (res.data.items || []).map(normalizeWorkshopSearchItem)
+        collections.searchResults = isAppend ? mergeWorkshopSearchResults(collections.searchResults, items) : items
+        collections.searchTotal = res.data.total || 0
+        collections.searchCursor = String(res.data.cursor || collections.searchCursor || '*')
+        collections.searchNextCursor = String(res.data.next_cursor || '')
+        collections.searchHasMore = !!res.data.has_more
+        return true
+      }
+    } finally {
+      collections.isSearchLoading = false
+      collections.isSearchLoadMore = false
+    }
+    return false
+  }
+
+  const activateCollectionSearchView = async () => {
+    if (!canUseCollectionOnlineSearch()) {
+      toast.warning('合集搜索需要填写 Steam Web API Key')
+      return false
+    }
+    collections.activeView = 'search'
+    if (collections.searchResults.length || collections.isSearchLoading || collections.isSearchLoadMore) return true
+
+    collections.searchTokens = []
+    collections.searchLogic = 'AND'
+    collections.searchSort = 'popular'
+    collections.searchDays = 7
+    return searchCollectionsOnline('', false)
+  }
+
 
   return {
     // 库矩阵状态
@@ -1065,12 +1998,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
     matrixFocusTarget, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
     // 库数据与工坊时间线
-    fetchLibrariesMods, refreshLifecycleUpdateStates, doWorkshopSearch, fetchWorkshopDetails, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode,
+    fetchLibrariesMods, refreshLifecycleUpdateStates, doWorkshopSearch, fetchWorkshopDetails, loadSteamLanguageOptions, loadWorkshopDlcOptions, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode, syncWorkshopSearchModeFromSettings, ensureWorkshopSearchReady,
+    openWorkshopTransientList, loadWorkshopTransientList, closeWorkshopTransientList,
     // GitHub 数据
     github, fetchGithubRepos, fetchGithubProviderCatalog, fetchGithubTimeline, startGithubTimelinePolling, stopGithubTimelinePolling, selectGithubRepo, clearActiveGithubRepo,
     // 懒加载与来源映射
     getGithubOnlineVersion, getGithubRepoStatus, githubRepoNeedsUpdate, ensureLibrariesLoaded, ensureGithubLoaded, ensureCollectionsLoaded, ensureWorkspaceTabLoaded, refreshLoadedData, openSteamWorkshopUrl, getWorkshopDetailsByPackageIdsMap, getInstallSourcesByPackageIdsMap, getWorkshopIdsByPackageIdsMap, resolvePackageIdsToWorkshopIds, goBackWorkshopDetail,
     // 合集
-    collections, fetchSavedCollections, addCollection, removeCollection, selectCollection,
+    collections, fetchSavedCollections, addCollection, removeCollection, selectCollection, searchCollectionsOnline, activateCollectionSearchView,
   }
 })

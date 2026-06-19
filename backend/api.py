@@ -42,6 +42,7 @@ from backend.utils.event_bus import EventBus
 from backend._version import __version__, __build__, get_all_changelogs
 from backend.utils.tools import normalize_package_id, normalize_workshop_id
 from backend.utils.tools import current_ms, generate_path_hash
+from backend.utils.constants import RIMWORLD_DLC_OPTIONS, get_steam_elanguage_options
 from backend.utils.logger import logger, app_log_reader
 from backend.utils.shortcuts import get_desktop_directory
 from backend.managers.mgr_network import network_mgr
@@ -5511,6 +5512,58 @@ class API:
         import threading
         threading.Thread(target=worker, daemon=True).start()
         return ApiResponse.success(message="后台更新检查已启动")
+
+    def _normalize_workshop_id_batch(self, workshop_ids: list, limit: int = 300) -> list[str]:
+        """把前端传入的工坊 ID 收束为去重后的数字列表，避免后台预热收到脏输入。"""
+        normalized_ids = []
+        seen_ids = set()
+        for workshop_id in workshop_ids or []:
+            normalized_id = normalize_workshop_id(workshop_id, digits_only=True, min_length=6, max_length=20)
+            if not normalized_id or normalized_id in seen_ids:
+                continue
+            seen_ids.add(normalized_id)
+            normalized_ids.append(normalized_id)
+            if len(normalized_ids) >= limit:
+                break
+        return normalized_ids
+
+    def _emit_workshop_public_details_async(self, workshop_ids: list[str], *, force_refresh: bool = False, trace_label: str = "workshop_public_preheat"):
+        """
+        后台批量获取公开工坊详情，并复用 workspace-online-update 推给前端。
+
+        这条链路只走公开 GetPublishedFileDetails 与在线缓存，不读取 Steam Web API Key。
+        """
+        normalized_ids = self._normalize_workshop_id_batch(workshop_ids)
+        if not normalized_ids:
+            return 0
+
+        def worker():
+            for i in range(0, len(normalized_ids), 100):
+                batch = normalized_ids[i:i + 100]
+                online_data, _ = SteamWebAPI.fetch_item_details(
+                    batch,
+                    force_refresh=force_refresh,
+                    trace_label=trace_label,
+                )
+                if online_data:
+                    EventBus.emit('workspace-online-update', online_data)
+
+        threading.Thread(target=worker, daemon=True).start()
+        return len(normalized_ids)
+
+    def _emit_workshop_screenshots_async(self, workshop_id: str):
+        """后台补当前详情项截图，完成后仍走统一公开详情推送事件。"""
+        normalized_id = normalize_workshop_id(workshop_id, digits_only=True, min_length=6, max_length=20)
+        if not normalized_id:
+            return False
+
+        def worker():
+            screenshot_data = SteamWebAPI.fetch_and_cache_screenshots(normalized_id)
+            if screenshot_data.get("screenshots"):
+                EventBus.emit('workspace-online-update', {normalized_id: screenshot_data})
+
+        threading.Thread(target=worker, daemon=True).start()
+        return True
     
     @log_api_call
     def workspace_get_mod_timeline(self, workshop_id: str, is_steamcmd: bool = False):
@@ -5518,45 +5571,267 @@ class API:
         return ApiResponse.success(self.steam_mgr.get_item_timeline(workshop_id, is_steamcmd))
     
     @log_api_call
-    def workshop_search(self, query: str, page: int = 1):
-        """离线库搜索 + 在线静默预热"""
-        # 1. 从本地 SQLite 获取当前页的数据 (瞬间完成)
-        data = ExtDAO.search_workshop(query, page, page_size=100)
-        items = data['items']
-        if items:
-            # 2. 提取 ID 列表，去 Steam 检查是否有更新 (利用你已有的缓存机制)
-            workshop_ids = [item['workshop_id'] for item in items]
-            # 只取缓存或触发网络请求更新 DB。因为你设置了 1天的 TTL，大部分情况下也是瞬间返回
-            online_info, _ = SteamWebAPI.fetch_item_details(workshop_ids, force_refresh=False)
-            
-            # 3. 将最新的封面和名字合并回 items
-            for item in items:
-                wid = item['workshop_id']
-                if wid in online_info:
-                    item['preview_url'] = online_info[wid].get('preview_url', item['preview_url'])
-                    item['name'] = online_info[wid].get('title', item['name'])
-                    item['time_updated'] = online_info[wid].get('time_updated', item.get('time_updated'))
-
+    def workshop_search(self, query: str, page: int = 1, filters: dict | None = None):
+        """基础渠道：先返回外置缓存库，再后台预热当前页公开详情。"""
+        data = ExtDAO.search_workshop(query, page, page_size=100, filters=filters)
+        # 普通模式不读 API Key。这里后台获取的是公开详情，用于让当前页 100 项逐步补封面、简介、更新时间等字段。
+        self._emit_workshop_public_details_async(
+            [item.get("workshop_id") for item in data.get("items", [])],
+            trace_label="workshop_search:normal_page",
+        )
         return ApiResponse.success(data)
 
     @log_api_call
-    def workshop_search_online(self, query: str, cursor: str = "*", page_size: int = 25, sort: str = "relevance"):
-        """使用 Steam Web API 在线搜索工坊条目。"""
+    def workshop_search_enhanced(self, query: str, cursor: str = "*", page_size: int = 25, sort: str = "relevance", filters: dict | None = None):
+        """增强渠道：搜索普通工坊物品，并补全当页详情。"""
         try:
-            data = SteamWebAPI.search_workshop_online(query, cursor=cursor, page_size=page_size, sort=sort)
+            data = SteamWebAPI.search_workshop_items_enhanced(query, cursor=cursor, page_size=page_size, sort=sort, filters=filters)
             return ApiResponse.success(data)
         except ValueError as exc:
             return ApiResponse.warning(str(exc))
         except Exception as exc:
-            return ApiResponse.error(f"在线工坊搜索失败: {exc}")
+            return ApiResponse.error(f"增强工坊搜索失败: {exc}")
+
+    @log_api_call
+    def workshop_search_collections_enhanced(self, query: str, cursor: str = "*", page_size: int = 100, sort: str = "relevance", filters: dict | None = None):
+        """增强渠道：搜索 Steam 合集。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.search_workshop_collections_enhanced(query, cursor=cursor, page_size=page_size, sort=sort, filters=filters))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"增强合集搜索失败: {exc}")
+
+    @log_api_call
+    def workshop_get_language_options(self):
+        """获取 Steam 在线接口可用语言。"""
+        return ApiResponse.success(get_steam_elanguage_options())
+
+    @log_api_call
+    def workshop_get_dlc_options(self):
+        """获取 RimWorld / DLC 的 Steam AppID 选项。"""
+        return ApiResponse.success(RIMWORLD_DLC_OPTIONS)
 
     @log_api_call
     def workshop_get_details(self, workshop_id: str):
-        """获取云端详细图文"""
+        """基础渠道详情：缓存信息 + 旧版详情补全。"""
         details = SteamWebAPI.get_or_fetch_details(workshop_id)
         if details:
+            # 详情先用已有字段即时展示；截图抓取放后台增量推送，避免点击详情被网页抓图阻塞。
+            self._emit_workshop_screenshots_async(workshop_id)
             return ApiResponse.success(details)
         return ApiResponse.error("未找到模组详情")
+
+    @log_api_call
+    def workshop_get_dependencies(self, workshop_id: str):
+        """基础渠道：从外置缓存库读取依赖项目。"""
+        try:
+            return ApiResponse.success(ExtDAO.get_workshop_dependencies(workshop_id))
+        except Exception as exc:
+            return ApiResponse.error(f"获取依赖项目失败: {exc}")
+
+    @log_api_call
+    def workshop_search_dependents(self, workshop_id: str, page: int = 1, page_size: int = 20):
+        """基础渠道：从外置缓存库反查生态关联项。"""
+        try:
+            return ApiResponse.success(ExtDAO.search_workshop_dependents(workshop_id, page=page, page_size=page_size))
+        except Exception as exc:
+            return ApiResponse.error(f"获取生态关联失败: {exc}")
+
+    @log_api_call
+    def workshop_get_same_author(self, workshop_id: str, page: int = 1, page_size: int = 20):
+        """基础渠道：从外置缓存库查找同作者作品。"""
+        try:
+            return ApiResponse.success(ExtDAO.get_workshop_same_author(workshop_id, page=page, page_size=page_size))
+        except Exception as exc:
+            return ApiResponse.error(f"获取作者作品失败: {exc}")
+
+    @log_api_call
+    def workshop_preheat_public_details(self, workshop_ids: list[str]):
+        """普通模式：后台批量获取公开详情，不使用 Steam Web API Key。"""
+        count = self._emit_workshop_public_details_async(workshop_ids, trace_label="workshop_related:normal")
+        return ApiResponse.success({"count": count})
+
+    @log_api_call
+    def workshop_get_enhanced_details(self, workshop_id: str, current_detail: dict | None = None):
+        """增强渠道详情：复用当前项详情，只补全当前条目本体。"""
+        try:
+            details = SteamWebAPI.get_enhanced_workshop_detail(workshop_id, current_detail=current_detail)
+            if details:
+                return ApiResponse.success(details)
+            return ApiResponse.error("未找到模组详情")
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"获取增强详情失败: {exc}")
+
+    @log_api_call
+    def workshop_get_dependencies_enhanced(self, workshop_id: str, current_detail: dict | None = None):
+        """增强渠道：获取依赖项目或合集子项详情。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.get_workshop_dependencies_enhanced(workshop_id, current_detail=current_detail))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"获取依赖项目失败: {exc}")
+
+    @log_api_call
+    def workshop_search_dependents_enhanced(self, workshop_id: str, cursor: str = "*", page_size: int = 20, filters: dict | None = None):
+        """增强渠道：搜索依赖当前工坊项的生态关联项。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.search_workshop_dependents_enhanced(workshop_id, cursor=cursor, page_size=page_size, filters=filters))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"获取生态关联失败: {exc}")
+
+    @log_api_call
+    def workshop_get_same_author_enhanced(self, workshop_id: str, author_steam_id: str = "", page: int = 1, page_size: int = 20, filters: dict | None = None):
+        """增强渠道：分页获取同作者作品。"""
+        try:
+            return ApiResponse.success(
+                SteamWebAPI.get_workshop_same_author_enhanced(
+                    workshop_id,
+                    author_steam_id=author_steam_id,
+                    page=page,
+                    page_size=page_size,
+                    filters=filters,
+                )
+            )
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"获取作者作品失败: {exc}")
+
+    @log_api_call
+    def workshop_get_author_profiles(self, steam_ids: list[str]):
+        """增强渠道：批量获取作者资料。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.fetch_player_summaries(steam_ids or []))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"获取作者信息失败: {exc}")
+
+    @log_api_call
+    def workshop_get_user_files(self, steamid: str, page: int = 1, page_size: int = 25, filters: dict | None = None):
+        """获取作者发布的工坊文件。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.get_user_files(steamid, page=page, page_size=page_size, filters=filters))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"获取作者作品失败: {exc}")
+
+    @log_api_call
+    def workshop_get_user_file_count(self, steamid: str, filters: dict | None = None):
+        """获取作者工坊文件数量。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.get_user_file_count(steamid, filters=filters))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"获取作者作品数量失败: {exc}")
+
+    @log_api_call
+    def workshop_get_user_vote_summary(self, workshop_ids: list):
+        """获取当前账号对工坊项的投票摘要。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.get_user_vote_summary(workshop_ids))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"获取投票摘要失败: {exc}")
+
+    @log_api_call
+    def workshop_can_subscribe(self, workshop_id: str):
+        """检查当前账号是否可通过 WebAPI 订阅。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.can_subscribe(workshop_id))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"检查订阅权限失败: {exc}")
+
+    @log_api_call
+    def workshop_webapi_subscribe(self, workshop_id: str, options: dict | None = None):
+        """备用 WebAPI 订阅入口。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.subscribe_published_file(workshop_id, options))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"WebAPI 订阅失败: {exc}")
+
+    @log_api_call
+    def workshop_webapi_unsubscribe(self, workshop_id: str, options: dict | None = None):
+        """备用 WebAPI 取消订阅入口。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.unsubscribe_published_file(workshop_id, options))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"WebAPI 取消订阅失败: {exc}")
+
+    @log_api_call
+    def workshop_publish_file(self, payload: dict):
+        """创建 Steam 工坊文件。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.publish_file(payload))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"发布工坊文件失败: {exc}")
+
+    @log_api_call
+    def workshop_update_file(self, payload: dict):
+        """更新 Steam 工坊文件。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.update_file(payload))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"更新工坊文件失败: {exc}")
+
+    @log_api_call
+    def workshop_delete_file(self, payload: dict):
+        """删除 Steam 工坊文件。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.delete_file(payload))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"删除工坊文件失败: {exc}")
+
+    @log_api_call
+    def workshop_update_tags(self, payload: dict):
+        """更新 Steam 工坊普通标签。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.update_tags(payload))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"更新工坊标签失败: {exc}")
+
+    @log_api_call
+    def workshop_update_key_value_tags(self, payload: dict):
+        """更新 Steam 工坊 Key/Value 标签。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.update_key_value_tags(payload))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"更新工坊 KV 标签失败: {exc}")
+
+    @log_api_call
+    def workshop_set_developer_metadata(self, payload: dict):
+        """设置 Steam 工坊开发者元数据。"""
+        try:
+            return ApiResponse.success(SteamWebAPI.set_developer_metadata(payload))
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            return ApiResponse.error(f"设置工坊开发者元数据失败: {exc}")
 
     
     # ==========================================
@@ -5580,12 +5855,18 @@ class API:
         阻塞请求直到爬取完成，确保前端能立即得到数据。
         """
         coll_id = str(collection_id)
+        new_coll = self._fetch_and_store_collection(coll_id)
+        if not new_coll: return ApiResponse.error("无效的合集、合集为空，或无法获取合集信息")
+        return ApiResponse.success(model_to_dict(new_coll))
+
+    def _fetch_and_store_collection(self, coll_id: str):
+        """精确获取合集并写入缓存；用于导入和搜索结果点击，避免两条链路重复实现。"""
         child_wids = SteamWebAPI.fetch_collection_children(coll_id)
-        if not child_wids: return ApiResponse.error("无效的合集或合集为空")
+        if not child_wids: return None
 
         all_ids = list(set([coll_id] + child_wids))
         online_results, _ = SteamWebAPI.fetch_item_details(all_ids, force_refresh=True)
-        if coll_id not in online_results: return ApiResponse.error("无法获取合集信息")
+        if coll_id not in online_results: return None
         main_info = online_results[coll_id]
         final_children = self._build_collection_children(child_wids, online_results)
 
@@ -5593,8 +5874,7 @@ class API:
         # 持久化
         CollectionDAO.upsert_collection(coll_id, main_info, final_children, total)
         # 重新取回完整结构返回给前端
-        new_coll = CollectionDAO.get_collection_by_id(coll_id)
-        return ApiResponse.success(model_to_dict(new_coll))
+        return CollectionDAO.get_collection_by_id(coll_id)
 
     @log_api_call
     def lifecycle_fetch_collection(self, collection_id: str):
@@ -5616,8 +5896,17 @@ class API:
                 "total": cached_coll.total,
                 "is_cache": True # 标记这是缓存
             }
-        # 如果没有缓存，或者缓存已过期，启动后台刷新
-        if not is_fresh:
+        if not cached_coll:
+            fetched_coll = self._fetch_and_store_collection(coll_id)
+            if fetched_coll:
+                initial_data = {
+                    "collection": model_to_dict(fetched_coll),
+                    "children": fetched_coll.children or [],
+                    "total": fetched_coll.total,
+                    "is_cache": True
+                }
+        # 如果已有缓存但过期，保留旧数据先展示，后台刷新。
+        elif not is_fresh:
             self._start_tracked_main_db_task("collection-refresh", self._bg_refresh_collection, coll_id)
 
         return ApiResponse.success(initial_data)

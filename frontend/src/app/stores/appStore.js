@@ -41,6 +41,7 @@ export const useAppStore = defineStore('app', () => {
   const appVersion = ref('')     // 应用版本号
   const buildMode = ref('')      // 构建模式
   const isLoading = ref(false)   // 加载状态
+  const settingsReady = ref(false) // 后端设置已注入，避免其它 store 把默认空配置误判为用户配置
   const isGameRunning = ref(false) // 全局游戏运行状态
   const isSuspended = ref(false) // 浏览器模式下的同页静默挂起状态
   // 运行时会话与 UI 当前环境分离：这里只记录“游戏现在实际按谁在跑”。
@@ -234,6 +235,7 @@ export const useAppStore = defineStore('app', () => {
       context_window_tokens: 0,
       max_concurrency: 3,     // 最大并发请求数（避免被API封锁）
     },
+    enable_steam_enhanced_api: false,
     steam_web_api_key: '',
 
     // --- 贴图优化 ---
@@ -542,6 +544,7 @@ export const useAppStore = defineStore('app', () => {
     } else {
       Object.assign(settings.value, payload.settings)
     }
+    if (payload.settings) settingsReady.value = true
     if (Array.isArray(payload.user_themes)) {
       userThemes.value = payload.user_themes
     }
@@ -1290,7 +1293,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     // 基础状态
-    appVersion, buildMode, uiState, settings, isLoading, isDownloading, isScanRunning, updateState,
+    appVersion, buildMode, uiState, settings, settingsReady, isLoading, isDownloading, isScanRunning, updateState,
     themes, currentTheme, userThemes, themeEditor, packageTransferDialog, recommendationExportDialog,
     // 布局与运行态
     remoteImageCache, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, runtimeSession, upgradeContext,
