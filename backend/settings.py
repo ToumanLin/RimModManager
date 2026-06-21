@@ -150,6 +150,7 @@ def default_translation_settings() -> Dict[str, Dict[str, Any]]:
             "provider": "default",
             "prefer_ui_language_translation": True,
             "auto_translate_missing": False,
+            "source_detection": {"enabled": False, "mode": "or", "terms": []},
         },
     }
 
@@ -596,6 +597,14 @@ class SettingsManager:
             workshop_detail_cfg["target_language"] = str(workshop_detail_cfg.get("target_language") or "").strip() or "default"
             workshop_detail_cfg["prefer_ui_language_translation"] = bool(workshop_detail_cfg.get("prefer_ui_language_translation"))
             workshop_detail_cfg["auto_translate_missing"] = bool(workshop_detail_cfg.get("auto_translate_missing"))
+            source_detection = workshop_detail_cfg.get("source_detection")
+            source_detection = source_detection if isinstance(source_detection, dict) else {}
+            source_terms = source_detection.get("terms")
+            workshop_detail_cfg["source_detection"] = {
+                "enabled": bool(source_detection.get("enabled")),
+                "mode": "and" if str(source_detection.get("mode") or "").lower() == "and" else "or",
+                "terms": [str(item).strip() for item in source_terms if str(item).strip()] if isinstance(source_terms, list) else [],
+            }
             translation_cfg["default"] = default_cfg
             translation_cfg["workshop_detail"] = workshop_detail_cfg
         self.config.translation = translation_cfg

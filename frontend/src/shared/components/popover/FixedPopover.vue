@@ -44,6 +44,7 @@ const props = defineProps({
   // 下拉/浮层的大多数场景都需要默认可关闭，特殊场景再由调用方显式关闭。
   closeOnOutside: { type: Boolean, default: true },
   closeOnEscape: { type: Boolean, default: true },
+  closeOnOtherPopover: { type: Boolean, default: false },
 })
 
 const appStore = useAppStore()
@@ -304,7 +305,7 @@ const handleDocumentPointerDown = (event) => {
   const triggerEl = resolveTriggerEl()
   if (popoverRef.value?.contains(target)) return
   if (triggerEl?.contains?.(target) || target === triggerEl) return
-  if (target?.closest?.('[data-fixed-popover]')) return
+  if (target?.closest?.('[data-fixed-popover]') && !props.closeOnOtherPopover) return
   emit('request-close', { reason: 'outside-pointerdown' })
 }
 

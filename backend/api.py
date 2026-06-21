@@ -5545,6 +5545,8 @@ class API:
                     trace_label=trace_label,
                 )
                 if online_data:
+                    patched_items = self._attach_workshop_translation_meta_to_items(list(online_data.values()))
+                    online_data = {str(item.get("workshop_id") or ""): item for item in patched_items if isinstance(item, dict)}
                     EventBus.emit('workspace-online-update', online_data)
 
         threading.Thread(target=worker, daemon=True).start()
@@ -5573,6 +5575,7 @@ class API:
     def workshop_search(self, query: str, page: int = 1, filters: dict | None = None):
         """基础渠道：先返回外置缓存库，再后台预热当前页公开详情。"""
         data = ExtDAO.search_workshop(query, page, page_size=100, filters=filters)
+        self._attach_workshop_translation_meta_to_result(data)
         # 普通模式不读 API Key。这里后台获取的是公开详情，用于让当前页 100 项逐步补封面、简介、更新时间等字段。
         self._emit_workshop_public_details_async(
             [item.get("workshop_id") for item in data.get("items", [])],
@@ -5585,6 +5588,7 @@ class API:
         """增强渠道：搜索普通工坊物品，并补全当页详情。"""
         try:
             data = SteamWebAPI.search_workshop_items_enhanced(query, cursor=cursor, page_size=page_size, sort=sort, filters=filters)
+            self._attach_workshop_translation_meta_to_result(data)
             return ApiResponse.success(data)
         except ValueError as exc:
             return ApiResponse.warning(str(exc))
@@ -5595,7 +5599,9 @@ class API:
     def workshop_search_collections_enhanced(self, query: str, cursor: str = "*", page_size: int = 100, sort: str = "relevance", filters: dict | None = None):
         """增强渠道：搜索 Steam 合集。"""
         try:
-            return ApiResponse.success(SteamWebAPI.search_workshop_collections_enhanced(query, cursor=cursor, page_size=page_size, sort=sort, filters=filters))
+            data = SteamWebAPI.search_workshop_collections_enhanced(query, cursor=cursor, page_size=page_size, sort=sort, filters=filters)
+            self._attach_workshop_translation_meta_to_result(data)
+            return ApiResponse.success(data)
         except ValueError as exc:
             return ApiResponse.warning(str(exc))
         except Exception as exc:
@@ -5662,13 +5668,56 @@ class API:
             context="Steam Workshop item detail",
         )
 
-    def _attach_workshop_translation_source_hash(self, detail: dict[str, Any] | None) -> dict[str, Any] | None:
+    def _attach_workshop_translation_meta(self, detail: dict[str, Any] | None, cached_translations: dict[str, Any] | None = None) -> dict[str, Any] | None:
         if not isinstance(detail, dict):
             return detail
+        # Steam 在线接口会返回空 translations 对象；这里必须让本地缓存译文优先，
+        # 否则搜索列表会在已有译文时仍显示原文，直到详情页重新合并缓存。
+        detail_translations = detail.get("translations") if isinstance(detail.get("translations"), dict) else {}
+        translations = dict(cached_translations) if isinstance(cached_translations, dict) else None
+        if translations is None:
+            translations = dict(detail_translations) if detail_translations else None
+        elif detail_translations:
+            translations.update(detail_translations)
+        if translations is None:
+            workshop_id = normalize_workshop_id(detail.get("workshop_id") or "", digits_only=True, min_length=6, max_length=20)
+            row = WorkshopOnlineCache.get_or_none(WorkshopOnlineCache.workshop_id == workshop_id) if workshop_id else None
+            translations = dict((row.translations if row else {}) or {})
+        detail["translations"] = translations if isinstance(translations, dict) else {}
         detail["translation_source_hash"] = self.translation_mgr.build_source_hash(
             self._build_workshop_translation_document("", detail)
         )
         return detail
+
+    def _attach_workshop_translation_meta_to_items(self, items: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        """工坊数据出口统一附带翻译缓存；前端只选择显示，不负责再请求翻译缓存。"""
+        if not isinstance(items, list) or not items:
+            return items or []
+        workshop_ids = [
+            normalized_id
+            for item in items
+            if isinstance(item, dict)
+            if (normalized_id := normalize_workshop_id(item.get("workshop_id") or "", digits_only=True, min_length=6, max_length=20))
+        ]
+        translation_map: dict[str, dict[str, Any]] = {}
+        if workshop_ids:
+            rows = (
+                WorkshopOnlineCache
+                .select(WorkshopOnlineCache.workshop_id, WorkshopOnlineCache.translations)
+                .where(WorkshopOnlineCache.workshop_id.in_(list(dict.fromkeys(workshop_ids))))
+            )
+            translation_map = {str(row.workshop_id): dict(row.translations or {}) for row in rows}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            workshop_id = normalize_workshop_id(item.get("workshop_id") or "", digits_only=True, min_length=6, max_length=20)
+            self._attach_workshop_translation_meta(item, translation_map.get(workshop_id))
+        return items
+
+    def _attach_workshop_translation_meta_to_result(self, data: dict[str, Any] | None) -> dict[str, Any] | None:
+        if isinstance(data, dict) and isinstance(data.get("items"), list):
+            data["items"] = self._attach_workshop_translation_meta_to_items(data["items"])
+        return data
 
     def _save_workshop_translation_result(self, workshop_id: str, language: str, translation: dict[str, Any]) -> dict[str, Any]:
         with ext_db.atomic():
@@ -5689,7 +5738,7 @@ class API:
         """基础渠道详情：缓存信息 + 旧版详情补全。"""
         details = SteamWebAPI.get_or_fetch_details(workshop_id)
         if details:
-            self._attach_workshop_translation_source_hash(details)
+            self._attach_workshop_translation_meta(details)
             # 详情先用已有字段即时展示；截图抓取放后台增量推送，避免点击详情被网页抓图阻塞。
             self._emit_workshop_screenshots_async(workshop_id)
             return ApiResponse.success(details)
@@ -5699,7 +5748,9 @@ class API:
     def workshop_get_dependencies(self, workshop_id: str):
         """基础渠道：从外置缓存库读取依赖项目。"""
         try:
-            return ApiResponse.success(ExtDAO.get_workshop_dependencies(workshop_id))
+            data = ExtDAO.get_workshop_dependencies(workshop_id)
+            self._attach_workshop_translation_meta_to_result(data)
+            return ApiResponse.success(data)
         except Exception as exc:
             return ApiResponse.error(f"获取依赖项目失败: {exc}")
 
@@ -5707,7 +5758,9 @@ class API:
     def workshop_search_dependents(self, workshop_id: str, page: int = 1, page_size: int = 20):
         """基础渠道：从外置缓存库反查生态关联项。"""
         try:
-            return ApiResponse.success(ExtDAO.search_workshop_dependents(workshop_id, page=page, page_size=page_size))
+            data = ExtDAO.search_workshop_dependents(workshop_id, page=page, page_size=page_size)
+            self._attach_workshop_translation_meta_to_result(data)
+            return ApiResponse.success(data)
         except Exception as exc:
             return ApiResponse.error(f"获取生态关联失败: {exc}")
 
@@ -5715,7 +5768,9 @@ class API:
     def workshop_get_same_author(self, workshop_id: str, page: int = 1, page_size: int = 20):
         """基础渠道：从外置缓存库查找同作者作品。"""
         try:
-            return ApiResponse.success(ExtDAO.get_workshop_same_author(workshop_id, page=page, page_size=page_size))
+            data = ExtDAO.get_workshop_same_author(workshop_id, page=page, page_size=page_size)
+            self._attach_workshop_translation_meta_to_result(data)
+            return ApiResponse.success(data)
         except Exception as exc:
             return ApiResponse.error(f"获取作者作品失败: {exc}")
 
@@ -5731,7 +5786,7 @@ class API:
         try:
             details = SteamWebAPI.get_enhanced_workshop_detail(workshop_id, current_detail=current_detail)
             if details:
-                self._attach_workshop_translation_source_hash(details)
+                self._attach_workshop_translation_meta(details)
                 return ApiResponse.success(details)
             return ApiResponse.error("未找到模组详情")
         except ValueError as exc:
@@ -5828,7 +5883,9 @@ class API:
     def workshop_get_dependencies_enhanced(self, workshop_id: str, current_detail: dict | None = None):
         """增强渠道：获取依赖项目或合集子项详情。"""
         try:
-            return ApiResponse.success(SteamWebAPI.get_workshop_dependencies_enhanced(workshop_id, current_detail=current_detail))
+            data = SteamWebAPI.get_workshop_dependencies_enhanced(workshop_id, current_detail=current_detail)
+            self._attach_workshop_translation_meta_to_result(data)
+            return ApiResponse.success(data)
         except ValueError as exc:
             return ApiResponse.warning(str(exc))
         except Exception as exc:
@@ -5838,7 +5895,9 @@ class API:
     def workshop_search_dependents_enhanced(self, workshop_id: str, cursor: str = "*", page_size: int = 20, filters: dict | None = None):
         """增强渠道：搜索依赖当前工坊项的生态关联项。"""
         try:
-            return ApiResponse.success(SteamWebAPI.search_workshop_dependents_enhanced(workshop_id, cursor=cursor, page_size=page_size, filters=filters))
+            data = SteamWebAPI.search_workshop_dependents_enhanced(workshop_id, cursor=cursor, page_size=page_size, filters=filters)
+            self._attach_workshop_translation_meta_to_result(data)
+            return ApiResponse.success(data)
         except ValueError as exc:
             return ApiResponse.warning(str(exc))
         except Exception as exc:
@@ -5848,15 +5907,15 @@ class API:
     def workshop_get_same_author_enhanced(self, workshop_id: str, author_steam_id: str = "", page: int = 1, page_size: int = 20, filters: dict | None = None):
         """增强渠道：分页获取同作者作品。"""
         try:
-            return ApiResponse.success(
-                SteamWebAPI.get_workshop_same_author_enhanced(
-                    workshop_id,
-                    author_steam_id=author_steam_id,
-                    page=page,
-                    page_size=page_size,
-                    filters=filters,
-                )
+            data = SteamWebAPI.get_workshop_same_author_enhanced(
+                workshop_id,
+                author_steam_id=author_steam_id,
+                page=page,
+                page_size=page_size,
+                filters=filters,
             )
+            self._attach_workshop_translation_meta_to_result(data)
+            return ApiResponse.success(data)
         except ValueError as exc:
             return ApiResponse.warning(str(exc))
         except Exception as exc:

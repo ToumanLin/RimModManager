@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from backend.database.dao_ext import ExtDAO
 from backend.database.models_ext import ModReplacement, WorkshopAuthorCache, WorkshopManifest, WorkshopOnlineCache, ext_db
+from backend.api import API
 from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.translation import TranslationManager
 from backend.translation.contracts import TranslationDocument
@@ -518,6 +519,34 @@ class TestWorkshopSearch(unittest.TestCase):
         )
         self.assertEqual(result.source_hash, TranslationManager.build_source_hash(same_source))
 
+    def test_translation_manager_retries_when_title_is_missing(self):
+        class DummyAIManager:
+            def __init__(self):
+                self.calls = 0
+                self.contexts = []
+
+            def execute_structured_task(self, task_key, payload, override_config=None):
+                self.calls += 1
+                self.contexts.append(payload["variables"].get("translation_context", ""))
+                if self.calls == 1:
+                    return {"segments": [{"key": "description", "text": "完整译文"}]}
+                return {"segments": [{"key": "title", "text": "现代阿尔法"}, {"key": "description", "text": "完整译文"}]}
+
+        document = TranslationDocument.from_segments(
+            [
+                {"key": "title", "role": "title", "text": "Modern Alpha"},
+                {"key": "description", "role": "body", "text": "Full text"},
+            ],
+            context="Steam Workshop item detail",
+        )
+        ai_mgr = DummyAIManager()
+        translated = TranslationManager(ai_mgr).translate_document(document, "zh-CN").segment_map()
+
+        self.assertEqual(ai_mgr.calls, 2)
+        self.assertIn("缺少这些 key", ai_mgr.contexts[1])
+        self.assertEqual(translated["title"], "现代阿尔法")
+        self.assertEqual(translated["description"], "完整译文")
+
     def test_author_summaries_are_cached_and_attached_to_items(self):
         captured = {}
 
@@ -796,6 +825,21 @@ class TestWorkshopSearch(unittest.TestCase):
         scraper_mock.assert_not_called()
         self.assertEqual(detail["workshop_id"], "1111111111")
         self.assertEqual(detail["description"], "Cached detail")
+
+    def test_translation_meta_prefers_cached_translation_over_empty_online_value(self):
+        cached_translation = {"zh-CN": {"title": "现代阿尔法", "description": "完整译文"}}
+        api = object.__new__(API)
+        api.translation_mgr = TranslationManager(None)
+        item = {
+            "workshop_id": "1111111111",
+            "title": "Alpha Tools",
+            "description": "English detail",
+            "translations": {},
+        }
+
+        API._attach_workshop_translation_meta(api, item, cached_translation)
+
+        self.assertEqual(item["translations"], cached_translation)
 
     def test_account_and_creator_operations_validate_required_params(self):
         with patch.object(SteamWebAPI, "_get_steam_web_api_key", return_value=""):

@@ -34,6 +34,7 @@
     <FixedPopover
       :trigger-ref="inputRef" :is-open="isOpen"
       :placement="menuPlacement"
+      close-on-other-popover
       @request-close="handlePopoverRequestClose"
     >
       <div @mousedown.prevent class="popover-surface inline-flex max-h-60 min-w-32 max-w-[min(50vw,24rem)] flex-col gap-0.5 overflow-y-auto rounded-xl p-1 custom-scrollbar">

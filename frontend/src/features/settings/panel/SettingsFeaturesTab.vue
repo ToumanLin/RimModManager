@@ -29,12 +29,8 @@
                     <CommonNumber class="col-span-1" label="自动备份保留天数" description="管理自动备份的最长保留时间，手动备份不受影响。" v-model="formData.backup_retention_days" :step="1" :min="0" :max="365" />
                     <div v-if="formData.translation" class="modal-section col-span-2 grid grid-cols-2 gap-2 p-2">
                       <span class="col-span-2 ml-2 mt-2 text-sm font-bold tracking-wide">翻译</span>
-                      <CommonSelect class="col-span-1" label="默认目标语言" v-model="formData.translation.default.target_language" showBottom
-                        description="没有单独指定语言的翻译功能，会使用这里的目标语言。"
-                        :options="translationLanguageOptions" />
-                      <CommonSelect class="col-span-1" label="默认翻译器" v-model="formData.translation.default.provider" showBottom
-                        description="没有单独指定翻译器的翻译功能，会使用这里的翻译器。"
-                        :options="translationProviderOptions" />
+                      <TranslationFeatureControls class="col-span-2" mode="panel" feature="default" :settings="formData.translation.default" :show-feature-switches="false"
+                        title="默认翻译设置" description="没有单独指定语言或翻译器的翻译功能，会使用这里的设置。" />
                       <button type="button" class="col-span-2 mt-2 flex items-center justify-between rounded-lg border border-border-base/10 bg-bg-inset/70 px-3 py-2 text-left transition-colors hover:border-accent-primary/30 hover:text-accent-primary"
                         @click="showWorkshopTranslationSettings = !showWorkshopTranslationSettings">
                         <span>
@@ -43,18 +39,8 @@
                         </span>
                         <span class="text-xs font-bold text-text-dim">{{ showWorkshopTranslationSettings ? '收起' : '设置' }}</span>
                       </button>
-                      <template v-if="showWorkshopTranslationSettings">
-                        <CommonSelect class="col-span-1" label="目标语言" v-model="formData.translation.workshop_detail.target_language" showBottom
-                          description="工坊详情页点击翻译按钮时使用的目标语言。"
-                          :options="featureLanguageOptions" />
-                        <CommonSelect class="col-span-1" label="翻译器" v-model="formData.translation.workshop_detail.provider" showBottom
-                          description="只影响工坊详情说明翻译，不影响后续其它翻译功能。"
-                          :options="featureProviderOptions" />
-                        <CommonSwitch class="col-span-1" label="优先显示界面语言译文" v-model="formData.translation.workshop_detail.prefer_ui_language_translation"
-                          description="打开工坊详情时，如果已有当前界面语言的译文，会直接显示译文；关闭后默认显示原文。" />
-                        <CommonSwitch class="col-span-1" label="缺少译文时自动翻译" v-model="formData.translation.workshop_detail.auto_translate_missing"
-                          description="工坊详情当前显示语言没有译文时自动请求翻译。默认关闭，避免意外消耗 AI 请求。" />
-                      </template>
+                      <TranslationFeatureControls v-if="showWorkshopTranslationSettings" class="col-span-2" mode="panel" feature="workshop_detail" :settings="formData.translation.workshop_detail"
+                        title="工坊说明翻译" description="只影响工坊详情页的标题和说明翻译。" />
                     </div>
                   </div>
                 </div>
@@ -62,41 +48,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import CommonSwitch from '../../../shared/components/input/CommonSwitch.vue'
 import CommonSelect from '../../../shared/components/input/CommonSelect.vue'
 import CommonNumber from '../../../shared/components/input/CommonNumber.vue'
-import { useAppStore } from '../../../app/stores/appStore'
+import TranslationFeatureControls from '../../../shared/components/translation/TranslationFeatureControls.vue'
 
 defineProps({ formData: { type: Object, required: true } })
-const appStore = useAppStore()
 const showWorkshopTranslationSettings = ref(false)
-
-const translationLanguageOptions = [
-  { label: '跟随界面语言', value: 'follow_ui' },
-  { label: '简体中文', value: 'zh-CN' },
-  { label: 'English', value: 'en' },
-  { label: '日本語', value: 'ja' },
-  { label: '한국어', value: 'ko' },
-  { label: 'Deutsch', value: 'de' },
-  { label: 'Français', value: 'fr' },
-  { label: 'Español', value: 'es' },
-  { label: 'Português do Brasil', value: 'pt-BR' },
-  { label: 'Русский', value: 'ru' },
-]
-const translationProviderOptions = computed(() => (
-  appStore.translationProviders.map(item => ({ label: item.label || item.id, value: item.id }))
-))
-const featureLanguageOptions = computed(() => [
-  { label: '使用默认目标语言', value: 'default' },
-  ...translationLanguageOptions,
-])
-const featureProviderOptions = computed(() => [
-  { label: '使用默认翻译器', value: 'default' },
-  ...translationProviderOptions.value,
-])
-
-onMounted(() => {
-  void appStore.ensureTranslationProviders()
-})
 </script>

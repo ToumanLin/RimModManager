@@ -29,34 +29,31 @@ class AITranslationProvider:
     def __init__(self, ai_mgr: Any):
         self.ai_mgr = ai_mgr
 
-    def translate(self, document: TranslationDocument, target_language: str) -> list[TranslationSegment]:
-        target_label = get_language_label(target_language, default=target_language)
-        glossary_lines = [
-            f"- {term.source} => {term.target or '(按上下文处理)'}{f'；{term.note}' if term.note else ''}"
-            for term in document.glossary
-        ]
-        parsed = self.ai_mgr.execute_structured_task(
+    def _request_translation(self, document: TranslationDocument, target_label: str, glossary_lines: list[str], required_keys: list[str], retry_note: str = "") -> Any:
+        context = document.context
+        if retry_note:
+            context = f"{context}\n{retry_note}".strip()
+        return self.ai_mgr.execute_structured_task(
             "task.translation",
             {
                 "variables": {
                     "target_lang": target_label,
                     "source_format": document.format,
-                    "translation_context": document.context,
+                    "translation_context": context,
                     "glossary_block": "\n".join(glossary_lines),
+                    "required_segment_keys": ", ".join(required_keys),
                     "translation_input_json": json.dumps(document.to_prompt_payload(), ensure_ascii=False),
                 }
             },
         )
-        if not isinstance(parsed, dict):
-            raise ValueError("翻译器返回格式无效")
 
-        raw_segments = parsed.get("segments")
+    def _parse_segments(self, raw_segments: Any, document: TranslationDocument) -> tuple[list[TranslationSegment], list[str]]:
         if not isinstance(raw_segments, list):
             raise ValueError("翻译器返回格式无效")
-
         source_roles = {segment.key: segment.role for segment in document.segments}
         source_keys = set(source_roles)
         translated: list[TranslationSegment] = []
+        translated_text: dict[str, str] = {}
         seen_keys: set[str] = set()
         for item in raw_segments:
             if not isinstance(item, dict):
@@ -64,10 +61,34 @@ class AITranslationProvider:
             key = str(item.get("key") or "").strip()
             if not key or key not in source_keys or key in seen_keys:
                 continue
+            text = str(item.get("text") or "")
             seen_keys.add(key)
-            translated.append(TranslationSegment(key=key, text=str(item.get("text") or ""), role=source_roles.get(key, "body")))
-        if not translated:
-            raise ValueError("翻译器未返回有效译文")
+            translated_text[key] = text
+            translated.append(TranslationSegment(key=key, text=text, role=source_roles.get(key, "body")))
+        missing = [segment.key for segment in document.segments if not translated_text.get(segment.key, "").strip()]
+        return translated, missing
+
+    def translate(self, document: TranslationDocument, target_language: str) -> list[TranslationSegment]:
+        target_label = get_language_label(target_language, default=target_language)
+        required_keys = [segment.key for segment in document.segments]
+        glossary_lines = [
+            f"- {term.source} => {term.target or '(按上下文处理)'}{f'；{term.note}' if term.note else ''}"
+            for term in document.glossary
+        ]
+        parsed = self._request_translation(document, target_label, glossary_lines, required_keys)
+        if not isinstance(parsed, dict):
+            raise ValueError("翻译器返回格式无效")
+
+        translated, missing = self._parse_segments(parsed.get("segments"), document)
+        if missing:
+            # ponytail: 只对缺字段重试一次，避免为偶发模型漏 key 引入复杂修复流程。
+            retry_note = f"上次输出缺少这些 key 或译文为空：{', '.join(missing)}。这次必须返回所有 required keys。"
+            parsed = self._request_translation(document, target_label, glossary_lines, required_keys, retry_note=retry_note)
+            if not isinstance(parsed, dict):
+                raise ValueError("翻译器返回格式无效")
+            translated, missing = self._parse_segments(parsed.get("segments"), document)
+        if missing:
+            raise ValueError(f"翻译器未返回完整译文: {', '.join(missing)}")
         return translated
 
 

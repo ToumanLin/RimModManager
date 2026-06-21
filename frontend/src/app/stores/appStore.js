@@ -110,6 +110,7 @@ export const useAppStore = defineStore('app', () => {
       provider: 'default',
       prefer_ui_language_translation: true,
       auto_translate_missing: false,
+      source_detection: { enabled: false, mode: 'or', terms: [] },
     },
   })
 
@@ -118,6 +119,7 @@ export const useAppStore = defineStore('app', () => {
     const source = value && typeof value === 'object' ? value : {}
     const globalDefault = source.default && typeof source.default === 'object' ? source.default : {}
     const workshopDetail = source.workshop_detail && typeof source.workshop_detail === 'object' ? source.workshop_detail : {}
+    const sourceDetection = workshopDetail.source_detection && typeof workshopDetail.source_detection === 'object' ? workshopDetail.source_detection : {}
     const normalized = {
       ...source,
       default: {
@@ -127,6 +129,13 @@ export const useAppStore = defineStore('app', () => {
       workshop_detail: {
         ...defaults.workshop_detail,
         ...workshopDetail,
+        source_detection: {
+          ...defaults.workshop_detail.source_detection,
+          ...sourceDetection,
+          terms: Array.isArray(sourceDetection.terms) ? sourceDetection.terms.map(item => String(item || '').trim()).filter(Boolean) : [],
+          mode: String(sourceDetection.mode || '').toLowerCase() === 'and' ? 'and' : 'or',
+          enabled: !!sourceDetection.enabled,
+        },
       },
     }
     delete normalized.defaults
@@ -312,6 +321,7 @@ export const useAppStore = defineStore('app', () => {
         provider: 'default',
         prefer_ui_language_translation: true,
         auto_translate_missing: false,
+        source_detection: { enabled: false, mode: 'or', terms: [] },
       },
     },
     enable_steam_enhanced_api: false,

@@ -69,13 +69,15 @@ def get_default_ai_prompts() -> dict:
                 "2. 保留原文格式，包括换行、URL、图片标记、Steam/Unity 富文本标签、版本号、包名、文件名和 ID。\n"
                 "3. 标题、名称和说明可以结合上下文自然翻译，但不要加入原文没有的新宣传语或功能判断。\n"
                 "4. 如果提供术语表，优先按术语表统一译名；术语表没有覆盖的内容按上下文翻译。\n"
-                "5. 如果某段内容已经是目标语言，也要按用户请求正常处理，可做轻微润色，但不要改变事实。"
+                "5. 如果某段内容已经是目标语言，也要按用户请求正常处理，可做轻微润色，但不要改变事实。\n"
+                "6. 必须返回所有 required keys，尤其是 title、name 这类短文本，不能因为短或像专有名词就跳过。"
             ),
             "user_template": (
                 "目标语言：{target_lang}\n"
                 "原文格式：{source_format}\n"
                 "上下文：{translation_context}\n\n"
                 "术语表：\n{glossary_block}\n\n"
+                "必须返回的 keys：{required_segment_keys}\n\n"
                 "输入 JSON：\n{translation_input_json}"
             ),
         }, category="task"),
@@ -227,6 +229,7 @@ def get_prompt_category_definitions() -> dict[str, dict]:
                 PromptVariableDefinition(key="attachments_block", label="附件总览", description="所有附件的通用兜底摘要块。适合通用模板，不建议替代具体附件变量。"),
                 PromptVariableDefinition(key="mod_alias_input_json", label="模组数据 JSON", description="模组别名任务输入的 JSON 文本。"),
                 PromptVariableDefinition(key="translation_input_json", label="翻译输入 JSON", description="通用翻译任务输入的文本段 JSON。"),
+                PromptVariableDefinition(key="required_segment_keys", label="必需段落键", description="翻译结果必须完整返回的 segments key 列表。"),
                 PromptVariableDefinition(key="translation_context", label="翻译上下文", description="说明文本来源、用途或显示位置。"),
                 PromptVariableDefinition(key="source_format", label="原文格式", description="原文格式或标记类型，例如 plain_text、steam_rich_text。"),
                 PromptVariableDefinition(key="glossary_block", label="术语表", description="当前翻译可参考的术语约束。"),

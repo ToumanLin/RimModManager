@@ -5,6 +5,7 @@ import { useAppStore } from '../../app/stores/appStore'
 import { checkResult, toast } from '../../shared/lib/common'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 import { SOURCE_TYPE_MAP } from '../../shared/lib/constants'
+import { matchesTranslationSourceDetection } from '../../shared/lib/translationDetection'
 import {
   dedupeNormalizedPackageIds, normalizeInstallSources,
   normalizePackageId, normalizeUrl, normalizeWorkshopId,
@@ -141,7 +142,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectedId: null,
     detailData: null,
     detailTranslationLanguage: 'follow_ui',
-    translationPanelOpen: false,
     isTranslating: false,
     isDetailLoading: false,
     relatedLoading: { dependencies: false, dependents: false, same_author: false },
@@ -889,6 +889,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     })
   )
 
+  const mergeWorkshopItemIntoList = (items = [], patch = {}) => {
+    const workshopId = String(patch?.workshop_id || '').trim()
+    if (!workshopId || !Array.isArray(items)) return items
+    return items.map(item => String(item?.workshop_id || '').trim() === workshopId ? mergeWorkshopItemPatch(item, patch) : item)
+  }
+
   const preheatNormalWorkshopPublicDetails = async (items = []) => {
     if (!window.pywebview || workshopSearch.isEnhancedMode) return
     const workshopIds = [...new Set(
@@ -988,6 +994,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const getInitialWorkshopDetailTranslationLanguage = () => (
     getWorkshopDetailTranslationSettings().prefer_ui_language_translation === false ? '' : 'follow_ui'
   )
+  const getDefaultWorkshopDisplayTranslationLanguage = () => (
+    getWorkshopDetailTranslationSettings().prefer_ui_language_translation === false ? '' : getDefaultTranslationSelection()
+  )
   const getResolvedTranslationLanguage = (language = '') => {
     const code = normalizeDetailTranslationLanguage(language)
     return code === 'follow_ui' ? getUiTranslationLanguage() : code
@@ -1004,9 +1013,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const value = code && translations && typeof translations === 'object' ? translations[code] : null
     return value && typeof value === 'object' && (value.title || value.description) ? value : null
   }
-  const pickWorkshopTranslation = (translations = {}, sourceHash = '') => {
+  const shouldSkipWorkshopAutoTranslate = (item = {}) => {
+    const sourceText = [
+      item?.original_title || item?.title || item?.name || '',
+      item?.original_description || item?.description || item?.short_description || '',
+    ].join('\n')
+    return matchesTranslationSourceDetection(sourceText, getWorkshopDetailTranslationSettings().source_detection)
+  }
+  const pickWorkshopTranslation = (translations = {}, sourceHash = '', language = getDefaultWorkshopDisplayTranslationLanguage()) => {
     if (!translations || typeof translations !== 'object') return {}
-    const explicitLanguage = normalizeDetailTranslationLanguage(workshopSearch.detailTranslationLanguage)
+    const explicitLanguage = normalizeDetailTranslationLanguage(language)
     if (!explicitLanguage) return {}
     const lang = getResolvedTranslationLanguage(explicitLanguage)
     const value = getWorkshopTranslationEntry(translations, lang)
@@ -1020,16 +1036,38 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return {}
   }
 
+  const refreshWorkshopTranslationDisplays = () => {
+    workshopSearch.results = workshopSearch.results.map(item => normalizeWorkshopSearchItem(item))
+    workshopSearch.transientList.items = workshopSearch.transientList.items.map(item => normalizeWorkshopSearchItem(item))
+    if (workshopSearch.detailData) {
+      const related = workshopSearch.detailData.related || {}
+      workshopSearch.detailData = normalizeWorkshopSearchItem({
+        ...workshopSearch.detailData,
+        related: {
+          ...related,
+          dependencies: (related.dependencies || []).map(item => normalizeWorkshopSearchItem(item)),
+          dependents: (related.dependents || []).map(item => normalizeWorkshopSearchItem(item)),
+          same_author: (related.same_author || []).map(item => normalizeWorkshopSearchItem(item)),
+          collection_children: (related.collection_children || []).map(item => normalizeWorkshopSearchItem(item)),
+        },
+      })
+    }
+  }
+
   watch(
-    () => appStore.getTranslationFeatureSettings('workshop_detail').prefer_ui_language_translation,
-    (enabled) => {
-      if (!workshopSearch.detailData) return
+    () => [
+      appStore.getTranslationFeatureSettings('workshop_detail').prefer_ui_language_translation,
+      appStore.getTranslationFeatureSettings('workshop_detail').target_language,
+      appStore.settings.language,
+    ],
+    ([enabled]) => {
       const current = normalizeDetailTranslationLanguage(workshopSearch.detailTranslationLanguage)
       if (enabled === false && current === 'follow_ui') {
         setWorkshopDetailTranslationLanguage('')
       } else if (enabled !== false && !current) {
         setWorkshopDetailTranslationLanguage('follow_ui')
       }
+      refreshWorkshopTranslationDisplays()
     }
   )
 
@@ -1042,9 +1080,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       ...(Array.isArray(item.game_versions) ? item.game_versions : []),
       ...versionTags,
     ])
-    const author = Array.isArray(item.author)
+    const profileName = String(item.author_profile?.name || '').trim()
+    const rawAuthor = Array.isArray(item.author)
       ? item.author.filter(Boolean).join(' / ')
-      : String(item.author || item.author_profile?.name || '').trim()
+      : String(item.author || '').trim()
+    const author = profileName || rawAuthor
     const workshopId = String(item.workshop_id || '').trim()
     const itemType = resolveWorkshopItemType(item)
     const stats = normalizeWorkshopStats(item)
@@ -1053,6 +1093,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const preferredTranslation = pickWorkshopTranslation(translations, sourceHash)
     const rawTitle = String(item.original_title || item.title || item.name || '').trim()
     const rawDescription = String(item.original_description || item.description || item.short_description || '').trim()
+    // 翻译只生成展示字段，原文字段保持稳定；详情页、缓存刷新和过期判断仍依赖原文。
+    // 列表显示使用默认翻译设置，不能复用详情页手动“原文/译文”切换状态。
+    const displayTitle = String(preferredTranslation.title || rawTitle).trim()
+    const displayDescription = String(preferredTranslation.description || rawDescription || item.short_description || '').trim()
     const children = Array.isArray(item.children)
       ? [...item.children]
           .filter(child => child && child.workshop_id)
@@ -1067,10 +1111,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       package_id: String(item.package_id || '').trim(),
       author,
       author_steam_id: String(item.author_steam_id || '').trim(),
+      author_label: author || String(item.author_steam_id || '').trim(),
       author_profile: item.author_profile || null,
       short_description: String(item.short_description || '').trim(),
       description: rawDescription,
       original_description: rawDescription,
+      display_title: displayTitle,
+      display_description: displayDescription,
+      shows_translated_title: !!(preferredTranslation.title && displayTitle && rawTitle && displayTitle !== rawTitle),
       preview_url: String(item.preview_url || '').trim(),
       game_versions: gameVersions,
       tags: rawTags,
@@ -1127,6 +1175,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       },
     })
     workshopSearch.detailData = normalized
+    // 详情翻译接口只返回当前详情对象；列表项是独立旧对象，必须同步补丁，否则左侧仍显示原文。
+    workshopSearch.results = mergeWorkshopItemIntoList(workshopSearch.results, normalized)
+    workshopSearch.transientList.items = mergeWorkshopItemIntoList(workshopSearch.transientList.items, normalized)
+    for (const key of ['dependencies', 'dependents', 'same_author', 'collection_children']) {
+      if (Array.isArray(workshopSearch.detailData.related?.[key])) {
+        workshopSearch.detailData.related[key] = mergeWorkshopItemIntoList(workshopSearch.detailData.related[key], normalized)
+      }
+    }
     return normalized
   }
 
@@ -1340,7 +1396,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workshopSearch.selectedId = null
     workshopSearch.detailData = null
     workshopSearch.detailTranslationLanguage = getInitialWorkshopDetailTranslationLanguage()
-    workshopSearch.translationPanelOpen = false
     closeWorkshopTransientList()
   }
 
@@ -1627,7 +1682,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
     workshopSearch.selectedId = workshop_id
     workshopSearch.detailTranslationLanguage = getInitialWorkshopDetailTranslationLanguage()
-    workshopSearch.translationPanelOpen = false
     workshopSearch.isDetailLoading = true
     resetWorkshopRelatedState()
     const currentDetail = findWorkshopListItem(workshop_id)
@@ -1646,6 +1700,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
           getWorkshopDetailTranslationSettings().auto_translate_missing
           && displayLanguage
           && targetLanguage
+          && !shouldSkipWorkshopAutoTranslate(workshopSearch.detailData)
           && !getWorkshopTranslationEntry(workshopSearch.detailData?.translations, targetLanguage)
         ) {
           void translateWorkshopDetail({ language: targetLanguage, displayLanguage })
@@ -2155,7 +2210,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     github, fetchGithubRepos, fetchGithubProviderCatalog, fetchGithubTimeline, startGithubTimelinePolling, stopGithubTimelinePolling, selectGithubRepo, clearActiveGithubRepo,
     // 懒加载与来源映射
     getGithubOnlineVersion, getGithubRepoStatus, githubRepoNeedsUpdate, ensureLibrariesLoaded, ensureGithubLoaded, ensureCollectionsLoaded, ensureWorkspaceTabLoaded, refreshLoadedData, openSteamWorkshopUrl, getWorkshopDetailsByPackageIdsMap, getInstallSourcesByPackageIdsMap, getWorkshopIdsByPackageIdsMap, resolvePackageIdsToWorkshopIds, goBackWorkshopDetail,
-    getDefaultTranslationLanguage, getDefaultTranslationSelection, getResolvedTranslationLanguage, getTranslationLanguageLabel, getWorkshopTranslationEntry, setWorkshopDetailTranslationLanguage, translateWorkshopDetail, clearWorkshopDetailTranslation, toggleWorkshopDetailTranslation,
+    getDefaultTranslationLanguage, getDefaultTranslationSelection, getResolvedTranslationLanguage, getTranslationLanguageLabel, getWorkshopTranslationEntry, shouldSkipWorkshopAutoTranslate, setWorkshopDetailTranslationLanguage, translateWorkshopDetail, clearWorkshopDetailTranslation, toggleWorkshopDetailTranslation,
     // 合集
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection, searchCollectionsOnline, activateCollectionSearchView,
   }
