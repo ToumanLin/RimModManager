@@ -339,6 +339,7 @@ def filestree( start_path: str = '.', exclude_dirs: List[str] = [], max_depth: i
 
 if __name__ == "__main__":
     from backend._version import __version__
+    # pack_zip = False
     pack_zip = True
     # 配置
     APP_MAIN = 'main.py'
