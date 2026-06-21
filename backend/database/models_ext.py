@@ -110,10 +110,16 @@ class WorkshopOnlineCache(ExtBaseModel):
     status = UTF8JSONField(default=dict)
     maybe_inappropriate_sex = IntegerField(default=0)
     maybe_inappropriate_violence = IntegerField(default=0)
-    # 翻译缓存。以语言简码为键，保存面向展示的标题和简介：
+    # 翻译缓存。以项目语言码为键，保存用户生成的展示译文。
+    # 译文只按原文哈希判断是否过期，不跟随 Steam 在线缓存 TTL 刷新：
     # {
-    #   "zh-CN": {"title": "译名", "description": "译文简介"},
-    #   "en": {"title": "...", "description": "..."}
+    #   "zh-CN": {
+    #     "title": "译名",
+    #     "description": "译文说明",
+    #     "source_hash": "sha256...",
+    #     "provider": "ai.default",
+    #     "updated_at": 1760000000000
+    #   }
     # }
     translations = UTF8JSONField(default=dict)
     playtime_stats = UTF8JSONField(null=True)

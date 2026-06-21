@@ -43,6 +43,7 @@ from backend._version import __version__, __build__, get_all_changelogs
 from backend.utils.tools import normalize_package_id, normalize_workshop_id
 from backend.utils.tools import current_ms, generate_path_hash
 from backend.utils.constants import RIMWORLD_DLC_OPTIONS, get_steam_elanguage_options
+from backend.i18n.language_registry import normalize_language_code
 from backend.utils.logger import logger, app_log_reader
 from backend.utils.shortcuts import get_desktop_directory
 from backend.managers.mgr_network import network_mgr
@@ -51,6 +52,7 @@ from backend.managers.mgr_network import network_mgr
 from backend.database.models import MOD_ASSET_STATE_MISSING, MOD_ASSET_STATE_PRESENT, ModAsset, ModInterlock, UserModData, GithubModRecord, GithubTimeline, db
 from backend.database.dao import CollectionDAO, GroupDAO, ModDAO, ModInterlockDAO, ModMaintenanceDAO
 from backend.database.dao_ext import ExtDAO
+from backend.database.models_ext import WorkshopOnlineCache, ext_db
 from backend.database.runtime import close_db, clear_db, init_db
 from backend.database.repair import (
     _cleanup_database_sidecars,
@@ -82,6 +84,8 @@ from backend.managers.mgr_mod_settings import ModSettingsManager
 from backend.managers.mgr_mod_residue import ModResidueManager
 from backend.utils.profile_runtime import resolve_profile_runtime_capabilities
 from backend.managers.mgr_steam_api import SteamWebAPI
+from backend.translation import DEFAULT_TRANSLATION_PROVIDER, TranslationManager
+from backend.translation.contracts import TranslationDocument
 from backend.managers.mgr_github import GithubManager
 from backend.managers.mgr_maintenance import MaintenanceManager
 from backend.managers.mgr_data_bundle import DataBundleManager
@@ -294,6 +298,7 @@ class API:
         self.file_mgr = file_mgr
         self.steam_mgr = SteamManager()
         self.ai_mgr = AIManager()
+        self.translation_mgr = TranslationManager(self.ai_mgr)
         self.data_bundle_mgr = DataBundleManager(
             self.profile_mgr,
             self.ai_mgr,
@@ -5602,6 +5607,79 @@ class API:
         return ApiResponse.success(get_steam_elanguage_options())
 
     @log_api_call
+    def translation_get_providers(self):
+        """获取当前可用翻译器。"""
+        return ApiResponse.success(self.translation_mgr.list_providers())
+
+    @log_api_call
+    def translation_translate_document(self, document: dict | None, target_language: str, provider: str = DEFAULT_TRANSLATION_PROVIDER):
+        """通用翻译入口：只处理文本段，不绑定具体业务缓存。"""
+        if self.translation_mgr.provider_requires_ai(provider):
+            ai_ready = self._ai_check_enable_with_config()
+            if ai_ready.get("status") != "success":
+                return ai_ready
+        try:
+            raw_document = document if isinstance(document, dict) else {}
+            translation_document = TranslationDocument.from_segments(
+                raw_document.get("segments") if isinstance(raw_document.get("segments"), list) else [],
+                format=raw_document.get("format") or "plain_text",
+                context=raw_document.get("context") or "",
+                glossary=raw_document.get("glossary") if isinstance(raw_document.get("glossary"), list) else [],
+            )
+            result = self.translation_mgr.translate_document(translation_document, target_language, provider_id=provider)
+            return ApiResponse.success(result.to_dict())
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            logger.error("Translation document failed: %s", exc, exc_info=True)
+            return ApiResponse.error(f"翻译失败: {exc}")
+
+    def _build_workshop_translation_document(self, workshop_id: str, current_detail: dict[str, Any] | None = None) -> TranslationDocument:
+        """把工坊详情整理成通用翻译文档；翻译系统本身不理解工坊字段。"""
+        current_detail = current_detail or {}
+        meta = ExtDAO.get_merged_meta_by_workshop_id(workshop_id) if workshop_id else None
+        meta = meta or {}
+        source_title = str(
+            current_detail.get("original_title")
+            or meta.get("title")
+            or current_detail.get("title")
+            or current_detail.get("name")
+            or ""
+        ).strip()
+        source_description = str(
+            current_detail.get("original_description")
+            or meta.get("description")
+            or current_detail.get("description")
+            or current_detail.get("short_description")
+            or ""
+        ).strip()
+        return TranslationDocument.from_segments(
+            [
+                {"key": "title", "role": "title", "text": source_title},
+                {"key": "description", "role": "body", "text": source_description},
+            ],
+            format="steam_rich_text",
+            context="Steam Workshop item detail",
+        )
+
+    def _attach_workshop_translation_source_hash(self, detail: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not isinstance(detail, dict):
+            return detail
+        detail["translation_source_hash"] = self.translation_mgr.build_source_hash(
+            self._build_workshop_translation_document("", detail)
+        )
+        return detail
+
+    def _save_workshop_translation_result(self, workshop_id: str, language: str, translation: dict[str, Any]) -> dict[str, Any]:
+        with ext_db.atomic():
+            row, _created = WorkshopOnlineCache.get_or_create(workshop_id=workshop_id)
+            translations = dict((row.translations if row else {}) or {})
+            translations[language] = translation
+            row.translations = translations
+            row.save(only=[WorkshopOnlineCache.translations])
+            return translations
+
+    @log_api_call
     def workshop_get_dlc_options(self):
         """获取 RimWorld / DLC 的 Steam AppID 选项。"""
         return ApiResponse.success(RIMWORLD_DLC_OPTIONS)
@@ -5611,6 +5689,7 @@ class API:
         """基础渠道详情：缓存信息 + 旧版详情补全。"""
         details = SteamWebAPI.get_or_fetch_details(workshop_id)
         if details:
+            self._attach_workshop_translation_source_hash(details)
             # 详情先用已有字段即时展示；截图抓取放后台增量推送，避免点击详情被网页抓图阻塞。
             self._emit_workshop_screenshots_async(workshop_id)
             return ApiResponse.success(details)
@@ -5652,12 +5731,98 @@ class API:
         try:
             details = SteamWebAPI.get_enhanced_workshop_detail(workshop_id, current_detail=current_detail)
             if details:
+                self._attach_workshop_translation_source_hash(details)
                 return ApiResponse.success(details)
             return ApiResponse.error("未找到模组详情")
         except ValueError as exc:
             return ApiResponse.warning(str(exc))
         except Exception as exc:
             return ApiResponse.error(f"获取增强详情失败: {exc}")
+
+    @log_api_call
+    def workshop_translate_detail(self, workshop_id: str, target_language: str, current_detail: dict | None = None, force: bool = False, provider: str = DEFAULT_TRANSLATION_PROVIDER):
+        """翻译并缓存当前工坊详情标题与说明。"""
+        if self.translation_mgr.provider_requires_ai(provider):
+            ai_ready = self._ai_check_enable_with_config()
+            if ai_ready.get("status") != "success":
+                return ai_ready
+        try:
+            normalized_id = normalize_workshop_id(workshop_id, digits_only=True, min_length=6, max_length=20)
+            if not normalized_id:
+                raise ValueError("工坊 ID 不能为空或格式不正确")
+            document = self._build_workshop_translation_document(normalized_id, current_detail)
+            if not document.segments:
+                raise ValueError("当前工坊项目没有可翻译的标题或说明")
+            language_code = normalize_language_code(target_language)
+            if not language_code:
+                raise ValueError("目标语言不能为空")
+            source_hash = self.translation_mgr.build_source_hash(document)
+            row = WorkshopOnlineCache.get_or_none(WorkshopOnlineCache.workshop_id == normalized_id)
+            translations = dict((row.translations if row else {}) or {})
+            existing = translations.get(language_code)
+            if existing and isinstance(existing, dict) and not force:
+                return ApiResponse.success({
+                    "workshop_id": normalized_id,
+                    "language": language_code,
+                    "translation": existing,
+                    "source_hash": source_hash,
+                    "is_stale": existing.get("source_hash") != source_hash,
+                    "translations": translations,
+                })
+            result = self.translation_mgr.translate_document(document, target_language, provider_id=provider)
+            translated = result.segment_map()
+            translation = {
+                "title": str(translated.get("title") or "").strip(),
+                "description": str(translated.get("description") or "").strip(),
+                "source_hash": result.source_hash,
+                "provider": result.provider,
+                "updated_at": result.updated_at,
+            }
+            if not translation["title"] and not translation["description"]:
+                raise ValueError("翻译器未返回有效译文")
+            translations = self._save_workshop_translation_result(normalized_id, result.target_language, translation)
+            return ApiResponse.success({
+                "workshop_id": normalized_id,
+                "language": result.target_language,
+                "translation": translation,
+                "source_hash": result.source_hash,
+                "is_stale": False,
+                "translations": translations,
+            })
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            logger.error("Workshop translation failed: %s", exc, exc_info=True)
+            return ApiResponse.error(f"翻译失败: {exc}")
+
+    @log_api_call
+    def workshop_clear_detail_translation(self, workshop_id: str, target_language: str = ""):
+        """清理当前工坊详情的翻译缓存；target_language 为空时清理全部译文。"""
+        try:
+            normalized_id = normalize_workshop_id(workshop_id, digits_only=True, min_length=6, max_length=20)
+            if not normalized_id:
+                raise ValueError("工坊 ID 不能为空或格式不正确")
+            language_code = normalize_language_code(target_language) if target_language else ""
+            with ext_db.atomic():
+                row = WorkshopOnlineCache.get_or_none(WorkshopOnlineCache.workshop_id == normalized_id)
+                translations = dict((row.translations if row else {}) or {})
+                if language_code:
+                    translations.pop(language_code, None)
+                else:
+                    translations = {}
+                if row:
+                    row.translations = translations
+                    row.save(only=[WorkshopOnlineCache.translations])
+            return ApiResponse.success({
+                "workshop_id": normalized_id,
+                "language": language_code,
+                "translations": translations,
+            })
+        except ValueError as exc:
+            return ApiResponse.warning(str(exc))
+        except Exception as exc:
+            logger.error("Workshop clear translation failed: %s", exc, exc_info=True)
+            return ApiResponse.error(f"清理翻译失败: {exc}")
 
     @log_api_call
     def workshop_get_dependencies_enhanced(self, workshop_id: str, current_detail: dict | None = None):

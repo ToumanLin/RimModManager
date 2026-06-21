@@ -140,6 +140,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     // --- 详情区状态 ---
     selectedId: null,
     detailData: null,
+    detailTranslationLanguage: 'follow_ui',
+    translationPanelOpen: false,
+    isTranslating: false,
     isDetailLoading: false,
     relatedLoading: { dependencies: false, dependents: false, same_author: false },
     relatedErrors: { dependencies: '', dependents: '', same_author: '' },
@@ -967,22 +970,68 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  const pickWorkshopTranslation = (translations = {}) => {
+  const normalizeTranslationLanguage = (value = '') => String(value || '').trim()
+  const normalizeDetailTranslationLanguage = (value = '') => {
+    const code = normalizeTranslationLanguage(value)
+    return code === 'auto' ? 'follow_ui' : code
+  }
+  const getWorkshopDetailTranslationSettings = () => appStore.getTranslationFeatureSettings('workshop_detail')
+  const getUiTranslationLanguage = () => normalizeTranslationLanguage(appStore.settings.language || 'zh-CN')
+  const getDefaultTranslationLanguage = () => {
+    const configured = normalizeTranslationLanguage(getWorkshopDetailTranslationSettings().target_language)
+    return !configured || configured === 'follow_ui' ? getUiTranslationLanguage() : configured
+  }
+  const getDefaultTranslationSelection = () => {
+    const configured = normalizeTranslationLanguage(getWorkshopDetailTranslationSettings().target_language)
+    return configured || 'follow_ui'
+  }
+  const getInitialWorkshopDetailTranslationLanguage = () => (
+    getWorkshopDetailTranslationSettings().prefer_ui_language_translation === false ? '' : 'follow_ui'
+  )
+  const getResolvedTranslationLanguage = (language = '') => {
+    const code = normalizeDetailTranslationLanguage(language)
+    return code === 'follow_ui' ? getUiTranslationLanguage() : code
+  }
+  const getTranslationLanguageLabel = (language = '') => {
+    const code = normalizeDetailTranslationLanguage(language)
+    if (!code) return '原文'
+    if (code === 'follow_ui') return `跟随界面语言（${getTranslationLanguageLabel(getUiTranslationLanguage())}）`
+    const option = workshopSearch.languageOptions.find(item => item.code === code || item.value === code)
+    return option?.label || code
+  }
+  const getWorkshopTranslationEntry = (translations = {}, language = '') => {
+    const code = getResolvedTranslationLanguage(language)
+    const value = code && translations && typeof translations === 'object' ? translations[code] : null
+    return value && typeof value === 'object' && (value.title || value.description) ? value : null
+  }
+  const pickWorkshopTranslation = (translations = {}, sourceHash = '') => {
     if (!translations || typeof translations !== 'object') return {}
-    const preferred = [
-      workshopSearch.language,
-      appStore.settings.language,
-      String(appStore.settings.language || '').split('-')[0],
-      'zh-CN',
-      'zh',
-      'en',
-    ].map(value => String(value || '').trim()).filter(Boolean)
-    for (const lang of preferred) {
-      const value = translations[lang]
-      if (value && typeof value === 'object' && (value.title || value.description)) return value
+    const explicitLanguage = normalizeDetailTranslationLanguage(workshopSearch.detailTranslationLanguage)
+    if (!explicitLanguage) return {}
+    const lang = getResolvedTranslationLanguage(explicitLanguage)
+    const value = getWorkshopTranslationEntry(translations, lang)
+    if (value) {
+      return {
+        ...value,
+        language: lang,
+        is_stale: !!(sourceHash && value.source_hash && value.source_hash !== sourceHash),
+      }
     }
     return {}
   }
+
+  watch(
+    () => appStore.getTranslationFeatureSettings('workshop_detail').prefer_ui_language_translation,
+    (enabled) => {
+      if (!workshopSearch.detailData) return
+      const current = normalizeDetailTranslationLanguage(workshopSearch.detailTranslationLanguage)
+      if (enabled === false && current === 'follow_ui') {
+        setWorkshopDetailTranslationLanguage('')
+      } else if (enabled !== false && !current) {
+        setWorkshopDetailTranslationLanguage('follow_ui')
+      }
+    }
+  )
 
   const normalizeWorkshopSearchItem = (item = {}) => {
     const rawTags = Array.isArray(item.tags)
@@ -1000,9 +1049,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const itemType = resolveWorkshopItemType(item)
     const stats = normalizeWorkshopStats(item)
     const translations = item.translations && typeof item.translations === 'object' ? item.translations : {}
-    const preferredTranslation = pickWorkshopTranslation(translations)
-    const rawTitle = String(item.title || item.name || '').trim()
-    const rawDescription = String(item.description || item.short_description || '').trim()
+    const sourceHash = String(item.translation_source_hash || '').trim()
+    const preferredTranslation = pickWorkshopTranslation(translations, sourceHash)
+    const rawTitle = String(item.original_title || item.title || item.name || '').trim()
+    const rawDescription = String(item.original_description || item.description || item.short_description || '').trim()
     const children = Array.isArray(item.children)
       ? [...item.children]
           .filter(child => child && child.workshop_id)
@@ -1011,15 +1061,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const normalizedItem = {
       ...item,
       workshop_id: workshopId,
-      title: String(preferredTranslation.title || rawTitle).trim(),
-      name: String(preferredTranslation.title || item.name || rawTitle || '未知模组').trim(),
+      title: rawTitle,
+      name: String(item.name || rawTitle || '未知模组').trim(),
       original_title: rawTitle,
       package_id: String(item.package_id || '').trim(),
       author,
       author_steam_id: String(item.author_steam_id || '').trim(),
       author_profile: item.author_profile || null,
       short_description: String(item.short_description || '').trim(),
-      description: String(preferredTranslation.description || rawDescription).trim(),
+      description: rawDescription,
       original_description: rawDescription,
       preview_url: String(item.preview_url || '').trim(),
       game_versions: gameVersions,
@@ -1031,6 +1081,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       status: item.status && typeof item.status === 'object' ? item.status : {},
       item_type: itemType,
       translations,
+      translation_source_hash: sourceHash,
+      current_translation_language: String(preferredTranslation.language || '').trim(),
+      translation_is_stale: !!preferredTranslation.is_stale,
       time_created: Number(item.time_created || 0),
       time_updated: Number(item.time_updated || 0),
       source: String(item.source || '').trim(),
@@ -1286,6 +1339,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workshopSearch.total = 0
     workshopSearch.selectedId = null
     workshopSearch.detailData = null
+    workshopSearch.detailTranslationLanguage = getInitialWorkshopDetailTranslationLanguage()
+    workshopSearch.translationPanelOpen = false
     closeWorkshopTransientList()
   }
 
@@ -1467,6 +1522,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  const loadTranslationProviders = async () => {
+    return appStore.ensureTranslationProviders()
+  }
+
   const loadWorkshopDlcOptions = async () => {
     if (!window.pywebview || workshopSearch.isDlcOptionsLoaded) return
     const res = await window.pywebview.api.workshop_get_dlc_options()
@@ -1474,6 +1533,85 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       workshopSearch.dlcOptions = Array.isArray(res.data) ? res.data : []
       workshopSearch.isDlcOptionsLoaded = true
     }
+  }
+
+  const refreshWorkshopDetailTranslation = () => {
+    if (!workshopSearch.detailData) return null
+    workshopSearch.detailData = normalizeWorkshopSearchItem({ ...workshopSearch.detailData })
+    return workshopSearch.detailData
+  }
+
+  const setWorkshopDetailTranslationLanguage = (language = 'follow_ui') => {
+    workshopSearch.detailTranslationLanguage = normalizeDetailTranslationLanguage(language)
+    return refreshWorkshopDetailTranslation()
+  }
+
+  const translateWorkshopDetail = async ({ language = '', displayLanguage = undefined, force = false } = {}) => {
+    if (!window.pywebview || !workshopSearch.detailData?.workshop_id || workshopSearch.isTranslating) return null
+    const targetLanguage = getResolvedTranslationLanguage(language || getDefaultTranslationSelection())
+    if (!targetLanguage) return null
+    const provider = normalizeTranslationLanguage(getWorkshopDetailTranslationSettings().provider || 'ai.default')
+    workshopSearch.isTranslating = true
+    try {
+      const res = await window.pywebview.api.workshop_translate_detail(
+        workshopSearch.detailData.workshop_id,
+        targetLanguage,
+        workshopSearch.detailData,
+        !!force,
+        provider,
+      )
+      if (!checkResult(res, '翻译工坊说明')) return null
+      const payload = res.data || {}
+      workshopSearch.detailTranslationLanguage = normalizeDetailTranslationLanguage(displayLanguage === undefined ? language || getDefaultTranslationSelection() : displayLanguage)
+      const normalized = mergeWorkshopDetailData({
+        translations: payload.translations || {
+          ...(workshopSearch.detailData.translations || {}),
+          [targetLanguage]: payload.translation,
+        },
+        translation_source_hash: payload.source_hash || workshopSearch.detailData.translation_source_hash || '',
+      })
+      toast.success(force ? '已重新翻译说明' : '已翻译说明', { timeout: 1500 })
+      return normalized
+    } finally {
+      workshopSearch.isTranslating = false
+    }
+  }
+
+  const clearWorkshopDetailTranslation = async ({ language = '', displayLanguage = undefined } = {}) => {
+    if (!window.pywebview || !workshopSearch.detailData?.workshop_id) return null
+    const targetLanguage = getResolvedTranslationLanguage(language || workshopSearch.detailTranslationLanguage)
+    if (!targetLanguage) return null
+    const res = await window.pywebview.api.workshop_clear_detail_translation(
+      workshopSearch.detailData.workshop_id,
+      targetLanguage,
+    )
+    if (!checkResult(res, '清理工坊翻译')) return null
+    const payload = res.data || {}
+    const normalized = mergeWorkshopDetailData({
+      translations: payload.translations || {},
+    })
+    workshopSearch.detailTranslationLanguage = normalizeDetailTranslationLanguage(displayLanguage === undefined ? language || workshopSearch.detailTranslationLanguage : displayLanguage)
+    if (!getWorkshopTranslationEntry(normalized.translations, targetLanguage)) {
+      workshopSearch.detailTranslationLanguage = ''
+    }
+    toast.success('已清理翻译', { timeout: 1500 })
+    return normalized
+  }
+
+  const toggleWorkshopDetailTranslation = async () => {
+    const current = workshopSearch.detailData
+    if (!current) return null
+    const currentSelection = normalizeDetailTranslationLanguage(workshopSearch.detailTranslationLanguage)
+    const currentLanguage = getResolvedTranslationLanguage(currentSelection)
+    if (currentSelection && getWorkshopTranslationEntry(current.translations, currentLanguage)) {
+      return setWorkshopDetailTranslationLanguage('')
+    }
+    const nextSelection = getDefaultTranslationSelection()
+    const targetLanguage = getResolvedTranslationLanguage(nextSelection)
+    if (getWorkshopTranslationEntry(current.translations, targetLanguage)) {
+      return setWorkshopDetailTranslationLanguage(nextSelection)
+    }
+    return translateWorkshopDetail({ language: targetLanguage, displayLanguage: nextSelection })
   }
 
   // 获取云端详情 (包含网页抓取截图)
@@ -1488,6 +1626,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       workshopSearch.historyStack.push(workshopSearch.selectedId)
     }
     workshopSearch.selectedId = workshop_id
+    workshopSearch.detailTranslationLanguage = getInitialWorkshopDetailTranslationLanguage()
+    workshopSearch.translationPanelOpen = false
     workshopSearch.isDetailLoading = true
     resetWorkshopRelatedState()
     const currentDetail = findWorkshopListItem(workshop_id)
@@ -1500,6 +1640,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (workshopSearch.selectedId !== workshop_id) return
       if (checkResult(res, '获取云端详情')) {
         mergeWorkshopDetailData(res.data)
+        const displayLanguage = normalizeDetailTranslationLanguage(workshopSearch.detailTranslationLanguage)
+        const targetLanguage = getResolvedTranslationLanguage(displayLanguage)
+        if (
+          getWorkshopDetailTranslationSettings().auto_translate_missing
+          && displayLanguage
+          && targetLanguage
+          && !getWorkshopTranslationEntry(workshopSearch.detailData?.translations, targetLanguage)
+        ) {
+          void translateWorkshopDetail({ language: targetLanguage, displayLanguage })
+        }
       }
     } finally {
       if (workshopSearch.selectedId === workshop_id) {
@@ -1999,12 +2149,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
     matrixFocusTarget, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
     // 库数据与工坊时间线
-    fetchLibrariesMods, refreshLifecycleUpdateStates, doWorkshopSearch, fetchWorkshopDetails, loadSteamLanguageOptions, loadWorkshopDlcOptions, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode, syncWorkshopSearchModeFromSettings, ensureWorkshopSearchReady,
+    fetchLibrariesMods, refreshLifecycleUpdateStates, doWorkshopSearch, fetchWorkshopDetails, loadSteamLanguageOptions, loadTranslationProviders, loadWorkshopDlcOptions, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode, syncWorkshopSearchModeFromSettings, ensureWorkshopSearchReady,
     openWorkshopTransientList, loadWorkshopTransientList, closeWorkshopTransientList,
     // GitHub 数据
     github, fetchGithubRepos, fetchGithubProviderCatalog, fetchGithubTimeline, startGithubTimelinePolling, stopGithubTimelinePolling, selectGithubRepo, clearActiveGithubRepo,
     // 懒加载与来源映射
     getGithubOnlineVersion, getGithubRepoStatus, githubRepoNeedsUpdate, ensureLibrariesLoaded, ensureGithubLoaded, ensureCollectionsLoaded, ensureWorkspaceTabLoaded, refreshLoadedData, openSteamWorkshopUrl, getWorkshopDetailsByPackageIdsMap, getInstallSourcesByPackageIdsMap, getWorkshopIdsByPackageIdsMap, resolvePackageIdsToWorkshopIds, goBackWorkshopDetail,
+    getDefaultTranslationLanguage, getDefaultTranslationSelection, getResolvedTranslationLanguage, getTranslationLanguageLabel, getWorkshopTranslationEntry, setWorkshopDetailTranslationLanguage, translateWorkshopDetail, clearWorkshopDetailTranslation, toggleWorkshopDetailTranslation,
     // 合集
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection, searchCollectionsOnline, activateCollectionSearchView,
   }

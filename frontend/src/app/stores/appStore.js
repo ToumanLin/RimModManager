@@ -90,6 +90,8 @@ export const useAppStore = defineStore('app', () => {
     file_count: 0,
     total_bytes: 0,
   })
+  const translationProviders = ref([{ id: 'ai.default', label: 'AI 翻译', type: 'ai' }])
+  const isTranslationProvidersLoaded = ref(false)
   const cancelPendingTaskIds = ref(new Set())
   const cancelPendingTimers = new Map()
   const CANCELLATION_PENDING_TIMEOUT_MS = 15000
@@ -97,6 +99,71 @@ export const useAppStore = defineStore('app', () => {
   let suspendRecoveryPromise = null
 
   const upgradeContext = ref({}); // 升级上下文
+
+  const createDefaultTranslationSettings = () => ({
+    default: {
+      target_language: 'follow_ui',
+      provider: 'ai.default',
+    },
+    workshop_detail: {
+      target_language: 'default',
+      provider: 'default',
+      prefer_ui_language_translation: true,
+      auto_translate_missing: false,
+    },
+  })
+
+  const normalizeTranslationSettings = (value = {}) => {
+    const defaults = createDefaultTranslationSettings()
+    const source = value && typeof value === 'object' ? value : {}
+    const globalDefault = source.default && typeof source.default === 'object' ? source.default : {}
+    const workshopDetail = source.workshop_detail && typeof source.workshop_detail === 'object' ? source.workshop_detail : {}
+    const normalized = {
+      ...source,
+      default: {
+        ...defaults.default,
+        ...globalDefault,
+      },
+      workshop_detail: {
+        ...defaults.workshop_detail,
+        ...workshopDetail,
+      },
+    }
+    delete normalized.defaults
+    delete normalized.scopes
+    return normalized
+  }
+
+  const ensureTranslationSettingsShape = () => {
+    settings.value.translation = normalizeTranslationSettings(settings.value.translation)
+    return settings.value.translation
+  }
+
+  const getTranslationFeatureSettings = (feature = 'workshop_detail') => {
+    const translation = normalizeTranslationSettings(settings.value.translation)
+    const defaults = createDefaultTranslationSettings()
+    const globalDefault = translation.default || defaults.default
+    const fallback = defaults[feature] && typeof defaults[feature] === 'object' ? defaults[feature] : {}
+    const featureSettings = translation[feature] && typeof translation[feature] === 'object' ? translation[feature] : {}
+    const merged = { ...globalDefault, ...fallback, ...featureSettings }
+    const targetLanguage = String(merged.target_language || '').trim()
+    const provider = String(merged.provider || '').trim()
+    return {
+      ...merged,
+      target_language: !targetLanguage || targetLanguage === 'default' ? globalDefault.target_language : targetLanguage,
+      provider: !provider || provider === 'default' ? globalDefault.provider : provider,
+    }
+  }
+
+  const saveTranslationFeatureSettings = async (feature = 'workshop_detail', patch = {}) => {
+    const translation = ensureTranslationSettingsShape()
+    translation[feature] = {
+      ...(translation[feature] || {}),
+      ...(patch && typeof patch === 'object' ? patch : {}),
+    }
+    await saveSetting('translation', translation)
+    return translation[feature]
+  }
 
   // 定义侧边栏标签配置 (ID 与 标题绑定)
   const SIDEBAR_TABS = [
@@ -234,6 +301,18 @@ export const useAppStore = defineStore('app', () => {
       max_input_tokens: 0,
       context_window_tokens: 0,
       max_concurrency: 3,     // 最大并发请求数（避免被API封锁）
+    },
+    translation: {
+      default: {
+        target_language: 'follow_ui',
+        provider: 'ai.default',
+      },
+      workshop_detail: {
+        target_language: 'default',
+        provider: 'default',
+        prefer_ui_language_translation: true,
+        auto_translate_missing: false,
+      },
     },
     enable_steam_enhanced_api: false,
     steam_web_api_key: '',
@@ -541,10 +620,13 @@ export const useAppStore = defineStore('app', () => {
       settings.value = payload.settings
       settings.value.asset_port = payload.asset_port || 0
       upgradeContext.value = payload.upgrade_context
-    } else {
+    } else if (payload.settings) {
       Object.assign(settings.value, payload.settings)
     }
-    if (payload.settings) settingsReady.value = true
+    if (payload.settings) {
+      settings.value.translation = normalizeTranslationSettings(settings.value.translation)
+      settingsReady.value = true
+    }
     if (Array.isArray(payload.user_themes)) {
       userThemes.value = payload.user_themes
     }
@@ -1293,17 +1375,27 @@ export const useAppStore = defineStore('app', () => {
     return res.data
   }
 
+  const ensureTranslationProviders = async () => {
+    if (!window.pywebview || isTranslationProvidersLoaded.value) return translationProviders.value
+    const res = await window.pywebview.api.translation_get_providers()
+    if (checkResult(res, '获取翻译器列表', false, { silent: true })) {
+      translationProviders.value = Array.isArray(res.data) && res.data.length ? res.data : translationProviders.value
+      isTranslationProvidersLoaded.value = true
+    }
+    return translationProviders.value
+  }
+
   return {
     // 基础状态
     appVersion, buildMode, uiState, settings, settingsReady, isLoading, isDownloading, isScanRunning, updateState,
     themes, currentTheme, userThemes, themeEditor, packageTransferDialog, recommendationExportDialog,
     // 布局与运行态
-    remoteImageCache, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, runtimeSession, upgradeContext,
+    remoteImageCache, translationProviders, isTranslationProvidersLoaded, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, isSuspended, runtimeSession, upgradeContext,
     // 生命周期与通用工具
     initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode, exitSleepMode,
     refreshModsData, requestModScan,
     // 图片与缓存
-    getThumbUrl, getLocalUrl, getRemoteUrl, refreshRemoteImageCacheStats, clearRemoteImageCache,
+    getThumbUrl, getLocalUrl, getRemoteUrl, refreshRemoteImageCacheStats, clearRemoteImageCache, ensureTranslationProviders, normalizeTranslationSettings, getTranslationFeatureSettings, saveTranslationFeatureSettings,
     // 路径与游戏启动
     checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultExternalPaths, openPath, openFile, readTextFile, getFilePath, getFolderPath, deletePath, deletePaths, openUrl,
     // 下载与工坊

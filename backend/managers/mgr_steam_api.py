@@ -1315,7 +1315,6 @@ class SteamWebAPI:
             "revision_change_number": cls._safe_int(item.get("revision_change_number")),
             "kv_tags": item.get("kv_tags") or [],
             "playtime_stats": item.get("playtime_stats"),
-            "translations": item.get("translations") if isinstance(item.get("translations"), dict) else {},
         }
 
     @classmethod

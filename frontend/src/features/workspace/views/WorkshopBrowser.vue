@@ -195,7 +195,7 @@
         <div class="group relative h-[clamp(10rem,18vh,13.5rem)] shrink-0 overflow-hidden border-b border-border-base/10">
           <!-- 背景 -->
           <div class="absolute inset-0 z-0 overflow-hidden">
-            <img v-if="selectedPreviewUrl" :src="selectedPreviewUrl" :alt="selectedMod?.title || selectedMod?.name || '工坊项目背景'"
+            <img v-if="selectedPreviewUrl" :src="selectedPreviewUrl" :alt="selectedDisplayTitle || '工坊项目背景'"
               class="h-full w-full scale-[1.03] object-cover object-center opacity-74 blur-[10px] transition-[filter,transform,opacity] duration-700 group-hover:blur-[18px] group-hover:opacity-86 group-hover:brightness-70" />
             <div v-else class="h-full w-full bg-bg-inset/95"></div>
           </div>
@@ -205,20 +205,31 @@
           <!-- 封面图片 -->
           <div v-if="selectedPreviewUrl" v-viewer.rebuild="imageViewerOptions" class="absolute left-0 top-0 z-3 h-full w-fit overflow-hidden pointer-events-auto" :style="headerPreviewWrapStyle" >
             <div class="relative inline-block h-full">
-              <img :src="selectedPreviewUrl" :alt="selectedMod?.title || selectedMod?.name || '工坊项目封面'" class="block h-full w-auto max-w-none cursor-zoom-in select-none" />
+              <img :src="selectedPreviewUrl" :alt="selectedDisplayTitle || '工坊项目封面'" class="block h-full w-auto max-w-none cursor-zoom-in select-none" />
               <img :src="selectedPreviewUrl" aria-hidden="true" class="pointer-events-none absolute inset-0 block h-full w-auto max-w-none blur-[20px]" :style="headerPreviewBlurStyle" />
             </div>
           </div>
           <div v-else class="absolute left-0 top-0 z-3 h-full aspect-4/3 bg-bg-inset/50"></div>
           <!-- 项目名称及数据 -->
           <div class="absolute inset-y-0 left-[25%] right-0 z-4 flex flex-col justify-center gap-2 px-5 py-4 text-text-main">
+            <!-- 原始名称（仅在翻译后出现） -->
+            <span v-if="selectedShowsTranslatedTitle" class="flex items-center justify-start gap-2 -my-2 pl-3 text-text-dim">
+              <button type="button" v-tooltip="'点击可复制项目名称'" class="hover:text-accent-primary scale-95 hover:scale-105 active:scale-95 transition-all duration-300"
+                @click.stop="copyHeaderValue('原始名称', selectedOriginalTitle)">
+                <Copy class="size-3" />
+              </button> 
+              <span class="min-w-0 text-xs font-black leading-tight text-balance text-shadow-md"  v-tooltip="selectedOriginalTitle">
+                {{ selectedOriginalTitle }}
+              </span>
+            </span>
+            <!-- 项目名称（优先显示翻译） -->
             <span class="flex items-center justify-start gap-2">
               <button type="button" v-tooltip="'点击可复制项目名称'" class="hover:text-accent-primary scale-95 hover:scale-105 active:scale-95 transition-all duration-300"
-                @click.stop="copyHeaderValue('项目名称', selectedMod?.title || selectedMod?.name)">
+                @click.stop="copyHeaderValue('项目名称', selectedDisplayTitle)">
                 <Copy class="size-6" />
               </button> 
-              <h2 class="min-w-0 text-[1.75rem] font-black leading-tight text-balance text-shadow-lg" v-tooltip="selectedMod?.title || selectedMod?.name">
-                {{ selectedMod?.title || selectedMod?.name }}
+              <h2 class="min-w-0 text-[1.75rem] font-black leading-tight text-balance text-shadow-lg" v-tooltip="selectedDisplayTitle">
+                {{ selectedDisplayTitle }}
               </h2>
             </span>
             <!-- 项目信息 -->
@@ -324,7 +335,7 @@
           <WorkshopItemActions :workshop-id="selectedId" class="absolute right-3 top-3 z-5 pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </div>
 
-        <!-- 内容区 (使用 Tailwind Typography) -->
+        <!-- 内容区 -->
         <div ref="detailScrollRef" class="content-surface custom-scrollbar flex-1 overflow-y-auto p-5">
           <!-- 依赖提示框 (如果是解析得到的) -->
           <div v-if="relatedDependencies.length > 0 || (workspaceStore.workshopSearch.relatedLoading.dependencies && selectedMod?.item_type !== 'collection')" data-tour="workspace-workshop-dependencies"
@@ -375,11 +386,49 @@
                   </svg>
                 </div>
                 <img class="h-full w-full object-cover transition-transform hover:scale-[1.02] cursor-zoom-in"
-                  :src="appStore.getRemoteUrl(img)" :alt="`${selectedMod?.title || selectedMod?.name || '工坊项目'}截图`" @load="markScreenshotLoaded(img)" @error="markScreenshotLoaded(img)" />
+                  :src="appStore.getRemoteUrl(img)" :alt="`${selectedDisplayTitle || '工坊项目'}截图`" @load="markScreenshotLoaded(img)" @error="markScreenshotLoaded(img)" />
               </div>
             </div>
           </div>
           <!-- 描述内容 -->
+          <div v-if="selectedMod" class="mb-2 flex justify-end">
+            <div class="relative flex items-center gap-1.5">
+              <button ref="translationButtonRef" type="button" @click="toggleTranslationPanel" v-tooltip="translationSettingsTooltip"
+                class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border-base/10 bg-bg-surface/80 px-2.5 text-[0.68rem] font-bold text-text-dim transition-all hover:border-accent-primary/30 hover:text-accent-primary">
+                <SlidersHorizontal class="size-3.5" />
+                <span class="max-w-28 truncate">{{ selectedTranslationLanguageLabel }}</span>
+                <span v-if="selectedTranslationStale" class="size-1.5 rounded-full bg-accent-warn"></span>
+              </button>
+              <button type="button" :disabled="workspaceStore.workshopSearch.isTranslating" @click="handleToggleWorkshopTranslation" v-tooltip="translationQuickTooltip"
+                class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-accent-primary/25 bg-accent-primary/12 px-2.5 text-[0.68rem] font-extrabold text-accent-primary transition-all hover:bg-accent-primary hover:text-on-accent-primary disabled:cursor-not-allowed disabled:opacity-50">
+                <LoaderCircle v-if="workspaceStore.workshopSearch.isTranslating" class="size-3.5 animate-spin" />
+                <Languages v-else class="size-3.5" />
+                <span>{{ translationQuickLabel }}</span>
+              </button>
+              <FixedPopover :is-open="workspaceStore.workshopSearch.translationPanelOpen" :trigger-ref="translationButtonRef"
+                :min-width="300" :max-width="340" :max-height="360" :offset="6" @request-close="closeTranslationPanel">
+                <div class="popover-surface w-80 rounded-xl border border-border-base/18 bg-bg-surface/98 p-3 text-xs">
+                  <div class="flex flex-col gap-3">
+                    <CommonSelect :model-value="workspaceStore.workshopSearch.detailTranslationLanguage" :options="translationDisplayOptions" label="显示语言" mini class="min-w-0" @update:model-value="selectTranslationDisplayLanguage" />
+                    <CommonSelect :model-value="workshopTranslationSettings.provider" :options="translationProviderOptions" label="翻译器" mini class="min-w-0" @update:model-value="setTranslationProvider" />
+                    <div class="flex items-center justify-end gap-2 border-t border-border-base/10 pt-3">
+                      <button type="button" :disabled="workspaceStore.workshopSearch.isTranslating || !selectedResolvedTranslationLanguage" @click="handleRetranslateCurrentLanguage"
+                        class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-accent-warn/30 bg-accent-warn/12 px-2.5 text-[0.68rem] font-extrabold text-accent-warn transition-colors hover:bg-accent-warn hover:text-on-accent-warn disabled:cursor-not-allowed disabled:opacity-50">
+                        <LoaderCircle v-if="workspaceStore.workshopSearch.isTranslating" class="size-3.5 animate-spin" />
+                        <RotateCcw v-else class="size-3.5" />
+                        <span>重新翻译</span>
+                      </button>
+                      <button type="button" :disabled="workspaceStore.workshopSearch.isTranslating || !selectedTranslationEntry" @click="handleClearCurrentTranslation"
+                        class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-accent-danger/30 bg-accent-danger/12 px-2.5 text-[0.68rem] font-extrabold text-accent-danger transition-colors hover:bg-accent-danger hover:text-on-accent-danger disabled:cursor-not-allowed disabled:opacity-50">
+                        <Trash2 class="size-3.5" />
+                        <span>清理翻译</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </FixedPopover>
+            </div>
+          </div>
           <div v-viewer.rebuild="imageViewerOptions" class="prose prose-invert prose-sm md:prose-base max-w-none select-text px-2 prose-a:text-accent-primary prose-img:rounded-xl">
             <div v-if="parsedDescription" v-html="parsedDescription"></div>
             <div v-else class="text-text-dim italic">该模组没有提供详细描述。</div>
@@ -479,7 +528,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css' // 确保引入 CSS
-import { Search, Globe, Cpu, Download, Link, Flag, FlagOff, Network, User, Image, Layers, UserRound, SlidersHorizontal, Star, ThumbsUp, ThumbsDown, HardDrive, ShieldAlert, TriangleAlert, Heart, Hash, Copy, Tag, Plus, MessageSquareMore, Package, CalendarPlus, CalendarArrowUp } from 'lucide-vue-next'
+import { Search, Globe, Cpu, Download, Link, Flag, FlagOff, Network, User, Image, Layers, UserRound, SlidersHorizontal, Star, ThumbsUp, ThumbsDown, HardDrive, ShieldAlert, TriangleAlert, Heart, Hash, Copy, Tag, Plus, MessageSquareMore, Package, CalendarPlus, CalendarArrowUp, Languages, LoaderCircle, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { useAppStore } from '../../../app/stores/appStore'
 import { toast } from '../../../shared/lib/common'
 import { cleanRichText, parseUnityRichText } from '../../../shared/lib/text'
@@ -503,6 +552,7 @@ const workspaceStore = useWorkspaceStore()
 const workshopSearchInputRef = ref(null)
 const advancedButtonRef = ref(null)
 const advancedPanelRef = ref(null)
+const translationButtonRef = ref(null)
 const scrollerRef = ref(null)
 const detailScrollRef = ref(null)
 const isLocalFetching = ref(false)  // 局部硬锁，绝对同步，防穿透
@@ -515,6 +565,17 @@ const normalSortOptions = [
   { label: '作者排序', value: 'author' },
 ]
 const languageOptions = computed(() => workspaceStore.workshopSearch.languageOptions)
+const translationLanguageOptions = computed(() => languageOptions.value
+  .map(item => ({ label: item.label, value: item.code || item.value }))
+  .filter(item => item.value))
+const translationDisplayOptions = computed(() => [
+  { label: workspaceStore.getTranslationLanguageLabel('follow_ui'), value: 'follow_ui' },
+  { label: '原文', value: '' },
+  ...translationLanguageOptions.value,
+])
+const translationProviderOptions = computed(() => (
+  appStore.translationProviders.map(item => ({ label: item.label || item.id, value: item.id }))
+))
 const workshopSearchReady = computed(() => !!workspaceStore.workshopSearch.isModeReady)
 const workshopSourceTitle = computed(() => {
   if (!workshopSearchReady.value) return '读取工坊设置'
@@ -566,6 +627,7 @@ const workshopInputHelpText = [
 onMounted(async () => {
   await workspaceStore.ensureWorkshopSearchReady()
   void workspaceStore.loadSteamLanguageOptions()
+  void workspaceStore.loadTranslationProviders()
   void workspaceStore.loadWorkshopDlcOptions()
   if (workspaceStore.workshopSearch.results.length === 0) {
     void workspaceStore.doWorkshopSearch('')
@@ -671,6 +733,50 @@ const selectedCommentLabel = computed(() => {
 const selectedStatusLabel = computed(() => (
   selectedMod.value?.status?.banned ? '已封禁' : ''
 ))
+const selectedOriginalTitle = computed(() => String(selectedMod.value?.original_title || selectedMod.value?.title || selectedMod.value?.name || '').trim())
+const selectedOriginalDescription = computed(() => String(selectedMod.value?.original_description || selectedMod.value?.description || selectedMod.value?.short_description || '').trim())
+const selectedResolvedTranslationLanguage = computed(() => (
+  workspaceStore.getResolvedTranslationLanguage(workspaceStore.workshopSearch.detailTranslationLanguage)
+))
+const selectedTranslationEntry = computed(() => (
+  workspaceStore.workshopSearch.detailTranslationLanguage
+    ? workspaceStore.getWorkshopTranslationEntry(selectedMod.value?.translations, selectedResolvedTranslationLanguage.value)
+    : null
+))
+const selectedDisplayTitle = computed(() => String(selectedTranslationEntry.value?.title || selectedOriginalTitle.value || selectedMod.value?.name || '未知模组').trim())
+const selectedDisplayDescription = computed(() => String(selectedTranslationEntry.value?.description || selectedOriginalDescription.value || '').trim())
+const selectedShowsTranslatedTitle = computed(() => (
+  !!selectedTranslationEntry.value?.title
+  && selectedDisplayTitle.value
+  && selectedOriginalTitle.value
+  && selectedDisplayTitle.value !== selectedOriginalTitle.value
+))
+const selectedTranslationLanguageLabel = computed(() => (
+  workspaceStore.getTranslationLanguageLabel(workspaceStore.workshopSearch.detailTranslationLanguage)
+))
+const workshopTranslationSettings = computed(() => appStore.getTranslationFeatureSettings('workshop_detail'))
+const selectedTranslationProviderLabel = computed(() => {
+  const provider = String(workshopTranslationSettings.value.provider || 'ai.default')
+  return translationProviderOptions.value.find(item => item.value === provider)?.label || provider
+})
+const selectedTranslationStale = computed(() => (
+  !!(
+    selectedTranslationEntry.value
+    && selectedMod.value?.translation_source_hash
+    && selectedTranslationEntry.value.source_hash
+    && selectedTranslationEntry.value.source_hash !== selectedMod.value.translation_source_hash
+  )
+))
+const translationSettingsTooltip = computed(() => (
+  `当前显示：${selectedTranslationLanguageLabel.value}${selectedTranslationStale.value ? '，原文已更新' : ''}\n当前翻译器：${selectedTranslationProviderLabel.value}\n\n点击可切换显示语言和翻译器，也可以重新翻译或清理当前译文。`
+))
+const translationQuickLabel = computed(() => {
+  if (workspaceStore.workshopSearch.isTranslating) return '翻译'
+  return selectedTranslationEntry.value ? '原文' : '翻译'
+})
+const translationQuickTooltip = computed(() => (
+  selectedTranslationEntry.value ? '切换回工坊原文' : `按当前翻译目标语言显示或生成译文：${workspaceStore.getTranslationLanguageLabel(workspaceStore.getDefaultTranslationSelection())}`
+))
 const selectedContentWarningLabel = computed(() => (
   selectedMod.value?.maybe_inappropriate_sex || selectedMod.value?.maybe_inappropriate_violence ? '含敏感标记' : ''
 ))
@@ -692,9 +798,9 @@ const relatedCollectionChildren = computed(() => selectedMod.value?.related?.col
 const dependencyIds = computed(() => relatedDependencies.value.map(item => item.workshop_id).filter(Boolean))
 // 解析富文本描述
 const parsedDescription = computed(() => {
-  if (!workspaceStore.workshopSearch.detailData?.description) return ''
+  if (!selectedDisplayDescription.value) return ''
   return parseUnityRichText(
-    workspaceStore.workshopSearch.detailData?.description,
+    selectedDisplayDescription.value,
     false,
     (url) => appStore.getRemoteUrl(url),
   )
@@ -788,6 +894,43 @@ const closeAdvancedPanel = () => {
   workspaceStore.workshopSearch.advancedOpen = false
   workshopAdvancedSnapshot.value = ''
   if (hasChanged) triggerSearchNow()
+}
+const toggleTranslationPanel = () => {
+  workspaceStore.workshopSearch.translationPanelOpen = !workspaceStore.workshopSearch.translationPanelOpen
+}
+const closeTranslationPanel = () => {
+  workspaceStore.workshopSearch.translationPanelOpen = false
+}
+const selectTranslationDisplayLanguage = async (language) => {
+  const displayLanguage = String(language || '').trim()
+  workspaceStore.setWorkshopDetailTranslationLanguage(displayLanguage)
+  const targetLanguage = workspaceStore.getResolvedTranslationLanguage(displayLanguage)
+  if (
+    workshopTranslationSettings.value.auto_translate_missing
+    && displayLanguage
+    && targetLanguage
+    && !workspaceStore.getWorkshopTranslationEntry(selectedMod.value?.translations, targetLanguage)
+  ) {
+    await workspaceStore.translateWorkshopDetail({ language: targetLanguage, displayLanguage })
+  }
+}
+const setTranslationProvider = (value) => {
+  void appStore.saveTranslationFeatureSettings('workshop_detail', { provider: String(value || 'ai.default') })
+}
+const handleToggleWorkshopTranslation = async () => {
+  await workspaceStore.toggleWorkshopDetailTranslation()
+}
+const handleRetranslateCurrentLanguage = async () => {
+  const displayLanguage = String(workspaceStore.workshopSearch.detailTranslationLanguage || '').trim() || workspaceStore.getDefaultTranslationSelection()
+  const targetLanguage = workspaceStore.getResolvedTranslationLanguage(displayLanguage)
+  if (!targetLanguage) return
+  await workspaceStore.translateWorkshopDetail({ language: targetLanguage, displayLanguage, force: true })
+}
+const handleClearCurrentTranslation = async () => {
+  const displayLanguage = String(workspaceStore.workshopSearch.detailTranslationLanguage || '').trim()
+  const targetLanguage = workspaceStore.getResolvedTranslationLanguage(displayLanguage)
+  if (!targetLanguage || !selectedTranslationEntry.value) return
+  await workspaceStore.clearWorkshopDetailTranslation({ language: targetLanguage, displayLanguage })
 }
 // 以图片地址为键记录加载完成状态，避免切换详情时旧状态串到新截图。
 const markScreenshotLoaded = (url) => {

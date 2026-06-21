@@ -181,6 +181,10 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
         // 兼容旧配置文件：默认键位由前端命令注册表决定，设置里只保存用户覆盖项。
         formData.value.ui.keybindings = createDefaultKeybindingConfig()
       }
+      if (!formData.value.translation || typeof formData.value.translation !== 'object') {
+        formData.value.translation = {}
+      }
+      formData.value.translation = appStore.normalizeTranslationSettings(formData.value.translation)
       // 如果当前上下文不健康，自动检测路径
       if (!profileStore.activeContext || profileStore.activeContext.is_healthy === false) {
         await autoDetect()

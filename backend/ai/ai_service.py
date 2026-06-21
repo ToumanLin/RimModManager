@@ -456,6 +456,34 @@ class AIManager:
         max_item_tokens = max(300, chunk_item_budget - 200)
         return chunk_item_budget, max_item_tokens
 
+    def execute_structured_task(
+        self,
+        task_key: str,
+        payload: Dict[str, Any] | None = None,
+        override_config: dict | None = None,
+    ) -> Any:
+        """同步执行单次结构化任务。
+
+        用于翻译这类即时请求：复用 AI Task / Prompt / 输出契约，
+        但不进入异步任务栏、分块重试或附件专用流程。
+        """
+        context = self._build_task_execution_context(task_key, payload, override_config)
+        prompt_config = dict(context["prompt_config"] or {})
+        runtime_variables = dict(context["runtime_variables"] or {})
+        llm_kwargs = dict(context["llm_kwargs"] or {})
+
+        messages = self._build_prompt_messages(prompt_config, runtime_variables)
+        response = self.llm.completion(messages=messages, llm_kwargs=llm_kwargs)
+        choices = getattr(response, "choices", None) or []
+        if not choices:
+            raise ValueError("AI 任务没有返回有效内容")
+        message_obj = choices[0].message  # type: ignore
+        result_text = self._message_text(getattr(message_obj, "content", ""))
+        parsed_json = self._parse_structured_output(task_key, result_text)
+        if parsed_json is None:
+            raise ValueError("AI 任务返回格式无效")
+        return parsed_json
+
     # =========================================================================
     #  核心：异步任务执行引擎
     # =========================================================================

@@ -6,6 +6,8 @@ from unittest.mock import patch
 from backend.database.dao_ext import ExtDAO
 from backend.database.models_ext import ModReplacement, WorkshopAuthorCache, WorkshopManifest, WorkshopOnlineCache, ext_db
 from backend.managers.mgr_steam_api import SteamWebAPI
+from backend.translation import TranslationManager
+from backend.translation.contracts import TranslationDocument
 from backend.utils.constants import get_steam_elanguage_options, to_steam_elanguage
 
 
@@ -464,7 +466,7 @@ class TestWorkshopSearch(unittest.TestCase):
         self.assertEqual(row.stats["votes_down"], 1)
         self.assertEqual(row.stats["vote_score"], 0.9)
         self.assertEqual(row.stats["num_comments_public"], 7)
-        self.assertEqual(row.translations["zh-CN"]["title"], "现代阿尔法")
+        self.assertEqual(row.translations, {})
         self.assertEqual(row.status["visibility"], 0)
         self.assertEqual(row.status["flags"], 8)
         self.assertEqual(row.status["can_subscribe"], True)
@@ -477,6 +479,44 @@ class TestWorkshopSearch(unittest.TestCase):
         self.assertEqual(row.children[0]["item_type"], "mod")
         self.assertEqual(row.screenshots, ["https://example.test/shot.png"])
         self.assertEqual(row.summary_last_sync_time, 123456)
+
+    def test_translation_manager_returns_segment_based_result(self):
+        class DummyAIManager:
+            def execute_structured_task(self, task_key, payload, override_config=None):
+                self.task_key = task_key
+                self.payload = payload
+                return {"segments": [{"key": "title", "text": "现代阿尔法"}, {"key": "description", "text": "完整译文"}]}
+
+        ai_mgr = DummyAIManager()
+        document = TranslationDocument.from_segments(
+            [
+                {"key": "title", "role": "title", "text": "Modern Alpha"},
+                {"key": "description", "role": "body", "text": "[b]Full[/b] text"},
+            ],
+            format="steam_rich_text",
+            context="Steam Workshop item detail",
+            glossary=[{"source": "RimWorld", "target": "环世界"}],
+        )
+        result = TranslationManager(ai_mgr).translate_document(document, "zh-CN")
+        translated = result.segment_map()
+
+        self.assertEqual(ai_mgr.task_key, "task.translation")
+        self.assertIn("translation_input_json", ai_mgr.payload["variables"])
+        self.assertIn("RimWorld", ai_mgr.payload["variables"]["glossary_block"])
+        self.assertEqual(result.provider, "ai.default")
+        self.assertEqual(translated["title"], "现代阿尔法")
+        self.assertEqual(translated["description"], "完整译文")
+        self.assertEqual(result.source_hash, TranslationManager.build_source_hash(document))
+        self.assertGreater(result.updated_at, 0)
+
+        same_source = TranslationDocument.from_segments(
+            [
+                {"key": "title", "role": "body", "text": "Modern Alpha"},
+                {"key": "description", "role": "note", "text": "[b]Full[/b] text"},
+            ],
+            format="plain_text",
+        )
+        self.assertEqual(result.source_hash, TranslationManager.build_source_hash(same_source))
 
     def test_author_summaries_are_cached_and_attached_to_items(self):
         captured = {}

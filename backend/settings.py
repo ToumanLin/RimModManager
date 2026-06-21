@@ -137,6 +137,23 @@ class AIConfig:
         from backend.ai.def_model_capabilities import DEFAULT_INPUT_TOKENS
         return max(2000, min(DEFAULT_INPUT_TOKENS, output_budget * 2))
 
+
+def default_translation_settings() -> Dict[str, Dict[str, Any]]:
+    """翻译设置按功能键保存，未知键保留给后续功能模块或外部插件。"""
+    return {
+        "default": {
+            "target_language": "follow_ui",
+            "provider": "ai.default",
+        },
+        "workshop_detail": {
+            "target_language": "default",
+            "provider": "default",
+            "prefer_ui_language_translation": True,
+            "auto_translate_missing": False,
+        },
+    }
+
+
 @dataclass
 class UIConfig:
     theme_id: str = "obsidian-cyan"  # 当前使用的主题 ID；完整主题数据由主题文件管理。
@@ -308,6 +325,7 @@ class AppConfig:
     # --- 功能设置 ---
     network: NetworkConfig = field(default_factory=NetworkConfig)
     ai: AIConfig = field(default_factory=AIConfig)
+    translation: Dict[str, Dict[str, Any]] = field(default_factory=default_translation_settings)
     texture_opt: TextureOptConfig = field(default_factory=TextureOptConfig)
     
 
@@ -554,6 +572,33 @@ class SettingsManager:
                 ai_cfg.context_window_tokens = max(0, int(ai_cfg.context_window_tokens or 0))
             except (TypeError, ValueError):
                 ai_cfg.context_window_tokens = 0
+        translation_cfg = self.config.translation
+        default_translation = default_translation_settings()
+        if not isinstance(translation_cfg, dict):
+            translation_cfg = default_translation
+        else:
+            translation_cfg = {
+                str(key).strip(): value
+                for key, value in translation_cfg.items()
+                if str(key).strip() and isinstance(value, dict)
+            }
+            default_cfg = {
+                **default_translation["default"],
+                **translation_cfg.get("default", {}),
+            }
+            default_cfg["provider"] = str(default_cfg.get("provider") or "").strip() or "ai.default"
+            default_cfg["target_language"] = str(default_cfg.get("target_language") or "").strip() or "follow_ui"
+            workshop_detail_cfg = {
+                **default_translation["workshop_detail"],
+                **translation_cfg.get("workshop_detail", {}),
+            }
+            workshop_detail_cfg["provider"] = str(workshop_detail_cfg.get("provider") or "").strip() or "default"
+            workshop_detail_cfg["target_language"] = str(workshop_detail_cfg.get("target_language") or "").strip() or "default"
+            workshop_detail_cfg["prefer_ui_language_translation"] = bool(workshop_detail_cfg.get("prefer_ui_language_translation"))
+            workshop_detail_cfg["auto_translate_missing"] = bool(workshop_detail_cfg.get("auto_translate_missing"))
+            translation_cfg["default"] = default_cfg
+            translation_cfg["workshop_detail"] = workshop_detail_cfg
+        self.config.translation = translation_cfg
         return warnings
     
     def _sync_derived_paths(self):
