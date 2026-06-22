@@ -2,6 +2,8 @@
 
 import { h, markRaw } from 'vue'
 
+export const RIMWORLD_STEAM_APP_ID = 294100
+
 /**
  * 辅助函数：将 SVG 路径转换为 Vue 渲染函数组件
  * @param {string} colorClass Tailwind 颜色类名

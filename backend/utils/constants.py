@@ -22,9 +22,13 @@ STEAM_WEBAPI_LANGUAGE_CODES = SUPPORTED_LANGUAGE_CODES
 
 
 RIMWORLD_STEAM_APP_ID = 294100
+RIMWORLD_STEAM_APP_ID_STR = str(RIMWORLD_STEAM_APP_ID)
+RIMWORLD_WORKSHOP_CONTENT_PARTS = ("steamapps", "workshop", "content", RIMWORLD_STEAM_APP_ID_STR)
+RIMWORLD_APPMANIFEST_NAME = f"appmanifest_{RIMWORLD_STEAM_APP_ID_STR}.acf"
+RIMWORLD_APPWORKSHOP_NAME = f"appworkshop_{RIMWORLD_STEAM_APP_ID_STR}.acf"
 
 RIMWORLD_DLC_APPID_PACKAGE_MAP = {
-    294100: "ludeon.rimworld",
+    RIMWORLD_STEAM_APP_ID: "ludeon.rimworld",
     1149640: "ludeon.rimworld.royalty",
     1392840: "ludeon.rimworld.ideology",
     1826140: "ludeon.rimworld.biotech",
@@ -33,7 +37,7 @@ RIMWORLD_DLC_APPID_PACKAGE_MAP = {
 }
 
 RIMWORLD_DLC_OPTIONS = [
-    {"label": "Core", "appid": 294100, "package_id": "ludeon.rimworld"},
+    {"label": "Core", "appid": RIMWORLD_STEAM_APP_ID, "package_id": "ludeon.rimworld"},
     {"label": "Royalty", "appid": 1149640, "package_id": "ludeon.rimworld.royalty"},
     {"label": "Ideology", "appid": 1392840, "package_id": "ludeon.rimworld.ideology"},
     {"label": "Biotech", "appid": 1826140, "package_id": "ludeon.rimworld.biotech"},

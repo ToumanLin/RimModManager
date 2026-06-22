@@ -9,8 +9,9 @@ from dataclasses import dataclass, asdict, field, fields, is_dataclass
 from pathlib import Path
 import sys
 from typing import Dict, Any, List, Optional, Tuple
-from backend.utils.constants import normalize_language_code
+from backend.utils.constants import RIMWORLD_STEAM_APP_ID_STR, normalize_language_code
 from backend.migrations.app_relocation import apply_config_relocation
+from backend.utils.tools import normalize_path_for_storage, same_path
 
 
 # 1. 资源目录：存放前端文件、内置工具 (对应开发时的项目根目录)
@@ -242,7 +243,7 @@ class AppConfig:
     
     # steamcmd 下载路径
     steamcmd_path: str = str(TOOLS_DIR / "steamcmd")
-    steamcmd_mods_path: str = str(TOOLS_DIR / "steamcmd" / "steamapps" / "workshop" / "content" / "294100")
+    steamcmd_mods_path: str = str(TOOLS_DIR / "steamcmd" / "steamapps" / "workshop" / "content" / RIMWORLD_STEAM_APP_ID_STR)
     self_mods_path: str = str(MODS_DIR)  # 本程序默认模组路径
     # use_self_mods: bool = True          # 是否使用本程序模组
     move_old_self_mods: bool = False    # 修改路径后是否移动原有模组
@@ -534,14 +535,23 @@ class SettingsManager:
             self.last_relocation = relocation
         self.config.home_path = str(HOME_DIR)
         self.config.current_profile_id = str(self.config.current_profile_id or "").strip() or "default"
-        self.config.steam_path = str(self.config.steam_path or "").strip()
-        self.config.workshop_mods_path = str(self.config.workshop_mods_path or "").strip()
-        self.config.steamcmd_path = str(self.config.steamcmd_path or "").strip() or str(TOOLS_DIR / "steamcmd")
-        self.config.self_mods_path = str(self.config.self_mods_path or "").strip() or str(MODS_DIR)
-        if self.config.workshop_mods_path and Path(self.config.self_mods_path).resolve() == Path(self.config.workshop_mods_path).resolve():
+        self.config.steam_path = normalize_path_for_storage(self.config.steam_path)
+        self.config.workshop_mods_path = normalize_path_for_storage(self.config.workshop_mods_path)
+        self.config.steamcmd_path = normalize_path_for_storage(self.config.steamcmd_path) or str(TOOLS_DIR / "steamcmd")
+        self.config.self_mods_path = normalize_path_for_storage(self.config.self_mods_path) or str(MODS_DIR)
+        if self.config.workshop_mods_path and same_path(self.config.self_mods_path, self.config.workshop_mods_path):
             self.config.self_mods_path = str(MODS_DIR)
             warnings.append("管理器下载模组路径不能与创意工坊目录相同，已自动恢复为默认目录。")
-        self.config.ripgrep_path = str(self.config.ripgrep_path or "").strip() or str(TOOLS_DIR / "ripgrep")
+        self.config.ripgrep_path = normalize_path_for_storage(self.config.ripgrep_path) or str(TOOLS_DIR / "ripgrep")
+        self.config.load_order_import_custom_path = normalize_path_for_storage(self.config.load_order_import_custom_path)
+        self.config.load_order_import_last_path = normalize_path_for_storage(self.config.load_order_import_last_path)
+        self.config.load_order_export_custom_path = normalize_path_for_storage(self.config.load_order_export_custom_path)
+        self.config.load_order_export_last_path = normalize_path_for_storage(self.config.load_order_export_last_path)
+        self.config.community_workshop_db_path = normalize_path_for_storage(self.config.community_workshop_db_path) or str(COMMUNITY_WORKSHOP_DB_PATH)
+        self.config.community_instead_db_path = normalize_path_for_storage(self.config.community_instead_db_path) or str(COMMUNITY_INSTEAD_DB_PATH)
+        self.config.community_rules_path = normalize_path_for_storage(self.config.community_rules_path) or str(COMMUNITY_RULES_PATH)
+        self.config.user_rules_path = normalize_path_for_storage(self.config.user_rules_path) or str(USER_RULES_PATH)
+        self.config.texture_opt.texture_tools_path = normalize_path_for_storage(self.config.texture_opt.texture_tools_path) or str(TOOLS_DIR / "texture_tools")
         self.config.language = normalize_language_code(self.config.language, default="zh-CN") or "zh-CN"
         valid_modes = {"default", "remember", "custom"}
         if str(self.config.load_order_import_dir_mode or "").strip().lower() not in valid_modes:
@@ -616,8 +626,7 @@ class SettingsManager:
         """
         # 根据 steamcmd_path 计算 steamcmd_mods_path
         if self.config.steamcmd_path:
-            base_path = Path(self.config.steamcmd_path).resolve()
-            new_path = str(base_path / "steamapps" / "workshop" / "content" / "294100")
+            new_path = normalize_path_for_storage(Path(self.config.steamcmd_path) / "steamapps" / "workshop" / "content" / RIMWORLD_STEAM_APP_ID_STR)
             self.config.steamcmd_mods_path = new_path
             
     def get_default_external_paths(self):

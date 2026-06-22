@@ -32,6 +32,7 @@ from backend.utils.tools import (
     current_ms,
     is_hex_color,
     normalize_hex_color,
+    normalize_dir_root_for_compare,
     normalize_package_id,
     normalize_package_ids, 
     delete_fs_path,
@@ -143,7 +144,7 @@ class _ProfilePathScope:
     @staticmethod
     def _normalize_root(path: str | None) -> str:
         if not path: return ""
-        return os.path.normpath(path).lower() + os.sep
+        return normalize_dir_root_for_compare(path)
 
     @classmethod
     def from_context(cls, context: ProfileContext | None) -> "_ProfilePathScope":

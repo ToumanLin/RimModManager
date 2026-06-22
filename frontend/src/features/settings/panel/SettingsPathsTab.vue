@@ -36,7 +36,9 @@
                       v-model="formData.steam_path" @browse="handleBrowse('steam_path')" @blur="checkPath('steam_path', formData.steam_path)"
                     />
                     <div class="grid grid-cols-2 gap-2">
-                      <CommonSwitch label="优先使用 Steam 启动" :disabled="steamLaunchDisabled" v-model="formData.prefer_steam_launch" description="适用于 Steam 版游戏。开启后，管理器会优先通过 Steam 启动当前环境，并直接使用 Steam 中的创意工坊内容。" />
+                      <CommonSwitch label="优先使用 Steam 启动" :disabled="steamLaunchDisabled"
+                        :model-value="formData.prefer_steam_launch" description="适用于 Steam 版游戏。开启后，管理器会优先通过 Steam 启动当前环境，并直接使用 Steam 中的创意工坊内容。"
+                        @update:modelValue="handlePreferSteamLaunchUpdate" />
                       <CommonSwitch label="使用创意工坊 Mod" :disabled="workshopModsDisabled" v-model="formData.use_workshop_mods" description="适用于非 Steam 版环境。开启后，管理器会把创意工坊模组接入当前环境的本地模组目录，这样直接启动游戏本体时也能使用这些模组。" />
                     </div>
                   </div>
@@ -92,6 +94,7 @@ const props = defineProps({
   formData: { type: Object, required: true },
   steamLaunchDisabled: Boolean,
   workshopModsDisabled: Boolean,
+  markSteamLaunchTouched: Function,
   autoDetect: { type: Function, required: true },
   handleBrowse: { type: Function, required: true },
   checkPath: { type: Function, required: true },
@@ -112,6 +115,11 @@ const handleGameBrowse = async () => {
   if (!res) return
   props.formData.game_install_path = res
   await props.checkPath('game_install_path', props.formData.game_install_path)
+}
+
+const handlePreferSteamLaunchUpdate = (value) => {
+  props.markSteamLaunchTouched?.()
+  props.formData.prefer_steam_launch = !!value
 }
 
 const handleCheckSteamcmdMods = async () => {

@@ -22,9 +22,10 @@ from backend.managers.mgr_network import build_retry_session, merge_headers, net
 from backend.profile import UserDataRoot
 from backend.settings import GALLERY_CACHE_DIR, THUMBNAIL_CACHE_DIR, settings
 from backend.utils.event_bus import EventBus
+from backend.utils.constants import RIMWORLD_STEAM_APP_ID_STR, RIMWORLD_WORKSHOP_CONTENT_PARTS
 from backend.utils.logger import logger
 from backend.utils.text_decode import decode_text_bytes
-from backend.utils.tools import delete_fs_path
+from backend.utils.tools import delete_fs_path, same_path
 from backend.utils.shortcuts import (
     create_shortcut,
     format_shortcut_arguments,
@@ -819,7 +820,7 @@ class FileManager:
         prefer_steam_launch: bool = False,
         steam_exe_path: str | None = None,
         destination_dir: str | None = None,
-        steam_app_id: str = "294100",
+        steam_app_id: str = RIMWORLD_STEAM_APP_ID_STR,
     ) -> Dict[str, str]:
         """
         根据环境启动逻辑构造桌面快捷方式定义。
@@ -872,7 +873,7 @@ class FileManager:
         extra_args: list[str] | None = None,
         prefer_steam_launch: bool = False,
         steam_exe_path: str | None = None,
-        steam_app_id: str = "294100",
+        steam_app_id: str = RIMWORLD_STEAM_APP_ID_STR,
     ) -> Dict[str, Any]:
         """为指定环境在桌面创建快捷方式。"""
         spec = FileManager.build_profile_shortcut_spec(
@@ -1359,13 +1360,20 @@ class FileManager:
         # 1. 获取最新配置
         # 实际物理存储路径 (Target)
         real_storage_path = os.path.normpath(os.path.abspath(settings.config.self_mods_path))
-        # SteamCMD 期望的下载路径 (Link Location, 通常是 .../294100)
+        # SteamCMD 期望的下载路径 (Link Location, 通常是 RimWorld 工坊内容目录)
         steamcmd_link_path = os.path.normpath(os.path.abspath(settings.config.steamcmd_mods_path))
         
         os.makedirs(os.path.dirname(steamcmd_link_path), exist_ok=True)
         os.makedirs(real_storage_path, exist_ok=True)
 
         logger.info(f"Redirecting SteamCMD: {steamcmd_link_path} -> {real_storage_path}")
+
+        if same_path(steamcmd_link_path, real_storage_path):
+            logger.warning(
+                "SteamCMD redirect skipped because source and target are the same path: %s",
+                real_storage_path,
+            )
+            return True
 
         # ---------------------------------------------------------
         # 步骤 A: 处理 mods_path 变更导致的数据迁移
@@ -1458,6 +1466,13 @@ class FileManager:
         如果目标位置已存在同名 Mod，则覆盖。
         """
         if not os.path.exists(src): return
+        try:
+            same_real_path = os.path.exists(dst) and os.path.samefile(src, dst)
+        except OSError:
+            same_real_path = False
+        if same_path(src, dst) or same_real_path:
+            logger.warning("跳过同一路径目录合并: %s", src)
+            return
         os.makedirs(dst, exist_ok=True)
         
         try:
@@ -1617,7 +1632,7 @@ class PathChecker:
         检查 Workshop 路径是否有效。
 
         这里不再只看 `steamapps/workshop`，而是要求命中 RimWorld 对应的
-        `steamapps/workshop/content/294100`，避免把其它游戏或中间目录误判为有效。
+        RimWorld 工坊内容目录，避免把其它游戏或中间目录误判为有效。
         返回：{
             'pass': True,
             'data': {},
@@ -1629,12 +1644,13 @@ class PathChecker:
             return cls._format_res(False, msg="Workshop 路径不存在")
 
         normalized_parts = [part.lower() for part in Path(os.path.normpath(path_str)).parts]
+        workshop_parts = [part.lower() for part in RIMWORLD_WORKSHOP_CONTENT_PARTS]
         is_valid = any(
-            normalized_parts[index:index + 4] == ["steamapps", "workshop", "content", "294100"]
+            normalized_parts[index:index + 4] == workshop_parts
             for index in range(max(0, len(normalized_parts) - 3))
         )
         return cls._format_res(is_valid, data=path_str, 
-                               msg=f"Workshop 路径：{path_str}" if is_valid else "路径不在 Steam Workshop 294100 目录中",
+                               msg=f"Workshop 路径：{path_str}" if is_valid else f"路径不在 Steam Workshop {RIMWORLD_STEAM_APP_ID_STR} 目录中",
                                msg_type="success" if is_valid else "warn")
         
     @classmethod

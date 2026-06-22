@@ -4,7 +4,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { useAppStore } from '../../app/stores/appStore'
 import { checkResult, toast } from '../../shared/lib/common'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore'
-import { SOURCE_TYPE_MAP } from '../../shared/lib/constants'
+import { RIMWORLD_STEAM_APP_ID, SOURCE_TYPE_MAP } from '../../shared/lib/constants'
 import { matchesTranslationSourceDetection } from '../../shared/lib/translationDetection'
 import {
   dedupeNormalizedPackageIds, normalizeInstallSources,
@@ -847,7 +847,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const enhancedFilters = {
       ...commonFilters,
       language: workshopSearch.language || appStore.settings.language || '',
-      appid: 294100,
+      appid: RIMWORLD_STEAM_APP_ID,
       type: 0,
       return_vote_data: true,
       strip_description_bbcode: false,

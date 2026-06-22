@@ -9,7 +9,8 @@ from typing import Any
 from urllib.parse import urlparse
 from backend.managers.mgr_game_logs import GameLogManager
 from backend.managers.mgr_profile import ProfileContext
-from backend.utils.tools import generate_path_hash, get_folder_size
+from backend.utils.constants import RIMWORLD_STEAM_APP_ID_STR
+from backend.utils.tools import generate_path_hash, get_folder_size, normalize_path_for_storage
 from backend.database.models import MOD_ASSET_STATE_MISSING, MOD_ASSET_STATE_PRESENT, db
 
 # --- 模块测试准备 ---
@@ -133,7 +134,11 @@ class ModScanner:
             # 扫描前先把 ACF 中“目录已不存在”的陈旧安装记录清掉，
             # 避免后续任何 SteamCMD 下载又被旧记录拖入 Missing game files 校验失败。
             SteamManager().reconcile_steamcmd_acf()
-            valid_paths = [p for p in search_paths if p and os.path.exists(p)]
+            valid_paths = [
+                normalize_path_for_storage(p)
+                for p in search_paths
+                if p and os.path.exists(p)
+            ]
             if not valid_paths:
                 if emit_events:
                     EventBus.emit_progress(task_id, "scan", status="failed", progress=0, message="没有有效路径", metrics={"title": "模组扫描"})
@@ -162,7 +167,7 @@ class ModScanner:
                             if entry.is_dir():
                                 # 遇到链接生成目录直接跳过，防止无限递归和重复
                                 if entry.name.startswith(FileManager.LINK_PREFIX): continue
-                                mod_folders.append((entry.path, is_data_dir))
+                                mod_folders.append((normalize_path_for_storage(entry.path), is_data_dir))
                 except OSError as e:
                     logger.warning(f"无法访问路径 {base_path}: {e}")
             total_count = len(mod_folders)
@@ -387,6 +392,7 @@ class ModScanner:
         处理单个 Mod 的纯函数逻辑。
         返回: Mod数据字典 或 None(无效) 或 {'_skipped': True, 'package_id': ...}
         """
+        mod_path = normalize_path_for_storage(mod_path)
         try:
             about_state = ModAnalyzer.resolve_mod_about_state(mod_path, cleanup_dual_files=True)
         except OSError as e:
@@ -579,12 +585,11 @@ class ModScanner:
             except Exception:
                 pass
         
-        # 2. 尝试使用文件夹名 (如果是纯数字 且 路径中包含 "steamapps\workshop\content\427520")
+        # 2. 尝试使用文件夹名 (如果是纯数字且路径位于 RimWorld Workshop 内容目录)
         # 建议：使用 path 字符串查找，不依赖正则，避免分隔符坑
         norm_path = os.path.normpath(mod_path).lower() # 统一转为小写、标准分隔符
-        # 检查路径中是否包含 workshop/content/294100 关键段
-        # Windows normpath 会是 workshop\content\294100
-        keywords = os.path.join('workshop', 'content', '294100').lower()
+        # Windows normpath 会把关键段转换成系统分隔符。
+        keywords = os.path.join('workshop', 'content', RIMWORLD_STEAM_APP_ID_STR).lower()
         if keywords in norm_path:
             folder_name = os.path.basename(mod_path)
             # 只要是纯数字就认
@@ -601,14 +606,17 @@ class ModScanner:
         # 扩展：RimWorld 也支持 jpg/gif 改名为 png，或者直接识别。
         # 这里简单起见，先只找 About/Preview.png，如果要做得细致，可以 glob 搜索
         preview_path = os.path.join(mod_path, 'About', 'Preview.png')
-        if not os.path.isfile(preview_path): preview_path = ""
+        if os.path.isfile(preview_path): preview_path = normalize_path_for_storage(preview_path)
+        else: preview_path = ""
 
         # --- ModIcon.png ---
         icon_path = os.path.join(mod_path, 'About', 'ModIcon.png')
-        if not os.path.isfile(icon_path): icon_path = ""
+        if os.path.isfile(icon_path): icon_path = normalize_path_for_storage(icon_path)
+        else: icon_path = ""
         
         rel_xml_icon_path = os.path.join(mod_path, 'Textures', xml_icon_path+'.png')
-        if not os.path.isfile(rel_xml_icon_path): rel_xml_icon_path = ""
+        if os.path.isfile(rel_xml_icon_path): rel_xml_icon_path = normalize_path_for_storage(rel_xml_icon_path)
+        else: rel_xml_icon_path = ""
         
         # 使用 XML 中定义的路径 (RimWorld 1.5+)
         if not icon_path and rel_xml_icon_path:

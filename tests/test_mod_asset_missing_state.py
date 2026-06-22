@@ -10,7 +10,7 @@ from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.managers.mgr_profile import ProfileContext
 from backend.scanner.mod_scanner import ModScanner
 from backend.settings import settings
-from backend.utils.tools import generate_path_hash
+from backend.utils.tools import generate_path_hash, normalize_path_for_storage
 
 
 class TestModAssetMissingState(unittest.TestCase):
@@ -111,7 +111,8 @@ class TestModAssetMissingState(unittest.TestCase):
         scanner._resolve_images = Mock(return_value=("", ""))
 
         stat = about_file.stat()
-        path_hash = generate_path_hash(str(mod_dir))
+        normalized_mod_dir = normalize_path_for_storage(mod_dir)
+        path_hash = generate_path_hash(normalized_mod_dir)
         snapshot = {
             "mtime": int(stat.st_mtime * 1000),
             "size": 0,
@@ -121,7 +122,7 @@ class TestModAssetMissingState(unittest.TestCase):
             "name": "Restored Mod",
             "version": "",
             "store": "local",
-            "path": str(mod_dir),
+            "path": normalized_mod_dir,
             "state": MOD_ASSET_STATE_MISSING,
             "supported_versions": [],
         }
@@ -140,7 +141,7 @@ class TestModAssetMissingState(unittest.TestCase):
         self.assertFalse(mod_data.get("_skipped"))
         self.assertEqual(mod_data["path_hash"], path_hash)
         self.assertEqual(mod_data["state"], MOD_ASSET_STATE_PRESENT)
-        self.assertEqual(mod_data["path"], str(mod_dir))
+        self.assertEqual(mod_data["path"], normalized_mod_dir)
 
     def test_workspace_classification_keeps_missing_assets_in_original_domain(self):
         scope = _ProfilePathScope(
@@ -177,7 +178,7 @@ class TestModAssetMissingState(unittest.TestCase):
                 path_hash=path_hash,
                 package_id=f"author.{path_hash}",
                 name=path_hash,
-                path=str(path),
+                path=normalize_path_for_storage(path),
                 source="local",
                 store="local",
                 state=state,
@@ -228,7 +229,7 @@ class TestModAssetMissingState(unittest.TestCase):
                 path_hash=path_hash,
                 package_id=f"author.{path_hash}",
                 name=path_hash,
-                path=str(path),
+                path=normalize_path_for_storage(path),
                 source=store,
                 store=store,
                 disabled=disabled,

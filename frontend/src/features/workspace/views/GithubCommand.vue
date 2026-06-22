@@ -74,7 +74,7 @@
             <button @click.stop="openRepoOriginal(repo)" v-tooltip="'打开原始地址'" class="p-2 rounded-lg bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <ExternalLink class="size-4" />
             </button>
-            <button v-if="repo.local_folder" @click.stop="openRepoLocal(repo)" v-tooltip="'打开本地目录'" class="p-2 rounded-lg bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
+            <button v-if="repo.local_path || repo.local_folder" @click.stop="openRepoLocal(repo)" v-tooltip="'打开本地目录'" class="p-2 rounded-lg bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <FolderOpen class="size-4" />
             </button>
             <button @click.stop="removeRepo(repo.repo_url)" v-tooltip="'移除订阅'" class="p-2 rounded-lg bg-accent-danger/20 text-accent-danger hover:bg-accent-danger hover:text-on-accent-danger transition-colors">
@@ -334,7 +334,7 @@
               class="p-3 rounded-xl bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <ExternalLink class="size-4" />
             </button>
-            <button v-if="workspaceStore.github.activeRepo.local_folder" @click="openRepoLocal(workspaceStore.github.activeRepo)" v-tooltip="'打开本地目录'"
+            <button v-if="workspaceStore.github.activeRepo.local_path || workspaceStore.github.activeRepo.local_folder" @click="openRepoLocal(workspaceStore.github.activeRepo)" v-tooltip="'打开本地目录'"
               class="p-3 rounded-xl bg-bg-overlay/10 text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-colors">
               <FolderOpen class="size-4" />
             </button>
@@ -507,7 +507,7 @@ const openRepoOriginal = (repo) => {
 }
 
 const openRepoLocal = (repo) => {
-  const path = joinPath(appStore.settings.self_mods_path, repo?.local_folder)
+  const path = repo?.local_path || joinPath(appStore.settings.self_mods_path, repo?.local_folder)
   if (path) appStore.openPath(path)
 }
 

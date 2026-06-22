@@ -45,10 +45,9 @@ from backend.utils.event_bus import EventBus
 from backend.managers.mgr_download import TaskStatus
 from backend.managers.mgr_steamcmd_core import SteamCMDController
 from backend.managers.mgr_game import GameManager
+from backend.utils.constants import RIMWORLD_APPWORKSHOP_NAME, RIMWORLD_STEAM_APP_ID_STR
 from backend.utils.tools import extract_zip
 
-# RimWorld App ID
-RIMWORLD_APP_ID = "294100"
 STEAMCMD_DOWNLOAD_BATCH_SIZE = 25
 STEAMCMD_RETRY_BATCH_SIZE = 10
 STEAMCMD_DOWNLOAD_IDLE_TIMEOUT_SECONDS = 180
@@ -459,7 +458,7 @@ class SteamManager:
         appid_path = os.path.join(self.agent_dir, "steam_appid.txt")
         if not os.path.exists(appid_path):
             with open(appid_path, "w") as f:
-                f.write(RIMWORLD_APP_ID)
+                f.write(RIMWORLD_STEAM_APP_ID_STR)
 
         # 2. 检查并复制 DLL (逻辑同上一次修改，保持不变)
         target_dll = "SteamworksPy64.dll" if platform.system() == "Windows" else "libSteamworksPy.so"
@@ -859,7 +858,7 @@ class SteamManager:
         normalized_ids = [str(item or "").strip() for item in (workshop_ids or []) if str(item or "").strip().isdigit()]
         script_lines = ["login anonymous"]
         for workshop_id in normalized_ids:
-            script_lines.append(f"workshop_download_item {RIMWORLD_APP_ID} {workshop_id}")
+            script_lines.append(f"workshop_download_item {RIMWORLD_STEAM_APP_ID_STR} {workshop_id}")
         script_lines.append("quit")
 
         fd, script_path = tempfile.mkstemp(prefix="rmm_steamcmd_", suffix=".txt")
@@ -1616,28 +1615,37 @@ class SteamManager:
     # =========================================================
     
     def get_steam_path(self, with_exe=False):
-        """从注册表获取 Steam 安装路径"""
+        """检测 Steam 安装路径"""
         if platform.system() != "Windows" or winreg is None:
             return None
 
+        candidates = []
         key_paths = [
             r"SOFTWARE\WOW6432Node\Valve\Steam",
             r"SOFTWARE\Valve\Steam",
         ]
 
-        # 这里只查 Windows 注册表安装位；其它平台的 Steam 路径发现不应复用这个入口。
+        # Windows 下 Steam 可能只写入当前用户注册表；最后再复用通用候选路径兜底。
         for key_path in key_paths:
-            try:
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
-                    path, _ = winreg.QueryValueEx(key, "InstallPath")
-                return os.path.join(path, "steam.exe") if with_exe else path
-            except OSError:
-                continue
+            for root in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
+                try:
+                    with winreg.OpenKey(root, key_path) as key:
+                        path, _ = winreg.QueryValueEx(key, "InstallPath")
+                    if path:
+                        candidates.append(str(path))
+                except OSError:
+                    continue
 
-        logger.debug("Steam registry InstallPath not found.")
+        candidates.extend(GameManager._detect_steam_root_candidates())
+        for steam_dir in GameManager._unique_paths(candidates):
+            steam_exe = Path(steam_dir) / "steam.exe"
+            if steam_exe.exists():
+                return str(steam_exe) if with_exe else str(Path(steam_dir))
+
+        logger.debug("Steam InstallPath not found.")
         return None
 
-    def launch_via_steam_cmd(self, app_id=RIMWORLD_APP_ID, extra_args=None):
+    def launch_via_steam_cmd(self, app_id=RIMWORLD_STEAM_APP_ID_STR, extra_args=None):
         steam_exe = str(self.steam_exe) if self.steam_exe else None
         # 如果找不到 Steam.exe，回退到原来的 URL 方式
         if not steam_exe or not os.path.exists(steam_exe):
@@ -2118,29 +2126,29 @@ class SteamManager:
     # =========================================================
 
     def _get_acf_path(self):
-        """获取 appworkshop_294100.acf 的路径"""
+        """获取 RimWorld Workshop ACF 路径。"""
         # 依赖 settings 中的 workshop_mods_path
-        # 典型路径: .../steamapps/workshop/content/294100
-        # ACF 路径: .../steamapps/workshop/appworkshop_294100.acf
+        # 典型路径: .../steamapps/workshop/content/<RimWorld AppID>
+        # ACF 路径: .../steamapps/workshop/appworkshop_<RimWorld AppID>.acf
         ws_path = settings.config.workshop_mods_path
         if not ws_path or not os.path.exists(ws_path): return None
         
         try:
             # 回退两级找到 workshop 目录
             workshop_root = os.path.dirname(os.path.dirname(ws_path))
-            acf_file = os.path.join(workshop_root, f"appworkshop_{RIMWORLD_APP_ID}.acf")
+            acf_file = os.path.join(workshop_root, RIMWORLD_APPWORKSHOP_NAME)
             if os.path.exists(acf_file): return acf_file
         except:
             pass
         return None
     
     def _get_steamcmd_acf_path(self) -> Path:
-        """返回 SteamCMD 专用的 appworkshop_294100.acf 路径。"""
-        return Path(self.steamcmd_dir) / "steamapps" / "workshop" / f"appworkshop_{RIMWORLD_APP_ID}.acf"
+        """返回 SteamCMD 专用的 RimWorld Workshop ACF 路径。"""
+        return Path(self.steamcmd_dir) / "steamapps" / "workshop" / RIMWORLD_APPWORKSHOP_NAME
 
     def _get_steamcmd_content_root(self) -> Path:
         """返回 SteamCMD 认定的 workshop 内容根目录。"""
-        return Path(self.steamcmd_dir) / "steamapps" / "workshop" / "content" / RIMWORLD_APP_ID
+        return Path(self.steamcmd_dir) / "steamapps" / "workshop" / "content" / RIMWORLD_STEAM_APP_ID_STR
 
     def _invalidate_steamcmd_cache(self) -> None:
         """SteamCMD ACF 被修正后，清空对应缓存，避免后续继续读到旧状态。"""
@@ -2294,7 +2302,7 @@ class SteamManager:
         解析 ACF 文件，返回 JSON 格式数据
         返回: dict
         {
-            "appid": "294100",
+            "appid": RIMWORLD_STEAM_APP_ID_STR,
             "SizeOnDisk": "7959848359",
             "NeedsUpdate": "0",
             "NeedsDownload": "0",
@@ -2451,7 +2459,7 @@ class SteamManager:
             
         return None
 
-    def parse_workshop_log(self, log_path: str|Path|None=None, target_appid: str=RIMWORLD_APP_ID) -> dict:
+    def parse_workshop_log(self, log_path: str|Path|None=None, target_appid: str=RIMWORLD_STEAM_APP_ID_STR) -> dict:
         """
         解析 Steam workshop_log.txt，提取指定 AppID 的模组操作历史。
         归并相似动作，智能识别【订阅、取订、更新、同步】的最新时间。
@@ -2680,7 +2688,7 @@ class SteamManager:
         raw_events = []
         
         # 预编译正则
-        log_pattern = re.compile(r'\[(.*?)\] \[AppID 294100\] (.*)')
+        log_pattern = re.compile(rf'\[(.*?)\] \[AppID {re.escape(RIMWORLD_STEAM_APP_ID_STR)}\] (.*)')
         
         # 动作映射：顺序代表了在同一时间点发生的逻辑先后顺序
         # 我们给每个动作一个数字优先级 (index)

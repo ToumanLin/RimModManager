@@ -40,9 +40,9 @@ from backend.managers.mgr_steamcmd_core import SteamCMDController
 from backend.settings import DATA_DIR, HOME_DIR, TOOL_MODS_DIR, settings, RULES_DIR
 from backend.utils.event_bus import EventBus
 from backend._version import __version__, __build__, get_all_changelogs
-from backend.utils.tools import normalize_package_id, normalize_workshop_id
+from backend.utils.tools import normalize_package_id, normalize_path_for_compare, normalize_path_for_storage, normalize_workshop_id
 from backend.utils.tools import current_ms, generate_path_hash
-from backend.utils.constants import RIMWORLD_DLC_OPTIONS, get_steam_elanguage_options
+from backend.utils.constants import RIMWORLD_DLC_OPTIONS, RIMWORLD_STEAM_APP_ID_STR, get_steam_elanguage_options
 from backend.i18n.language_registry import normalize_language_code
 from backend.utils.logger import logger, app_log_reader
 from backend.utils.shortcuts import get_desktop_directory
@@ -72,7 +72,7 @@ from backend.managers.mgr_files import FileManager, file_mgr, PathChecker
 from backend.managers.mgr_game_logs import GameLogManager, LogCondenser
 from backend.managers.mgr_sorter import OrderSorter
 from backend.managers.mgr_download import DownloadManager, TaskStatus
-from backend.managers.mgr_steam import RIMWORLD_APP_ID, SteamManager
+from backend.managers.mgr_steam import SteamManager
 from backend.managers.mgr_sub_browser import SubBrowserManager
 from backend.ai.ai_service import AIManager
 from backend.managers.mgr_workshop_db import WorkshopDBManager
@@ -98,11 +98,21 @@ from backend.browser_runtime import build_sub_browser_target_url
 from backend.utils.restart import launch_new_application
 from backend.migrations.app_upgrade import normalize_duplicate_group_names_on_load, run_app_upgrade_migrations
 from backend.migrations.app_relocation import apply_database_relocation, write_relocation_marker
+from backend.migrations.path_normalization import run_path_normalization_migration
 from backend.text_search.manager import FileSearchManager
 from backend.startup import StartupCoordinator
 from backend.theme_store import ThemeStore
 
 GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS = 3 * 60 * 1000
+
+
+def _resolve_github_local_path(local_folder: str = "") -> str:
+    folder = str(local_folder or "").strip()
+    if not folder:
+        return ""
+    if os.path.isabs(folder):
+        return normalize_path_for_storage(folder)
+    return normalize_path_for_storage(Path(str(settings.config.self_mods_path or "")) / folder)
 
 
 def _ensure_bundle_filename_extension(filename: str, preferred_extension: str, accepted_extensions: list[str] | tuple[str, ...]) -> str:
@@ -274,6 +284,9 @@ class API:
         # 否则像 workshop_cache.db 这类需要“删库重建”的迁移，
         # 会在 Windows 上撞到已打开文件句柄导致无法删除。
         self._handle_app_version_upgrade()
+        path_normalization = run_path_normalization_migration()
+        if path_normalization.messages:
+            self._upgrade_context["messages"].extend(path_normalization.messages)
         renamed_groups = normalize_duplicate_group_names_on_load()
         if renamed_groups:
             self._upgrade_context["messages"].append(f"检测到重名分组，已自动重命名 {len(renamed_groups)} 项。")
@@ -501,7 +514,15 @@ class API:
         # 确保 self_mods_path 目录存在
         self_mods_path = str(settings.config.self_mods_path or "").strip()
         if self_mods_path:
-            os.makedirs(self_mods_path, exist_ok=True)
+            if os.path.exists(self_mods_path) and not os.path.isdir(self_mods_path):
+                logger.error("管理器 Mod 路径已存在但不是目录，跳过创建: %s", self_mods_path)
+                self.load_order_mgr = None
+                self.scanner = None
+                self.game_log_mgr = None
+                self.sorter = None
+                return
+            else:
+                os.makedirs(self_mods_path, exist_ok=True)
         else:
             logger.warning("self_mods_path 为空，跳过管理器 Mod 目录创建。")
         
@@ -2646,7 +2667,7 @@ class API:
                                     data={"runtime_session": failed_session, "failure_reason": "launch_prepare_failed"},
                                 )
                             session = runtime_session_mgr.begin_launch(profile_id, "steam", message="已尝试通过 Steam URL 启动，等待游戏进程确认。")
-                            os.startfile(f"steam://run/{RIMWORLD_APP_ID}")
+                            os.startfile(f"steam://run/{RIMWORLD_STEAM_APP_ID_STR}")
                             return ApiResponse.warning(
                                 message="未检测到有效的 Steam 程序路径，已尝试通过 URL 协议启动 Steam 游戏；如果失败，请检查 Steam 客户端状态或关闭“优先 Steam 启动”选项。",
                                 data={"runtime_session": session},
@@ -3144,7 +3165,7 @@ class API:
                         extra_args=extra_args,
                         prefer_steam_launch=True,
                         steam_exe_path=self.steam_mgr.steam_exe,
-                        steam_app_id=RIMWORLD_APP_ID,
+                        steam_app_id=RIMWORLD_STEAM_APP_ID_STR,
                     )
                     self.file_mgr.remove_existing_shortcut_variants(shortcut.get("shortcut_path", ""))
                     launch_mode = "Steam 官方 AppID"
@@ -3175,7 +3196,7 @@ class API:
                 extra_args=self.profile_mgr.get_launch_args(profile_id, include_executable=False),
                 prefer_steam_launch=False,
                 steam_exe_path=self.steam_mgr.steam_exe,
-                steam_app_id=RIMWORLD_APP_ID,
+                steam_app_id=RIMWORLD_STEAM_APP_ID_STR,
             )
             self.file_mgr.remove_existing_shortcut_variants(shortcut.get("shortcut_path", ""))
             launch_mode = "游戏本体"
@@ -3311,6 +3332,7 @@ class API:
         if not path_type or not path:
             return ApiResponse.error("未指定路径类型或路径")
         try:
+            path = normalize_path_for_storage(path)
             if path_type == "game_install_path":
                 res = PathChecker.check_install_path(path)
             elif path_type == "game_config_path":
@@ -3327,6 +3349,10 @@ class API:
                 res = PathChecker.check_texture_tools_path(path)
             else:
                 res = PathChecker.check_normal_path(path)
+            if isinstance(res, dict):
+                data = res.get("data")
+                if isinstance(data, dict):
+                    data.setdefault("normalized_path", path)
                 
         except Exception as e:
             return ApiResponse.error(f"检查路径时出错: {e}")
@@ -3343,7 +3369,17 @@ class API:
             return ApiResponse.error("未指定任何路径信息")
         info = {}
         try:
-            info = PathChecker.paths_check(paths_data)
+            normalized_data = {
+                key: normalize_path_for_storage(value)
+                for key, value in paths_data.items()
+            }
+            info = PathChecker.paths_check(normalized_data)
+            for key, res in info.items():
+                if isinstance(res, dict):
+                    data = res.get("data")
+                    normalized_path = normalized_data.get(key, "")
+                    if isinstance(data, dict):
+                        data.setdefault("normalized_path", normalized_path)
             return ApiResponse.success(info)
         except Exception as e:
             logger.error(f"Check Paths Error: {e}", exc_info=True)
@@ -3405,7 +3441,7 @@ class API:
         """
         try:
             folder = file_mgr.select_folder_dialog(initial_dir)
-            if folder: return ApiResponse.success(folder)
+            if folder: return ApiResponse.success(normalize_path_for_storage(folder))
         except Exception as e:
             return ApiResponse.error(f"选择文件夹时出错: {e}")
         return ApiResponse.warning("未选择文件夹")
@@ -3424,7 +3460,7 @@ class API:
         """
         try:
             file = file_mgr.select_file_dialog(initial_dir, file_types)
-            if file: return ApiResponse.success(file)
+            if file: return ApiResponse.success(normalize_path_for_storage(file))
         except Exception as e:
             return ApiResponse.error(f"选择文件时出错: {e}")
         return ApiResponse.warning("未选择文件")
@@ -3436,7 +3472,7 @@ class API:
         """
         try:
             file = file_mgr.save_file_dialog(initial_dir, default_filename, file_types)
-            if file: return ApiResponse.success(file)
+            if file: return ApiResponse.success(normalize_path_for_storage(file))
         except Exception as e:
             return ApiResponse.error(f"保存文件时出错: {e}")
         return ApiResponse.warning("未选择文件")
@@ -3576,7 +3612,7 @@ class API:
                 if mode == 'move':
                     # 如果是移动，更新 path 和 store
                     # 注意：path_hash 也要按实际落地路径重新生成，避免重名避让后数据库指向旧目录名。
-                    new_path = record["new_path"]
+                    new_path = normalize_path_for_storage(record["new_path"])
                     new_hash = generate_path_hash(new_path)
                     ModAsset.update(
                         path=new_path,
@@ -5305,18 +5341,15 @@ class API:
                 for log in success_logs:
                     latest_success_time.setdefault(str(log.repo_url), int(log.time or 0))
 
-            def normalize_folder(value: str = "") -> str:
-                return str(value or "").strip().replace("\\", "/").strip("/").lower()
-
             github_download_map = {
-                normalize_folder(record.get("local_folder")): {
+                normalize_path_for_compare(_resolve_github_local_path(record.get("local_folder"))): {
                     "repo_url": str(record.get("repo_url") or "").strip(),
                     "download_time": latest_success_time.get(str(record.get("repo_url") or "").strip(), 0),
                     "source": "github_timeline_success",
                     "installed_version": str(record.get("installed_version") or "").strip(),
                 }
                 for record in github_records
-                if normalize_folder(record.get("local_folder")) and latest_success_time.get(str(record.get("repo_url") or "").strip(), 0)
+                if _resolve_github_local_path(record.get("local_folder")) and latest_success_time.get(str(record.get("repo_url") or "").strip(), 0)
             }
         
         known_workshop_ids = set()
@@ -5339,8 +5372,7 @@ class API:
                 if download_status:
                     mod['download_status'] = download_status
             if str(mod.get('source') or '').strip().lower() == 'github':
-                folder = str(mod.get('path') or '').replace("\\", "/").strip("/").split("/")[-1].lower()
-                download_status = github_download_map.get(folder)
+                download_status = github_download_map.get(normalize_path_for_compare(mod.get('path')))
                 if download_status:
                     mod['download_status'] = download_status
             mod['replacement'] = replacements_map.get(wid)
@@ -6351,8 +6383,9 @@ class API:
             repo_url = str(r.get("repo_url") or "")
             local_folder = str(r.get("local_folder") or "").strip()
             if local_folder:
-                local_path = Path(str(settings.config.self_mods_path or "")) / local_folder
-                local_exists = local_path.exists()
+                local_path = _resolve_github_local_path(local_folder)
+                local_exists = bool(local_path and os.path.exists(local_path))
+                r["local_path"] = local_path
                 r["local_exists"] = local_exists
                 last_missing = latest_missing_time.get(repo_url, 0)
                 last_present = latest_present_time.get(repo_url, 0)

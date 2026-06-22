@@ -26,6 +26,7 @@ from backend.managers.mgr_game_install import GameInstallRegistry
 from backend.managers.mgr_profile import ProfileManager
 from backend.utils.profile_runtime import normalize_profile_runtime_flags
 from backend.settings import DATA_DIR, settings
+from backend.utils.tools import normalize_path_for_compare, normalize_path_for_storage
 
 
 class DataBundleManager:
@@ -212,12 +213,12 @@ class DataBundleManager:
         collected: dict[str, dict[str, Any]] = {}
 
         def _push(install_path: str, source: str):
-            normalized_path = os.path.normpath(str(install_path or "").strip())
+            normalized_path = normalize_path_for_storage(install_path)
             executable_path = str(GameManager.detect_executable(normalized_path) or "")
             if not normalized_path or not executable_path:
                 return
             facts = registry.get(normalized_path)
-            key = os.path.normcase(normalized_path)
+            key = normalize_path_for_compare(normalized_path)
             collected[key] = {
                 "install_path": normalized_path,
                 "game_version": str(
@@ -849,9 +850,9 @@ class DataBundleManager:
         }
 
     def _resolve_import_install_path(self, selected_install_path: str = "") -> str:
-        normalized_selected = str(selected_install_path or "").strip()
+        normalized_selected = normalize_path_for_storage(selected_install_path)
         if normalized_selected and GameManager.detect_executable(normalized_selected):
-            return os.path.normpath(normalized_selected)
+            return normalized_selected
         return ""
 
     def _resolve_profile_import_target_root(self, target_profile_id: str = "") -> Path:
@@ -885,7 +886,7 @@ class DataBundleManager:
             plan_map[archive_key] = {
                 "mode": mode,
                 "target_profile_id": str(item.get("target_profile_id") or "").strip(),
-                "game_install_path": str(item.get("game_install_path") or "").strip(),
+                "game_install_path": normalize_path_for_storage(item.get("game_install_path")),
             }
         return plan_map
 

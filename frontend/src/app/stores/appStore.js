@@ -656,7 +656,7 @@ export const useAppStore = defineStore('app', () => {
     if (payload.active_context) {
       profileStore.activeContext = payload.active_context
       if (!profileStore.activeContext.is_healthy) {
-        toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
+        toast.warning("需要确认路径配置。已自动搜索到的路径会填入设置面板，请确认后保存。",{position: "top-center",timeout: 5000})
         uiState.showSettingsPanel = true
         return false
       }

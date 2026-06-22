@@ -64,6 +64,7 @@
                 :form-data="formData"
                 :steam-launch-disabled="steamLaunchDisabled"
                 :workshop-mods-disabled="workshopModsDisabled"
+                :mark-steam-launch-touched="markSteamLaunchTouched"
                 :auto-detect="autoDetect"
                 :handle-browse="handleBrowse"
                 :check-path="checkPath"
@@ -122,6 +123,7 @@ const profileStore = useProfileStore()
 
 const currentTab = ref('paths')
 const formData = ref({})
+const steamLaunchTouched = ref(false)
 const detectedIsSteam = computed(() => {
   const checkedInstall = formData.value?.check_info?.game_install_path
   if (checkedInstall && Object.prototype.hasOwnProperty.call(checkedInstall, 'pass')) {
@@ -158,6 +160,7 @@ const currentTabLabel = computed(() => (
 // 数据同步：打开时深度拷贝
 watch(() => appStore.uiState.showSettingsPanel, (val) => {
   if (val) {
+    steamLaunchTouched.value = false
     // 利用 requestAnimationFrame 或 setTimeout
     // 让浏览器先渲染出弹窗的“背景”和“动画第一帧”，然后再去塞数据
     requestAnimationFrame(async () => {
@@ -186,8 +189,9 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
       }
       formData.value.translation = appStore.normalizeTranslationSettings(formData.value.translation)
       // 如果当前上下文不健康，自动检测路径
-      if (!profileStore.activeContext || profileStore.activeContext.is_healthy === false) {
-        await autoDetect()
+      const autoDetected = !profileStore.activeContext || profileStore.activeContext.is_healthy === false
+      if (autoDetected) {
+        await autoDetect(false)
       }
       // 检测所有路径是否有效
       await checkPaths()
@@ -217,10 +221,36 @@ const changeTab = (tab) => {
   currentTab.value = tab
 }
 
+const shouldPreferSteamLaunch = () => {
+  const checkInfo = formData.value?.check_info || {}
+  const installCheck = checkInfo.game_install_path || {}
+  const steamCheck = checkInfo.steam_path || {}
+  return !!(
+    installCheck.pass
+    && installCheck.data?.is_steam
+    && steamCheck.pass
+    && !formData.value?.use_workshop_mods
+  )
+}
+
+const applySteamLaunchDefault = () => {
+  if (steamLaunchTouched.value || !formData.value) return
+  if (shouldPreferSteamLaunch() && !formData.value.prefer_steam_launch) {
+    formData.value.prefer_steam_launch = true
+  }
+}
+
+const markSteamLaunchTouched = () => {
+  steamLaunchTouched.value = true
+}
+
 // 自动检测路径
-const autoDetect = async () => {
+const autoDetect = async (checkAfterDetect = true) => {
   const paths = await appStore.autoDetectPaths(false)
-  if (paths) Object.assign(formData.value, paths)
+  if (!paths) return false
+  Object.assign(formData.value, paths)
+  if (checkAfterDetect) await checkPaths()
+  return true
 }
 
 // 检查游戏路径是否有效
@@ -242,6 +272,9 @@ const checkPath = async (type, path) => {
   if (res?.pass && res?.data && type === 'ripgrep_path') {
     formData.value.ripgrep_path = res.data
   }
+  if (['game_install_path', 'steam_path'].includes(type)) {
+    applySteamLaunchDefault()
+  }
 }
 // 检查全部路径
 const checkPaths = async () => {
@@ -259,6 +292,7 @@ const checkPaths = async () => {
   const res = await appStore.checkPaths(paths_data)
   if (res) {
     formData.value['check_info'] = res
+    applySteamLaunchDefault()
   }
 }
 
