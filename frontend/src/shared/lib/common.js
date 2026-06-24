@@ -50,6 +50,23 @@ export const normalizeStringList = (values = []) => {
   return normalized
 }
 
+const displayNameCollator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
+
+// 标签、分组这类面向用户的列表统一按可见名称排序，避免不同入口顺序忽左忽右。
+export const compareDisplayName = (left, right) => (
+  displayNameCollator.compare(normalizeText(left), normalizeText(right))
+)
+
+export const sortTextByName = (values = []) => (
+  [...(Array.isArray(values) ? values : [])].sort((left, right) => compareDisplayName(left, right))
+)
+
+export const sortByDisplayName = (items = [], getName = item => item?.name ?? item) => (
+  [...(Array.isArray(items) ? items : [])].sort((left, right) => (
+    compareDisplayName(getName(left), getName(right))
+  ))
+)
+
 // 全局 Toast 实例
 export const toast = createToastInterface(globalEventBus)
 

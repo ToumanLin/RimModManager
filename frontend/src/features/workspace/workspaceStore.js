@@ -146,6 +146,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     detailData: null,
     detailTranslationLanguage: 'follow_ui',
     isTranslating: false,
+    translatingByWorkshopId: {},
     isDetailLoading: false,
     relatedLoading: { dependencies: false, dependents: false, same_author: false },
     relatedErrors: { dependencies: '', dependents: '', same_author: '' },
@@ -898,6 +899,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return items.map(item => String(item?.workshop_id || '').trim() === workshopId ? mergeWorkshopItemPatch(item, patch) : item)
   }
 
+  const mergeWorkshopPatchIntoLoadedLists = (patch = {}) => {
+    const workshopId = String(patch?.workshop_id || '').trim()
+    if (!workshopId) return null
+    const normalized = normalizeWorkshopSearchItem(patch)
+    workshopSearch.results = mergeWorkshopItemIntoList(workshopSearch.results, normalized)
+    workshopSearch.transientList.items = mergeWorkshopItemIntoList(workshopSearch.transientList.items, normalized)
+    const related = workshopSearch.detailData?.related || {}
+    for (const key of ['dependencies', 'dependents', 'same_author', 'collection_children']) {
+      if (Array.isArray(related[key])) {
+        related[key] = mergeWorkshopItemIntoList(related[key], normalized)
+      }
+    }
+    return normalized
+  }
+
   const preheatNormalWorkshopPublicDetails = async (items = []) => {
     if (!window.pywebview || workshopSearch.isEnhancedMode) return
     const workshopIds = [...new Set(
@@ -1606,49 +1622,69 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   const translateWorkshopDetail = async ({ language = '', displayLanguage = undefined, force = false } = {}) => {
-    if (!window.pywebview || !workshopSearch.detailData?.workshop_id || workshopSearch.isTranslating) return null
+    const requestDetail = workshopSearch.detailData ? { ...workshopSearch.detailData } : null
+    const requestWorkshopId = String(requestDetail?.workshop_id || '').trim()
+    if (!window.pywebview || !requestWorkshopId || workshopSearch.translatingByWorkshopId[requestWorkshopId]) return null
     const targetLanguage = getResolvedTranslationLanguage(language || getDefaultTranslationSelection())
     if (!targetLanguage) return null
     const provider = normalizeTranslationLanguage(getWorkshopDetailTranslationSettings().provider || 'ai.default')
+    workshopSearch.translatingByWorkshopId[requestWorkshopId] = true
     workshopSearch.isTranslating = true
     try {
       const res = await window.pywebview.api.workshop_translate_detail(
-        workshopSearch.detailData.workshop_id,
+        requestWorkshopId,
         targetLanguage,
-        workshopSearch.detailData,
+        requestDetail,
         !!force,
         provider,
       )
       if (!checkResult(res, '翻译工坊说明')) return null
       const payload = res.data || {}
-      workshopSearch.detailTranslationLanguage = normalizeDetailTranslationLanguage(displayLanguage === undefined ? language || getDefaultTranslationSelection() : displayLanguage)
-      const normalized = mergeWorkshopDetailData({
+      const responseWorkshopId = String(payload.workshop_id || requestWorkshopId).trim()
+      if (responseWorkshopId !== requestWorkshopId) return null
+      const patch = {
+        workshop_id: requestWorkshopId,
         translations: payload.translations || {
-          ...(workshopSearch.detailData.translations || {}),
+          ...(requestDetail.translations || {}),
           [targetLanguage]: payload.translation,
         },
-        translation_source_hash: payload.source_hash || workshopSearch.detailData.translation_source_hash || '',
-      })
+        translation_source_hash: payload.source_hash || requestDetail.translation_source_hash || '',
+      }
+      if (workshopSearch.selectedId !== requestWorkshopId) {
+        return mergeWorkshopPatchIntoLoadedLists(patch)
+      }
+      workshopSearch.detailTranslationLanguage = normalizeDetailTranslationLanguage(displayLanguage === undefined ? language || getDefaultTranslationSelection() : displayLanguage)
+      const normalized = mergeWorkshopDetailData(patch)
       toast.success(force ? '已重新翻译说明' : '已翻译说明', { timeout: 1500 })
       return normalized
     } finally {
-      workshopSearch.isTranslating = false
+      delete workshopSearch.translatingByWorkshopId[requestWorkshopId]
+      workshopSearch.isTranslating = !!workshopSearch.translatingByWorkshopId[String(workshopSearch.selectedId || '').trim()]
     }
   }
 
   const clearWorkshopDetailTranslation = async ({ language = '', displayLanguage = undefined } = {}) => {
-    if (!window.pywebview || !workshopSearch.detailData?.workshop_id) return null
+    const requestDetail = workshopSearch.detailData ? { ...workshopSearch.detailData } : null
+    const requestWorkshopId = String(requestDetail?.workshop_id || '').trim()
+    if (!window.pywebview || !requestWorkshopId) return null
     const targetLanguage = getResolvedTranslationLanguage(language || workshopSearch.detailTranslationLanguage)
     if (!targetLanguage) return null
     const res = await window.pywebview.api.workshop_clear_detail_translation(
-      workshopSearch.detailData.workshop_id,
+      requestWorkshopId,
       targetLanguage,
     )
     if (!checkResult(res, '清理工坊翻译')) return null
     const payload = res.data || {}
-    const normalized = mergeWorkshopDetailData({
+    const responseWorkshopId = String(payload.workshop_id || requestWorkshopId).trim()
+    if (responseWorkshopId !== requestWorkshopId) return null
+    const patch = {
+      workshop_id: requestWorkshopId,
       translations: payload.translations || {},
-    })
+    }
+    if (workshopSearch.selectedId !== requestWorkshopId) {
+      return mergeWorkshopPatchIntoLoadedLists(patch)
+    }
+    const normalized = mergeWorkshopDetailData(patch)
     workshopSearch.detailTranslationLanguage = normalizeDetailTranslationLanguage(displayLanguage === undefined ? language || workshopSearch.detailTranslationLanguage : displayLanguage)
     if (!getWorkshopTranslationEntry(normalized.translations, targetLanguage)) {
       workshopSearch.detailTranslationLanguage = ''
@@ -1686,6 +1722,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
     workshopSearch.selectedId = workshop_id
     workshopSearch.detailTranslationLanguage = getInitialWorkshopDetailTranslationLanguage()
+    workshopSearch.isTranslating = !!workshopSearch.translatingByWorkshopId[String(workshop_id || '').trim()]
     workshopSearch.isDetailLoading = true
     resetWorkshopRelatedState()
     const currentDetail = findWorkshopListItem(workshop_id)

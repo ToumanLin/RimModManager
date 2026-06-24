@@ -41,16 +41,16 @@
                 </div>
                 <div class="col-span-3 min-w-0 flex items-center gap-4">
                   <span class="shrink-0 text-accent-tip/80">
-                    缩放 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.scaled_count || 0 }}</span>
+                    当前比例 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.scaled_count || 0 }}</span>
                   </span>
                   <span class="shrink-0 text-accent-secondary/80">
-                    回退 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.fallback_scaled_count || 0 }}</span>
+                    自动回退 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.fallback_scaled_count || 0 }}</span>
                   </span>
                   <span class="shrink-0 text-text-dim">
-                    原尺寸 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.keep_original_count || 0 }}</span>
+                    保留原尺寸 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.keep_original_count || 0 }}</span>
                   </span>
                   <div class="min-w-0 text-text-dim">
-                    超范围 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.skip_small_count || 0 }}</span>
+                    超范围未缩放 <span class="ml-1 font-mono font-bold text-text-main">{{ summary.skip_small_count || 0 }}</span>
                   </div>
                   <span v-if="summary.unsupported_source_count" class="shrink-0 cursor-help text-accent-warning" v-tooltip="unsupportedSummaryTooltip">
                     无效 PNG <span class="ml-1 font-mono font-bold text-text-main">{{ summary.unsupported_source_count }}</span>
@@ -176,15 +176,15 @@
                 <section class="modal-section space-y-2 p-3">
                   <h3 class="text-xs font-black uppercase tracking-widest text-text-main">生成选项</h3>
                   <CommonSelect label="生成范围" v-model="config.process_mode" @change="saveConfig"
-                    description="决定这次是全量重做、只补缺失结果，还是只更新可缩放的图片。"
+                    description="全部处理（完全覆盖重新生成所有贴图），只补缺失的贴图（增量处理，不重新生成已存在的优化贴图），只处理需要缩放的图片（已经存在的无法缩放的优化贴图不用重新生成，可缩放的覆盖生成）。"
                     :options="[
-                      { label: '完全覆盖生成', value: 'all_overwrite' },
-                      { label: '增量生成', value: 'all_skip_existing' },
-                      { label: '只生成压缩贴图（覆盖）', value: 'scaled_only_overwrite' }
+                      { label: '处理全部贴图（覆盖）', value: 'all_overwrite' },
+                      { label: '只处理新增贴图（增量）', value: 'all_skip_existing' },
+                      { label: '只处理可缩放图片（覆盖）', value: 'scaled_only_overwrite' }
                     ]"
                   />
                   <CommonSelect label="输出格式" v-model="config.output_format" @change="saveConfig"
-                    description="DDS 可直接配合当前贴图优化使用；ZSTD 只生成 .dds.zstd，需要 Image Opt 在当前列表中启用后才能被游戏读取。"
+                    :description="'DDS：RimWorld 1.6 起游戏可原生读取；1.6 以前通常需要搭配 Graphics Settings+ 才能加载 .dds。\nZSTD：先生成 DDS，再额外压缩成 .dds.zstd，主要节省磁盘空间；需要搭配 Image Opt 后游戏才能读取。'"
                     :options="[
                       { label: 'DDS', value: 'dds' },
                       { label: 'ZSTD（Image Opt）', value: 'zstd' }
@@ -203,18 +203,18 @@
                       </button>
                     </div>
                   </div>
-                  <CommonSwitch v-if="isZstdMode" label="生成后清理旧 DDS" description="ZSTD 生成成功后删除同名 DDS；默认关闭，避免误删已有 DDS 贴图。"
+                  <CommonSwitch v-if="isZstdMode" label="生成后清理旧 DDS" description="ZSTD 生成后自动删除同名旧 DDS。"
                     v-model="config.zstd_clean_old_dds" @change="saveConfig" mini />
                   <CommonSwitch label="生成 Mipmap" description="Mipmap 是给远距离显示准备的缩小层级。开启后远看更平滑、闪烁更少，但生成时间和文件体积会增加一些。" v-model="config.generate_mipmaps"
                     @change="saveConfig" mini />
                 </section>
 
                 <section class="modal-section space-y-3 p-3">
-                  <h3 class="text-xs font-black uppercase tracking-widest text-text-main">缩放贴图节省显存</h3>
+                  <h3 class="text-xs font-black uppercase tracking-widest text-text-main">缩放选项（进一步节省显存）</h3>
                   <CommonSelect label="缩放比例" v-model.number="config.scale_factor" @change="saveConfig"
-                    description="优先按当前比例处理；如果某些图片不适合这个比例，会自动回退到更稳妥的比例，必要时保持原尺寸。"
+                    description="优先按当前选定的比例处理；如果某些图片不适合这个比例，会自动回退到更稳妥的比例，必要时保持原尺寸。"
                     :options="[
-                      { label: '不压缩', value: 1.0 },
+                      { label: '不缩放', value: 1.0 },
                       { label: '80%', value: 0.8 },
                       { label: '75%', value: 0.75 },
                       { label: '60%', value: 0.6 },
@@ -247,10 +247,10 @@
                     <button type="button" class="inline-flex min-w-0 items-center justify-center gap-1 rounded-md border border-accent-warning/25 px-2 py-1 text-xs font-bold text-accent-warning transition-colors hover:bg-accent-warning/10 disabled:cursor-not-allowed disabled:opacity-50"
                       :disabled="!toolStatus.available || isBusy" @click="handleCleanResidue" v-tooltip="residueCleanButtonLabel">
                       <BrushCleaning class="size-3.5 shrink-0" />
-                      <span class="truncate">{{ residueCleanButtonLabel }}</span>
-                    </button>
-                    <button type="button" class="inline-flex min-w-0 items-center justify-center gap-1 rounded-md border border-accent-danger/25 px-2 py-1 text-xs font-bold text-accent-danger transition-colors hover:bg-accent-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
-                      :disabled="isBusy" @click="handleCleanWithoutSource" v-tooltip="orphanCleanButtonLabel">
+                    <span class="truncate">{{ residueCleanButtonLabel }}</span>
+                  </button>
+                  <button type="button" class="inline-flex min-w-0 items-center justify-center gap-1 rounded-md border border-accent-danger/25 px-2 py-1 text-xs font-bold text-accent-danger transition-colors hover:bg-accent-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="isBusy" @click="handleCleanWithoutSource" v-tooltip="orphanCleanButtonLabel">
                       <Trash2 class="size-3.5 shrink-0" />
                       <span class="truncate">{{ orphanCleanButtonLabel }}</span>
                     </button>
@@ -297,7 +297,7 @@
               <div class="flex items-center justify-between border-b border-border-base/10 px-4 py-3">
                 <div>
                   <div class="text-sm font-black tracking-wider text-text-main">结果面板</div>
-                  <div class="text-xs text-text-dim">当前任务、最近 3 次生成历史和排除规则</div>
+                  <div class="text-xs text-text-dim">当前任务、最近 3 次任务历史和排除规则</div>
                 </div>
                 <button class="rounded-lg p-1.5 text-text-dim hover:bg-bg-overlay/10 hover:text-text-main" @click="textureStore.isResultDrawerOpen = false">
                   <X class="w-4 h-4" />
@@ -485,12 +485,12 @@ const isImageOptEnabled = computed(() => (
 ))
 const imageOptWarningText = computed(() => (
   isImageOptInstalled.value
-    ? 'ZSTD 贴图需要 Image Opt 在当前启用列表中生效；未启用时仍可生成，但游戏可能不会读取这些文件。'
-    : 'ZSTD 贴图需要 Image Opt 才能被游戏读取；未安装时仍可生成，但游戏会继续使用原图或其它可读输出。'
+    ? 'ZSTD 压缩贴图需要当前已启用 Image Opt 才会生效；未启用时仍可生成，但游戏可能不会读取这些文件。'
+    : 'ZSTD 压缩贴图需要 Image Opt 才能被游戏读取；未安装时仍可生成，但游戏会继续使用原图或其它可读取的输出。'
 ))
 const maxSizeDescription = computed(() => (
   isNoCompressionMode.value
-    ? '当前为不压缩，最小清晰度不会参与处理。'
+    ? '当前为不缩放，最小清晰度不会参与处理。'
     : '缩放时会尽量保证最短边不低于这个目标，避免图片被压得过小。'
 ))
 const cleanZstdMode = computed({
@@ -503,9 +503,9 @@ const cleanOutputFormat = computed(() => cleanZstdMode.value ? 'zstd' : 'dds')
 const cleanOutputLabel = computed(() => cleanZstdMode.value ? 'ZSTD' : 'DDS')
 const cleanButtonLabel = computed(() => `清理已生成 ${cleanOutputLabel.value}`)
 const residueCleanButtonLabel = computed(() => `清理卸载残留 ${cleanOutputLabel.value}`)
-const orphanCleanButtonLabel = computed(() => `删除无源 ${cleanOutputLabel.value}`)
+const orphanCleanButtonLabel = computed(() => `删除无对应源图 ${cleanOutputLabel.value}`)
 const cleanDescription = computed(() => (
-  `主清理会删除当前范围内存在同名 PNG 源图的 ${cleanOutputLabel.value}；卸载残留和无源输出需要单独触发。`
+  `主清理会删除当前范围内、且能找到同名 PNG 源图的已生成 ${cleanOutputLabel.value}；卸载残留和无对应源图的输出需要单独处理。`
 ))
 const resultHistory = computed(() => textureStore.resultHistory)
 const textureExclusions = computed(() => textureStore.textureExclusions)
@@ -517,7 +517,7 @@ const failedSearchQuery = ref('')
 const excludeModQuery = ref('')
 const excludeFileQuery = ref('')
 const pathExclusionInput = ref('')
-const textureOptHelpText = '把 PNG贴图提前转换成更适合游戏读取的 DDS 格式。通常能减少显存压力、加快加载，以及大型模组环境下更少的卡顿和爆显存风险；但会占据更多磁盘空间，生成需要一定时间。'+'\n\n缩放功能部分感谢贴吧老哥 ##贴吧用户_0CWt68M## 提供的帮助'
+const textureOptHelpText = '把 PNG 贴图预先生成为更适合游戏读取的 DDS 贴图输出。\nDDS 主要用来减少显存压力、加快加载；通常情况下，DDS 能在大型模组环境下减少卡顿和爆显存风险；代价是生成比较耗时，DDS 也往往会比源 PNG 更占磁盘空间。\nRimWorld 1.6 起游戏可原生读取 DDS，1.6 以前通常需要[[ Graphics Settings+ ]]才能加载。\n\nZSTD 会生成 .dds.zstd，本质上相当于把已经生成好的 DDS 再打包压缩一层，主要作用是进一步节省磁盘空间，但需要[[ Image Opt ]]才能被游戏读取。\n\n缩放功能部分感谢贴吧老哥 ##贴吧用户_0CWt68M## 提供的帮助'
 const textureListMinItemSize = computed(() => appStore.scalePx(101, 14))
 const viewModes = [
   { label: '综合视图', value: 'ALL' },
@@ -530,7 +530,7 @@ const sortOptions = [
   { label: '按总体积占比', value: 'impact' },
   { label: '按待生成数量', value: 'pending' },
   { label: '按预估显存', value: 'vram' },
-  { label: '按显存节省', value: 'vram_saved' },
+  { label: '按节省显存', value: 'vram_saved' },
   { label: '按名称', value: 'name' },
 ]
 
@@ -635,7 +635,7 @@ const progressPhaseLabel = computed(() => {
 const processModeLabel = computed(() => {
   if (config.value.process_mode === 'all_overwrite') return '完全覆盖生成'
   if (config.value.process_mode === 'all_skip_existing') return '增量生成'
-  return '只生成压缩贴图'
+  return '只处理需缩放图片'
 })
 
 const progressCountLabel = computed(() => {
@@ -848,7 +848,7 @@ const getTargetIds = () => {
 
 const warnImageOptIfNeeded = () => {
   if (isZstdMode.value && !isImageOptEnabled.value) {
-    toast.warning('当前启用列表未检测到 Image Opt。ZSTD 贴图仍会生成，但游戏可能不会读取这些文件。')
+    toast.warning('当前启用模组里未检测到 Image Opt。ZSTD 贴图仍会生成，但游戏可能不会读取这些文件。')
   }
 }
 
@@ -880,8 +880,8 @@ const handleCleanResidue = async () => {
 
 const handleCleanWithoutSource = async () => {
   const ok = await confirmStore.confirmAction(
-    `删除无源 ${cleanOutputLabel.value}`,
-    `将删除当前范围内没有同名 PNG 源图的 ${cleanOutputLabel.value}。部分模组会直接使用纯 DDS 贴图，这类文件可能被误删；建议确认目标范围后再继续。`,
+    `删除无对应源图 ${cleanOutputLabel.value}`,
+    `将删除当前范围内找不到同名 PNG 源图的 ${cleanOutputLabel.value} 输出文件。部分模组本来就会直接提供 DDS 或 ZSTD 贴图，这类文件也可能被误删；建议确认目标范围后再继续。`,
     {
       type: 'error',
       confirmText: '确认删除',
@@ -938,8 +938,8 @@ const handleCleanSingleModWithoutSource = async (item, outputFormat = cleanOutpu
   if (!item?.mod_path) return
   const outputLabel = outputFormat === 'zstd' ? 'ZSTD' : 'DDS'
   const ok = await confirmStore.confirmAction(
-    `删除无源 ${outputLabel}`,
-    `将删除「${item.mod_name || '当前模组'}」中没有同名 PNG 源图的 ${outputLabel}。部分模组会直接使用纯 DDS 贴图，这类文件可能被误删。`,
+    `删除无对应源图 ${outputLabel}`,
+    `将删除「${item.mod_name || '当前模组'}」中找不到同名 PNG 源图的 ${outputLabel} 输出文件。部分模组本来就会直接提供 DDS 或 ZSTD 贴图，这类文件也可能被误删。`,
     { type: 'error', confirmText: '确认删除', cancelText: '取消' },
   )
   if (!ok) return
@@ -964,13 +964,13 @@ const openTextureModMenu = (event, item) => {
       ],
     },
     {
-      label: '删除无源',
+      label: '删除无对应源图',
       icon: Trash2,
       level: 'danger',
       disabled: isBusy.value || !item?.mod_path,
       children: [
-        { label: '只删除无源 DDS', icon: Trash2, level: 'danger', action: () => handleCleanSingleModWithoutSource(item, 'dds') },
-        { label: '只删除无源 ZSTD', icon: Trash2, level: 'danger', action: () => handleCleanSingleModWithoutSource(item, 'zstd') },
+        { label: '只删除无对应源图 DDS', icon: Trash2, level: 'danger', action: () => handleCleanSingleModWithoutSource(item, 'dds') },
+        { label: '只删除无对应源图 ZSTD', icon: Trash2, level: 'danger', action: () => handleCleanSingleModWithoutSource(item, 'zstd') },
       ],
     },
     { divider: true },

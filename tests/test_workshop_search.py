@@ -467,6 +467,7 @@ class TestWorkshopSearch(unittest.TestCase):
         self.assertEqual(row.stats["votes_down"], 1)
         self.assertEqual(row.stats["vote_score"], 0.9)
         self.assertEqual(row.stats["num_comments_public"], 7)
+        self.assertEqual(normalized["translations"], {})
         self.assertEqual(row.translations, {})
         self.assertEqual(row.status["visibility"], 0)
         self.assertEqual(row.status["flags"], 8)
@@ -840,6 +841,39 @@ class TestWorkshopSearch(unittest.TestCase):
         API._attach_workshop_translation_meta(api, item, cached_translation)
 
         self.assertEqual(item["translations"], cached_translation)
+
+    def test_translation_meta_ignores_detail_translations_when_cache_exists(self):
+        cached_translation = {"zh-CN": {"title": "本地译文", "description": "本地说明"}}
+        api = object.__new__(API)
+        api.translation_mgr = TranslationManager(None)
+        item = {
+            "workshop_id": "1111111111",
+            "title": "Alpha Tools",
+            "description": "English detail",
+            "translations": {
+                "zh-CN": {"title": "外部译文", "description": "外部说明"},
+                "ja": {"title": "外部日文", "description": "外部说明"},
+            },
+        }
+
+        API._attach_workshop_translation_meta(api, item, cached_translation)
+
+        self.assertEqual(item["translations"], cached_translation)
+        self.assertNotIn("ja", item["translations"])
+
+    def test_translation_meta_does_not_trust_detail_translations_without_cache(self):
+        api = object.__new__(API)
+        api.translation_mgr = TranslationManager(None)
+        item = {
+            "workshop_id": "1111111111",
+            "title": "Alpha Tools",
+            "description": "English detail",
+            "translations": {"zh-CN": {"title": "外部译文", "description": "外部说明"}},
+        }
+
+        API._attach_workshop_translation_meta(api, item)
+
+        self.assertEqual(item["translations"], {})
 
     def test_account_and_creator_operations_validate_required_params(self):
         with patch.object(SteamWebAPI, "_get_steam_web_api_key", return_value=""):

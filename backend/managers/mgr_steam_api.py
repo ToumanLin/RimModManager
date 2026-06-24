@@ -567,7 +567,7 @@ class SteamWebAPI:
             "previews": previews,
             "kv_tags": cls._extract_kv_tag_items(item),
             "playtime_stats": item.get("playtime_stats") or None,
-            "translations": item.get("translations") if isinstance(item.get("translations"), dict) else {},
+            "translations": {},
             "url": cls._build_workshop_url(workshop_id),
             "source": "steam_legacy" if source == "legacy" else "steam_online",
         }

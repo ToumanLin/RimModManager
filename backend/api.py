@@ -5823,14 +5823,9 @@ class API:
     def _attach_workshop_translation_meta(self, detail: dict[str, Any] | None, cached_translations: dict[str, Any] | None = None) -> dict[str, Any] | None:
         if not isinstance(detail, dict):
             return detail
-        # Steam 在线接口会返回空 translations 对象；这里必须让本地缓存译文优先，
-        # 否则搜索列表会在已有译文时仍显示原文，直到详情页重新合并缓存。
-        detail_translations = detail.get("translations") if isinstance(detail.get("translations"), dict) else {}
+        # translations 只能来自本地缓存。Steam 返回或前端回传的 detail.translations
+        # 属于展示态数据，不能反向参与缓存合并。
         translations = dict(cached_translations) if isinstance(cached_translations, dict) else None
-        if translations is None:
-            translations = dict(detail_translations) if detail_translations else None
-        elif detail_translations:
-            translations.update(detail_translations)
         if translations is None:
             workshop_id = normalize_workshop_id(detail.get("workshop_id") or "", digits_only=True, min_length=6, max_length=20)
             row = WorkshopOnlineCache.get_or_none(WorkshopOnlineCache.workshop_id == workshop_id) if workshop_id else None

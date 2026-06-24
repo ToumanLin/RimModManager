@@ -373,7 +373,7 @@
               <div class="flex flex-wrap gap-1 mb-2">
                 <!-- 现有标签列表 -->
                 <TransitionGroup name="list">
-                  <span v-for="tag in userTags" :key="tag"
+                  <span v-for="tag in sortedUserTags" :key="tag"
                     class="px-1 py-0.5 rounded truncate text-shadow-lg/20 bg-accent-primary/20 text-accent-primary text-xs border border-accent-primary/20 flex items-center gap-1 group animate-in">
                     {{ tag }}
                     <button @click="removeTag(tag)" v-tooltip="'移除标签'" class="w-3 h-3 flex items-center justify-center rounded-full hover:bg-accent-danger hover:text-text-main transition-colors opacity-50 group-hover:opacity-100">
@@ -384,12 +384,12 @@
 
                 <!-- 添加标签输入框 (带自定义下拉建议) -->
                 <div class="relative flex-1 flex" :ref="el => tagInputRef = el">
-                  <input type="text" v-model="tagInput" @focus="showTagSuggest = true" placeholder="+"
+                  <input type="text" v-model="tagInput" @focus="openTagSuggest" @input="openTagSuggest" placeholder="+"
                     @keydown.enter.prevent="confirmAddTag" @keydown.up.prevent="navTag(-1)" @keydown.down.prevent="navTag(1)"
-                    @keydown.esc="showTagSuggest = false" v-tooltip="'添加新标签'"
+                    @keydown.esc="closeTagSuggest" v-tooltip="'添加新标签'"
                     class="input-glass w-5 rounded px-1 py-0.5 text-center text-xs text-text-main placeholder:text-text-disabled focus:flex-1 focus:w-24 focus:outline-none"
                   />
-                  <FixedPopover :is-open="showTagSuggest && filteredKnownTags.length > 0" :trigger-ref="tagInputRef" @request-close="showTagSuggest = false">
+                  <FixedPopover :is-open="showTagSuggest && filteredKnownTags.length > 0" :trigger-ref="tagInputRef" @request-close="closeTagSuggest">
                       <!-- 标签建议下拉框 -->
                       <div class="popover-surface z-50 flex max-h-40 flex-col items-center gap-0.5 overflow-y-auto rounded-lg p-1">
                         <button v-for="(t, idx) in filteredKnownTags" :key="t"  @click="addTag(t)"
@@ -560,6 +560,7 @@ import FixedPopover from '../../shared/components/popover/FixedPopover.vue'
 import { useProfileStore } from '../profiles/profileStore'
 import { ColorPicker } from 'vue3-colorpicker'
 import { imageViewerOptions } from '../../shared/lib/domEffects'
+import { sortByDisplayName, sortTextByName } from '../../shared/lib/common'
 import { useToast } from 'vue-toastification'
 
 const appStore = useAppStore()
@@ -594,7 +595,7 @@ const isUsingAI = ref(false)
 const tagInput = ref('')
 const showTagSuggest = ref(false)
 const tagInputRef = ref(null)
-const tagNavIndex = ref(0) // 键盘导航索引
+const tagNavIndex = ref(-1) // -1 表示当前只是展示建议，还没有显式选中某一项
 // === 分组管理逻辑 ===
 const showGroupDrop = ref(false)
 const groupDropRef = ref(null)
@@ -656,21 +657,28 @@ watch(selectedMod, (newVal) => {
   }
 }, { immediate: true })
 
+const sortedUserTags = computed(() => sortTextByName(userTags.value))
+
 // 计算可用分组 (排除已加入的)
 const availableGroups = computed(() => {
   const search = groupSearch.value.toLowerCase().trim()
   const currentGroupIds = new Set(userGroups.value.map(g => g.group_id))
 
-  return groupStore.groupList
-    .filter(g => !currentGroupIds.has(g.group_id)) // 排除已加入
-    .filter(g => g.name.toLowerCase().includes(search)) // 搜索过滤
+  return sortByDisplayName(
+    groupStore.groupList
+      .filter(g => !currentGroupIds.has(g.group_id)) // 排除已加入
+      .filter(g => g.name.toLowerCase().includes(search)), // 搜索过滤
+    group => group?.name
+  )
 })
 // 计算过滤后的建议标签 (排除已存在的)
 const filteredKnownTags = computed(() => {
   const input = tagInput.value.toLowerCase().trim()
-  return modStore.allModTags
-    .filter(t => !userTags.value.includes(t)) // 排除已添加
-    .filter(t => t.toLowerCase().includes(input)) // 模糊匹配
+  return sortTextByName(
+    modStore.allModTags
+      .filter(t => !userTags.value.includes(t)) // 排除已添加
+      .filter(t => t.toLowerCase().includes(input)) // 模糊匹配
+  )
     .slice(0, 8) // 最多显示8个
 })
 // 辅助计算：格式化描述（换行转为 <br>）
@@ -792,7 +800,10 @@ const versionIsCompatible = (version) => {
   // 转为浮点数比较版本号，返回 true 表示兼容，false 表示不兼容
   return parseFloat(version) >= parseFloat(game_version)
 }
-const userGroups = computed(() => {return groupStore.takeGroupsByModId(selectedMod.value?.package_id);})
+const userGroups = computed(() => sortByDisplayName(
+  groupStore.takeGroupsByModId(selectedMod.value?.package_id),
+  group => group?.name
+))
 const toggleGroupDrop = async () => {
   showGroupDrop.value = !showGroupDrop.value
   if (showGroupDrop.value) {
@@ -813,15 +824,23 @@ const addGroup = (groupId) => {
 const removeModInGroup =(groupId, modId) => {
   groupStore.groupRemoveMods(groupId, [modId]);
 }
+const openTagSuggest = () => {
+  showTagSuggest.value = true
+  tagNavIndex.value = -1
+}
+const closeTagSuggest = () => {
+  showTagSuggest.value = false
+  tagNavIndex.value = -1
+}
 // 添加标签
 const addTag = (tag) => {
-  if (tag && !userTags.value.includes(tag)) {
-    userTags.value.push(tag)
+  const nextTag = String(tag ?? '').trim()
+  if (nextTag && !userTags.value.includes(nextTag)) {
+    userTags.value.push(nextTag)
     saveUserData()
   }
   tagInput.value = ''
-  showTagSuggest.value = false
-  tagNavIndex.value = 0
+  closeTagSuggest()
 }
 // 移除标签
 const removeTag = (tag) => {
@@ -830,8 +849,8 @@ const removeTag = (tag) => {
 }
 // 确认添加 (回车键)
 const confirmAddTag = () => {
-  // 如果有建议项被选中，优先使用建议项
-  if (showTagSuggest.value && filteredKnownTags.value.length > 0) {
+  // 只有用户显式用方向键选中过建议项时，回车才采纳建议；否则优先保留原始输入。
+  if (showTagSuggest.value && tagNavIndex.value >= 0 && filteredKnownTags.value.length > tagNavIndex.value) {
     addTag(filteredKnownTags.value[tagNavIndex.value])
   } else if (tagInput.value.trim()) {
     // 否则创建新标签
@@ -840,9 +859,13 @@ const confirmAddTag = () => {
 }
 // 键盘导航
 const navTag = (step) => {
-  if (!showTagSuggest.value) return
+  if (!showTagSuggest.value) showTagSuggest.value = true
   const len = filteredKnownTags.value.length
   if (len === 0) return
+  if (tagNavIndex.value < 0) {
+    tagNavIndex.value = step > 0 ? 0 : len - 1
+    return
+  }
   tagNavIndex.value = (tagNavIndex.value + step + len) % len
 }
 const persistSignColor = useDebounceFn((packageId, color) => {

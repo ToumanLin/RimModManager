@@ -195,7 +195,7 @@ import { useGroupStore } from './stores/groupStore'
 import { useContextMenuStore } from '../../shared/components/context-menu/contextMenuStore'
 import { useCommandStore } from '../../shared/commands/commandStore'
 import { DEFAULT_ACCENT_HEX, hexToRgba, hexToRgb, normalizeHexColor } from '../../shared/lib/color'
-import { extractSectionHeaderTitle, isSectionHeaderTitle, toast } from '../../shared/lib/common'
+import { extractSectionHeaderTitle, isSectionHeaderTitle, sortByDisplayName, sortTextByName, toast } from '../../shared/lib/common'
 import { normalizePackageId, normalizePackageToken } from './lib/modIdentity'
 import { X, FolderInput, Tag, Group, Palette, BetweenHorizontalStart, Redo2, ChevronDown, ChevronsDown, ChevronUp, ChevronsUp, ChessPawn, MessageSquareHeart, Download, Eraser, FolderMinus, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight, Lock, SquaresExclude, Package, ChevronsDownUp, ChevronsUpDown } from 'lucide-vue-next';
 
@@ -504,6 +504,8 @@ const handleContextMenu = async (event) => {
     ? stats.color
     : (modData.value?.sign_color || null)
   const pickerColor = normalizeHexColor(selectedColor, DEFAULT_ACCENT_HEX)
+  const sortedTagNames = sortTextByName(modStore.allModTags)
+  const sortedGroups = sortByDisplayName(groupStore.groupList, group => group?.name)
   // 移动菜单
   const moveMenu = props.moveMenu
   const splitGroupOptions = moveMenu?.splitGroupOptions || []
@@ -525,12 +527,12 @@ const handleContextMenu = async (event) => {
   const commnMenuItems = [
     { commandId: 'mods.toggleSelectedActive', args: { modIds: [...selectedIds] }, labelOverride: (isActive.value?'停用':'启用') + selectedCountStr, icon: isActive.value? CircleSlash2:CircleCheckBig },
     { label: '标签管理'+ selectedCountStr , icon: Tag, disabled: !modStore.allModTags?.length, children: [{type: 'grid', columns: 5, label: '批量分配标签',
-      children: modStore.allModTags.map(tag => ({ state: stats.tags[tag] || null,
+      children: sortedTagNames.map(tag => ({ state: stats.tags[tag] || null,
         label: '#'+tag, action: () => modStore.selectModsTag(tag)
       }))}]
     },
     { label: '分组管理'+ selectedCountStr, icon: Group, disabled: !groupStore.groupList?.length, children: [{type: 'grid', columns: 4, label: '批量加入分组',
-      children: groupStore.groupList.map(group => ({ state: stats.groups[group.group_id] || null,
+      children: sortedGroups.map(group => ({ state: stats.groups[group.group_id] || null,
         label: group.name, color: group.color, bgColor: hexToRgba(group.color, 0.1), action: () => modStore.selectModsGroup(group.group_id)
       }))}]
     },
