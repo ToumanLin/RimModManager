@@ -6,35 +6,35 @@
       <!-- 遮罩 Loading -->
       <div v-if="workspaceStore.isFetching && !workspaceStore.librariesMods.local.length" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-bg-deep/50 backdrop-blur-sm">
         <div class="size-10 border-4 border-accent-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-        <span class="text-sm font-bold text-accent-primary animate-pulse">正在扫描所有存储位置...</span>
+        <span class="text-sm font-bold text-accent-primary animate-pulse">{{ t('workspace.library.scanningAll') }}</span>
       </div>
       <!-- 左：Steam工坊目录 (Workshop) -->
-      <MatrixColumn v-if="hasWorkshopLibrary" title="Steam 创意工坊" iconColor="text-accent-primary" storeType="workshop" data-tour="workspace-workshop-list"
+      <MatrixColumn v-if="hasWorkshopLibrary" :title="t('workspace.library.workshopTitle')" iconColor="text-accent-primary" storeType="workshop" data-tour="workspace-workshop-list"
         :mods="workspaceStore.librariesMods.workshop" @open-timeline="handleOpenTimeline"
-        tooltip="由 Steam 客户端管理和自动更新的模组。" />
+        :tooltip="t('workspace.library.workshopTip')" />
       <!-- 中：管理器目录 (SteamCMD) -->
-      <MatrixColumn title="管理器 (SteamCMD)" iconColor="text-accent-success" storeType="self" data-tour="workspace-self-list"
+      <MatrixColumn :title="t('workspace.library.managerTitle')" iconColor="text-accent-success" storeType="self" data-tour="workspace-self-list"
         :mods="workspaceStore.librariesMods.self" @open-timeline="handleOpenTimeline"
         :disabled="managerColumnDisabled"
-        tooltip="由 RimModManager 通过SteamCMD/Git下载管理的模组库。" />
+        :tooltip="t('workspace.library.managerTip')" />
       <!-- 中：游戏本地目录 (Local) -->
-      <MatrixColumn title="游戏本地模组" iconColor="text-accent-warn" storeType="local"
+      <MatrixColumn :title="t('workspace.library.localTitle')" iconColor="text-accent-warn" storeType="local"
         :mods="localMatrixMods" v-model:show-official-local-mods="showOfficialLocalMods" @open-timeline="handleOpenTimeline"
-        tooltip="游戏本体所在的 Mods 目录。此处的变动会直接影响游戏。" />
+        :tooltip="t('workspace.library.localTip')" />
     </div>
 
     <!-- 顶部控制栏 -->
     <div class="modal-footer flex h-12 shrink-0 items-center justify-between px-6">
       <div class="text-xs font-mono text-text-disabled uppercase tracking-widest">
-        总计数量: {{ visibleTotalCount }} 
-        | 总计大小：{{ formatFileSize(visibleTotalSize) }}
-        | 状态: {{ workspaceStore.isFetching ? '扫描中...' : '就绪' }}
+        {{ t('workspace.library.totalCount', { count: visibleTotalCount }) }}
+        | {{ t('workspace.library.totalSize', { size: formatFileSize(visibleTotalSize) }) }}
+        | {{ t('workspace.library.status', { status: workspaceStore.isFetching ? t('workspace.library.scanning') : t('workspace.library.ready') }) }}
       </div>
-      <button @click="workspaceStore.fetchLibrariesMods" :disabled="workspaceStore.isFetching" v-tooltip="'重新读取当前三域矩阵数据'"
+      <button @click="workspaceStore.fetchLibrariesMods" :disabled="workspaceStore.isFetching" v-tooltip="t('workspace.library.refreshTip')"
         class="flex items-center gap-2 px-3 py-2 bg-bg-overlay/5 hover:bg-bg-overlay/10 rounded-lg text-xs font-bold transition-all"
         :class="{'opacity-50 cursor-not-allowed': workspaceStore.isFetching}">
         <RefreshCw class="size-3.5" :class="{'animate-spin': workspaceStore.isFetching}" />
-        刷新数据
+        {{ t('workspace.library.refreshData') }}
       </button>
     </div>
 
@@ -52,6 +52,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RefreshCw } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 import MatrixColumn from './MatrixColumn.vue'
@@ -65,6 +66,7 @@ const toast = useToast()
 const workspaceStore = useWorkspaceStore()
 const appStore = useAppStore()
 const profileStore = useProfileStore()
+const { t } = useI18n()
 const hasWorkshopLibrary = computed(() => !!appStore.settings.workshop_mods_path)
 const normalizePath = (path = '') => String(path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
 const managerColumnDisabled = computed(() => {
@@ -110,11 +112,11 @@ const handleOpenTimeline = (mod) => {
     return workspaceStore.openTimelineGithub(mod)
   }
   if (mod.store === 'local') {
-    toast.warning("该 Mod 位于游戏本地目录中，无法获取变动轨迹")
+    toast.warning(t('workspace.library.localTimelineUnavailable'))
     return
   }
   if (!mod.workshop_id) {
-    toast.warning("该 Mod 没有绑定工坊 ID，无法获取变动轨迹")
+    toast.warning(t('workspace.library.missingWorkshopId'))
     return
   }
   return workspaceStore.openTimeline(mod.workshop_id, mod.name || mod.package_id, (mod.store === 'self'))

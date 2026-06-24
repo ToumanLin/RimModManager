@@ -3,7 +3,7 @@
     <div class="flex h-8 items-center justify-between border-b border-border-base/5 bg-accent-danger/10 px-3">
       <span class="flex items-center gap-1 text-sm font-bold uppercase tracking-wider text-accent-danger">
         <div class="mr-1 h-1.5 w-1.5 rounded-full bg-accent-danger shadow-lg shadow-accent-danger"></div>
-        已禁用
+        {{ t('disabledMods.title') }}
       </span>
       <span class="rounded bg-bg-inset/70 px-2 py-0.5 text-xs text-accent-danger">
         {{ displayMods.length }} / {{ modStore.disabledMods.length }}
@@ -11,7 +11,7 @@
     </div>
 
     <div class="flex flex-col gap-2 bg-bg-deep/20 px-2 py-2 shadow-xl">
-      <input v-model="searchQuery" placeholder="筛选名称、包名、工坊 ID、路径..."
+      <input v-model="searchQuery" :placeholder="t('disabledMods.searchPlaceholder')"
         class="w-full rounded-lg border border-border-base/10 bg-bg-inset px-3 py-1.5 text-xs text-text-main outline-none transition-colors focus:border-accent-danger" />
       <div class="flex items-center justify-end gap-2">
         <CommonSelect v-model="sourceFilter" mini :options="sourceOptions" />
@@ -21,7 +21,7 @@
           :animate="{ rotateX: isSortDesc ? 0 : 180 }"
           :transition="{ type: 'spring', stiffness: 300, damping: 20 }"
           @click="isSortDesc = !isSortDesc"
-          v-tooltip="isSortDesc ? '切换为升序排列' : '切换为降序排列'">
+          v-tooltip="isSortDesc ? t('disabledMods.sortAscTip') : t('disabledMods.sortDescTip')">
           <span v-if="isSortDesc" class="rotate-x-180">
             <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="M11 12h4"/><path d="M11 16h7"/><path d="M11 20h10"/></svg>
           </span>
@@ -63,10 +63,10 @@
                     <svg class="size-6 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                   </div>
                   <div class="absolute -left-1 -top-2 flex items-center gap-0.5">
-                    <span class="flex items-center justify-center rounded-sm bg-glass-medium/70" v-tooltip="`类型：${getModType(displayMods[virtualRow.index])}`">
+                    <span class="flex items-center justify-center rounded-sm bg-glass-medium/70" v-tooltip="t('disabledMods.typeTooltip', { type: getModType(displayMods[virtualRow.index]) })">
                       <component :is="getTypeIcon(displayMods[virtualRow.index])" class="size-4" />
                     </span>
-                    <span class="flex items-center justify-center rounded-sm bg-glass-medium/70" v-tooltip="`储存位置：${getSourceLabel(displayMods[virtualRow.index])}`">
+                    <span class="flex items-center justify-center rounded-sm bg-glass-medium/70" v-tooltip="t('disabledMods.sourceTooltip', { source: getSourceLabel(displayMods[virtualRow.index]) })">
                       <IconSteam v-if="isWorkshopMod(displayMods[virtualRow.index])" class="size-4 fill-current" />
                       <IconSelf v-else-if="isManagerMod(displayMods[virtualRow.index])" class="size-4 grayscale-20" />
                       <Folder v-else class="size-4" />
@@ -96,7 +96,7 @@
       </div>
 
       <div v-else class="absolute inset-1 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border-base/18 bg-bg-deep/90 text-xs text-text-subtle/70">
-        <span>{{ modStore.disabledMods.length ? '没有符合筛选条件的禁用 Mod' : '当前环境没有已禁用 Mod' }}</span>
+        <span>{{ modStore.disabledMods.length ? t('disabledMods.noMatches') : t('disabledMods.empty') }}</span>
       </div>
     </div>
   </div>
@@ -104,6 +104,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { Motion } from 'motion-v'
 import { FlagOff, Folder, FolderInput, LockOpen, Trash2 } from 'lucide-vue-next'
@@ -117,6 +118,7 @@ import { formatFileSize } from '../../shared/lib/format'
 const appStore = useAppStore()
 const menuStore = useContextMenuStore()
 const modStore = useModStore()
+const { t } = useI18n()
 
 const searchQuery = ref('')
 const sourceFilter = ref('all')
@@ -125,18 +127,18 @@ const isSortDesc = ref(true)
 const selectedPathHashes = ref([])
 const scrollRef = ref(null)
 
-const sourceOptions = [
-  { label: '全部来源', value: 'all' },
-  { label: '游戏本地', value: 'local' },
-  { label: '创意工坊', value: 'workshop' },
-  { label: '管理器库', value: 'self' },
-]
-const sortOptions = [
-  { label: '按修改时间', value: 'mtime' },
-  { label: '按创建时间', value: 'ctime' },
-  { label: '按文件体积', value: 'size' },
-  { label: '按名称 A-Z', value: 'name' },
-]
+const sourceOptions = computed(() => [
+  { label: t('disabledMods.sources.all'), value: 'all' },
+  { label: t('disabledMods.sources.local'), value: 'local' },
+  { label: t('disabledMods.sources.workshop'), value: 'workshop' },
+  { label: t('disabledMods.sources.manager'), value: 'self' },
+])
+const sortOptions = computed(() => [
+  { label: t('disabledMods.sort.mtime'), value: 'mtime' },
+  { label: t('disabledMods.sort.ctime'), value: 'ctime' },
+  { label: t('disabledMods.sort.size'), value: 'size' },
+  { label: t('disabledMods.sort.name'), value: 'name' },
+])
 const getStoreType = (mod = {}) => {
   const domain = String(mod?.runtime_domain || mod?.store || '').toLowerCase()
   if (domain === 'workshop') return 'workshop'
@@ -148,8 +150,12 @@ const isManagerMod = (mod = {}) => getStoreType(mod) === 'self'
 const getSourceLabel = (mod = {}) => {
   const domain = String(mod?.runtime_domain || mod?.store || '').toLowerCase()
   if (domain === 'dlc') return 'DLC'
-  if (domain === 'tool') return '管理器库'
-  return SOURCE_TYPE_MAP[getStoreType(mod)] || domain || '未知来源'
+  if (domain === 'tool') return t('disabledMods.sources.manager')
+  return {
+    local: t('disabledMods.sources.local'),
+    workshop: t('disabledMods.sources.workshop'),
+    self: t('disabledMods.sources.manager'),
+  }[getStoreType(mod)] || SOURCE_TYPE_MAP[getStoreType(mod)] || domain || t('disabledMods.unknownSource')
 }
 const getModType = (mod = {}) => modStore.displayModType(mod)
 const getTypeIcon = (mod = {}) => MOD_TYPE_ICON_MAP[getModType(mod)] || MOD_TYPE_ICON_MAP.Unknown
@@ -159,7 +165,7 @@ const getLatestSupportedVersion = (mod = {}) => {
 }
 const formatTime = (ts) => {
   if (!ts) return 'N/A'
-  return new Date(ts).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return new Date(ts).toLocaleDateString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 const matchesSearch = (mod = {}) => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -182,7 +188,7 @@ const displayMods = computed(() => {
   const list = (modStore.disabledMods || [])
     .filter(mod => mod?.path_hash && matchesSearch(mod) && matchesSource(mod))
     .sort((left, right) => {
-      if (sortBy.value === 'name') return String(left.name || left.package_id || '').localeCompare(String(right.name || right.package_id || ''), 'zh-CN')
+      if (sortBy.value === 'name') return String(left.name || left.package_id || '').localeCompare(String(right.name || right.package_id || ''), globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN')
       if (sortBy.value === 'size') return Number(right.file_size || 0) - Number(left.file_size || 0)
       if (sortBy.value === 'ctime') return Number(right.file_create_time || 0) - Number(left.file_create_time || 0)
       return Number(right.file_modify_time || 0) - Number(left.file_modify_time || 0)
@@ -238,14 +244,14 @@ const handleContextMenu = (event, targetMod) => {
   }
 
   const selectedMods = getSelectedMods()
-  const selectedCountText = selectedMods.length > 1 ? ` (${selectedMods.length} 项)` : ''
+  const selectedCountText = selectedMods.length > 1 ? t('disabledMods.selectedCount', { count: selectedMods.length }) : ''
   const hasPath = selectedMods.some(mod => !!mod.path)
   const hasWorkshop = selectedMods.some(mod => !!mod.workshop_id)
   menuStore.open(event, [
-    { label: '解除禁用' + selectedCountText, icon: LockOpen, level: 'success', action: enableSelectedMods },
-    { label: '打开文件夹', icon: FolderInput, disabled: !targetMod.path, action: () => appStore.openPath(targetMod.path) },
-    { label: '取消订阅' + selectedCountText, icon: FlagOff, level: 'danger', disabled: !hasWorkshop, action: unsubscribeSelectedMods },
-    { label: '删除文件' + selectedCountText, icon: Trash2, level: 'danger', disabled: !hasPath, action: deleteSelectedMods },
+    { label: t('disabledMods.menu.enable') + selectedCountText, icon: LockOpen, level: 'success', action: enableSelectedMods },
+    { label: t('disabledMods.menu.openFolder'), icon: FolderInput, disabled: !targetMod.path, action: () => appStore.openPath(targetMod.path) },
+    { label: t('disabledMods.menu.unsubscribe') + selectedCountText, icon: FlagOff, level: 'danger', disabled: !hasWorkshop, action: unsubscribeSelectedMods },
+    { label: t('disabledMods.menu.deleteFiles') + selectedCountText, icon: Trash2, level: 'danger', disabled: !hasPath, action: deleteSelectedMods },
   ])
 }
 

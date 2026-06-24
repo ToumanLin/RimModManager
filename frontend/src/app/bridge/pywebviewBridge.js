@@ -11,6 +11,7 @@ const getConfiguredApiBaseUrl = () => {
 }
 
 const callBridgeEndpoint = async (baseUrl, path, payload = null, options = {}) => {
+  const url = `${baseUrl}${path}`
   const requestInit = {
     method: options.method || 'POST',
     headers: {},
@@ -25,12 +26,35 @@ const callBridgeEndpoint = async (baseUrl, path, payload = null, options = {}) =
     requestInit.body = JSON.stringify(payload)
   }
 
-  const response = await fetch(`${baseUrl}${path}`, requestInit)
+  if (typeof fetch !== 'function') {
+    return callBridgeEndpointWithXhr(url, requestInit)
+  }
+
+  const response = await fetch(url, requestInit)
   if (!response.ok) {
     throw new Error(`Bridge request failed: ${response.status}`)
   }
   return response.json()
 }
+
+const callBridgeEndpointWithXhr = (url, requestInit = {}) => new Promise((resolve, reject) => {
+  const xhr = new XMLHttpRequest()
+  xhr.open(requestInit.method || 'GET', url, true)
+  Object.entries(requestInit.headers || {}).forEach(([key, value]) => xhr.setRequestHeader(key, value))
+  xhr.onload = () => {
+    if (xhr.status < 200 || xhr.status >= 300) {
+      reject(new Error(`Bridge request failed: ${xhr.status}`))
+      return
+    }
+    try {
+      resolve(JSON.parse(xhr.responseText || '{}'))
+    } catch (error) {
+      reject(error)
+    }
+  }
+  xhr.onerror = () => reject(new Error('Bridge request failed'))
+  xhr.send(requestInit.body || null)
+})
 
 const createApiProxy = (baseUrl) => new Proxy({}, {
   get(_target, propKey) {
@@ -59,6 +83,7 @@ const registerCloseHooks = (baseUrl, clientId) => {
       navigator.sendBeacon(`${baseUrl}/api/session/close`, new Blob([body], { type: 'application/json' }))
       return
     }
+    if (typeof fetch !== 'function') return
     fetch(`${baseUrl}/api/session/close`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -104,6 +129,7 @@ const startHeartbeat = (baseUrl, clientId) => {
 }
 
 const connectEventStream = (baseUrl, clientId) => {
+  if (typeof EventSource !== 'function') return
   if (eventStream) {
     eventStream.close()
   }
@@ -122,8 +148,9 @@ const connectEventStream = (baseUrl, clientId) => {
 
 export const setupPywebviewBridge = async () => {
   if (window.pywebview?.api) {
-    window.__RMM_RUNTIME_MODE__ = 'desktop'
-    return 'desktop'
+    const mode = window.__RMM_API_BASE_URL__ ? 'browser' : 'desktop'
+    window.__RMM_RUNTIME_MODE__ = mode
+    return mode
   }
 
   const baseUrl = getConfiguredApiBaseUrl()
@@ -161,4 +188,10 @@ export const setupPywebviewBridge = async () => {
 
   window.dispatchEvent(new Event('pywebviewready'))
   return 'browser'
+}
+
+export const ensurePywebviewBridge = async () => {
+  if (window.pywebview?.api) return true
+  const mode = await setupPywebviewBridge()
+  return !!mode && !!window.pywebview?.api
 }

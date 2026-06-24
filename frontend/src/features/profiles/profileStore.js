@@ -7,6 +7,7 @@ import { useGroupStore } from '../mod/stores/groupStore'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 import { toast, checkResult } from '../../shared/lib/common'
 import { useOrderStore } from '../load-order/orderStore'
+import { t } from '../../app/i18n'
 
 
 export const useProfileStore = defineStore('profile', () => {
@@ -63,7 +64,7 @@ export const useProfileStore = defineStore('profile', () => {
 
   const buildSteamShortcutProgressMessage = (steps) => (
     [
-      'Steam 快捷方式创建步骤：',
+      t('profiles.steamShortcutSteps'),
       ...steps.map(step => `${step.done ? '√' : step.active ? '&gt;' : '-'} ${step.label}`)
     ].join('<br>')
   )
@@ -72,7 +73,7 @@ export const useProfileStore = defineStore('profile', () => {
   const fetchProfiles = async () => {
     if (!window.pywebview) return
     const res = await window.pywebview.api.profiles_get()
-    if (checkResult(res, '获取环境列表')) {
+    if (checkResult(res, t('profiles.fetchProfiles'))) {
       profiles.value = res.data
     }
   }
@@ -82,7 +83,7 @@ export const useProfileStore = defineStore('profile', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.profile_create(data, copyCurrentData)
-      if (checkResult(res, `创建环境 "${data.name}"`,true)) {
+      if (checkResult(res, t('profiles.createProfile', { name: data.name }),true)) {
         await fetchProfiles()
         return true
       }
@@ -101,7 +102,7 @@ export const useProfileStore = defineStore('profile', () => {
       const orderStore = useOrderStore()
       await orderStore.saveInactiveOrder();  // 先保存停用列表顺序
       const res = await window.pywebview.api.profile_activate(profileId)
-      if (checkResult(res, '切换环境')) {
+      if (checkResult(res, t('profiles.switchProfile'))) {
         currentProfileId.value = res?.data?.profile?.id || profileId
         // 【关键逻辑】环境切换后，重置并刷新所有数据
         const groupStore = useGroupStore()
@@ -115,7 +116,7 @@ export const useProfileStore = defineStore('profile', () => {
         if (appStore.settings.enable_auto_scan !== false && activeContext.value?.is_healthy !== false) {
           await appStore.requestModScan()
         }
-        toast.success(`已切换至环境: ${currentProfile.value?.name || currentProfileId.value}`)
+        toast.success(t('profiles.switchedProfile', { name: currentProfile.value?.name || currentProfileId.value }))
       } else {
         const fallbackProfileId = String(res?.data?.fallback_profile_id || '').trim()
         if (fallbackProfileId) {
@@ -133,7 +134,7 @@ export const useProfileStore = defineStore('profile', () => {
   // 更新环境信息
   const updateProfile = async (profileId, updates) => {
     const res = await window.pywebview.api.profile_update(profileId, updates)
-    if (checkResult(res, `更新环境 "${profileId}"`, true)) {
+    if (checkResult(res, t('profiles.updateProfile', { id: profileId }), true)) {
       await fetchProfiles()
       if (profileId === currentProfileId.value) {
         await appStore.refreshData()
@@ -144,7 +145,7 @@ export const useProfileStore = defineStore('profile', () => {
   // 删除环境
   const deleteProfile = async (profileId, force = false) => {
     const res = await window.pywebview.api.profile_delete(profileId, !!force)
-    if (checkResult(res, '删除环境')) {
+    if (checkResult(res, t('profiles.deleteProfile'))) {
       await fetchProfiles()
       // 如果删的是当前的，后端会自动切回 default，前端需要同步
       if (profileId === currentProfileId.value) {
@@ -162,7 +163,7 @@ export const useProfileStore = defineStore('profile', () => {
       if (!profile) return null
       return await createSteamVdfDesktopShortcut(profile)
     }
-    if (checkResult(res, '创建环境桌面快捷方式', true)) {
+    if (checkResult(res, t('profiles.createDesktopShortcut'), true)) {
       return res.data
     }
     return null
@@ -171,21 +172,21 @@ export const useProfileStore = defineStore('profile', () => {
   const createSteamVdfDesktopShortcut = async (profile) => {
     const confirmStore = useConfirmStore()
     const steps = [
-      { label: '等待手动关闭 Steam 进程', done: false, active: true },
-      { label: '写入 Steam 快捷方式配置', done: false, active: false },
-      { label: '启动 Steam 并等待登录完成', done: false, active: false },
-      { label: '确认稳定快捷方式 ID 并创建桌面快捷方式', done: false, active: false },
+      { label: t('profiles.shortcutStepCloseSteam'), done: false, active: true },
+      { label: t('profiles.shortcutStepWriteConfig'), done: false, active: false },
+      { label: t('profiles.shortcutStepLaunchSteam'), done: false, active: false },
+      { label: t('profiles.shortcutStepFinalize'), done: false, active: false },
     ]
 
     const updateProgress = () => {
-      confirmStore.state.title = '创建 Steam 快捷方式'
+      confirmStore.state.title = t('profiles.createSteamShortcut')
       confirmStore.state.message = buildSteamShortcutProgressMessage(steps)
       confirmStore.state.isHtml = true
       confirmStore.state.mode = 'confirm'
       confirmStore.state.type = 'warning'
-      confirmStore.state.confirmText = '确定'
-      confirmStore.state.cancelText = '取消'
-      confirmStore.state.actionButtons = [{ label: '取消', value: 'cancel', kind: 'secondary' }]
+      confirmStore.state.confirmText = t('common.confirm')
+      confirmStore.state.cancelText = t('common.cancel')
+      confirmStore.state.actionButtons = [{ label: t('common.cancel'), value: 'cancel', kind: 'secondary' }]
     }
 
     const setActiveStep = (index) => {
@@ -203,12 +204,12 @@ export const useProfileStore = defineStore('profile', () => {
 
     let cancelled = false
     confirmStore.open({
-      title: '创建 Steam 快捷方式',
+      title: t('profiles.createSteamShortcut'),
       message: buildSteamShortcutProgressMessage(steps),
       isHtml: true,
       mode: 'confirm',
       type: 'warning',
-      actionButtons: [{ label: '取消', value: 'cancel', kind: 'secondary' }],
+      actionButtons: [{ label: t('common.cancel'), value: 'cancel', kind: 'secondary' }],
     }).then(() => {
       cancelled = true
       return null
@@ -226,13 +227,13 @@ export const useProfileStore = defineStore('profile', () => {
 
       setActiveStep(1)
       const registerRes = await window.pywebview.api.profile_register_steam_shortcut(profile.id)
-      if (!checkResult(registerRes, '写入 Steam 快捷方式配置')) return null
+      if (!checkResult(registerRes, t('profiles.writeSteamShortcutConfig'))) return null
       const logProbe = registerRes?.data?.log_probe || null
       completeStep(1)
 
       setActiveStep(2)
       const steamLaunchRes = await window.pywebview.api.steam_launch_client()
-      if (!checkResult(steamLaunchRes, '启动 Steam 客户端')) return null
+      if (!checkResult(steamLaunchRes, t('profiles.launchSteamClient'))) return null
       completeStep(2)
 
       setActiveStep(3)
@@ -242,13 +243,13 @@ export const useProfileStore = defineStore('profile', () => {
       if (finalizeRes?.status === 'success') {
         completeStep(3)
         confirmStore.closeSilently()
-        checkResult(finalizeRes, '创建环境桌面快捷方式', true)
+        checkResult(finalizeRes, t('profiles.createDesktopShortcut'), true)
         return finalizeRes.data
       }
 
       confirmStore.closeSilently()
       if (finalizeRes) {
-        checkResult(finalizeRes, '创建环境桌面快捷方式')
+        checkResult(finalizeRes, t('profiles.createDesktopShortcut'))
       }
       return null
     } finally {
@@ -259,7 +260,7 @@ export const useProfileStore = defineStore('profile', () => {
   // 扫描孤立配置
   const scanOrphans = async () => {
     const res = await window.pywebview.api.profiles_scan_orphaned()
-    if (checkResult(res, '扫描待恢复环境')) {
+    if (checkResult(res, t('profiles.scanOrphans'))) {
       orphanedProfiles.value = res.data
     }
   }
@@ -267,8 +268,8 @@ export const useProfileStore = defineStore('profile', () => {
   // 导入孤立配置
   const importOrphan = async (profileData) => {
     const res = await window.pywebview.api.profile_import_orphaned(profileData)
-    if (checkResult(res, '导入环境')) {
-      toast.success('环境配置已恢复')
+    if (checkResult(res, t('profiles.importProfile'))) {
+      toast.success(t('profiles.profileRestored'))
       await fetchProfiles()
       await scanOrphans()
     }

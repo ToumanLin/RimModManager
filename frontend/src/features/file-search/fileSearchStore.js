@@ -4,6 +4,7 @@ import { checkResult, toast } from '../../shared/lib/common'
 
 import { useAppStore } from '../../app/stores/appStore'
 import { useTaskStore } from '../../app/stores/taskStore'
+import { t } from '../../app/i18n'
 
 const DEFAULT_FILE_TYPES = ['.xml']
 const DEFAULT_EXCLUDE_OPTIONS = {
@@ -16,17 +17,17 @@ const DEFAULT_EXCLUDE_OPTIONS = {
 }
 
 export const FILE_SEARCH_SCOPE_OPTIONS = [
-  { value: 'current-effective', label: '当前环境有效模组', desc: '搜索当前环境里实际可见的全部模组。' },
-  { value: 'current-active', label: '当前启用模组', desc: '只搜索当前已启用并实际可见的模组。' },
-  { value: 'workshop', label: '工坊模组', desc: '只搜索当前环境有效的工坊模组。' },
-  { value: 'local', label: '本地模组', desc: '只搜索当前环境有效的本地与官方内容。' },
-  { value: 'self', label: '管理器模组', desc: '只搜索当前环境有效的管理器模组。' },
+  { value: 'current-effective', labelKey: 'fileSearch.scopeCurrentEffective', descKey: 'fileSearch.scopeCurrentEffectiveDesc' },
+  { value: 'current-active', labelKey: 'fileSearch.scopeCurrentActive', descKey: 'fileSearch.scopeCurrentActiveDesc' },
+  { value: 'workshop', labelKey: 'fileSearch.scopeWorkshop', descKey: 'fileSearch.scopeWorkshopDesc' },
+  { value: 'local', labelKey: 'fileSearch.scopeLocal', descKey: 'fileSearch.scopeLocalDesc' },
+  { value: 'self', labelKey: 'fileSearch.scopeSelf', descKey: 'fileSearch.scopeSelfDesc' },
 ]
 
 export const FILE_SEARCH_EXCLUDE_OPTIONS = [
-  { key: 'skip_languages', label: '排除 Languages', desc: '默认排除语言包目录，避免翻译文本淹没定义结果。' },
-  { key: 'skip_source', label: '排除 Source', desc: '默认排除源码目录，先聚焦运行期文本资源。' },
-  { key: 'skip_textures', label: '排除 Textures', desc: '排除贴图目录，避免无意义大文件树。' },
+  { key: 'skip_languages', labelKey: 'fileSearch.excludeLanguages', descKey: 'fileSearch.excludeLanguagesDesc' },
+  { key: 'skip_source', labelKey: 'fileSearch.excludeSource', descKey: 'fileSearch.excludeSourceDesc' },
+  { key: 'skip_textures', labelKey: 'fileSearch.excludeTextures', descKey: 'fileSearch.excludeTexturesDesc' },
 ]
 
 export const useFileSearchStore = defineStore('fileSearch', () => {
@@ -65,7 +66,7 @@ export const useFileSearchStore = defineStore('fileSearch', () => {
   })
   const searchState = reactive({
     status: 'idle',
-    message: '准备搜索',
+    message: t('fileSearch.readyToSearch'),
     matchedCount: 0,
     done: false,
   })
@@ -87,7 +88,8 @@ export const useFileSearchStore = defineStore('fileSearch', () => {
   })
 
   const scopeLabel = computed(() => {
-    return FILE_SEARCH_SCOPE_OPTIONS.find(option => option.value === form.scope)?.label || '未知范围'
+    const option = FILE_SEARCH_SCOPE_OPTIONS.find(item => item.value === form.scope)
+    return option ? t(option.labelKey) : t('fileSearch.unknownScope')
   })
 
   const resetResults = () => {
@@ -107,7 +109,7 @@ export const useFileSearchStore = defineStore('fileSearch', () => {
     viewerState.encoding = ''
     viewerState.fileSize = 0
     searchState.status = 'idle'
-    searchState.message = '准备搜索'
+    searchState.message = t('fileSearch.readyToSearch')
     searchState.matchedCount = 0
     searchState.done = false
   }
@@ -117,18 +119,18 @@ export const useFileSearchStore = defineStore('fileSearch', () => {
     if (isBusy.value) return false
     const query = String(form.query || '').trim()
     if (!query) {
-      toast.warning('请输入搜索词')
+      toast.warning(t('fileSearch.enterSearchTerm'))
       return false
     }
     const requestedFileTypes = buildRequestedFileTypes()
     if (!Array.isArray(requestedFileTypes) || requestedFileTypes.length === 0) {
-      toast.warning('请至少选择一种文件类型')
+      toast.warning(t('fileSearch.selectFileType'))
       return false
     }
 
     results.value = []
     searchState.status = 'pending'
-    searchState.message = '搜索任务已提交'
+    searchState.message = t('fileSearch.searchSubmitted')
     searchState.matchedCount = 0
     searchState.done = false
 
@@ -145,16 +147,16 @@ export const useFileSearchStore = defineStore('fileSearch', () => {
       }
 
       const res = await window.pywebview.api.search_files_start(payload)
-      if (!checkResult(res, '启动文件搜索')) {
+      if (!checkResult(res, t('fileSearch.startFileSearch'))) {
         searchState.status = 'failed'
-        searchState.message = res?.message || '启动失败'
+        searchState.message = res?.message || t('fileSearch.startFailed')
         return false
       }
 
       const taskId = String(res?.data?.task_id || '')
       if (!taskId) {
         searchState.status = 'failed'
-        searchState.message = '后端未返回任务 ID'
+        searchState.message = t('fileSearch.noTaskId')
         return false
       }
 
@@ -164,9 +166,9 @@ export const useFileSearchStore = defineStore('fileSearch', () => {
         type: 'file-search',
         status: 'pending',
         progress: 0,
-        message: '任务已加入后台队列',
+        message: t('fileSearch.taskQueued'),
         metrics: {
-          title: '文件内容搜索',
+          title: t('fileSearch.title'),
           query,
           scope: form.scope,
           effective_only: form.effective_only,
@@ -175,7 +177,7 @@ export const useFileSearchStore = defineStore('fileSearch', () => {
       return true
     } catch (error) {
       searchState.status = 'failed'
-      searchState.message = error?.message || '启动失败'
+      searchState.message = error?.message || t('fileSearch.startFailed')
       toast.error(searchState.message)
       return false
     } finally {
@@ -274,7 +276,7 @@ export const useFileSearchStore = defineStore('fileSearch', () => {
     try {
       const data = await readResultFile(row.file_path)
       if (!data) {
-        viewerState.error = '无法读取该文件'
+        viewerState.error = t('fileSearch.cannotReadFile')
         viewerState.content = ''
         return false
       }

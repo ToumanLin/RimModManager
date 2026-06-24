@@ -11,12 +11,12 @@
               <Globe class="size-3.5" />
               <span>{{ workshopSourceTitle }}</span>
             </div>
-            <span class="font-mono text-sm text-text-soft">{{ workshopDisplayTotal }} 项结果</span>
+            <span class="font-mono text-sm text-text-soft">{{ t('workspace.workshop.resultCount', { count: workshopDisplayTotal }) }}</span>
           </div>
           <div class="flex items-center gap-2">
             
             <CommonSwitch v-model="workspaceStore.workshopSearch.isEnhancedMode" :mini="true" :disabled="!workshopSearchReady" @change="toggleEnhancedMode"
-              label="增强模式" description="开启后使用专用接口获取更完整的工坊信息；关闭该功能后，系统会依靠本地缓存工坊库以及公开接口来读取工坊相关信息；受本地缓存库的局限，查询到的结果并不完整，也无法获取刚发布的最新模组。" />
+              :label="t('workspace.workshop.enhancedMode')" :description="t('workspace.workshop.enhancedModeDesc')" />
           </div>
         </div>
 
@@ -31,9 +31,9 @@
             <div class="flex items-center justify-center gap-1">
               <button @click="submitWorkshopSearch" :disabled="!workshopSearchReady || workspaceStore.workshopSearch.isLoading"
                 class="inline-flex h-[1.85rem] shrink-0 items-center justify-center rounded-lg border border-accent-primary/40 bg-accent-primary/15 px-2.5 text-[0.7rem] font-extrabold text-accent-primary transition-all hover:bg-accent-primary hover:text-on-accent-primary active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50">
-                搜索
+                {{ t('workspace.workshop.search') }}
               </button>
-              <button ref="advancedButtonRef" @click="toggleAdvancedPanel" v-tooltip="'排序与高级搜索'"
+              <button ref="advancedButtonRef" @click="toggleAdvancedPanel" v-tooltip="t('workspace.workshop.advanced')"
                 class="inline-flex h-[1.85rem] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border-base/10 bg-bg-inset/85 px-2.5 text-[0.7rem] text-text-dim transition-all hover:border-accent-primary/40 hover:text-accent-primary active:scale-[0.98]">
                 <SlidersHorizontal class="size-3.5" />
                 <span class="max-w-24 truncate text-[0.7rem] font-bold">{{ workshopSortStateLabel }}</span>
@@ -49,17 +49,17 @@
           <div ref="advancedPanelRef" class="popover-surface w-80 rounded-xl border border-border-base/18 bg-bg-surface/98 p-3 text-xs">
             <div class="flex flex-col gap-3">
             <template v-if="workspaceStore.workshopSearch.isEnhancedMode">
-              <CommonSelect v-model="workspaceStore.workshopSearch.language" :options="languageOptions" label="查询语言" mini class="min-w-0" />
-              <CommonSelect v-model="workspaceStore.workshopSearch.searchTextTarget" :options="WORKSHOP_TEXT_TARGET_OPTIONS" label="查询范围" mini class="min-w-0" />
+              <CommonSelect v-model="workspaceStore.workshopSearch.language" :options="languageOptions" :label="t('workspace.workshop.language')" mini class="min-w-0" />
+              <CommonSelect v-model="workspaceStore.workshopSearch.searchTextTarget" :options="WORKSHOP_TEXT_TARGET_OPTIONS" :label="t('workspace.workshop.textTarget')" mini class="min-w-0" />
             </template>
             <div v-else class="rounded-lg border border-border-base/10 bg-bg-inset/60 px-2 py-1.5 text-xs text-text-dim">
-              缓存搜索使用本地数据库内容，不支持查询语言和查询范围。
+              {{ t('workspace.workshop.cacheSearchNotice') }}
             </div>
             <div class="border-t border-border-base/10 pt-3">
-              <div class="mb-1.5 text-[0.7rem] font-black text-text-main">排序</div>
+              <div class="mb-1.5 text-[0.7rem] font-black text-text-main">{{ t('workspace.workshop.sort') }}</div>
               <div class="grid grid-cols-2 gap-4">
                 <div class="space-y-1">
-                  <div class="text-[0.65rem] font-bold text-text-dim">顺序</div>
+                  <div class="text-[0.65rem] font-bold text-text-dim">{{ t('workspace.workshop.order') }}</div>
                   <button v-for="option in workshopSortPanelOptions" :key="option.value" type="button"
                     class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors"
                     :class="[
@@ -74,7 +74,7 @@
                   </button>
                 </div>
                 <div class="space-y-1">
-                  <div class="text-[0.65rem] font-bold text-text-dim">时间</div>
+                  <div class="text-[0.65rem] font-bold text-text-dim">{{ t('workspace.workshop.time') }}</div>
                   <button v-for="option in WORKSHOP_DAY_RANGE_OPTIONS" :key="option.value" type="button"
                     class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors"
                     :class="[
@@ -96,7 +96,7 @@
         <div v-if="workshopDisplayBanner" class="flex items-center justify-between gap-2 rounded-xl border border-accent-primary/20 bg-accent-primary/10 px-3 py-2 text-xs">
           <span class="min-w-0 truncate font-bold text-accent-primary">{{ workshopDisplayBanner }}</span>
           <button @click="closeTransientList" class="shrink-0 rounded-lg border border-border-base/10 bg-bg-inset px-2 py-1 text-[0.65rem] font-bold text-text-dim transition-colors hover:text-text-main">
-            返回搜索结果
+            {{ t('workspace.workshop.backToSearchResults') }}
           </button>
         </div>
       </div>
@@ -121,7 +121,7 @@
                 class="group relative flex min-h-[4.7rem] cursor-pointer items-center gap-3 overflow-hidden rounded-[0.85rem] border border-border-base/5 bg-bg-surface/55 p-[0.65rem] transition-all hover:-translate-y-px hover:border-accent-primary/25 hover:bg-accent-primary/10"
                 :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'border-accent-primary/40 bg-accent-primary/15 shadow-[inset_3px_0_0_var(--color-accent-primary),0_12px_28px_rgba(6,182,212,0.08)]' : ''">
                 <div v-if="workspaceStore.workshopSearch.isEnhancedMode" class="size-[3.45rem] shrink-0 overflow-hidden rounded-xl border border-border-base/10 bg-bg-inset/90">
-                  <img v-if="item.preview_url" class="h-full w-full object-cover" loading="lazy" :src="appStore.getRemoteUrl(item.preview_url)" :alt="item.title || item.name || '工坊项目封面'" />
+                  <img v-if="item.preview_url" class="h-full w-full object-cover" loading="lazy" :src="appStore.getRemoteUrl(item.preview_url)" :alt="item.title || item.name || t('workspace.workshop.coverAlt')" />
                   <div v-else class="flex h-full w-full items-center justify-center text-text-disabled">
                     <Image class="size-4" />
                   </div>
@@ -130,7 +130,7 @@
                 <div class="min-w-0 flex-1 space-y-1.5">
                   <div class="truncate text-sm font-bold leading-snug transition-colors"
                     :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'text-text-main' : 'text-text-soft group-hover:text-accent-primary'">
-                    {{ item.title || item.name || '未知模组' }}
+                    {{ item.title || item.name || t('workspace.workshop.unknownMod') }}
                   </div>
                   <div class="flex items-center justify-between gap-2">
                     <div class="flex min-w-0 items-center gap-1.5">
@@ -143,10 +143,10 @@
                       </span>
                     </div>
                     <div class="flex shrink-0 items-center gap-1 text-[0.68rem]">
-                      <span v-if="item.stats?.subscriptions" class="rounded-md border border-accent-primary/20 bg-accent-primary/10 px-1.5 py-0.5 font-bold text-accent-primary" v-tooltip="'订阅人数'">
+                      <span v-if="item.stats?.subscriptions" class="rounded-md border border-accent-primary/20 bg-accent-primary/10 px-1.5 py-0.5 font-bold text-accent-primary" v-tooltip="t('workspace.workshop.subscriptionsTip')">
                         {{ formatCount(item.stats.subscriptions) }}
                       </span>
-                      <div class="rounded-md border border-border-base/10 bg-bg-inset/80 px-1.5 py-0.5 font-mono font-bold text-text-dim" v-tooltip="'工坊ID'">
+                      <div class="rounded-md border border-border-base/10 bg-bg-inset/80 px-1.5 py-0.5 font-mono font-bold text-text-dim" v-tooltip="t('workspace.workshop.workshopIdTip')">
                         {{ item.workshop_id }}
                       </div>
                     </div>
@@ -162,10 +162,10 @@
             <!-- 修复：加入 isLocalFetching 判定，防止网络请求结束后 Loading 瞬间消失导致高度坍塌 -->
             <div v-if="(workshopDisplayLoading && workshopDisplayResults.length > 0) || isLocalFetching" class="flex items-center justify-center py-4 text-text-dim">
               <div class="mr-2 size-4 rounded-full border-2 border-accent-primary border-t-transparent animate-spin"></div>
-              <span class="text-xs">加载更多...</span>
+              <span class="text-xs">{{ t('workspace.workshop.loadingMore') }}</span>
             </div>
             <div v-else-if="!workshopDisplayHasMore && workshopDisplayResults.length > 0" class="py-4 text-center text-xs text-text-disabled">
-              已显示全部结果
+              {{ t('workspace.workshop.allResultsShown') }}
             </div>
           </template>
         </DynamicScroller>
@@ -173,8 +173,8 @@
         <!-- 空状态 -->
         <div v-else-if="!workshopDisplayLoading" class="absolute inset-0 flex flex-col items-center justify-center px-8 text-center text-text-disabled">
           <Cpu class="mb-4 size-14 opacity-45" />
-          <span class="text-sm font-bold tracking-[0.18em] text-text-dim">暂无结果</span>
-          <span class="mt-2 max-w-xs text-xs leading-5 text-text-subtle">换一个关键词、标签或排序条件再试。</span>
+          <span class="text-sm font-bold tracking-[0.18em] text-text-dim">{{ t('workspace.workshop.noResults') }}</span>
+          <span class="mt-2 max-w-xs text-xs leading-5 text-text-subtle">{{ t('workspace.workshop.noResultsDesc') }}</span>
         </div>
 
       </div>
@@ -188,14 +188,14 @@
         <div v-if="workspaceStore.workshopSearch.historyStack.length > 0" class="absolute left-4 top-4 z-20 flex items-center">
           <button @click="workspaceStore.goBackWorkshopDetail" class="flex items-center gap-1 rounded-xl border border-border-base/18 bg-bg-inset/80 px-3 py-1.5 text-xs font-bold text-text-main shadow-lg backdrop-blur-md transition-all hover:border-accent-primary/50 hover:text-accent-primary">
             <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            返回上一层
+            {{ t('workspace.workshop.backOneLevel') }}
           </button>
         </div>
         <!-- 头部 Banner -->
         <div class="group relative h-[clamp(10rem,18vh,13.5rem)] shrink-0 overflow-hidden border-b border-border-base/10">
           <!-- 背景 -->
           <div class="absolute inset-0 z-0 overflow-hidden">
-            <img v-if="selectedPreviewUrl" :src="selectedPreviewUrl" :alt="selectedDisplayTitle || '工坊项目背景'"
+            <img v-if="selectedPreviewUrl" :src="selectedPreviewUrl" :alt="selectedDisplayTitle || t('workspace.workshop.backgroundAlt')"
               class="h-full w-full scale-[1.03] object-cover object-center opacity-74 blur-[10px] transition-[filter,transform,opacity] duration-700 group-hover:blur-[18px] group-hover:opacity-86 group-hover:brightness-70" />
             <div v-else class="h-full w-full bg-bg-inset/95"></div>
           </div>
@@ -205,7 +205,7 @@
           <!-- 封面图片 -->
           <div v-if="selectedPreviewUrl" v-viewer.rebuild="imageViewerOptions" class="absolute left-0 top-0 z-3 h-full w-fit overflow-hidden pointer-events-auto" :style="headerPreviewWrapStyle" >
             <div class="relative inline-block h-full">
-              <img :src="selectedPreviewUrl" :alt="selectedDisplayTitle || '工坊项目封面'" class="block h-full w-auto max-w-none cursor-zoom-in select-none" />
+              <img :src="selectedPreviewUrl" :alt="selectedDisplayTitle || t('workspace.workshop.coverAlt')" class="block h-full w-auto max-w-none cursor-zoom-in select-none" />
               <img :src="selectedPreviewUrl" aria-hidden="true" class="pointer-events-none absolute inset-0 block h-full w-auto max-w-none blur-[20px]" :style="headerPreviewBlurStyle" />
             </div>
           </div>
@@ -214,8 +214,8 @@
           <div class="absolute inset-y-0 left-[25%] right-0 z-4 flex flex-col justify-center gap-2 px-5 py-4 text-text-main">
             <!-- 原始名称（仅在翻译后出现） -->
             <span v-if="selectedShowsTranslatedTitle" class="flex items-center justify-start gap-2 -my-2 pl-3 text-text-dim">
-              <button type="button" v-tooltip="'点击可复制项目名称'" class="hover:text-accent-primary scale-95 hover:scale-105 active:scale-95 transition-all duration-300"
-                @click.stop="copyHeaderValue('原始名称', selectedOriginalTitle)">
+              <button type="button" v-tooltip="t('workspace.workshop.copyProjectName')" class="hover:text-accent-primary scale-95 hover:scale-105 active:scale-95 transition-all duration-300"
+                @click.stop="copyHeaderValue(t('workspace.workshop.originalName'), selectedOriginalTitle)">
                 <Copy class="size-3" />
               </button> 
               <span class="min-w-0 text-xs font-black leading-tight text-balance text-shadow-md"  v-tooltip="selectedOriginalTitle">
@@ -224,8 +224,8 @@
             </span>
             <!-- 项目名称（优先显示翻译） -->
             <span class="flex items-center justify-start gap-2">
-              <button type="button" v-tooltip="'点击可复制项目名称'" class="hover:text-accent-primary scale-95 hover:scale-105 active:scale-95 transition-all duration-300"
-                @click.stop="copyHeaderValue('项目名称', selectedDisplayTitle)">
+              <button type="button" v-tooltip="t('workspace.workshop.copyProjectName')" class="hover:text-accent-primary scale-95 hover:scale-105 active:scale-95 transition-all duration-300"
+                @click.stop="copyHeaderValue(t('workspace.workshop.projectName'), selectedDisplayTitle)">
                 <Copy class="size-6" />
               </button> 
               <h2 class="min-w-0 text-[1.75rem] font-black leading-tight text-balance text-shadow-lg" v-tooltip="selectedDisplayTitle">
@@ -234,99 +234,99 @@
             </span>
             <!-- 项目信息 -->
             <div class="flex flex-wrap items-center gap-1.5 pointer-events-auto">
-              <button type="button" v-tooltip="'Steam 工坊项目的唯一编号。单击可复制。'" class="group relative workshop-detail-chip border-accent-primary/20 bg-accent-primary/10 pr-7 text-left transition-colors hover:border-accent-primary/36 hover:bg-accent-primary/14 active:scale-[0.99]" @click.stop="copyHeaderValue('工坊 ID', selectedIdLabel)">
+              <button type="button" v-tooltip="t('workspace.workshop.workshopIdTip')" class="group relative workshop-detail-chip border-accent-primary/20 bg-accent-primary/10 pr-7 text-left transition-colors hover:border-accent-primary/36 hover:bg-accent-primary/14 active:scale-[0.99]" @click.stop="copyHeaderValue(t('workspace.workshop.workshopId'), selectedIdLabel)">
                 <Hash class="workshop-detail-chip__icon text-accent-primary" />
-                <span class="workshop-detail-chip__title">工坊 ID</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.workshopId') }}</span>
                 <span class="workshop-detail-chip__value">{{ selectedIdLabel }}</span>
                 <Copy class="size-3 text-text-dim " />
               </button>
-              <button type="button" v-tooltip="'模组包标识。通常用于本地规则匹配和同模组识别。单击可复制。'" class="group relative workshop-detail-chip border-accent-cool/20 bg-accent-cool/10 pr-7 text-left transition-colors hover:border-accent-cool/30 hover:bg-accent-cool/12 active:scale-[0.99]" @click.stop="copyHeaderValue('包名', selectedPackageId)">
+              <button type="button" v-tooltip="t('workspace.workshop.packageIdTip')" class="group relative workshop-detail-chip border-accent-cool/20 bg-accent-cool/10 pr-7 text-left transition-colors hover:border-accent-cool/30 hover:bg-accent-cool/12 active:scale-[0.99]" @click.stop="copyHeaderValue(t('workspace.workshop.packageId'), selectedPackageId)">
                 <Package class="workshop-detail-chip__icon text-accent-cool" />
-                <span class="workshop-detail-chip__title">包名</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.packageId') }}</span>
                 <span class="workshop-detail-chip__value">{{ selectedPackageId }}</span>
                 <Copy class="size-3 text-text-dim " />
               </button>
-              <button type="button" v-tooltip="'作者名称。增强模式下优先显示作者资料缓存中的公开名称。单击可复制。'" class="group relative workshop-detail-chip border-accent-success/20 bg-accent-success/10 pr-7 text-left transition-colors hover:border-accent-success/30 hover:bg-accent-success/12 active:scale-[0.99]" @click.stop="copyHeaderValue('作者', selectedAuthorLabel)">
+              <button type="button" v-tooltip="t('workspace.workshop.authorTip')" class="group relative workshop-detail-chip border-accent-success/20 bg-accent-success/10 pr-7 text-left transition-colors hover:border-accent-success/30 hover:bg-accent-success/12 active:scale-[0.99]" @click.stop="copyHeaderValue(t('workspace.workshop.author'), selectedAuthorLabel)">
                 <UserRound class="workshop-detail-chip__icon text-accent-success" />
-                <span class="workshop-detail-chip__title">作者</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.author') }}</span>
                 <span class="workshop-detail-chip__value">{{ selectedAuthorLabel }}</span>
                 <Copy class="size-3 text-text-dim " />
               </button>
             </div>
             <div class="flex flex-wrap items-center gap-1.5 pointer-events-auto">
-              <span v-tooltip="'当前 Steam 工坊公开订阅人数。'" class="workshop-detail-chip border-accent-primary/20 bg-accent-primary/10">
+              <span v-tooltip="t('workspace.workshop.subscriptionCountTip')" class="workshop-detail-chip border-accent-primary/20 bg-accent-primary/10">
                 <Flag class="workshop-detail-chip__icon text-accent-primary" />
-                <span class="workshop-detail-chip__title">订阅数</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.subscriptionCount') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedSubscriptionLabel }}</strong>
               </span>
-              <span v-tooltip="'Steam 返回的综合评分。适合快速判断整体用户反馈。'" class="workshop-detail-chip border-accent-tip/22 bg-accent-tip/10">
+              <span v-tooltip="t('workspace.workshop.ratingTip')" class="workshop-detail-chip border-accent-tip/22 bg-accent-tip/10">
                 <Star class="workshop-detail-chip__icon text-accent-tip" />
-                <span class="workshop-detail-chip__title">评分</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.rating') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedVoteScoreLabel }}</strong>
               </span>
-              <span v-tooltip="'公开点赞数量。适合结合评分一起看口碑。'" class="workshop-detail-chip border-accent-success/20 bg-accent-success/10">
+              <span v-tooltip="t('workspace.workshop.upvotesTip')" class="workshop-detail-chip border-accent-success/20 bg-accent-success/10">
                 <ThumbsUp class="workshop-detail-chip__icon text-accent-success" />
-                <span class="workshop-detail-chip__title">点赞</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.upvotes') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedVoteUpLabel }}</strong>
               </span>
-              <span v-tooltip="'公开点踩数量。'" class="workshop-detail-chip border-accent-danger/20 bg-accent-danger/10">
+              <span v-tooltip="t('workspace.workshop.downvotesTip')" class="workshop-detail-chip border-accent-danger/20 bg-accent-danger/10">
                 <ThumbsDown class="workshop-detail-chip__icon text-accent-danger" />
-                <span class="workshop-detail-chip__title">点踩</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.downvotes') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedVoteDownLabel }}</strong>
               </span>
-              <span v-tooltip="'被加入收藏的次数。适合判断长期关注度。'" class="workshop-detail-chip border-accent-cool/20 bg-accent-cool/10">
+              <span v-tooltip="t('workspace.workshop.favoritesTip')" class="workshop-detail-chip border-accent-cool/20 bg-accent-cool/10">
                 <Heart class="workshop-detail-chip__icon text-accent-cool" />
-                <span class="workshop-detail-chip__title">收藏</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.favorites') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedFavoriteLabel }}</strong>
               </span>
-              <span v-tooltip="'Steam 工坊公开评论数量。'" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
+              <span v-tooltip="t('workspace.workshop.commentsTip')" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
                 <MessageSquareMore class="workshop-detail-chip__icon text-text-dim" />
-                <span class="workshop-detail-chip__title">评论</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.comments') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedCommentLabel }}</strong>
               </span>
-              <span v-tooltip="'Steam 返回的文件体积，可用来粗略判断下载耗时和磁盘占用。'" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
+              <span v-tooltip="t('workspace.workshop.sizeTip')" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
                 <HardDrive class="workshop-detail-chip__icon text-text-dim" />
-                <span class="workshop-detail-chip__title">大小</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.size') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedFileSizeLabel }}</strong>
               </span>
-              <span v-tooltip="'项目首次发布到 Steam 工坊的时间。'" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
+              <span v-tooltip="t('workspace.workshop.createdTip')" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
                 <CalendarPlus class="workshop-detail-chip__icon text-text-dim" />
-                <span class="workshop-detail-chip__title">创建</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.created') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedCreatedLabel }}</strong>
               </span>
-              <span v-tooltip="'项目最近一次在 Steam 工坊更新的时间。'" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
+              <span v-tooltip="t('workspace.workshop.updatedTip')" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
                 <CalendarArrowUp class="workshop-detail-chip__icon text-text-dim" />
-                <span class="workshop-detail-chip__title">更新</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.updated') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedUpdatedLabel }}</strong>
               </span>
-              <span v-if="selectedStatusLabel" v-tooltip="'项目当前状态异常。通常表示该项目已被 Steam 限制或封禁。'" class="workshop-detail-chip border-accent-danger/20 bg-accent-danger/10">
+              <span v-if="selectedStatusLabel" v-tooltip="t('workspace.workshop.statusTip')" class="workshop-detail-chip border-accent-danger/20 bg-accent-danger/10">
                 <ShieldAlert class="workshop-detail-chip__icon text-accent-danger" />
-                <span class="workshop-detail-chip__title">状态</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.status') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedStatusLabel }}</strong>
               </span>
-              <span v-if="selectedContentWarningLabel" v-tooltip="'项目被 Steam 标记为可能含有敏感内容，展示前建议自行确认。'" class="workshop-detail-chip border-accent-warn/24 bg-accent-warn/12">
+              <span v-if="selectedContentWarningLabel" v-tooltip="t('workspace.workshop.contentTip')" class="workshop-detail-chip border-accent-warn/24 bg-accent-warn/12">
                 <TriangleAlert class="workshop-detail-chip__icon text-accent-warn" />
-                <span class="workshop-detail-chip__title">内容</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.content') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedContentWarningLabel }}</strong>
               </span>
               <span v-for="tag in selectedDisplayTags" :key="`${selectedId}-${tag}`"
-                v-tooltip="`工坊标签：${tag}`" class="workshop-detail-chip border-accent-cool/20 bg-accent-cool/10">
+                v-tooltip="t('workspace.workshop.workshopTag', { tag })" class="workshop-detail-chip border-accent-cool/20 bg-accent-cool/10">
                 <Tag class="workshop-detail-chip__icon text-accent-cool" />
-                <span class="workshop-detail-chip__title">标签</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.tag') }}</span>
                 <strong class="workshop-detail-chip__value">{{ tag }}</strong>
               </span>
-              <span v-if="!selectedDisplayTags.length" v-tooltip="'该项目没有返回可展示的工坊标签。'" class="workshop-detail-chip border-accent-cool/20 bg-accent-cool/10">
+              <span v-if="!selectedDisplayTags.length" v-tooltip="t('workspace.workshop.noTagsTip')" class="workshop-detail-chip border-accent-cool/20 bg-accent-cool/10">
                 <Tag class="workshop-detail-chip__icon text-accent-cool" />
-                <span class="workshop-detail-chip__title">标签</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.tag') }}</span>
                 <strong class="workshop-detail-chip__value">-</strong>
               </span>
               <span v-if="selectedHiddenTagCount > 0" v-tooltip="selectedHiddenTagTooltip" class="workshop-detail-chip border-border-base/16 bg-bg-deep/38">
                 <Plus class="workshop-detail-chip__icon text-text-dim" />
                 <strong class="workshop-detail-chip__value">+{{ selectedHiddenTagCount }}</strong>
               </span>
-              <span v-tooltip="'该项目标注的 RimWorld 适用版本。这里会合并后端缓存和标签中的版本信息。'" class="workshop-detail-chip border-accent-tip/22 bg-accent-tip/10">
+              <span v-tooltip="t('workspace.workshop.versionTip')" class="workshop-detail-chip border-accent-tip/22 bg-accent-tip/10">
                 <Layers class="workshop-detail-chip__icon text-accent-tip" />
-                <span class="workshop-detail-chip__title">版本</span>
+                <span class="workshop-detail-chip__title">{{ t('workspace.workshop.version') }}</span>
                 <strong class="workshop-detail-chip__value">{{ selectedVersionSummary }}</strong>
               </span>
             </div>
@@ -342,18 +342,18 @@
             class="mb-4 rounded-2xl border border-accent-warn/25 bg-accent-warn/8 p-4">
             <div class="mb-3 flex items-center justify-between gap-3">
               <h4 class="flex items-center gap-1.5 text-[0.72rem] font-black text-accent-warn">
-                <Link class="size-3" /> 依赖项目
+                <Link class="size-3" /> {{ t('workspace.workshop.dependencies') }}
               </h4>
-              <span v-if="workspaceStore.workshopSearch.relatedLoading.dependencies" class="text-[0.65rem] text-text-dim">加载中...</span>
+              <span v-if="workspaceStore.workshopSearch.relatedLoading.dependencies" class="text-[0.65rem] text-text-dim">{{ t('workspace.workshop.loading') }}</span>
               <div class="flex flex-wrap justify-end gap-1.5">
                 <button @click="handleUnsubscribe(dependencyIds)" class="cursor-pointer rounded-lg border border-accent-danger/30 bg-accent-danger/15 px-2.5 py-1.5 text-[0.65rem] font-extrabold text-accent-danger transition-all hover:bg-accent-danger hover:text-on-accent-danger active:scale-[0.98]">
-                  取消订阅全部依赖
+                  {{ t('workspace.workshop.unsubscribeDependencies') }}
                 </button>
                 <button @click="handleSubscribe(dependencyIds)" class="cursor-pointer rounded-lg border border-accent-primary/30 bg-accent-primary/15 px-2.5 py-1.5 text-[0.65rem] font-extrabold text-accent-primary transition-all hover:bg-accent-primary hover:text-on-accent-primary active:scale-[0.98]">
-                  订阅全部依赖
+                  {{ t('workspace.workshop.subscribeDependencies') }}
                 </button>
                 <button @click="handleDownload(dependencyIds)" class="cursor-pointer rounded-lg border border-accent-success/30 bg-accent-success/15 px-2.5 py-1.5 text-[0.65rem] font-extrabold text-accent-success transition-all hover:bg-accent-success hover:text-on-accent-success active:scale-[0.98]">
-                  下载全部依赖
+                  {{ t('workspace.workshop.downloadDependencies') }}
                 </button>
               </div>
             </div>
@@ -372,7 +372,7 @@
           <!-- 游戏截图画廊 (Horizontal Scroll) -->
           <div v-if="selectedMod?.screenshots?.length > 0" class="mb-4 space-y-3 rounded-2xl border border-border-base/10 bg-bg-inset/45 p-4">
             <h4 class="flex items-center gap-1.5 text-[0.72rem] font-black text-text-dim">
-              <Image class="size-3" /> 截图
+              <Image class="size-3" /> {{ t('workspace.workshop.screenshots') }}
             </h4>
             <!-- 使用 flex nowrap 和 overflow-x-auto 实现横向滚动 -->
             <div v-viewer.rebuild="imageViewerOptions" class="flex gap-3 overflow-x-auto custom-scrollbar pb-2 snap-x">
@@ -386,7 +386,7 @@
                   </svg>
                 </div>
                 <img class="h-full w-full object-cover transition-transform hover:scale-[1.02] cursor-zoom-in"
-                  :src="appStore.getRemoteUrl(img)" :alt="`${selectedDisplayTitle || '工坊项目'}截图`" @load="markScreenshotLoaded(img)" @error="markScreenshotLoaded(img)" />
+                  :src="appStore.getRemoteUrl(img)" :alt="t('workspace.workshop.screenshotAlt', { title: selectedDisplayTitle || t('workspace.workshop.unknownMod') })" @load="markScreenshotLoaded(img)" @error="markScreenshotLoaded(img)" />
               </div>
             </div>
           </div>
@@ -409,19 +409,19 @@
                 :min-width="300" :max-width="340" :max-height="360" :offset="6" @request-close="closeTranslationPanel">
                 <div class="popover-surface w-80 rounded-xl border border-border-base/18 bg-bg-surface/98 p-3 text-xs">
                   <div class="flex flex-col gap-3">
-                    <CommonSelect :model-value="workspaceStore.workshopSearch.detailTranslationLanguage" :options="translationDisplayOptions" label="显示语言" mini class="min-w-0" @update:model-value="selectTranslationDisplayLanguage" />
-                    <CommonSelect :model-value="workshopTranslationSettings.provider" :options="translationProviderOptions" label="翻译器" mini class="min-w-0" @update:model-value="setTranslationProvider" />
+                    <CommonSelect :model-value="workspaceStore.workshopSearch.detailTranslationLanguage" :options="translationDisplayOptions" :label="t('workspace.workshop.displayLanguage')" mini class="min-w-0" @update:model-value="selectTranslationDisplayLanguage" />
+                    <CommonSelect :model-value="workshopTranslationSettings.provider" :options="translationProviderOptions" :label="t('workspace.workshop.translator')" mini class="min-w-0" @update:model-value="setTranslationProvider" />
                     <div class="flex items-center justify-end gap-2 border-t border-border-base/10 pt-3">
                       <button type="button" :disabled="workspaceStore.workshopSearch.isTranslating || !selectedResolvedTranslationLanguage" @click="handleRetranslateCurrentLanguage"
                         class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-accent-warn/30 bg-accent-warn/12 px-2.5 text-[0.68rem] font-extrabold text-accent-warn transition-colors hover:bg-accent-warn hover:text-on-accent-warn disabled:cursor-not-allowed disabled:opacity-50">
                         <LoaderCircle v-if="workspaceStore.workshopSearch.isTranslating" class="size-3.5 animate-spin" />
                         <RotateCcw v-else class="size-3.5" />
-                        <span>重新翻译</span>
+                        <span>{{ t('workspace.workshop.retranslate') }}</span>
                       </button>
                       <button type="button" :disabled="workspaceStore.workshopSearch.isTranslating || !selectedTranslationEntry" @click="handleClearCurrentTranslation"
                         class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-accent-danger/30 bg-accent-danger/12 px-2.5 text-[0.68rem] font-extrabold text-accent-danger transition-colors hover:bg-accent-danger hover:text-on-accent-danger disabled:cursor-not-allowed disabled:opacity-50">
                         <Trash2 class="size-3.5" />
-                        <span>清理翻译</span>
+                        <span>{{ t('workspace.workshop.clearTranslation') }}</span>
                       </button>
                     </div>
                   </div>
@@ -431,12 +431,12 @@
           </div>
           <div v-viewer.rebuild="imageViewerOptions" class="prose prose-invert prose-sm md:prose-base max-w-none select-text px-2 prose-a:text-accent-primary prose-img:rounded-xl">
             <div v-if="parsedDescription" v-html="parsedDescription"></div>
-            <div v-else class="text-text-dim italic">该模组没有提供详细描述。</div>
+            <div v-else class="text-text-dim italic">{{ t('workspace.workshop.noModDescription') }}</div>
           </div>
           <!-- Steam 详情数据 -->
           <div v-if="hasRichSteamDetails" class="mt-4 space-y-2 rounded-2xl border border-border-base/10 bg-bg-inset/45 p-4">
             <h4 class="flex items-center gap-1.5 text-[0.72rem] font-black text-accent-tip">
-              <SlidersHorizontal class="size-3" /> Steam 详情数据
+              <SlidersHorizontal class="size-3" /> {{ t('workspace.workshop.steamDetails') }}
             </h4>
             <div class="grid grid-cols-2 gap-2 text-xs">
               <div v-if="selectedMod?.kv_tags?.length" class="col-span-2 flex flex-wrap gap-1.5 rounded-xl border border-border-base/10 bg-bg-inset/70 p-2">
@@ -451,9 +451,9 @@
           <div v-if="relatedCollectionChildren.length > 0 || (selectedMod?.item_type === 'collection' && workspaceStore.workshopSearch.relatedLoading.dependencies)" class="mt-4 space-y-3 rounded-2xl border border-border-base/10 bg-bg-inset/45 p-4">
             <div class="flex items-center justify-between gap-2">
               <h4 class="flex items-center gap-1.5 text-[0.72rem] font-black text-accent-tip">
-                <Link class="size-3" /> 合集子项
+                <Link class="size-3" /> {{ t('workspace.workshop.collectionChildren') }}
               </h4>
-              <span v-if="workspaceStore.workshopSearch.relatedLoading.dependencies" class="text-[0.65rem] text-text-dim">加载中...</span>
+              <span v-if="workspaceStore.workshopSearch.relatedLoading.dependencies" class="text-[0.65rem] text-text-dim">{{ t('workspace.workshop.loading') }}</span>
             </div>
             <div class="flex flex-wrap gap-2">
               <button v-for="child in relatedCollectionChildren" :key="child.workshop_id"
@@ -468,13 +468,13 @@
           <div v-if="relatedDependents.length > 0 || workspaceStore.workshopSearch.relatedLoading.dependents || workspaceStore.workshopSearch.relatedErrors.dependents" class="mt-4 space-y-3 rounded-2xl border border-border-base/10 bg-bg-inset/45 p-4">
             <div class="flex items-center justify-between gap-2">
               <h4 class="flex items-center gap-1.5 text-[0.72rem] font-black text-accent-primary">
-                <Network class="size-3" /> 生态关联
+                <Network class="size-3" /> {{ t('workspace.workshop.related') }}
               </h4>
               <button v-if="workspaceStore.workshopSearch.relatedMeta.dependents.total > relatedDependents.length"
                 @click="showRelatedList('dependents')" class="rounded-lg border border-border-base/10 bg-bg-inset px-2 py-1 text-[0.65rem] font-bold text-text-dim hover:text-accent-primary">
-                查看全部
+                {{ t('workspace.workshop.viewAll') }}
               </button>
-              <span v-else-if="workspaceStore.workshopSearch.relatedLoading.dependents" class="text-[0.65rem] text-text-dim">加载中...</span>
+              <span v-else-if="workspaceStore.workshopSearch.relatedLoading.dependents" class="text-[0.65rem] text-text-dim">{{ t('workspace.workshop.loading') }}</span>
             </div>
             <div v-if="workspaceStore.workshopSearch.relatedErrors.dependents" class="text-xs text-accent-danger">{{ workspaceStore.workshopSearch.relatedErrors.dependents }}</div>
             <div class="flex gap-3 overflow-x-auto custom-scrollbar pb-2 snap-x">
@@ -487,13 +487,13 @@
           <div v-if="relatedSameAuthor.length > 0 || workspaceStore.workshopSearch.relatedLoading.same_author || workspaceStore.workshopSearch.relatedErrors.same_author" class="mt-4 space-y-3 rounded-2xl border border-border-base/10 bg-bg-inset/45 p-4">
             <div class="flex items-center justify-between gap-2">
               <h4 class="flex items-center gap-1.5 text-[0.72rem] font-black text-accent-success">
-                <User class="size-3" /> 同作者作品
+                <User class="size-3" /> {{ t('workspace.workshop.sameAuthor') }}
               </h4>
               <button v-if="workspaceStore.workshopSearch.relatedMeta.same_author.total > relatedSameAuthor.length"
                 @click="showRelatedList('same_author')" class="rounded-lg border border-border-base/10 bg-bg-inset px-2 py-1 text-[0.65rem] font-bold text-text-dim hover:text-accent-success">
-                查看全部
+                {{ t('workspace.workshop.viewAll') }}
               </button>
-              <span v-else-if="workspaceStore.workshopSearch.relatedLoading.same_author" class="text-[0.65rem] text-text-dim">加载中...</span>
+              <span v-else-if="workspaceStore.workshopSearch.relatedLoading.same_author" class="text-[0.65rem] text-text-dim">{{ t('workspace.workshop.loading') }}</span>
             </div>
             <div v-if="workspaceStore.workshopSearch.relatedErrors.same_author" class="text-xs text-accent-danger">{{ workspaceStore.workshopSearch.relatedErrors.same_author }}</div>
             <div class="flex gap-3 overflow-x-auto custom-scrollbar pb-2 snap-x">
@@ -511,12 +511,12 @@
           <div class="absolute size-16 border-2 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
           <Globe class="size-6 text-accent-primary absolute animate-pulse" />
         </div>
-        <span class="text-xs font-mono text-text-dim mt-6 tracking-widest">从 Steam 获取详情中...</span>
+        <span class="text-xs font-mono text-text-dim mt-6 tracking-widest">{{ t('workspace.workshop.fetchingDetails') }}</span>
       </div>
       <div v-else-if="!selectedMod" class="flex h-full flex-col items-center justify-center px-8 text-center text-text-disabled">
         <Globe class="mb-4 size-16 opacity-35" />
-        <div class="text-base font-bold text-text-dim">选择一个工坊项目查看详情</div>
-        <div class="mt-2 max-w-sm text-xs leading-5 text-text-subtle">左侧结果会保留搜索和排序状态，点击项目后可查看说明、依赖、截图和关联项目。</div>
+        <div class="text-base font-bold text-text-dim">{{ t('workspace.workshop.selectItem') }}</div>
+        <div class="mt-2 max-w-sm text-xs leading-5 text-text-subtle">{{ t('workspace.workshop.selectItemDesc') }}</div>
       </div>
 
     </section>
@@ -526,6 +526,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css' // 确保引入 CSS
 import { Search, Globe, Cpu, Download, Link, Flag, FlagOff, Network, User, Image, Layers, UserRound, SlidersHorizontal, Star, ThumbsUp, ThumbsDown, HardDrive, ShieldAlert, TriangleAlert, Heart, Hash, Copy, Tag, Plus, MessageSquareMore, Package, CalendarPlus, CalendarArrowUp, Languages, LoaderCircle, RotateCcw, Trash2 } from 'lucide-vue-next'
@@ -548,6 +549,7 @@ import {
 
 const appStore = useAppStore()
 const workspaceStore = useWorkspaceStore()
+const { t } = useI18n()
 
 const workshopSearchInputRef = ref(null)
 const advancedButtonRef = ref(null)
@@ -558,19 +560,19 @@ const detailScrollRef = ref(null)
 const isLocalFetching = ref(false)  // 局部硬锁，绝对同步，防穿透
 const loadedScreenshotMap = ref({})
 const versionTagPattern = /^\d+(?:\.\d+)+$/
-const normalSortOptions = [
-  { label: '最近更新', value: 'latest' },
-  { label: '最多订阅', value: 'subscriptions' },
-  { label: '名称排序', value: 'name' },
-  { label: '作者排序', value: 'author' },
-]
+const normalSortOptions = computed(() => [
+  { label: t('workspace.workshop.sortLatest'), value: 'latest' },
+  { label: t('workspace.workshop.sortSubscriptions'), value: 'subscriptions' },
+  { label: t('workspace.workshop.sortName'), value: 'name' },
+  { label: t('workspace.workshop.sortAuthor'), value: 'author' },
+])
 const languageOptions = computed(() => workspaceStore.workshopSearch.languageOptions)
 const translationLanguageOptions = computed(() => languageOptions.value
   .map(item => ({ label: item.label, value: item.code || item.value }))
   .filter(item => item.value))
 const translationDisplayOptions = computed(() => [
   { label: workspaceStore.getTranslationLanguageLabel('follow_ui'), value: 'follow_ui' },
-  { label: '原文', value: '' },
+  { label: t('workspace.workshop.original'), value: '' },
   ...translationLanguageOptions.value,
 ])
 const translationProviderOptions = computed(() => (
@@ -578,32 +580,32 @@ const translationProviderOptions = computed(() => (
 ))
 const workshopSearchReady = computed(() => !!workspaceStore.workshopSearch.isModeReady)
 const workshopSourceTitle = computed(() => {
-  if (!workshopSearchReady.value) return '读取工坊设置'
-  return workspaceStore.workshopSearch.isEnhancedMode ? '增强工坊搜索' : '缓存工坊搜索'
+  if (!workshopSearchReady.value) return t('workspace.workshop.loadingSettings')
+  return workspaceStore.workshopSearch.isEnhancedMode ? t('workspace.workshop.enhancedSearch') : t('workspace.workshop.cacheSearch')
 })
 const workshopSortPanelOptions = computed(() => (
-  workspaceStore.workshopSearch.isEnhancedMode ? WORKSHOP_SORT_OPTIONS : normalSortOptions
+  workspaceStore.workshopSearch.isEnhancedMode ? WORKSHOP_SORT_OPTIONS : normalSortOptions.value
 ))
 const knownTagOptions = computed(() => ([
-  { label: 'Mod（普通模组）', value: 'Mod' },
-  { label: 'Translation（翻译）', value: 'Translation' },
-  { label: 'Scenario（剧本）', value: 'Scenario' },
+  { label: t('workspace.workshop.tagMod'), value: 'Mod' },
+  { label: t('workspace.workshop.tagTranslation'), value: 'Translation' },
+  { label: t('workspace.workshop.tagScenario'), value: 'Scenario' },
   ...['1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0'].map(version => ({ label: version, value: version })),
 ]))
 const workshopSearchPlaceholder = computed(() => (
   workspaceStore.workshopSearch.isEnhancedMode
-    ? '搜索工坊，支持 t:标签 d:DLC_AppID m:依赖工坊ID'
-    : '搜索缓存，支持 t:标签 d:DLC_AppID m:依赖工坊ID a:作者'
+    ? t('workspace.workshop.enhancedPlaceholder')
+    : t('workspace.workshop.cachePlaceholder')
 ))
 const workshopTokenSchema = computed(() => {
   const schema = {
-    text: { type: TAG_FIELD_TYPES.STRING, label: '搜索文本', alias: ['q', 'text'], suggest: true, defaultSearch: true },
-    tag: { type: TAG_FIELD_TYPES.LIST, label: '标签', alias: ['t', 'tag'], suggest: true },
-    dlc: { type: TAG_FIELD_TYPES.STRING, label: 'DLC依赖', alias: ['d', 'dlc'], suggest: true },
-    dependency: { type: TAG_FIELD_TYPES.STRING, label: '模组依赖', alias: ['m', 'mod', 'dep'], suggest: false },
+    text: { type: TAG_FIELD_TYPES.STRING, label: t('workspace.workshop.searchText'), alias: ['q', 'text'], suggest: true, defaultSearch: true },
+    tag: { type: TAG_FIELD_TYPES.LIST, label: t('workspace.workshop.tag'), alias: ['t', 'tag'], suggest: true },
+    dlc: { type: TAG_FIELD_TYPES.STRING, label: t('workspace.workshop.dlcDependency'), alias: ['d', 'dlc'], suggest: true },
+    dependency: { type: TAG_FIELD_TYPES.STRING, label: t('workspace.workshop.modDependency'), alias: ['m', 'mod', 'dep'], suggest: false },
   }
   if (!workspaceStore.workshopSearch.isEnhancedMode) {
-    schema.author = { type: TAG_FIELD_TYPES.STRING, label: '作者', alias: ['a', 'author'], suggest: false }
+    schema.author = { type: TAG_FIELD_TYPES.STRING, label: t('workspace.workshop.author'), alias: ['a', 'author'], suggest: false }
   }
   return schema
 })
@@ -615,13 +617,7 @@ const workshopSearchController = computed(() => createTagSearchController({
   schema: workshopTokenSchema.value,
   valueOptions: workshopTokenValueOptions.value,
 }))
-const workshopInputHelpText = [
-  '**输入关键词并回车确认**',
-  '可直接输入关键词，或使用 类别:关键词 格式',
-  '搜索文本支持用英文括号约束内部条件，可使用 [[+]]、^^|^^、!!-!! 表示[[必须包含]]、^^任意匹配^^、!!排除匹配!!。',
-  '例如：(红色 ^^|^^ !!-!!蓝色) 表示：匹配红色或排除蓝色。',
-  '\n[[(使用 Tab 键应用输入建议)]]',
-].join('\n')
+const workshopInputHelpText = computed(() => t('workspace.workshop.inputHelp'))
 
 // 仅在用户真正打开工坊页且当前没有任何结果时，才触发默认搜索。
 onMounted(async () => {
@@ -650,7 +646,7 @@ const workshopActiveList = computed(() => (
 const workshopDisplayResults = computed(() => Array.isArray(workshopActiveList.value.items) ? workshopActiveList.value.items : (workshopActiveList.value.results || []))
 const workshopDisplayTotal = computed(() => Number(workshopActiveList.value.total || 0))
 const workshopDisplayLoading = computed(() => !workshopSearchReady.value || !!(workshopActiveList.value.isLoading || workshopActiveList.value.isLoadMore))
-const workshopLoadingText = computed(() => (workshopSearchReady.value ? '正在检索...' : '正在读取工坊设置...'))
+const workshopLoadingText = computed(() => (workshopSearchReady.value ? t('workspace.workshop.searching') : t('workspace.workshop.readingSettings')))
 const workshopDisplayHasMore = computed(() => !!workshopActiveList.value.hasMore)
 const workshopDisplayBanner = computed(() => (
   workspaceStore.workshopSearch.transientList.active
@@ -731,7 +727,7 @@ const selectedCommentLabel = computed(() => {
   return formatHeaderCount(stats.num_comments_public)
 })
 const selectedStatusLabel = computed(() => (
-  selectedMod.value?.status?.banned ? '已封禁' : ''
+  selectedMod.value?.status?.banned ? t('workspace.workshop.banned') : ''
 ))
 const selectedOriginalTitle = computed(() => String(selectedMod.value?.original_title || selectedMod.value?.title || selectedMod.value?.name || '').trim())
 const selectedOriginalDescription = computed(() => String(selectedMod.value?.original_description || selectedMod.value?.description || selectedMod.value?.short_description || '').trim())
@@ -743,7 +739,7 @@ const selectedTranslationEntry = computed(() => (
     ? workspaceStore.getWorkshopTranslationEntry(selectedMod.value?.translations, selectedResolvedTranslationLanguage.value)
     : null
 ))
-const selectedDisplayTitle = computed(() => String(selectedTranslationEntry.value?.title || selectedOriginalTitle.value || selectedMod.value?.name || '未知模组').trim())
+const selectedDisplayTitle = computed(() => String(selectedTranslationEntry.value?.title || selectedOriginalTitle.value || selectedMod.value?.name || t('workspace.workshop.unknownMod')).trim())
 const selectedDisplayDescription = computed(() => String(selectedTranslationEntry.value?.description || selectedOriginalDescription.value || '').trim())
 const selectedShowsTranslatedTitle = computed(() => (
   !!selectedTranslationEntry.value?.title
@@ -768,23 +764,29 @@ const selectedTranslationStale = computed(() => (
   )
 ))
 const translationSettingsTooltip = computed(() => (
-  `当前显示：${selectedTranslationLanguageLabel.value}${selectedTranslationStale.value ? '，原文已更新' : ''}\n当前翻译器：${selectedTranslationProviderLabel.value}\n\n点击可切换显示语言和翻译器，也可以重新翻译或清理当前译文。`
+  t('workspace.workshop.translationCurrent', {
+    language: selectedTranslationLanguageLabel.value,
+    stale: selectedTranslationStale.value ? t('workspace.workshop.translationStale') : '',
+    provider: selectedTranslationProviderLabel.value,
+  })
 ))
 const translationQuickLabel = computed(() => {
-  if (workspaceStore.workshopSearch.isTranslating) return '翻译'
-  return selectedTranslationEntry.value ? '原文' : '翻译'
+  if (workspaceStore.workshopSearch.isTranslating) return t('workspace.workshop.translating')
+  return selectedTranslationEntry.value ? t('workspace.workshop.backToOriginal') : t('workspace.workshop.translating')
 })
 const translationQuickTooltip = computed(() => (
-  selectedTranslationEntry.value ? '切换回工坊原文' : `按当前翻译目标语言显示或生成译文：${workspaceStore.getTranslationLanguageLabel(workspaceStore.getDefaultTranslationSelection())}`
+  selectedTranslationEntry.value
+    ? t('workspace.workshop.quickOriginalTip')
+    : t('workspace.workshop.quickTranslateTip', { language: workspaceStore.getTranslationLanguageLabel(workspaceStore.getDefaultTranslationSelection()) })
 ))
 const selectedContentWarningLabel = computed(() => (
-  selectedMod.value?.maybe_inappropriate_sex || selectedMod.value?.maybe_inappropriate_violence ? '含敏感标记' : ''
+  selectedMod.value?.maybe_inappropriate_sex || selectedMod.value?.maybe_inappropriate_violence ? t('workspace.workshop.contentWarning') : ''
 ))
 const selectedDisplayTags = computed(() => selectedTags.value.slice(0, 4))
 const selectedHiddenTagCount = computed(() => Math.max(0, selectedTags.value.length - selectedDisplayTags.value.length))
 const selectedHiddenTagTooltip = computed(() => (
   selectedTags.value.length > selectedDisplayTags.value.length
-    ? `其余标签：${selectedTags.value.slice(selectedDisplayTags.value.length).join(' / ')}`
+    ? t('workspace.workshop.hiddenTags', { tags: selectedTags.value.slice(selectedDisplayTags.value.length).join(' / ') })
     : ''
 ))
 const hasRichSteamDetails = computed(() => {
@@ -837,7 +839,7 @@ const workshopActiveSortValue = computed(() => (
 const workshopSortStateLabel = computed(() => (
   workspaceStore.workshopSearch.isEnhancedMode
     ? formatWorkshopSortStateLabel(workspaceStore.workshopSearch.sort, workspaceStore.workshopSearch.days, workshopHasSearchText.value)
-    : normalSortOptions.find(option => option.value === workspaceStore.workshopSearch.sort)?.label || '最近更新'
+    : normalSortOptions.value.find(option => option.value === workspaceStore.workshopSearch.sort)?.label || t('workspace.workshop.sortLatest')
 ))
 const isWorkshopSortOptionDisabled = (option) => (
   workspaceStore.workshopSearch.isEnhancedMode

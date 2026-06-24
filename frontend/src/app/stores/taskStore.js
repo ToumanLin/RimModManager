@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { t } from '../i18n'
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'cancelled'])
 const ACTIVE_STATUSES = new Set(['pending', 'running'])
@@ -33,7 +34,7 @@ export const useTaskStore = defineStore('tasks', () => {
       if (task.status === 'success') {
         entry.resolve(task)
       } else {
-        entry.reject(new Error(task.message || task.metrics?.error || '任务未成功完成'))
+        entry.reject(new Error(task.message || task.metrics?.error || t('taskStore.taskDidNotComplete')))
       }
     }
   }
@@ -117,14 +118,14 @@ export const useTaskStore = defineStore('tasks', () => {
     const currentTask = getTask(taskId)
     if (currentTask && TERMINAL_STATUSES.has(currentTask.status)) {
       if (currentTask.status === 'success') return Promise.resolve(currentTask)
-      return Promise.reject(new Error(currentTask.message || currentTask.metrics?.error || '任务未成功完成'))
+      return Promise.reject(new Error(currentTask.message || currentTask.metrics?.error || t('taskStore.taskDidNotComplete')))
     }
 
     return new Promise((resolve, reject) => {
       const timer = window.setTimeout(() => {
         const entries = waiters.get(taskId) || []
         waiters.set(taskId, entries.filter(entry => entry.timer !== timer))
-        reject(new Error('任务超时'))
+        reject(new Error(t('taskStore.taskTimeout')))
       }, timeout)
       const entries = waiters.get(taskId) || []
       entries.push({ resolve, reject, timer })

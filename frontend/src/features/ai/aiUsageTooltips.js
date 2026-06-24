@@ -10,7 +10,7 @@ const numberOrZero = (value) => {
   return Number.isFinite(numeric) ? numeric : 0
 }
 
-const formatTokenCount = (value) => numberOrZero(value).toLocaleString('zh-CN')
+const formatTokenCount = (value) => numberOrZero(value).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN')
 
 const appendDetailLine = (lines, label, value) => {
   /** 仅在某项 token > 0 时才把细项写入 tooltip，避免出现大段空统计。 */

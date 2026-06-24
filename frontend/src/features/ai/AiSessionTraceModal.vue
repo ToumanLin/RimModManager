@@ -236,7 +236,7 @@ const formatTime = (value) => {
   if (!timestamp) return '未知时间'
   const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return '未知时间'
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', {
     hour12: false,
     month: '2-digit',
     day: '2-digit',

@@ -10,11 +10,11 @@
             {{ title }}
           </h3>
           <CommonSwitch v-if="storeType === 'workshop' && canToggleWorkshopMods" label="" mini class="text-text-dim" :disabled="workshopSwitchDisabled"
-            v-model="use_workshop_mods" description="适用于非 Steam 版环境。为当前环境使用创意工坊模组，启用后将通过链接方式自动为游戏添加创意工坊模组。（前提是账号拥有游戏，或创意工坊内容本身可正常使用。）" />
+            v-model="use_workshop_mods" :description="t('workspace.matrix.workshopSwitchDesc')" />
           <CommonSwitch v-else-if="storeType === 'self'" label=" " mini class="text-text-dim" 
-            v-model="use_self_mods" description="为当前环境使用管理器Mod，启用后将通过链接方式自动为游戏添加管理器 Mod。" />
-          <CommonSwitch v-if="storeType === 'local'" label="· 显示官方" mini class="text-text-dim" 
-            v-model="showOfficialLocalModsModel" description="默认隐藏 Core/DLC 等官方项目；隐藏时不会进入本地列表和多选范围。" />
+            v-model="use_self_mods" :description="t('workspace.matrix.selfSwitchDesc')" />
+          <CommonSwitch v-if="storeType === 'local'" :label="t('workspace.matrix.showOfficial')" mini class="text-text-dim" 
+            v-model="showOfficialLocalModsModel" :description="t('workspace.matrix.showOfficialDesc')" />
         </div>
 
         <div class="flex gap-2">
@@ -22,28 +22,22 @@
             {{ formatFileSize(columnSize) }}
           </span>
           <span class="text-[0.65rem] font-mono text-text-main bg-bg-inset/80 px-2 py-0.5 rounded-md border border-border-base/5">
-            {{ mods.length }} 项
+            {{ t('workspace.matrix.itemCount', { count: mods.length }) }}
           </span>
         </div>
       </div>
 
       <div class="flex flex-col items-center gap-2">
         <div class="relative w-full">
-          <input v-model="searchQuery" placeholder="在此域检索..."
+          <input v-model="searchQuery" :placeholder="t('workspace.matrix.searchPlaceholder')"
             class="w-full bg-bg-inset border border-border-base/10 rounded-lg pl-3 pr-2 py-1.5 text-xs text-text-main focus:border-accent-primary outline-none transition-colors"
           />
         </div>
         <div class="flex items-center w-full justify-end gap-2">
-          <CommonSelect v-model="filterState" mini :options="MATRIX_FILTER_STATE_OPTIONS" />
+          <CommonSelect v-model="filterState" mini :options="matrixFilterStateOptions" />
 
           <CommonSelect v-model="sortBy" mini
-            :options="[
-              { label: '按变动时间', value: 'change' },
-              { label: '按修改时间', value: 'mtime' },
-              { label: '按创建时间', value: 'ctime' },
-              { label: '按文件体积', value: 'size' },
-              { label: '按名称 A-Z', value: 'name' }
-            ]"
+            :options="matrixSortOptions"
           />
 
           <Motion :class="`p-1 size-7 rounded-md bg-bg-overlay/5 border border-border-base/10 hover:text-text-main hover:bg-bg-overlay/10 text-xs font-bold flex items-center justify-center cursor-pointer `"
@@ -51,7 +45,7 @@
             :animate="{ rotateX: isSortDsc ? 0 : 180 }"
             :transition="{ type: 'spring', stiffness: 300, damping: 20 }"
             @click="isSortDsc=!isSortDsc"
-            v-tooltip="isSortDsc ? '切换为升序排列' : '切换为降序排列'"
+            v-tooltip="isSortDsc ? t('workspace.matrix.sortAsc') : t('workspace.matrix.sortDesc')"
           >
             <span v-if="isSortDsc" class="rotate-x-180">
               <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="M11 12h4"/><path d="M11 16h7"/><path d="M11 20h10"/></svg>
@@ -99,7 +93,7 @@
 
       <div v-else class="absolute inset-0 flex flex-col items-center justify-center text-text-disabled">
         <svg class="size-12 mb-2 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
-        <span class="text-xs font-bold tracking-widest uppercase">库内暂无数据</span>
+        <span class="text-xs font-bold tracking-widest uppercase">{{ t('workspace.matrix.empty') }}</span>
       </div>
     </div>
   </div>
@@ -107,6 +101,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { Motion } from 'motion-v'
 import { Activity, ArrowRightLeft, Cable, Copy, CornerUpRight, DownloadCloud, Flag, FlagOff, FolderInput, Lock, LockOpen, Trash2, Upload } from 'lucide-vue-next'
@@ -121,7 +116,7 @@ import { useWorkspaceStore } from '../workspaceStore'
 import { IconSteam, SOURCE_TYPE_MAP } from '../../../shared/lib/constants'
 import { formatFileSize } from '../../../shared/lib/format'
 import { checkResult, toast } from '../../../shared/lib/common'
-import { getMatrixItemState, getMatrixMeaningfulChangeTime, getMatrixReplacementTargets, matchesMatrixFilter, MATRIX_FILTER_STATE_OPTIONS } from '../lib/matrixItemState'
+import { getMatrixItemState, getMatrixMeaningfulChangeTime, getMatrixReplacementTargets, matchesMatrixFilter } from '../lib/matrixItemState'
 import CommonSwitch from '../../../shared/components/input/CommonSwitch.vue'
 
 const props = defineProps({
@@ -144,6 +139,7 @@ const menuStore = useContextMenuStore()
 const modStore = useModStore()
 const workspaceStore = useWorkspaceStore()
 const confirmStore = useConfirmStore()
+const { t } = useI18n()
 
 const searchQuery = ref('')
 const sortBy = ref('change')
@@ -152,6 +148,24 @@ const filterState = ref('default')
 const localSelectedPathHashes = ref([])
 const scrollRef = ref(null)
 const columnSize = computed(() => (props.mods || []).reduce((acc, mod) => acc + (mod.file_size || 0), 0))
+const matrixFilterStateOptions = computed(() => [
+  { label: t('workspace.matrix.filters.default'), value: 'default' },
+  { label: t('workspace.matrix.filters.new'), value: 'new' },
+  { label: t('workspace.matrix.filters.change'), value: 'change' },
+  { label: t('workspace.matrix.filters.update'), value: 'update' },
+  { label: t('workspace.matrix.filters.same'), value: 'same' },
+  { label: t('workspace.matrix.filters.conflict'), value: 'conflict' },
+  { label: t('workspace.matrix.filters.replace'), value: 'replace' },
+  { label: t('workspace.matrix.filters.disabled'), value: 'disabled' },
+  { label: t('workspace.matrix.filters.missing'), value: 'missing' },
+])
+const matrixSortOptions = computed(() => [
+  { label: t('workspace.matrix.sortChange'), value: 'change' },
+  { label: t('workspace.matrix.sortMtime'), value: 'mtime' },
+  { label: t('workspace.matrix.sortCtime'), value: 'ctime' },
+  { label: t('workspace.matrix.sortSize'), value: 'size' },
+  { label: t('workspace.matrix.sortName'), value: 'name' },
+])
 
 const lastPlayedTime = computed(() => profileStore.currentProfile?.last_played_time || 0)
 const hasWorkshopLibrary = computed(() => !!appStore.settings.workshop_mods_path)
@@ -196,7 +210,7 @@ const getModsData = (pathHashes, type = null) => {
   return []
 }
 
-const getShortPathLabel = (path, fallback = '缺失记录') => {
+const getShortPathLabel = (path, fallback = t('workspace.matrix.missingRecord')) => {
   if (!path) return fallback
   const parts = String(path).split(/[\\/]/).filter(Boolean)
   return parts.slice(-2).join('\\') || path
@@ -207,7 +221,7 @@ const buildJumpMenuItem = (label, icon, targets) => {
   if (targets.length === 1) {
     return { label, icon, action: () => workspaceStore.jumpToMatrixItem(targets[0].path_hash) }
   }
-  return { label: `${label} (${targets.length} 项)`, icon,
+  return { label: t('workspace.matrix.targetCount', { label, count: targets.length }), icon,
     children: targets.map(target => ({
       label: `${SOURCE_TYPE_MAP[target.store] || target.store} · ${getShortPathLabel(target.path, target.name || target.package_id)}`,
       icon: CornerUpRight,
@@ -332,8 +346,8 @@ const unsubscribeAndClearMissingWorkshopRecords = async (mods) => {
   if (!workshopIds.length) return false
 
   const check = await confirmStore.confirmAction(
-    '清理失效并取消订阅',
-    `确定要取消订阅这些异常缺失的工坊项并清理本地记录吗？（${workshopIds.length} 项）`,
+    t('workspace.matrix.cleanInvalidTitle'),
+    t('workspace.matrix.cleanInvalidMessage', { count: workshopIds.length }),
     { type: 'error' }
   )
   if (!check) return false
@@ -346,7 +360,7 @@ const unsubscribeAndClearMissingWorkshopRecords = async (mods) => {
     .filter(pathHash => pathHash && !pathHash.startsWith('ghost_'))
   if (recordHashes.length > 0) {
     const res = await window.pywebview.api.mods_delete(recordHashes, false, false)
-    if (!checkResult(res, '清理缺失数据记录')) return false
+    if (!checkResult(res, t('workspace.matrix.clearMissingRecordsOp'))) return false
   }
 
   await workspaceStore.fetchLibrariesMods()
@@ -359,15 +373,15 @@ const clearMissingRecords = async (pathHashes) => {
   if (!hashes.length) return false
 
   const check = await confirmStore.confirmAction(
-    '清理数据记录',
-    `确定要清理选中缺失项的数据记录吗？（${hashes.length} 项）\n这不会取消 Steam 订阅，也不会删除任何仍存在的文件。`,
+    t('workspace.matrix.clearRecordsTitle'),
+    t('workspace.matrix.clearRecordsMessage', { count: hashes.length }),
     { type: 'warning' }
   )
   if (!check) return false
 
   const res = await window.pywebview.api.mods_delete(hashes, false, false)
-  if (checkResult(res, '清理缺失数据记录')) {
-    toast.success(`已清理 ${res.data?.success_count || hashes.length} 条缺失数据记录`)
+  if (checkResult(res, t('workspace.matrix.clearMissingRecordsOp'))) {
+    toast.success(t('workspace.matrix.clearRecordsSuccess', { count: res.data?.success_count || hashes.length }))
     await workspaceStore.fetchLibrariesMods()
     return true
   }
@@ -392,50 +406,50 @@ const handleContextMenu = async (event, targetMod) => {
   const selectedWorkshopIds = selectedMods.map(mod => mod.workshop_id).filter(Boolean)
   const selectedPaths = selectedMods.map(mod => mod.path).filter(Boolean)
   const selectedPackageIds = selectedMods.map(mod => mod.package_id).filter(Boolean)
-  const selectedNumStr = selectedMods.length > 1 ? ` (${selectedMods.length} 项)` : ''
+  const selectedNumStr = selectedMods.length > 1 ? t('workspace.matrix.selectedCount', { count: selectedMods.length }) : ''
   const isMissing = !!targetMod.is_missing
   const selectedMissingPathHashes = selectedMods
     .filter(mod => mod?.is_missing)
     .map(mod => mod?.path_hash)
     .filter(Boolean)
-  const selectedMissingNumStr = selectedMissingPathHashes.length > 1 ? ` (${selectedMissingPathHashes.length} 项)` : ''
+  const selectedMissingNumStr = selectedMissingPathHashes.length > 1 ? t('workspace.matrix.selectedCount', { count: selectedMissingPathHashes.length }) : ''
   const selectedSubscribedMissingMods = selectedMods.filter(mod => mod?.is_missing && mod?.steam_status?.is_subscribed === true && mod?.workshop_id)
   const sameTargets = workspaceStore.getMatrixSameItems(targetMod.path_hash)
   const replacementTargets = getMatrixReplacementTargets(targetMod, workspaceStore)
 
   const menuItems = []
   const transferTargets = [
-    { label: '复制到 游戏本地库', disabled: props.storeType === 'local', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'local', 'copy') },
-    { label: '复制到 管理器库', disabled: props.storeType === 'self', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'self', 'copy') },
+    { label: t('workspace.matrix.copyToLocal'), disabled: props.storeType === 'local', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'local', 'copy') },
+    { label: t('workspace.matrix.copyToSelf'), disabled: props.storeType === 'self', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'self', 'copy') },
   ]
   const moveTargets = [
-    { label: '移动到 游戏本地库', disabled: props.storeType === 'local' || props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'local', 'move') },
-    { label: '移动到 管理器库', disabled: props.storeType === 'self' || props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'self', 'move') },
+    { label: t('workspace.matrix.moveToLocal'), disabled: props.storeType === 'local' || props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'local', 'move') },
+    { label: t('workspace.matrix.moveToSelf'), disabled: props.storeType === 'self' || props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'self', 'move') },
   ]
   if (hasWorkshopLibrary.value) {
     // 工坊库路径缺失时，这类入口会把用户带到一个并不存在的落点；
     // 因此这里直接不渲染“转入工坊库”的菜单项，避免出现隐藏列仍可操作的残留入口。
-    transferTargets.push({ label: '复制到 创意工坊库', disabled: props.storeType === 'workshop', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'workshop', 'copy') })
-    moveTargets.push({ label: '移动到 创意工坊库', disabled: props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'workshop', 'move') })
+    transferTargets.push({ label: t('workspace.matrix.copyToWorkshop'), disabled: props.storeType === 'workshop', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'workshop', 'copy') })
+    moveTargets.push({ label: t('workspace.matrix.moveToWorkshop'), disabled: props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'workshop', 'move') })
   }
 
   // 1. 常规信息操作
   if (!isMissing) {
-    menuItems.push({ label: '查看变动', icon: Activity, action: () => emit('open-timeline', targetMod) })
-    menuItems.push({ label: '打开文件夹', icon: FolderInput, action: () => appStore.openPath(targetMod.path) })
+    menuItems.push({ label: t('workspace.matrix.viewTimeline'), icon: Activity, action: () => emit('open-timeline', targetMod) })
+    menuItems.push({ label: t('workspace.matrix.openFolder'), icon: FolderInput, action: () => appStore.openPath(targetMod.path) })
   }
 
-  const sameJumpItem = buildJumpMenuItem('跳转到相同项', CornerUpRight, sameTargets)
+  const sameJumpItem = buildJumpMenuItem(t('workspace.matrix.jumpSame'), CornerUpRight, sameTargets)
   if (sameJumpItem) menuItems.push(sameJumpItem)
 
-  const replacementJumpItem = buildJumpMenuItem('跳转到替代项', Cable, replacementTargets)
+  const replacementJumpItem = buildJumpMenuItem(t('workspace.matrix.jumpReplacement'), Cable, replacementTargets)
   if (replacementJumpItem) menuItems.push(replacementJumpItem)
 
   menuItems.push({ divider: true })
   // 2. 跨库物理转移 (Copy / Move)
   if (!isMissing) {
     menuItems.push({
-      label: '转移...' + selectedNumStr,
+      label: t('workspace.matrix.transfer') + selectedNumStr,
       icon: ArrowRightLeft,
       children: [
         ...transferTargets,
@@ -448,33 +462,33 @@ const handleContextMenu = async (event, targetMod) => {
   // 更新
   if (targetMod.steam_status?.needs_update || targetMod.has_update) {
     if (targetMod.store === 'workshop') {
-      menuItems.push({ label: '更新模组[再次订阅]' + selectedNumStr, disabled: selectedWorkshopIds.length === 0, icon: Upload, action: () => appStore.subscribeWorkshopIds(selectedWorkshopIds)
+      menuItems.push({ label: t('workspace.matrix.updateResubscribe') + selectedNumStr, disabled: selectedWorkshopIds.length === 0, icon: Upload, action: () => appStore.subscribeWorkshopIds(selectedWorkshopIds)
       })
     } else {
-      menuItems.push({ label: '更新模组[再次下载]' + selectedNumStr, disabled: selectedWorkshopIds.length === 0, icon: Upload, action: () => downloadMods(localSelectedPathHashes.value)
+      menuItems.push({ label: t('workspace.matrix.updateRedownload') + selectedNumStr, disabled: selectedWorkshopIds.length === 0, icon: Upload, action: () => downloadMods(localSelectedPathHashes.value)
       })
     }
   }
-  menuItems.push({ label: '下载到管理器' + selectedNumStr, disabled: selectedWorkshopIds.length === 0, icon: DownloadCloud, action: () => downloadMods(localSelectedPathHashes.value) })
+  menuItems.push({ label: t('workspace.matrix.downloadToManager') + selectedNumStr, disabled: selectedWorkshopIds.length === 0, icon: DownloadCloud, action: () => downloadMods(localSelectedPathHashes.value) })
   // 3. Steam API 相关操作
-  menuItems.push({ label: 'Steam操作', icon: IconSteam,
+  menuItems.push({ label: t('workspace.matrix.steamActions'), icon: IconSteam,
     children: [
-      { label: '访问创意工坊', disabled: !targetMod.workshop_id, icon: IconSteam, action: () => appStore.openSteamWorkshopById(targetMod.workshop_id) },
-      { label: '订阅模组' + selectedNumStr, disabled: selectedWorkshopIds.length === 0 || (!!targetMod.steam_status?.is_subscribed && selectedWorkshopIds.length === 1), icon: Flag, action: () => appStore.subscribeWorkshopIds(selectedWorkshopIds) },
-      { label: '取消订阅' + selectedNumStr, disabled: props.storeType !== 'workshop' || selectedWorkshopIds.length === 0 || targetMod.steam_status?.is_subscribed === false, icon: FlagOff, level: 'danger', action: () => unsubscribeWorkshopIds(localSelectedPathHashes.value, false) },
+      { label: t('workspace.matrix.visitWorkshop'), disabled: !targetMod.workshop_id, icon: IconSteam, action: () => appStore.openSteamWorkshopById(targetMod.workshop_id) },
+      { label: t('workspace.matrix.subscribeMod') + selectedNumStr, disabled: selectedWorkshopIds.length === 0 || (!!targetMod.steam_status?.is_subscribed && selectedWorkshopIds.length === 1), icon: Flag, action: () => appStore.subscribeWorkshopIds(selectedWorkshopIds) },
+      { label: t('workspace.matrix.unsubscribe') + selectedNumStr, disabled: props.storeType !== 'workshop' || selectedWorkshopIds.length === 0 || targetMod.steam_status?.is_subscribed === false, icon: FlagOff, level: 'danger', action: () => unsubscribeWorkshopIds(localSelectedPathHashes.value, false) },
     ]
   })
 
   // 4. 破坏性操作
   menuItems.push({ divider: true })
   if(!isMissing) {
-    menuItems.push({ label: targetMod.disabled ? '解禁' : '禁用' + selectedNumStr, icon: targetMod.disabled ? LockOpen : Lock, level: 'warn', action: () => modStore.disableMods(localSelectedPathHashes.value, !targetMod.disabled) })
-    menuItems.push({ label: '删除文件' + selectedNumStr, icon: Trash2, level: 'danger', action: () => modStore.deleteMods(localSelectedPathHashes.value) })
+    menuItems.push({ label: targetMod.disabled ? t('workspace.matrix.enable') : t('workspace.matrix.disable') + selectedNumStr, icon: targetMod.disabled ? LockOpen : Lock, level: 'warn', action: () => modStore.disableMods(localSelectedPathHashes.value, !targetMod.disabled) })
+    menuItems.push({ label: t('workspace.matrix.deleteFiles') + selectedNumStr, icon: Trash2, level: 'danger', action: () => modStore.deleteMods(localSelectedPathHashes.value) })
   } else if (props.storeType === 'workshop' && selectedSubscribedMissingMods.length > 0) {
     // 工坊列中仍处于订阅状态的缺失项，代表“订阅还在但文件异常丢失”。
-    menuItems.push({ label: '清理失效并取消订阅' + selectedNumStr, icon: Trash2, level: 'danger', action: () => unsubscribeAndClearMissingWorkshopRecords(selectedSubscribedMissingMods) })
+    menuItems.push({ label: t('workspace.matrix.cleanInvalidAndUnsubscribe') + selectedNumStr, icon: Trash2, level: 'danger', action: () => unsubscribeAndClearMissingWorkshopRecords(selectedSubscribedMissingMods) })
   } else {
-    menuItems.push({ label: '清理数据记录' + selectedMissingNumStr, icon: Trash2, level: 'danger', action: () => clearMissingRecords(selectedMissingPathHashes) })
+    menuItems.push({ label: t('workspace.matrix.clearRecords') + selectedMissingNumStr, icon: Trash2, level: 'danger', action: () => clearMissingRecords(selectedMissingPathHashes) })
   }
 
   menuStore.open(event, menuItems)

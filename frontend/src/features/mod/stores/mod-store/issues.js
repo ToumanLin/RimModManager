@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import { deepClone, toast, checkResult } from '../../../../shared/lib/common'
 import { ISSUE_LEVEL, ISSUE_TYPE, ISSUE_TITLE_MAP } from '../../../../shared/lib/constants'
 import { useProfileStore } from '../../../profiles/profileStore'
+import { t } from '../../../../app/i18n'
 
 const POSITION_WEIGHT_TOP = 0
 const POSITION_WEIGHT_DEFAULT = 500
@@ -50,7 +51,7 @@ export const useModIssues = ({
 
       // A. 文件缺失
       if (!mod.path || mod.isMissing) {
-        _add(id, ISSUE_TYPE.ERROR_MISSING_FILE, ISSUE_LEVEL.ERROR, '本地文件缺失或无法解析', id)
+        _add(id, ISSUE_TYPE.ERROR_MISSING_FILE, ISSUE_LEVEL.ERROR, t('modIssues.missingFile'), id)
         continue // 文件都没了，没必要查别的
       }
 
@@ -59,7 +60,11 @@ export const useModIssues = ({
         const gameVerMajor = profileStore.activeContext.game_version.substring(0, 3)
         if (mod.supported_versions && mod.supported_versions.length > 0 && !mod.supported_versions.includes(gameVerMajor)) {
           _add(id, ISSUE_TYPE.WARN_VERSION_MISMATCH, ISSUE_LEVEL.WARN,
-            `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_VERSION_MISMATCH]}^^：不支持当前游戏版本··[[${gameVerMajor}]]·· \n __(支持: ··${(mod.supported_versions || []).join('··, ··')}··)__`)
+            t('modIssues.versionMismatch', {
+              title: ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_VERSION_MISMATCH],
+              version: gameVerMajor,
+              supported: (mod.supported_versions || []).join('··, ··'),
+            }))
         }
       }
     }
@@ -147,7 +152,7 @@ export const useModIssues = ({
       const wInfo = rules.weight_info || {}
       // 直接使用后端统一提供的 final_weight，兜底为普通 Mod 默认位置权重。
       const finalWeight = wInfo.final_weight !== undefined ? wInfo.final_weight : POSITION_WEIGHT_DEFAULT
-      const sourceName = wInfo.absolute_source || '未知规则'
+      const sourceName = wInfo.absolute_source || t('modIssues.unknownRule')
 
       // 1. 置顶检查：0 是位置权重域里的置顶哨兵。
       if (finalWeight <= POSITION_WEIGHT_TOP && i > 0) { // 只检查非首位元素
@@ -161,7 +166,7 @@ export const useModIssues = ({
           const isAllowedByRule = isMustBefore.get(prevId)?.has(currentId)
           if (!isAllowedByRule) {
             _add(currentToken, ISSUE_TYPE.WARN_WRONG_ORDER, ISSUE_LEVEL.WARN,
-              `^^排序警告^^：根据 ${sourceName} 要求置顶，但被排在了非前置依赖的常规模组 [[${displayModName(prevId)}]] 之后`, prevToken)
+              t('modIssues.topOrderWarning', { source: sourceName, mod: displayModName(prevId) }), prevToken)
           }
         }
       }
@@ -177,7 +182,7 @@ export const useModIssues = ({
           const isAllowedByRule = isMustBefore.get(currentId)?.has(nextId)
           if (!isAllowedByRule) {
             _add(currentToken, ISSUE_TYPE.WARN_WRONG_ORDER, ISSUE_LEVEL.WARN,
-              `^^排序警告^^：根据 ${sourceName} 要求置底，但前方拦截了非后置依赖的常规模组 [[${displayModName(nextId)}]]`, nextToken)
+              t('modIssues.bottomOrderWarning', { source: sourceName, mod: displayModName(nextId) }), nextToken)
           }
         }
       }
@@ -205,7 +210,11 @@ export const useModIssues = ({
             const baseName = displayModName(baseTargetId)
             const altName = displayModName(activeTargetId)
             _add(currentToken, ISSUE_TYPE.INFO_ALTERNATIVE_USED, ISSUE_LEVEL.INFO,
-              `__${ISSUE_TITLE_MAP[ISSUE_TYPE.INFO_ALTERNATIVE_USED]}__：前置依赖 [[${baseName}]] 已由备选模组 [[${altName}]] 替代`, activeTargetToken)
+              t('modIssues.alternativeUsed', {
+                title: ISSUE_TITLE_MAP[ISSUE_TYPE.INFO_ALTERNATIVE_USED],
+                base: baseName,
+                alt: altName,
+              }), activeTargetToken)
           } else {
             // 缺失或停用
             const baseMod = allModsMap.value.get(baseTargetId)
@@ -217,15 +226,24 @@ export const useModIssues = ({
               const localAlt = alts.find(alt => hasRealModById(alt))
               if (localAlt) {
                 _add(currentToken, ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY, ISSUE_LEVEL.ERROR,
-                  `!!${ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY]}!!：未启用备选前置模组 [[${displayModName(localAlt)}]]`, activeTokenMap.get(normalizeCanonicalId(localAlt)) || normalizeCanonicalId(localAlt))
+                  t('modIssues.inactiveAlternativeDependency', {
+                    title: ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY],
+                    mod: displayModName(localAlt),
+                  }), activeTokenMap.get(normalizeCanonicalId(localAlt)) || normalizeCanonicalId(localAlt))
               } else {
                 // 全都不在本地，彻底缺失
                 _add(currentToken, ISSUE_TYPE.ERROR_MISSING_DEPENDENCY, ISSUE_LEVEL.ERROR,
-                  `!!${ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_MISSING_DEPENDENCY]}!!：缺少前置模组 [[${baseName}]]`, baseTargetId)
+                  t('modIssues.missingDependency', {
+                    title: ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_MISSING_DEPENDENCY],
+                    mod: baseName,
+                  }), baseTargetId)
               }
             } else {
               _add(currentToken, ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY, ISSUE_LEVEL.ERROR,
-                `!!${ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY]}!!：未启用前置模组 [[${baseName}]]`, baseTargetId)
+                t('modIssues.inactiveDependency', {
+                  title: ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY],
+                  mod: baseName,
+                }), baseTargetId)
             }
             continue // 基础依赖和备选依赖都没满足，不用查排序了
           }
@@ -237,7 +255,7 @@ export const useModIssues = ({
         // 3. 排序检查：依赖项必须在当前 Mod 之前
         if (activeIndexMap.get(activeTargetId) > i) {
           _add(currentToken, ISSUE_TYPE.WARN_WRONG_ORDER, ISSUE_LEVEL.ERROR,
-            `!!依赖后置!!：必须在依赖 [[${displayModName(activeTargetId)}]] 之后加载`, activeTokenMap.get(activeTargetId) || activeTargetId)
+            t('modIssues.dependencyAfter', { mod: displayModName(activeTargetId) }), activeTokenMap.get(activeTargetId) || activeTargetId)
         }
       }
 
@@ -248,13 +266,13 @@ export const useModIssues = ({
         if (!activeIndexMap.has(targetId)) continue
 
         const targetName = displayModName(targetId)
-        const sourceName = rule.source?.name || '未知规则'
+        const sourceName = rule.source?.name || t('modIssues.unknownRule')
         const level = (rule.is_force || rule.source?.type==="native") ? ISSUE_LEVEL.ERROR : ISSUE_LEVEL.WARN
-        const prefix = rule.is_force ? '!!排序错误!!' : '^^排序警告^^'
+        const prefix = rule.is_force ? t('modIssues.sortErrorPrefix') : t('modIssues.sortWarningPrefix')
 
         if (activeIndexMap.get(targetId) > i) {
           _add(currentToken, ISSUE_TYPE.WARN_WRONG_ORDER, level,
-            `${prefix}：根据 __${sourceName}__，应在 [[${targetName}]] 之后加载`, activeTokenMap.get(targetId) || targetId)
+            t('modIssues.loadAfter', { prefix, source: sourceName, mod: targetName }), activeTokenMap.get(targetId) || targetId)
         }
       }
 
@@ -265,13 +283,13 @@ export const useModIssues = ({
         if (!activeIndexMap.has(targetId)) continue
 
         const targetName = displayModName(targetId)
-        const sourceName = rule.source?.name || '未知规则'
+        const sourceName = rule.source?.name || t('modIssues.unknownRule')
         const level = rule.is_force ? ISSUE_LEVEL.ERROR : ISSUE_LEVEL.WARN
-        const prefix = rule.is_force ? '!!排序错误!!' : '^^排序警告^^'
+        const prefix = rule.is_force ? t('modIssues.sortErrorPrefix') : t('modIssues.sortWarningPrefix')
 
         if (activeIndexMap.get(targetId) < i) {
           _add(currentToken, ISSUE_TYPE.WARN_WRONG_ORDER, level,
-            `${prefix}：根据 __${sourceName}__，应在 [[${targetName}]] 之前加载`, activeTokenMap.get(targetId) || targetId)
+            t('modIssues.loadBefore', { prefix, source: sourceName, mod: targetName }), activeTokenMap.get(targetId) || targetId)
         }
       }
 
@@ -280,10 +298,15 @@ export const useModIssues = ({
         const targetId = normalizeCanonicalId(rule.target_id)
         if (activeIndexMap.has(targetId)) {
           const targetName = displayModName(targetId)
-          const sourceName = rule.source?.name || '未知规则'
+          const sourceName = rule.source?.name || t('modIssues.unknownRule')
           const extra = rule.source?.detail?.comment ? ` (${rule.source.detail.comment})` : ''
           _add(currentToken, ISSUE_TYPE.ERROR_INCOMPATIBLE, ISSUE_LEVEL.ERROR,
-            `!!${ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_INCOMPATIBLE]}!!：__${sourceName}__ 指出与 [[${targetName}]] 不兼容${extra}`, activeTokenMap.get(targetId) || targetId)
+            t('modIssues.incompatible', {
+              title: ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_INCOMPATIBLE],
+              source: sourceName,
+              mod: targetName,
+              extra,
+            }), activeTokenMap.get(targetId) || targetId)
         }
       }
 
@@ -338,16 +361,24 @@ export const useModIssues = ({
                 const localPack = availablePacks[0] // 取第一个本地找到的语言包
                 const packName = displayModName(localPack.package_id)
                 _add(currentToken, ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK, ISSUE_LEVEL.WARN,
-                  `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK]}^^：不支持当前语言，但本地存在语言包 [[${packName}]]`, activeTokenMap.get(normalizeCanonicalId(localPack.package_id)) || normalizeCanonicalId(localPack.package_id))
+                  t('modIssues.inactiveLanguagePack', {
+                    title: ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK],
+                    mod: packName,
+                  }), activeTokenMap.get(normalizeCanonicalId(localPack.package_id)) || normalizeCanonicalId(localPack.package_id))
               } else if (fallbackPacks.length > 0) {
                 const fallbackPack = fallbackPacks[0]
                 const packName = displayModName(fallbackPack.package_id)
                 _add(currentToken, ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK, ISSUE_LEVEL.WARN,
-                  `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK]}^^：不支持当前语言，但本地存在可能相关的语言包 [[${packName}]]（该语言包未声明支持当前语言）`, activeTokenMap.get(normalizeCanonicalId(fallbackPack.package_id)) || normalizeCanonicalId(fallbackPack.package_id))
+                  t('modIssues.inactivePossibleLanguagePack', {
+                    title: ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_LANGUAGE_PACK],
+                    mod: packName,
+                  }), activeTokenMap.get(normalizeCanonicalId(fallbackPack.package_id)) || normalizeCanonicalId(fallbackPack.package_id))
               } else {
                 // 本地彻底没有相关语言包
                 _add(currentToken, ISSUE_TYPE.WARN_MISSING_LANGUAGE, ISSUE_LEVEL.WARN,
-                  `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_MISSING_LANGUAGE]}^^：不支持当前语言，且未在本地发现相关语言包`)
+                  t('modIssues.missingLanguage', {
+                    title: ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_MISSING_LANGUAGE],
+                  }))
               }
             }
           } // 自身是语言包，检查是否存在前置或依赖，且目标Mod是否启用
@@ -355,7 +386,9 @@ export const useModIssues = ({
             const allRelatedModIds = getLanguagePackOwnerIds(mod)
             if(allRelatedModIds.length === 0) {
               _add(currentToken, ISSUE_TYPE.WARN_UNKNOWN_TARGET, ISSUE_LEVEL.WARN,
-                `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_UNKNOWN_TARGET]}^^：语言包指向对象未知，请检查该语言包是否多余，或者可在规则编辑器手动指定前置对象`)
+                t('modIssues.unknownLanguagePackTarget', {
+                  title: ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_UNKNOWN_TARGET],
+                }))
             }
             // 如果存在依赖或前置，检测是否有任意一个启用(部分语言包支持多个Mod，只要有一个启用即可)，
             // 如果未启用则提示用户存在多余的语言包，或者提示指向对象未启用
@@ -363,7 +396,9 @@ export const useModIssues = ({
               const anyActive = allRelatedModIds.some(id => activeIndexMap.has(id))
               if(!anyActive) {
                 _add(currentToken, ISSUE_TYPE.WARN_INACTIVE_TARGET, ISSUE_LEVEL.WARN,
-                  `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_TARGET]}^^：语言包指向对象未启用，请检查该语言包是否多余，或者可在规则编辑器手动指定前置对象`)
+                  t('modIssues.inactiveLanguagePackTarget', {
+                    title: ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_TARGET],
+                  }))
               }
             }
 
@@ -393,7 +428,7 @@ export const useModIssues = ({
               if (i === 0 || normalizeCanonicalId(list[i-1]) !== prevExpected) {
                 // targetId 传入 prevExpected，方便组件识别这是 "前驱断裂"
                 _add(tokenId, ISSUE_TYPE.WARN_LINK_WRONG_ORDER, ISSUE_LEVEL.WARN,
-                  `^^联锁断裂^^：必须紧跟在 [[${displayModName(prevExpected)}]] 之后`, prevExpectedToken)
+                  t('modIssues.interlockAfter', { mod: displayModName(prevExpected) }), prevExpectedToken)
               }
             }
             // B. 检查向下断裂 (期待的后一个元素不在我紧挨着的下方)
@@ -403,7 +438,7 @@ export const useModIssues = ({
               if (i === len - 1 || normalizeCanonicalId(list[i+1]) !== nextExpected) {
                 // targetId 传入 nextExpected，方便组件识别这是 "后继断裂"
                 _add(tokenId, ISSUE_TYPE.WARN_LINK_WRONG_ORDER, ISSUE_LEVEL.WARN,
-                  `^^联锁断裂^^：必须紧接 [[${displayModName(nextExpected)}]] 之前`, nextExpectedToken)
+                  t('modIssues.interlockBefore', { mod: displayModName(nextExpected) }), nextExpectedToken)
               }
             }
           }
@@ -513,8 +548,8 @@ export const useModIssues = ({
       if (updates.length === 0) return;
       // 3. 一次性调用后端 API
       const res = await window.pywebview.api.mods_ignore_issues_update(updates);
-      if (checkResult(res, "批量忽略/取消忽略问题")) {
-        toast.success(type ? `已忽略 ${updates.length} 项问题` : `已恢复 ${updates.length} 项警告`);
+      if (checkResult(res, t('modIssues.batchIgnoreToggle'))) {
+        toast.success(type ? t('modIssues.ignoredIssues', { count: updates.length }) : t('modIssues.restoredWarnings', { count: updates.length }));
       } else {
         rollback.forEach((ignoredIssues, id) => {
           const mod = takeModById(id)
@@ -522,8 +557,8 @@ export const useModIssues = ({
         })
       }
     } catch (e) {
-      console.error("批量忽略操作失败:", e);
-      toast.error(`操作失败: ${e.message}`);
+      console.error('Batch ignore issues failed:', e);
+      toast.error(t('modIssues.operationFailed', { message: e.message }));
       rollback.forEach((ignoredIssues, id) => {
         const mod = takeModById(id)
         if (mod) mod.ignored_issues = ignoredIssues

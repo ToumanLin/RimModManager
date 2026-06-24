@@ -1,5 +1,5 @@
 <template>
-  <CommonModalShell :show="appStore.uiState.showFileSearchWorkbench" title="文件内容搜索" size="page" :z-index="120" accent="primary"
+  <CommonModalShell :show="appStore.uiState.showFileSearchWorkbench" :title="t('fileSearch.title')" size="page" :z-index="120" accent="primary"
     panel-class="border-accent-primary/18" content-class="h-full flex flex-col"
     @close="fileSearchStore.closeWorkbench()" >
         <template #icon>
@@ -9,52 +9,52 @@
         <div class=" bg-bg-muted relative z-10 px-4 py-3">
           <div class="flex items-center gap-2">
             <div class="max-w-1/3">
-              <CommonSelect v-model="fileSearchStore.form.scope" :options="scopeOptions" label="范围:" mini />
+              <CommonSelect v-model="fileSearchStore.form.scope" :options="scopeOptions" :label="t('fileSearch.scopeLabel')" mini />
             </div>
             <div class="text-xs mx-1.5">
               <label class="flex items-center gap-1 whitespace-nowrap">
                 <input :checked="fileSearchStore.form.use_regex" type="checkbox" class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-primary"
                   @change="fileSearchStore.form.use_regex = $event.target.checked" >
-                正则表达式
+                {{ t('fileSearch.regex') }}
               </label>
               <label class="inline-flex items-center gap-1 whitespace-nowrap">
                 <input :checked="fileSearchStore.form.case_sensitive" type="checkbox" class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-primary"
                   @change="fileSearchStore.form.case_sensitive = $event.target.checked" >
-                大小写敏感
+                {{ t('fileSearch.caseSensitive') }}
               </label>
             </div>
-            <input ref="queryInputRef" v-model="fileSearchStore.form.query" type="text" placeholder="输入搜索词或正则表达式进行搜索"
+            <input ref="queryInputRef" v-model="fileSearchStore.form.query" type="text" :placeholder="t('fileSearch.queryPlaceholder')"
               class="h-10 min-w-0 flex-1 rounded-xl border border-border-base/10 bg-bg-inset/70 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-primary/45 focus:shadow-[0_0_0_1px_rgba(var(--rgb-accent-primary),0.25)]"
               @keydown.enter.prevent="fileSearchStore.startSearch()" >
 
             <button v-show="!fileSearchStore.isBusy" class="flex shrink-0 px-2 py-1.5 items-center justify-center gap-2 rounded-xl bg-accent-primary text-sm font-black text-on-accent-primary transition-colors hover:bg-accent-primary/85 disabled:cursor-not-allowed disabled:opacity-55"
               :disabled="fileSearchStore.isBusy" @click="fileSearchStore.startSearch()" >
-              <Search class="size-4" />搜索
+              <Search class="size-4" />{{ t('common.search') }}
             </button>
             <button v-show="fileSearchStore.isRunning" class="flex shrink-0 px-2 py-1.5 items-center justify-center gap-2 rounded-xl border border-accent-danger/28 bg-accent-danger/10 text-sm font-bold text-accent-danger transition-colors hover:bg-accent-danger/16 disabled:cursor-not-allowed disabled:opacity-45"
               :disabled="!fileSearchStore.isRunning" @click="fileSearchStore.cancelSearch()" >
-              <Square class="size-3.5" />取消
+              <Square class="size-3.5" />{{ t('common.cancel') }}
             </button>
           </div>
 
           <div class="mt-2 flex items-center gap-x-4 ml-1 text-xs text-text-dim">
             <div class="flex items-center gap-3">
-              <label class="inline-flex items-center gap-1 whitespace-nowrap" v-tooltip="'部分模组会按照游戏版本或DLC加载不同的文件，开启后仅会搜索当前有效的文件'">
+              <label class="inline-flex items-center gap-1 whitespace-nowrap" v-tooltip="t('fileSearch.effectiveOnlyTooltip')">
                 <input class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-primary"
                   :checked="fileSearchStore.form.effective_only" type="checkbox" @change="fileSearchStore.form.effective_only = $event.target.checked" >
-                  只限当前有效文件
+                  {{ t('fileSearch.effectiveOnly') }}
               </label>
-              <label class="inline-flex items-center gap-1 whitespace-nowrap" v-tooltip="'仅搜索 XML 文件'">
+              <label class="inline-flex items-center gap-1 whitespace-nowrap" v-tooltip="t('fileSearch.xmlOnlyTooltip')">
                 <input class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-primary"
                   :checked="isFileTypeEnabled('.xml')" type="checkbox" @change="toggleFileType('.xml')" >
-                XML 文件
+                {{ t('fileSearch.xmlFiles') }}
               </label>
             </div>
 
             <div class="flex items-center gap-1 whitespace-nowrap">
-              <span class="text-text-dim" v-tooltip="'可自定义搜索限定文件，直接输入文件后缀名即可.号表示全部文件，多文件类型可用英文,;|号分割'">限定文件类型：</span>
+              <span class="text-text-dim" v-tooltip="t('fileSearch.customFileTypesTooltip')">{{ t('fileSearch.fileTypeLimit') }}</span>
               <input :value="fileSearchStore.form.custom_file_types_text" type="text" class="input-glass h-8 min-w-80 px-3 text-sm text-text-main outline-none"
-                placeholder="例如 cs, txt; json | yaml，输入 . 表示全部文件"
+                :placeholder="t('fileSearch.customFileTypesPlaceholder')"
                 @input="fileSearchStore.setCustomFileTypesText($event.target.value)" >
             </div>
 
@@ -76,8 +76,8 @@
               <div class="sidebar-surface flex min-h-0 flex-col overflow-hidden">
                 <!-- 搜索结果筛选 -->
                 <div class="flex gap-1.5 items-center justify-between bg-bg-surface px-3 py-2 shadow-md/30">
-                  <div class="text-sm font-black uppercase tracking-[0.18em] text-text-disabled">搜索结果</div>
-                  <input v-model="fileSearchStore.resultFilter" type="text" placeholder="筛选模组、文件名、路径、命中内容" class="input-glass h-8 min-w-0 flex-1 px-3 text-sm text-text-main outline-none" >
+                  <div class="text-sm font-black uppercase tracking-[0.18em] text-text-disabled">{{ t('fileSearch.results') }}</div>
+                  <input v-model="fileSearchStore.resultFilter" type="text" :placeholder="t('fileSearch.resultFilterPlaceholder')" class="input-glass h-8 min-w-0 flex-1 px-3 text-sm text-text-main outline-none" >
                   <span class="rounded-full border border-border-base/10 bg-bg-overlay/5 px-2 py-0.5 text-xs text-text-dim">
                     {{ fileSearchStore.filteredResults.length }} / {{ fileSearchStore.results.length }}
                   </span>
@@ -166,18 +166,18 @@
                 <div class="flex items-center justify-between gap-3 shadow-md/30 px-4 py-2 bg-bg-surface">
                   <div class="min-w-0">
                     <div class="truncate font-mono text-sm text-text-main" v-tooltip="viewerTitleTooltip">
-                      {{ fileSearchStore.viewerState.fileName || '未选择文件' }}
+                      {{ fileSearchStore.viewerState.fileName || t('fileSearch.noFileSelected') }}
                     </div>
                   </div>
                   <div class="flex shrink-0 items-center gap-2">
                     <div class="flex items-center gap-1">
-                      <input v-model="viewerSearchQuery" type="text" placeholder="在当前文件中搜索定位" @keydown.enter.prevent="goToNextViewerMatch()"
+                      <input v-model="viewerSearchQuery" type="text" :placeholder="t('fileSearch.searchCurrentFile')" @keydown.enter.prevent="goToNextViewerMatch()"
                         class="h-8 min-w-50 rounded-lg border border-border-base/10 bg-bg-inset/60 px-3 text-sm text-text-main outline-none transition-all focus:border-accent-cool/40 focus:shadow-[0_0_0_1px_rgba(var(--rgb-accent-cool),0.18)]" >
                       <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 px-0.5 py-0.5 text-text-dim transition-colors hover:bg-bg-overlay/10 hover:text-text-main disabled:opacity-40"
-                        :disabled="viewerMatchEntries.length === 0" @click="goToPreviousViewerMatch()" v-tooltip="'上一个搜索结果'" ><ChevronUp class="size-5" />
+                        :disabled="viewerMatchEntries.length === 0" @click="goToPreviousViewerMatch()" v-tooltip="t('fileSearch.previousResult')" ><ChevronUp class="size-5" />
                       </button>
                       <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 px-0.5 py-0.5 text-text-dim transition-colors hover:bg-bg-overlay/10 hover:text-text-main disabled:opacity-40"
-                        :disabled="viewerMatchEntries.length === 0" @click="goToNextViewerMatch()" v-tooltip="'下一个搜索结果'" ><ChevronDown class="size-5" />
+                        :disabled="viewerMatchEntries.length === 0" @click="goToNextViewerMatch()" v-tooltip="t('fileSearch.nextResult')" ><ChevronDown class="size-5" />
                       </button>
                       <span class="rounded-xl border border-border-base/10 bg-bg-overlay/5 px-2 py-0.5 text-xs text-text-dim">
                         {{ viewerMatchCounterLabel }}
@@ -186,17 +186,17 @@
                     
                     <label class="inline-flex h-8 items-center gap-1 px-1 text-xs text-text-dim transition-colors hover:text-text-main">
                       <input v-model="wrapViewerLines" type="checkbox" class="size-3.5 rounded border border-border-base/18 bg-bg-muted/70 accent-accent-cool" >
-                      自动换行
+                      {{ t('fileSearch.wrapLines') }}
                     </label>
                     <span v-if="fileSearchStore.viewerState.truncated" class="rounded-full border border-accent-warn/20 bg-accent-warn/10 px-2 py-0.5 text-xs text-accent-warn" >
-                      文件过大已截断
+                      {{ t('fileSearch.fileTruncated') }}
                     </span>
                     <button class="flex items-center justify-center text-xs transition-colors text-text-dim hover:text-text-main disabled:opacity-40"
-                      :disabled="!fileSearchStore.viewerState.filePath" @click="openCurrentFolder" v-tooltip="'打开文件所在目录'" >
+                      :disabled="!fileSearchStore.viewerState.filePath" @click="openCurrentFolder" v-tooltip="t('fileSearch.openContainingFolder')" >
                       <FolderInput class="size-5" />
                     </button>
                     <button class="flex items-center justify-center text-xs text-text-dim transition-colors hover:text-text-main disabled:opacity-40"
-                      :disabled="!fileSearchStore.viewerState.filePath" @click="openCurrentFile" v-tooltip="'打开文件'" >
+                      :disabled="!fileSearchStore.viewerState.filePath" @click="openCurrentFile" v-tooltip="t('fileSearch.openFile')" >
                       <FileSymlink class="size-5" />
                     </button>
                   </div>
@@ -233,15 +233,25 @@ import { FILE_SEARCH_EXCLUDE_OPTIONS, FILE_SEARCH_SCOPE_OPTIONS, useFileSearchSt
 import { useContextMenuStore } from '../../shared/components/context-menu/contextMenuStore'
 import { useAppStore } from '../../app/stores/appStore'
 import { buildSearchRegExp, escapeHtml } from '../../shared/lib/text'
+import { useI18n } from 'vue-i18n'
 
 const appStore = useAppStore()
 const fileSearchStore = useFileSearchStore()
 const contextMenuStore = useContextMenuStore()
+const { t } = useI18n()
 const queryInputRef = ref(null)
 const treeScrollerRef = ref(null)
 const previewEditorRef = ref(null)
-const scopeOptions = FILE_SEARCH_SCOPE_OPTIONS
-const excludeOptions = FILE_SEARCH_EXCLUDE_OPTIONS
+const scopeOptions = computed(() => FILE_SEARCH_SCOPE_OPTIONS.map(option => ({
+  ...option,
+  label: t(option.labelKey || option.label),
+  desc: t(option.descKey || option.desc),
+})))
+const excludeOptions = computed(() => FILE_SEARCH_EXCLUDE_OPTIONS.map(option => ({
+  ...option,
+  label: t(option.labelKey || option.label),
+  desc: t(option.descKey || option.desc),
+})))
 
 const expandedModIds = ref(new Set())
 const expandedFileIds = ref(new Set())
@@ -256,25 +266,25 @@ const treeScrollCleanup = ref(null)
 const TREE_ROW_HEIGHT = 26
 
 const emptyTitle = computed(() => {
-  if (fileSearchStore.isBusy) return '正在搜索中'
-  if (fileSearchStore.results.length === 0) return '还没有搜索结果'
-  return '过滤后没有可见结果'
+  if (fileSearchStore.isBusy) return t('fileSearch.searching')
+  if (fileSearchStore.results.length === 0) return t('fileSearch.noResultsYet')
+  return t('fileSearch.noVisibleResults')
 })
 
 const emptyDescription = computed(() => {
-  if (fileSearchStore.isBusy) return '结果会随着后台扫描流式追加到这里。'
-  if (fileSearchStore.results.length === 0) return '输入搜索词并执行搜索后，这里会显示命中结果。'
-  return '尝试清空筛选词，或调整搜索条件后重新执行。'
+  if (fileSearchStore.isBusy) return t('fileSearch.streamingResults')
+  if (fileSearchStore.results.length === 0) return t('fileSearch.noResultsDescription')
+  return t('fileSearch.noVisibleResultsDescription')
 })
 
 const storeLabel = (store) => {
   const value = String(store || '').toLowerCase()
-  if (value === 'local') return '本地'
-  if (value === 'self') return '管理器'
-  if (value === 'workshop') return '工坊'
+  if (value === 'local') return t('fileSearch.storeLocal')
+  if (value === 'self') return t('fileSearch.storeSelf')
+  if (value === 'workshop') return t('fileSearch.storeWorkshop')
   if (value === 'core') return 'Core'
   if (value === 'dlc') return 'DLC'
-  return '未知'
+  return t('common.unknown')
 }
 
 const storeBadgeClass = (store) => {
@@ -742,16 +752,16 @@ const selectTreeMatch = async (row) => {
 
 const openModMenu = (event, group) => {
   contextMenuStore.open(event, [
-    { label: '打开模组目录', icon: FolderOpen, action: () => fileSearchStore.openResultModFolder(group) },
+    { label: t('fileSearch.openModFolder'), icon: FolderOpen, action: () => fileSearchStore.openResultModFolder(group) },
   ], group)
 }
 
 const openFileMenu = (event, group, file) => {
   const firstRow = file.rows?.[0]
   contextMenuStore.open(event, [
-    { label: '打开文件', icon: FileCode2, disabled: !firstRow, action: () => fileSearchStore.openResultFile(firstRow) },
-    { label: '打开所在目录', icon: FolderOpen, disabled: !firstRow, action: () => fileSearchStore.openResultFolder(firstRow) },
-    { label: '打开模组目录', icon: FolderOpen, action: () => fileSearchStore.openResultModFolder(group) },
+    { label: t('fileSearch.openFile'), icon: FileCode2, disabled: !firstRow, action: () => fileSearchStore.openResultFile(firstRow) },
+    { label: t('fileSearch.openContainingFolder'), icon: FolderOpen, disabled: !firstRow, action: () => fileSearchStore.openResultFolder(firstRow) },
+    { label: t('fileSearch.openModFolder'), icon: FolderOpen, action: () => fileSearchStore.openResultModFolder(group) },
   ], { group, file })
 }
 

@@ -30,26 +30,26 @@
             <div class="flex items-center justify-between px-3 py-2 bg-bg-overlay/5 border-b border-border-base/5 z-20 shrink-0">
               <!-- 图例 -->
               <div class="flex items-center gap-3 text-xs font-bold uppercase tracking-wider">
-                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-danger"></span>缺失{{ stats.removed }}</div>
-                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-success"></span>新增{{ stats.added }}</div>
-                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-warn"></span>移动{{ stats.moved }}</div>
-                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-warn/50"></span>偏移{{ stats.movedBlock }}</div>
-                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-bg-neutral"></span>一致{{ stats.same }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-danger"></span>{{ t('loadOrderDiff.legend.removed', { count: stats.removed }) }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-success"></span>{{ t('loadOrderDiff.legend.added', { count: stats.added }) }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-warn"></span>{{ t('loadOrderDiff.legend.moved', { count: stats.moved }) }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-accent-warn/50"></span>{{ t('loadOrderDiff.legend.movedBlock', { count: stats.movedBlock }) }}</div>
+                <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-bg-neutral"></span>{{ t('loadOrderDiff.legend.same', { count: stats.same }) }}</div>
               </div>
               
               <!-- 开关组 -->
               <div class="flex items-center gap-4">
                 <div class="relative flex flex-wrap items-center gap-1">
                   <input v-model="colorfulBlocks" type="checkbox" value="" id="b01" class="relative w-6 h-3 scale-80 transition-colors rounded-lg appearance-none cursor-pointer hover:bg-bg-overlay/10 after:hover:bg-bg-contrast checked:hover:bg-accent-success/40 checked:after:hover:bg-accent-success focus:outline-none checked:focus:bg-accent-success/50 checked:after:focus:bg-accent-success focus-visible:outline-none peer bg-bg-overlay/10 after:absolute after:-top-0.5 after:-left-1.5 after:h-4 after:w-4 after:rounded-full after:bg-bg-neutral after:transition-all checked:bg-accent-success/30 checked:after:left-3 checked:after:bg-accent-success disabled:cursor-not-allowed disabled:bg-bg-overlay/10 disabled:after:bg-bg-overlay/10"/>
-                  <label v-tooltip="'为不同的区块使用不同颜色便于区分'" for="b01" class="cursor-pointer text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors">
-                    多彩区块
+                  <label v-tooltip="t('loadOrderDiff.colorfulBlocksTip')" for="b01" class="cursor-pointer text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors">
+                    {{ t('loadOrderDiff.colorfulBlocks') }}
                   </label>
                 </div>
 
                 <div class="relative flex flex-wrap items-center gap-1">
                   <input v-model="hideIdentical" type="checkbox" value="" id="b02" class="relative w-6 h-3 scale-80 transition-colors rounded-lg appearance-none cursor-pointer hover:bg-bg-overlay/10 after:hover:bg-bg-contrast checked:hover:bg-accent-success/40 checked:after:hover:bg-accent-success focus:outline-none checked:focus:bg-accent-success/50 checked:after:focus:bg-accent-success focus-visible:outline-none peer bg-bg-overlay/10 after:absolute after:-top-0.5 after:-left-1.5 after:h-4 after:w-4 after:rounded-full after:bg-bg-neutral after:transition-all checked:bg-accent-success/30 checked:after:left-3 checked:after:bg-accent-success disabled:cursor-not-allowed disabled:bg-bg-overlay/10 disabled:after:bg-bg-overlay/10"/>
-                  <label v-tooltip="'折叠一致区块'" for="b02" class="cursor-pointer text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors">
-                    折叠长区块
+                  <label v-tooltip="t('loadOrderDiff.foldIdenticalTip')" for="b02" class="cursor-pointer text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors">
+                    {{ t('loadOrderDiff.foldIdentical') }}
                   </label>
                 </div>
               </div>
@@ -90,7 +90,7 @@
                       <!-- 指示条也继承 -->
                       <div v-if="shouldShowIndicator(item, 'a')" class="absolute right-0 w-0.5 h-full transition-all duration-200" :style="getIndicatorStyle(item, 'a')"></div>
                       <span class="text-xs text-text-disabled tracking-widest scale-90">
-                        ··· 已折叠{{ item.hiddenCount ?? item.count }}项 ···
+                        {{ t('loadOrderDiff.foldedItems', { count: item.hiddenCount ?? item.count }) }}
                       </span>
                     </div>
 
@@ -145,28 +145,28 @@
                         <button
                           v-if="canSubscribeImportItem(item.id)"
                           @click.stop="subscribeImportItem(item.id)"
-                          v-tooltip="'订阅该导入项对应的工坊项目'"
+                          v-tooltip="t('loadOrderDiff.subscribeImportTip')"
                           class="rounded-full bg-accent-primary/85 p-1 text-on-accent-primary transition-transform hover:scale-105">
                           <Flag class="size-3" />
                         </button>
                         <button
                           v-if="canDownloadImportItem(item.id)"
                           @click.stop="downloadImportItem(item.id)"
-                          v-tooltip="'下载该导入项对应的工坊项目到管理器'"
+                          v-tooltip="t('loadOrderDiff.downloadImportTip')"
                           class="rounded-full bg-accent-success/85 p-1 text-on-accent-success transition-transform hover:scale-105">
                           <Download class="size-3" />
                         </button>
                         <button
                           v-if="canOpenImportWorkshop(item.id)"
                           @click.stop="openImportWorkshop(item.id)"
-                          v-tooltip="'打开来源页面'"
+                          v-tooltip="t('loadOrderDiff.openSourcePage')"
                           class="rounded-full bg-accent-special/85 p-1 text-on-accent-special transition-transform hover:scale-105">
                           <Link class="size-3" />
                         </button>
                         <button
                           v-if="canRemoveImportItem(item.id)"
                           @click.stop="removeImportItem(item.id)"
-                          v-tooltip="'从当前导入序列中移除该项'"
+                          v-tooltip="t('loadOrderDiff.removeImportItemTip')"
                           class="rounded-full bg-accent-danger/85 p-1 text-on-accent-danger transition-transform hover:scale-105">
                           <X class="size-3" />
                         </button>
@@ -186,7 +186,7 @@
                           :style="getIndicatorStyle(item, 'b')">
                       </div>
                       <span class="text-xs text-text-disabled tracking-widest scale-90">
-                        ··· 已折叠{{ item.hiddenCount ?? item.count }}项 ···
+                        {{ t('loadOrderDiff.foldedItems', { count: item.hiddenCount ?? item.count }) }}
                       </span>
                     </div>
 
@@ -200,38 +200,38 @@
           <!-- 底部动作栏 -->
           <div class="modal-footer flex items-center justify-between gap-3 p-2 px-5">
             <div class="min-w-0">
-              <h2 class="text-text-soft font-bold">Mod序列对比</h2>
+              <h2 class="text-text-soft font-bold">{{ t('loadOrderDiff.title') }}</h2>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2">
               <button v-if="orderStore.importCheckSummary.missing > 0" @click="orderStore.subscribeImportCheckItems(['missing'])" class="px-3 py-1.5 rounded-lg bg-accent-primary/12 hover:bg-accent-primary/25 text-accent-primary border border-accent-primary/30 text-xs font-bold transition-all">
-                订阅缺失项 ({{ orderStore.importCheckSummary.missing }})
+                {{ t('loadOrderDiff.subscribeMissing', { count: orderStore.importCheckSummary.missing }) }}
               </button>
               <button v-if="orderStore.importCheckSummary.missing > 0" @click="orderStore.downloadImportCheckItems(['missing'])" class="px-3 py-1.5 rounded-lg bg-accent-tip/12 hover:bg-accent-tip/25 text-accent-tip border border-accent-tip/30 text-xs font-bold transition-all">
-                下载缺失项 ({{ orderStore.importCheckSummary.missing }})
+                {{ t('loadOrderDiff.downloadMissing', { count: orderStore.importCheckSummary.missing }) }}
               </button>
               <button v-if="orderStore.importCheckSummary.missing > 0" @click="orderStore.removeImportCheckItems(['missing'])" class="px-3 py-1.5 rounded-lg bg-accent-warning/10 hover:bg-accent-warning/20 text-accent-warning border border-border-base/10 text-xs font-bold transition-all">
-                移除缺失项 ({{ orderStore.importCheckSummary.missing }})
+                {{ t('loadOrderDiff.removeMissing', { count: orderStore.importCheckSummary.missing }) }}
               </button>
               <button v-if="orderStore.actionableReplacementImportItems.length > 0" @click="orderStore.subscribeImportCheckItems(['replacement'])" class="px-3 py-1.5 rounded-lg bg-accent-cool/12 hover:bg-accent-cool/25 text-accent-cool border border-accent-cool/30 text-xs font-bold transition-all">
-                订阅替代项 ({{ orderStore.actionableReplacementImportItems.length }})
+                {{ t('loadOrderDiff.subscribeReplacement', { count: orderStore.actionableReplacementImportItems.length }) }}
               </button>
               <button v-if="orderStore.actionableReplacementImportItems.length > 0" @click="orderStore.downloadImportCheckItems(['replacement'])" class="px-3 py-1.5 rounded-lg bg-accent-cool/12 hover:bg-accent-cool/25 text-accent-cool border border-accent-cool/30 text-xs font-bold transition-all">
-                下载替代项 ({{ orderStore.actionableReplacementImportItems.length }})
+                {{ t('loadOrderDiff.downloadReplacement', { count: orderStore.actionableReplacementImportItems.length }) }}
               </button>
               <button v-if="orderStore.importCheckSummary.other_version > 0" @click="orderStore.subscribeImportCheckItems(['other_version'])" class="px-3 py-1.5 rounded-lg bg-accent-warn/12 hover:bg-accent-warn/25 text-accent-warn border border-accent-warn/30 text-xs font-bold transition-all">
-                订阅其它版本 ({{ orderStore.importCheckSummary.other_version }})
+                {{ t('loadOrderDiff.subscribeOtherVersion', { count: orderStore.importCheckSummary.other_version }) }}
               </button>
               <button v-if="orderStore.importCheckSummary.other_version > 0" @click="orderStore.downloadImportCheckItems(['other_version'])" class="px-3 py-1.5 rounded-lg bg-accent-warn/12 hover:bg-accent-warn/25 text-accent-warn border border-accent-warn/30 text-xs font-bold transition-all">
-                下载其它版本 ({{ orderStore.importCheckSummary.other_version }})
+                {{ t('loadOrderDiff.downloadOtherVersion', { count: orderStore.importCheckSummary.other_version }) }}
               </button>
               <button v-if="orderStore.importCheckSummary.unknown > 0" @click="orderStore.removeImportCheckItems(['unknown'])" class="px-3 py-1.5 rounded-lg bg-bg-overlay/10 hover:bg-bg-overlay/10 text-text-dim border border-border-base/10 text-xs font-bold transition-all">
-                移除未知项 ({{ orderStore.importCheckSummary.unknown }})
+                {{ t('loadOrderDiff.removeUnknown', { count: orderStore.importCheckSummary.unknown }) }}
               </button>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2">
               
-              <button @click="orderStore.applyBackup()" class="px-3 py-1.5 rounded-lg bg-accent-success/20 hover:bg-accent-success/40 text-accent-success border border-accent-success/30 text-xs font-bold transition-all">应用文件序列</button>
-              <button @click="appStore.uiState.showDiffDrawer = false" class="px-3 py-1.5 rounded-lg bg-accent-danger/10 hover:bg-accent-danger/20 text-text-dim border border-border-base/10 text-xs font-bold transition-all">关闭</button>
+              <button @click="orderStore.applyBackup()" class="px-3 py-1.5 rounded-lg bg-accent-success/20 hover:bg-accent-success/40 text-accent-success border border-accent-success/30 text-xs font-bold transition-all">{{ t('loadOrderDiff.applyFileOrder') }}</button>
+              <button @click="appStore.uiState.showDiffDrawer = false" class="px-3 py-1.5 rounded-lg bg-accent-danger/10 hover:bg-accent-danger/20 text-text-dim border border-border-base/10 text-xs font-bold transition-all">{{ t('loadOrderDiff.close') }}</button>
             </div>
           </div>
 
@@ -256,6 +256,7 @@
 
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useModStore } from '../mod/stores/modStore'
 import { useDebounceFn } from '@vueuse/core'
 import { getTailwindColorHex, hexToRgba } from '../../shared/lib/color'
@@ -267,6 +268,7 @@ import { Download, Flag, Link, X } from 'lucide-vue-next'
 // 抽屉的显隐和底部操作继续复用现有 store，避免迁移后行为变化。
 const appStore = useAppStore()
 const orderStore = useOrderStore()
+const { t } = useI18n()
 
 const props = defineProps({
   listA: { type: Array, required: true },
@@ -302,12 +304,12 @@ const COLOR_MOVED = getTailwindColorHex('accent-warn')
 const COLOR_MOVED_GRAY = getTailwindColorHex('text-dim')
 const COLOR_HIGHLIGHT = getTailwindColorHex('accent-primary')
 
-const IMPORT_STATUS_META = {
-  replacement: { label: '替代', badgeClass: 'border-accent-cool/30 bg-accent-cool/10 text-accent-cool' },
-  other_version: { label: '其它版本', badgeClass: 'border-accent-warn/30 bg-accent-warn/10 text-accent-warn' },
-  missing: { label: '缺失', badgeClass: 'border-accent-warn/30 bg-accent-warn/10 text-accent-warn' },
-  unknown: { label: '未知', badgeClass: 'border-accent-danger/30 bg-accent-danger/10 text-accent-danger' },
-}
+const importStatusMeta = computed(() => ({
+  replacement: { label: t('loadOrderDiff.status.replacement'), badgeClass: 'border-accent-cool/30 bg-accent-cool/10 text-accent-cool' },
+  other_version: { label: t('loadOrderDiff.status.otherVersion'), badgeClass: 'border-accent-warn/30 bg-accent-warn/10 text-accent-warn' },
+  missing: { label: t('loadOrderDiff.status.missing'), badgeClass: 'border-accent-warn/30 bg-accent-warn/10 text-accent-warn' },
+  unknown: { label: t('common.unknown'), badgeClass: 'border-accent-danger/30 bg-accent-danger/10 text-accent-danger' },
+}))
 
 
 const displayNameById = (id, side = 'a') => {
@@ -328,11 +330,11 @@ const getImportStatusMeta = (rowKey) => {
   if (!item) return null
   if (item.status === 'replacement' && item.installed_via_replacement) {
     return {
-      label: '已安装替代',
+      label: t('loadOrderDiff.status.installedReplacement'),
       badgeClass: 'border-accent-cool/30 bg-accent-cool/15 text-accent-cool',
     }
   }
-  return IMPORT_STATUS_META[item.status] || null
+  return importStatusMeta.value[item.status] || null
 }
 const getImportTooltip = (rowKey) => {
   const item = getImportCheckItem(rowKey)

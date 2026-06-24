@@ -21,6 +21,8 @@ import { usePackageTransferActions } from './app/packageTransferActions'
 import { useSteamWorkshopActions } from './app/steamWorkshopActions'
 import { useMaintenanceActions } from './app/maintenanceActions'
 import { useUpdateActions } from './app/updateActions'
+import { setLocale, t } from '../i18n'
+import { ensurePywebviewBridge } from '../bridge/pywebviewBridge'
 
 export const useAppStore = defineStore('app', () => {
   const taskStore = useTaskStore()
@@ -72,8 +74,8 @@ export const useAppStore = defineStore('app', () => {
   })
   // 推荐导出弹窗只保存入口上下文，真正的模组详情在弹窗打开时从 modStore 读取最新值。
   const recommendationExportDialog = reactive({
-    title: '推荐导出',
-    sourceName: '已选模组',
+    title: t('appStore.recommendationExport'),
+    sourceName: t('appStore.selectedMods'),
     modIds: [],
   })
   // 存储各个列表的滚动偏移量
@@ -90,7 +92,7 @@ export const useAppStore = defineStore('app', () => {
     file_count: 0,
     total_bytes: 0,
   })
-  const translationProviders = ref([{ id: 'ai.default', label: 'AI 翻译', type: 'ai' }])
+  const translationProviders = ref([{ id: 'ai.default', label: t('appStore.aiTranslation'), type: 'ai' }])
   const isTranslationProvidersLoaded = ref(false)
   const cancelPendingTaskIds = ref(new Set())
   const cancelPendingTimers = new Map()
@@ -166,12 +168,12 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // 定义侧边栏标签配置 (ID 与 标题绑定)
-  const SIDEBAR_TABS = [
-    { id: 'temp', title: '临时' },
-    { id: 'disabled', title: '禁用' },
-    { id: 'group', title: '分组' },
-    { id: 'backup', title: '备份' }
-  ]
+  const SIDEBAR_TABS = computed(() => [
+    { id: 'temp', title: t('ui.sidebarTabs.temp') },
+    { id: 'disabled', title: t('ui.sidebarTabs.disabled') },
+    { id: 'group', title: t('ui.sidebarTabs.group') },
+    { id: 'backup', title: t('ui.sidebarTabs.backup') }
+  ])
   // 响应式状态：当前选中的标签 ID
   const activeSidebarTab = ref('temp')
 
@@ -184,26 +186,26 @@ export const useAppStore = defineStore('app', () => {
     { id: 'user_info', visible: true }, // 标签、备注、分组
     { id: 'description', visible: true }, // Mod 描述
   ]
-  const DETAILS_LAYOUT_MAPS = {
-    basic_info: {label: '基础信息', desc:'控制详情页中 Mod 作者及来源板块的显示。'},
-    files_info: {label: '文件统计', desc:'控制详情页中 Mod 文件统计板块的显示。'},
-    time_info: {label: '其它信息', desc:'控制详情页中 Mod 其它信息板块的显示。'},
-    relations_info: {label: '依赖关系', desc:'控制详情页中 Mod 依赖板块的显示。'},
-    user_info: {label: '自定义信息', desc:'控制详情页中 Mod 自定义信息板块的显示。'},
-    description: {label: 'Mod描述', desc:'控制详情页中 Mod 说明板块的显示。'},
-  }
+  const DETAILS_LAYOUT_MAPS = computed(() => ({
+    basic_info: {label: t('layout.details.basicInfo'), desc: t('layout.details.basicInfoDesc')},
+    files_info: {label: t('layout.details.filesInfo'), desc: t('layout.details.filesInfoDesc')},
+    time_info: {label: t('layout.details.timeInfo'), desc: t('layout.details.timeInfoDesc')},
+    relations_info: {label: t('layout.details.relationsInfo'), desc: t('layout.details.relationsInfoDesc')},
+    user_info: {label: t('layout.details.userInfo'), desc: t('layout.details.userInfoDesc')},
+    description: {label: t('layout.details.description'), desc: t('layout.details.descriptionDesc')},
+  }))
   const DEFAULT_MAIN_LAYOUT = [
     { id: 'details', visible: true }, // Mod 详情面板
     { id: 'library', visible: true }, // Mod 停用列表
     { id: 'active', visible: true },  // Mod 启用列表
     { id: 'sidebar', visible: true },  // 侧边功能栏
   ]
-  const MAIN_LAYOUT_MAPS = {
-    details: {label: 'Mod详情', desc:'控制主界面中 Mod 详情面板的显示。'},
-    library: {label: '停用列表', desc:'控制主界面中 Mod 停用列表的显示。'},
-    active: {label: '启用列表', desc:'控制主界面中 Mod 启用列表的显示。'},
-    sidebar: {label: '侧边栏', desc:'控制主界面中侧边功能栏的显示。'},
-  }
+  const MAIN_LAYOUT_MAPS = computed(() => ({
+    details: {label: t('layout.main.details'), desc: t('layout.main.detailsDesc')},
+    library: {label: t('layout.main.library'), desc: t('layout.main.libraryDesc')},
+    active: {label: t('layout.main.active'), desc: t('layout.main.activeDesc')},
+    sidebar: {label: t('layout.main.sidebar'), desc: t('layout.main.sidebarDesc')},
+  }))
 
   // 全局设置
   const settings = ref({
@@ -420,16 +422,16 @@ export const useAppStore = defineStore('app', () => {
   })
 
   const openRecommendationExportDialog = ({
-    title = '推荐导出',
-    sourceName = '已选模组',
+    title = t('appStore.recommendationExport'),
+    sourceName = t('appStore.selectedMods'),
     modIds = [],
   } = {}) => {
     // 右键菜单、分组列表等入口都可能传入重复 ID，打开弹窗前先收敛成稳定的导出列表。
     const normalizedModIds = [...new Set(
       (modIds || []).map(id => String(id || '').trim()).filter(Boolean)
     )]
-    recommendationExportDialog.title = String(title || '推荐导出')
-    recommendationExportDialog.sourceName = String(sourceName || '已选模组')
+    recommendationExportDialog.title = String(title || t('appStore.recommendationExport'))
+    recommendationExportDialog.sourceName = String(sourceName || t('appStore.selectedMods'))
     recommendationExportDialog.modIds = normalizedModIds
     uiState.showRecommendationExportDialog = true
   }
@@ -437,8 +439,8 @@ export const useAppStore = defineStore('app', () => {
   const closeRecommendationExportDialog = () => {
     // 关闭时清掉上一次选择，避免下次打开弹窗时短暂显示旧的导出对象。
     uiState.showRecommendationExportDialog = false
-    recommendationExportDialog.title = '推荐导出'
-    recommendationExportDialog.sourceName = '已选模组'
+    recommendationExportDialog.title = t('appStore.recommendationExport')
+    recommendationExportDialog.sourceName = t('appStore.selectedMods')
     recommendationExportDialog.modIds = []
   }
 
@@ -570,7 +572,11 @@ export const useAppStore = defineStore('app', () => {
   // === Utils ===
   // 等待后端就绪
   const waitForBackend = () => {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
+      if (await ensurePywebviewBridge()) {
+        resolve()
+        return
+      }
       // 情况 1: 如果 API 已经存在（前端加载慢，后端已经注入了），直接继续
       if (window.pywebview) resolve()
       // 情况 2: API 还没来（前端加载快），监听 pywebviewready 事件, { once: true } 确保只触发一次
@@ -592,7 +598,7 @@ export const useAppStore = defineStore('app', () => {
     isGameRunning.value = runtimeSession.value.state === 'running'
   }
 
-  const applyModsPayload = (payload, { isInit = false, historyLabel = '刷新磁盘状态', preserveListState = false } = {}) => {
+  const applyModsPayload = (payload, { isInit = false, historyLabel = t('appStore.refreshDiskState'), preserveListState = false } = {}) => {
     if (!payload) return false
 
     const groupStore = useGroupStore()
@@ -613,7 +619,7 @@ export const useAppStore = defineStore('app', () => {
     return true
   }
 
-  const applyInitialPayload = (payload, { isInit = false, historyLabel = '刷新磁盘状态' } = {}) => {
+  const applyInitialPayload = (payload, { isInit = false, historyLabel = t('appStore.refreshDiskState') } = {}) => {
     if (!payload) return false
 
     if (isInit && payload.settings) {
@@ -625,6 +631,7 @@ export const useAppStore = defineStore('app', () => {
     }
     if (payload.settings) {
       settings.value.translation = normalizeTranslationSettings(settings.value.translation)
+      setLocale(settings.value.language)
       settingsReady.value = true
     }
     if (Array.isArray(payload.user_themes)) {
@@ -634,7 +641,7 @@ export const useAppStore = defineStore('app', () => {
 
     syncRemoteImageCache(payload.remote_image_cache)
     if (payload.is_first_db_init && payload.context_healthy && (!payload.all_mods || payload.all_mods?.length === 0)) {
-      toast.warning("数据库正在进行首次初始化，此过程可能需要您等待一段时间，请您耐心等候。",{position: "top-center",timeout: 10000})
+      toast.warning(t('appStore.databaseInitializing'),{position: "top-center",timeout: 10000})
     }
 
     appVersion.value = payload.app_version || 'Unknown'
@@ -646,7 +653,7 @@ export const useAppStore = defineStore('app', () => {
     if (payload.active_context) {
       profileStore.activeContext = payload.active_context
       if (!profileStore.activeContext.is_healthy) {
-        toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
+        toast.warning(t('appStore.gamePathMissing'),{position: "top-center",timeout: 5000})
         uiState.showSettingsPanel = true
         return false
       }
@@ -656,11 +663,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // 扫描完成后只同步与模组相关的数据，避免再次触发整套工作区/集合/GitHub 初始化。
-  const refreshModsData = async (historyLabel = '扫描后同步模组数据', options = {}) => {
+  const refreshModsData = async (historyLabel = t('appStore.syncModDataAfterScan'), options = {}) => {
     if (!window.pywebview) return false
     try {
       const res = await window.pywebview.api.get_initial_data()
-      if (!checkResult(res, '同步模组数据')) return false
+      if (!checkResult(res, t('appStore.syncModData'))) return false
       const applied = applyModsPayload(res.data, {
         isInit: false,
         historyLabel,
@@ -678,7 +685,7 @@ export const useAppStore = defineStore('app', () => {
       void workspaceStore.refreshLoadedData({ librariesOnly: true })
       return true
     } catch (e) {
-      toast.error(`同步模组数据失败: \n${e.message}`)
+      toast.error(t('appStore.syncModDataFailed', { message: e.message }))
       return false
     }
   }
@@ -738,11 +745,11 @@ export const useAppStore = defineStore('app', () => {
       try {
         const clearedScanTasks = taskStore.settleActiveTasks('scan', {
           status: 'cancelled',
-          message: '扫描因界面挂起而中断，请重新刷新。',
+          message: t('appStore.scanInterruptedBySuspend'),
           metrics: { resumed_after_suspend: true },
         })
         if (clearedScanTasks > 0) {
-          toast.info('已清理挂起前遗留的扫描任务，请按需重新刷新。', { timeout: 2500 })
+          toast.info(t('appStore.clearedSuspendedScanTasks'), { timeout: 2500 })
         }
 
         await waitForBackend()
@@ -751,11 +758,11 @@ export const useAppStore = defineStore('app', () => {
         }
         const orderStore = useOrderStore()
         const resumeSnapshot = orderStore.captureRuntimeRefreshSnapshot()
-        await refreshData(false, '游戏退出后刷新磁盘状态')
+        await refreshData(false, t('appStore.refreshDiskAfterGameExit'))
         await orderStore.presentRuntimeRefreshDiff(resumeSnapshot)
       } catch (e) {
         console.error("恢复挂起界面失败:", e)
-        toast.error(`恢复界面失败: \n${e.message || e}`)
+        toast.error(t('appStore.resumeUiFailed', { message: e.message || e }))
       } finally {
         isLoading.value = false
         suspendRecoveryPromise = null
@@ -783,19 +790,19 @@ export const useAppStore = defineStore('app', () => {
       })
     } catch (e) {
       console.error("初始化失败:", e)
-      toast.error(`初始化失败：\n${e}`)
+      toast.error(t('appStore.initializeFailed', { message: e }))
     } finally {
       isLoading.value = false
     }
   }
   // 刷新数据 (初始化核心)
-  const refreshData = async (isInit = false, historyLabel = '刷新磁盘状态') => {
+  const refreshData = async (isInit = false, historyLabel = t('appStore.refreshDiskState')) => {
     if (!window.pywebview) return false
     isLoading.value = true
     try {
       // 调用后端获取全量数据
       const res = await window.pywebview.api.get_initial_data()
-      if (!checkResult(res, '刷新数据')) return false
+      if (!checkResult(res, t('appStore.refreshData'))) return false
       const applied = applyInitialPayload(res.data, { isInit, historyLabel })
       if (!applied) return false
       // 刷新动态规则
@@ -806,7 +813,7 @@ export const useAppStore = defineStore('app', () => {
       orderStore.getBackups(orderStore.backupProfileId || settings.value.current_profile_id || 'default')
       return true
     } catch (e) {
-      toast.error(`刷新数据失败: \n${e.message}`)
+      toast.error(t('appStore.refreshDataFailed', { message: e.message }))
       return false
     } finally {
       isLoading.value = false
@@ -828,9 +835,9 @@ export const useAppStore = defineStore('app', () => {
           type: 'scan',
           status: String(detail.status || 'success'),
           progress: Number(detail.progress ?? (detail.status === 'success' ? 100 : 0)),
-          message: detail.message || (detail.status === 'success' ? '扫描完成' : ''),
+          message: detail.message || (detail.status === 'success' ? t('appStore.scanComplete') : ''),
           metrics: {
-            title: '模组扫描',
+            title: t('appStore.modScan'),
             ...(detail.metrics || {}),
             ...(detail.stats ? { stats: detail.stats } : {}),
             ...(detail.runtime_sync_message ? { runtime_sync_message: detail.runtime_sync_message } : {}),
@@ -863,13 +870,13 @@ export const useAppStore = defineStore('app', () => {
         const { success_count, error_count, errors, status } = e.detail;
         console.log(`本地化完成。成功: ${success_count}, 失败: ${error_count}`, errors)
         if (status === 'cancelled') {
-            toast.info('本地化任务已取消');
+            toast.info(t('appStore.localizationCancelled'));
             return
         }
         if (error_count > 0) {
-            toast.warning(`本地化完成。成功: ${success_count}, 失败: ${error_count}`);
+            toast.warning(t('appStore.localizationCompletedWithErrors', { success: success_count, failed: error_count }));
         } else {
-            toast.success(`成功本地化 ${success_count} 个模组`);
+            toast.success(t('appStore.localizationSucceeded', { count: success_count }));
         }
         const modStore = useModStore()
         modStore.scanMods()
@@ -928,27 +935,27 @@ export const useAppStore = defineStore('app', () => {
       }
       if (task.type === 'download' && task.status === 'success') {
         const filename = task.metrics?.filename || task.message
-        if (filename) toast.success(`下载完成: ${filename}`)
+        if (filename) toast.success(t('appStore.downloadComplete', { filename }))
         const textureStore = useTextureStore()
         textureStore.handleDownloadEvent(task)
       }
       if (task.type === 'download' && task.status === 'failed') {
-        toast.error(`下载失败: ${task.metrics?.filename || task.message}\n${task.metrics?.error || ''}`)
+        toast.error(t('appStore.downloadFailed', { target: task.metrics?.filename || task.message, error: task.metrics?.error || '' }))
       }
       if (task.type === 'steamcmd-download' && task.status === 'failed') {
-        toast.error(`SteamCMD 下载失败: ${task.metrics?.error || task.message}`)
+        toast.error(t('appStore.steamcmdDownloadFailed', { message: task.metrics?.error || task.message }))
       }
       if (task.type === 'steam-subscribe' && task.status === 'success') {
         void (async () => {
           await requestModScan({ preserveListState: true })
-          toast.success('Steam 订阅已完成')
+          toast.success(t('appStore.steamSubscribeComplete'))
         })()
       }
       if (task.type === 'steam-subscribe' && task.status === 'failed') {
-        toast.error(`Steam 订阅失败: ${task.metrics?.error || task.message}`)
+        toast.error(t('appStore.steamSubscribeFailed', { message: task.metrics?.error || task.message }))
       }
       if (task.type === 'steam-unsubscribe' && task.status === 'failed') {
-        toast.error(`取消订阅失败：${task.metrics?.error || task.message}`)
+        toast.error(t('appStore.steamUnsubscribeFailed', { message: task.metrics?.error || task.message }))
       }
       if (task.type === 'update' && task.status === 'success' && task.metrics?.ready_to_install) {
         if (updateState.info) updateState.info.local_status = 'ready'
@@ -958,19 +965,19 @@ export const useAppStore = defineStore('app', () => {
         }
       }
       if (task.type === 'update' && task.status === 'failed') {
-        toast.error(`更新出错: ${task.metrics?.error || task.message}`)
+        toast.error(t('appStore.updateFailed', { message: task.metrics?.error || task.message }))
       }
       if (task.type === 'mod-export' && task.status === 'success') {
         if (!task.id || !exportCompletePrompted.has(task.id)) {
           if (task.id) exportCompletePrompted.add(task.id)
-          void showExportCompleteDialog('模组包导出', task.metrics?.target_path)
+          void showExportCompleteDialog(t('appStore.modPackExport'), task.metrics?.target_path)
         }
       }
       if (task.type === 'mod-export' && task.status === 'failed') {
-        toast.error(task.metrics?.error || task.message || '模组包导出失败')
+        toast.error(task.metrics?.error || task.message || t('appStore.modPackExportFailed'))
       }
       if (task.type === 'mod-export' && task.status === 'cancelled') {
-        toast.warning('模组包导出已取消')
+        toast.warning(t('appStore.modPackExportCancelled'))
       }
       if (task.type === 'mod-import' && task.status === 'success') {
         void (async () => {
@@ -979,14 +986,14 @@ export const useAppStore = defineStore('app', () => {
           if (warnings.length > 0) {
             toast.warning(warnings.join('\n'), { timeout: 8000 })
           }
-          toast.success('模组包导入完成')
+          toast.success(t('appStore.modPackImportComplete'))
         })()
       }
       if (task.type === 'mod-import' && task.status === 'failed') {
-        toast.error(task.metrics?.error || task.message || '模组包导入失败')
+        toast.error(task.metrics?.error || task.message || t('appStore.modPackImportFailed'))
       }
       if (task.type === 'mod-import' && task.status === 'cancelled') {
-        toast.warning('模组包导入已取消')
+        toast.warning(t('appStore.modPackImportCancelled'))
       }
     });
     // 监听：后端弹窗
@@ -1002,10 +1009,10 @@ export const useAppStore = defineStore('app', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.reset_database()
-      if (checkResult(res, "重置数据库")) {
+      if (checkResult(res, t('appStore.resetDatabase'))) {
         closeSettingsPanel()
         // 提示成功
-        toast.success("数据库已重置！")
+        toast.success(t('appStore.databaseReset'))
         // 清空本地状态
         const modStore = useModStore()
         modStore.reset()
@@ -1026,7 +1033,7 @@ export const useAppStore = defineStore('app', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.repair_database()
-      if (!checkResult(res, "修复数据库")) {
+      if (!checkResult(res, t('appStore.repairDatabase'))) {
         return res
       }
       if (res.data?.initialized) {
@@ -1049,7 +1056,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       // 修复结果切换发生在重启后的启动阶段，这里只负责让当前实例安全退出并拉起新实例。
       const res = await window.pywebview.api.restart_application()
-      checkResult(res, "重启应用")
+      checkResult(res, t('appStore.restartApp'))
       return res
     } finally {
       isLoading.value = false
@@ -1058,9 +1065,9 @@ export const useAppStore = defineStore('app', () => {
   // 数据库孤立数据清理
   const performDatabaseCleanup = async () => {
     const res = await window.pywebview.api.perform_database_cleanup()
-    if (checkResult(res, '数据库深度清理')) {
-      toast.success('无效数据清理完成，正在刷新列表...')
-      await refreshModsData('无效数据清理后同步模组数据')
+    if (checkResult(res, t('appStore.deepCleanDatabase'))) {
+      toast.success(t('appStore.invalidDataCleaned'))
+      await refreshModsData(t('appStore.syncModDataAfterCleanup'))
     }
   }
   const cancelTaskByProgress = async (task) => {
@@ -1069,9 +1076,9 @@ export const useAppStore = defineStore('app', () => {
     if (isTaskCancelPending(task.id)) return true
     markTaskCancelPending(task.id)
     try {
-      const displayName = task?.metrics?.title || task?.message || '任务'
+      const displayName = task?.metrics?.title || task?.message || t('appStore.task')
       const res = await window.pywebview.api.cancel_progress_task(task.id, task.type)
-      if (checkResult(res, `取消${displayName}`, false)) {
+      if (checkResult(res, t('appStore.cancelTask', { name: displayName }), false)) {
         return true
       }
       clearTaskCancelPending(task.id)
@@ -1079,7 +1086,7 @@ export const useAppStore = defineStore('app', () => {
     } catch (e) {
       clearTaskCancelPending(task.id)
       console.error('取消任务异常:', e)
-      toast.error(`取消任务异常: \n${e.message}`)
+      toast.error(t('appStore.cancelTaskError', { message: e.message }))
       return false
     }
   }
@@ -1089,8 +1096,8 @@ export const useAppStore = defineStore('app', () => {
       id: taskId,
       type: taskType,
       status: 'running',
-      message: '贴图任务',
-      metrics: { title: '贴图任务' },
+      message: t('appStore.textureTask'),
+      metrics: { title: t('appStore.textureTask') },
     })
   }
   // 变更 UI 状态
@@ -1119,22 +1126,22 @@ export const useAppStore = defineStore('app', () => {
     const currentProfileId = String(profileStore.currentProfileId || '').trim()
     const effectiveTargetProfileId = normalizedTargetProfileId || currentProfileId
     const targetProfile = (profileStore.profiles || []).find(item => item.id === effectiveTargetProfileId)
-    const targetProfileName = targetProfile?.name || effectiveTargetProfileId || '当前环境'
+    const targetProfileName = targetProfile?.name || effectiveTargetProfileId || t('appStore.currentProfile')
     // 当前环境启动前必须先把界面里的最新工作序列落盘；
     // 只有“启动别的环境”时，才允许跳过这一步。
     if (!normalizedTargetProfileId || normalizedTargetProfileId === currentProfileId) {
       const orderStore = useOrderStore()
-      const res = await orderStore.saveLoadOrder({ actionLabel: '运行' })
+      const res = await orderStore.saveLoadOrder({ actionLabel: t('appStore.run') })
       if (!res) return
     }
     if (!window.pywebview) return
     let gameRes = await window.pywebview.api.game_launch(profile_id)
     gameRes = await resolveGameLaunchWarning(gameRes, profile_id)
     if (!gameRes) return
-    if (checkResult(gameRes, "启动游戏程序")) {
+    if (checkResult(gameRes, t('main.launchGameProgram'))) {
       const runtimeState = String(gameRes?.data?.runtime_session?.state || '').trim()
       if (runtimeState === 'launching') {
-        toast.success(`正在启动“${targetProfileName}”环境，请等待游戏进程确认。`)
+        toast.success(t('main.launchingProfile', { name: targetProfileName }))
       } else {
         toast.success(gameRes.message)
       }
@@ -1156,11 +1163,11 @@ export const useAppStore = defineStore('app', () => {
     if (!window.pywebview) return
     try {
       const res = await window.pywebview.api.download_file(url, targetDir, filename)
-      if (checkResult(res, "添加下载任务")) {
+      if (checkResult(res, t('main.addDownloadTask'))) {
         // 成功
       }
     } catch (e) {
-      console.error('添加下载任务异常:', e)
+      console.error(t('main.addDownloadTaskError'), e)
     }
   }
   /**
@@ -1189,21 +1196,21 @@ export const useAppStore = defineStore('app', () => {
         return {
           type: 'warning',
           mode: 'confirm',
-          title: 'Steam 启动不可用',
-          message: '当前环境配置为优先使用 Steam 启动，但未检测到有效的 Steam 程序路径。\n你可以改为直接启动游戏本体，或先修复 Steam 路径后重试。',
-          confirmText: '直接启动',
-          cancelText: '取消',
+          title: t('main.steamLaunchUnavailable'),
+          message: t('main.steamLaunchUnavailableMessage'),
+          confirmText: t('main.directLaunch'),
+          cancelText: t('common.cancel'),
           action: 'continue',
         }
       case GAME_LAUNCH_WARNING_REASON.STEAM_RUNNING_WORKSHOP_CONFLICT:
         return {
           type: 'warning',
           mode: 'wait_steam_exit',
-          title: '建议先停用 Steam',
-          message: '当前环境配置为直接启动游戏本体，且已将创意工坊模组链接部署到本地模组目录。\n检测到 Steam 已在运行，如果现在继续启动游戏，Steam 会接管本次启动，游戏内将同时出现两套创意工坊模组。\n默认会优先加载本地目录中的那一套，一般不会影响实际游戏，但界面显示和后续管理会变得混乱。\n你可以手动退出 Steam；当前窗口会保持等待，Steam 完全退出后将自动启动游戏。\n如果你清楚影响，也可以直接继续运行。',
+          title: t('main.stopSteamFirstTitle'),
+          message: t('main.stopSteamFirstMessage'),
           actionButtons: [
-            { label: '继续运行', value: 'continue', kind: 'primary' },
-            { label: '取消', value: 'cancel', kind: 'secondary' },
+            { label: t('main.continueRunning'), value: 'continue', kind: 'primary' },
+            { label: t('common.cancel'), value: 'cancel', kind: 'secondary' },
           ],
         }
       default:
@@ -1211,10 +1218,10 @@ export const useAppStore = defineStore('app', () => {
           return {
             type: 'warning',
             mode: 'confirm',
-            title: '启动前确认',
-            message: fallbackMessage || '当前环境需要先确认后再继续启动。',
-            confirmText: '继续',
-            cancelText: '取消',
+            title: t('main.launchConfirmTitle'),
+            message: fallbackMessage || t('main.launchConfirmMessage'),
+            confirmText: t('common.continue'),
+            cancelText: t('common.cancel'),
             action: 'continue',
           }
         }
@@ -1258,15 +1265,15 @@ export const useAppStore = defineStore('app', () => {
     let autoResolved = false
 
     const choicePromise = confirmStore.open({
-      title: warningConfig?.title || '建议先停用 Steam',
+      title: warningConfig?.title || t('main.stopSteamFirstTitle'),
       message: warningConfig?.message || '',
       mode: 'confirm',
       type: warningConfig?.type || 'warning',
       actionButtons: Array.isArray(warningConfig?.actionButtons) && warningConfig.actionButtons.length
         ? warningConfig.actionButtons
         : [
-            { label: '继续运行', value: 'continue', kind: 'primary' },
-            { label: '取消', value: 'cancel', kind: 'secondary' },
+            { label: t('main.continueRunning'), value: 'continue', kind: 'primary' },
+            { label: t('common.cancel'), value: 'cancel', kind: 'secondary' },
           ],
     })
 
@@ -1292,7 +1299,7 @@ export const useAppStore = defineStore('app', () => {
             }
           }
         } catch (e) {
-          console.error('轮询 Steam 进程状态失败:', e)
+          console.error(t('main.steamPollError'), e)
         }
         await sleep(1000)
       }
@@ -1323,7 +1330,7 @@ export const useAppStore = defineStore('app', () => {
     // 模式2: 模态框 (Modal/Confirm)
     else {
       confirmStore.open({
-        title: title || '系统提示',
+        title: title || t('appStore.systemNotice'),
         message: message,
         type: type || 'info', // info, success, warning, error
         mode: 'alert', // 强制设为 alert 模式，因为后端无法直接await前端的选择结果(除非用更复杂的Promise桥接)
@@ -1361,7 +1368,7 @@ export const useAppStore = defineStore('app', () => {
   const refreshRemoteImageCacheStats = async () => {
     if (!window.pywebview) return null
     const res = await window.pywebview.api.get_remote_image_cache_stats()
-    if (!checkResult(res, '获取网络图片缓存统计')) return null
+    if (!checkResult(res, t('appStore.getRemoteImageCacheStats'))) return null
     syncRemoteImageCache(res.data)
     return res.data
   }
@@ -1369,7 +1376,7 @@ export const useAppStore = defineStore('app', () => {
   const clearRemoteImageCache = async () => {
     if (!window.pywebview) return false
     const res = await window.pywebview.api.clear_remote_image_cache()
-    if (!checkResult(res, '清理网络图片缓存', true)) return false
+    if (!checkResult(res, t('appStore.clearRemoteImageCache'), true)) return false
     // 清理接口会同时返回清理后的统计，前端直接复用即可。
     syncRemoteImageCache(res.data?.current)
     return res.data
@@ -1378,7 +1385,7 @@ export const useAppStore = defineStore('app', () => {
   const ensureTranslationProviders = async () => {
     if (!window.pywebview || isTranslationProvidersLoaded.value) return translationProviders.value
     const res = await window.pywebview.api.translation_get_providers()
-    if (checkResult(res, '获取翻译器列表', false, { silent: true })) {
+    if (checkResult(res, t('appStore.getTranslationProviders'), false, { silent: true })) {
       translationProviders.value = Array.isArray(res.data) && res.data.length ? res.data : translationProviders.value
       isTranslationProvidersLoaded.value = true
     }

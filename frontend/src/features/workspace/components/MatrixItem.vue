@@ -185,7 +185,7 @@ const formatTime = (value, full = false) => {
   if (!timestamp) return ''
   const date = new Date(timestamp)
   if (full) {
-    return date.toLocaleString('zh-CN', {
+    return date.toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -195,7 +195,7 @@ const formatTime = (value, full = false) => {
       hour12: false,
     })
   }
-  return date.toLocaleDateString('zh-CN', {
+  return date.toLocaleDateString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

@@ -11,9 +11,9 @@
             <div class="p-6">
               <h2 class="text-xl font-bold text-text-main flex items-center gap-2" @click="ruleStore.fetchRules">
                 <svg class="w-6 h-6 text-accent-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                规则中心
+                {{ t('rules.centerTitle') }}
               </h2>
-              <p class="text-sm text-text-dim mt-2">管理排序逻辑与约束</p>
+              <p class="text-sm text-text-dim mt-2">{{ t('rules.centerSubtitle') }}</p>
             </div>
 
             <nav class="flex-1 px-2 space-y-1" data-tour="rule-tabs">
@@ -32,15 +32,15 @@
             <div class="px-4 py-4 bg-bg-highlight/25 border-border-base/5" data-tour="rule-priority">
               <div class="flex items-center justify-between mb-3 px-2">
                 <span class="text-xs font-bold text-text-dim uppercase tracking-widest">
-                  生效优先级
-                  <label v-tooltip="'规则生效优先级，影响自动排序和问题检测的判定。'" class="text-xs text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
+                  {{ t('rules.effectivePriority') }}
+                  <label v-tooltip="t('rules.effectivePriorityTooltip')" class="text-xs text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                 </span>
                 <div class="flex gap-2">
-                  <button v-if="isPriorityDirty" @click="resetPriority" v-tooltip="'重置'"
+                  <button v-if="isPriorityDirty" @click="resetPriority" v-tooltip="t('common.reset')"
                     class="text-text-dim hover:text-text-main transition-colors">
                     <RotateCcw class="w-3.5 h-3.5" />
                   </button>
-                  <button @click="savePriority" v-tooltip="isPriorityDirty ? '保存优先级修改' : '无变化'"
+                  <button @click="savePriority" v-tooltip="isPriorityDirty ? t('rules.savePriorityChanges') : t('rules.noChanges')"
                     :class="[isPriorityDirty ? 'text-accent-success scale-110' : 'text-text-dim opacity-50']"
                     class="transition-all duration-300">
                     <Save class="w-4 h-4" />
@@ -67,16 +67,16 @@
                 </TransitionGroup>
               </div>
               <p class="text-[0.7rem] text-text-disabled mt-2 px-2 leading-relaxed">
-                * 生效优先级：从上到下，优先级从高到低。
+                {{ t('rules.priorityHint') }}
               </p>
             </div>
 
             <div class="p-4 border-t border-border-base/5 space-y-2" data-tour="rule-import-export">
               <button @click="ruleStore.handleImport" class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-bg-overlay/5 hover:bg-bg-overlay/10 text-sm text-text-dim transition-all border border-border-base/5">
-                <Download class="w-3 h-3" /> 导入配置包
+                <Download class="w-3 h-3" /> {{ t('rules.importConfigBundle') }}
               </button>
               <button @click="ruleStore.handleExport" class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-bg-overlay/5 hover:bg-bg-overlay/10 text-sm text-text-dim transition-all border border-border-base/5">
-                <Share2 class="w-3 h-3" /> 导出配置包
+                <Share2 class="w-3 h-3" /> {{ t('rules.exportConfigBundle') }}
               </button>
             </div>
           </aside>
@@ -89,7 +89,7 @@
               <!-- 搜索 -->
               <div class="relative w-1/3 group" data-tour="rule-search">
                 <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim group-focus-within:text-accent-primary transition-colors" />
-                <input v-model="searchQuery" placeholder="搜索规则、Mod名称或ID..." 
+                <input v-model="searchQuery" :placeholder="t('rules.searchPlaceholder')" 
                   class="input-glass w-full rounded-full py-1.5 pl-9 pr-4 text-sm text-text-main outline-none" />
               </div>
 
@@ -102,7 +102,7 @@
                     <div class="w-9 h-5 bg-bg-overlay/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-bg-contrast after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-bg-contrast after:border-border-base/18 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-secondary"></div>
                   </div>
                   <span class="relative text-sm text-text-dim font-bold">
-                    仅显示已安装
+                    {{ t('rules.installedOnly') }}
                     <span class="absolute top-full left-0 rounded-full border border-border-base/10 bg-bg-inset/70 px-1 text-xs text-text-dim">
                       {{ filteredStaticRules.length }} / {{ staticRuleTotal }}
                     </span>
@@ -112,7 +112,7 @@
 
                 <button v-if="currentTab === 'dynamic'" data-tour="rule-create" @click="createDynamicRule"
                   class="flex items-center gap-2 px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-on-accent-primary text-sm font-bold rounded-lg shadow-lg shadow-accent-primary/20 transition-all active:scale-95">
-                  <Plus class="w-4 h-4" /> 新建规则
+                  <Plus class="w-4 h-4" /> {{ t('rules.newRule') }}
                 </button>
 
                 <label class="flex items-center gap-2 cursor-pointer select-none" :key="currentTab + 'Enable'">
@@ -120,7 +120,7 @@
                     <input type="checkbox" v-model="globalRulesEnable" class="sr-only peer" >
                     <div class="w-9 h-5 bg-bg-overlay/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-bg-contrast after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-bg-contrast after:border-border-base/18 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-success"></div>
                   </div>
-                  <span class="text-sm text-text-dim font-bold">启用规则</span>
+                  <span class="text-sm text-text-dim font-bold">{{ t('rules.enableRules') }}</span>
                 </label>
                 
                 <label v-if="currentTab == 'workshop'" class="flex items-center gap-2 cursor-pointer select-none">
@@ -128,13 +128,13 @@
                     <input type="checkbox" v-model="workshopRulesAsDependency" class="sr-only peer" >
                     <div class="w-9 h-5 bg-bg-overlay/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-bg-contrast after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-bg-contrast after:border-border-base/18 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent-highlight"></div>
                   </div>
-                  <span class="text-sm text-text-dim font-bold">作为强依赖</span>
+                  <span class="text-sm text-text-dim font-bold">{{ t('rules.asStrongDependency') }}</span>
                 </label>
 
               </div>
 
               <div class="flex-1 flex justify-end">
-                <button class="modal-close-button" type="button" aria-label="关闭"  @click="appStore.uiState.showRuleDrawer = false" >
+                <button class="modal-close-button" type="button" :aria-label="t('common.close')"  @click="appStore.uiState.showRuleDrawer = false" >
                   <X class="size-4" />
                 </button>
               </div>
@@ -154,7 +154,7 @@
                       <div class="flex items-center gap-2">
                         <span class="text-sm font-bold text-text-main">{{ rule.name }}</span>
                         <span class="text-xs px-2 py-0.5 rounded bg-bg-inset/70 text-text-dim border border-border-base/5">Priority: {{ rule.priority }}</span>
-                        <span v-if="!rule.enabled" class="text-xs px-2 py-0.5 rounded bg-accent-danger/10 text-accent-danger border border-accent-danger/20">已禁用</span>
+                        <span v-if="!rule.enabled" class="text-xs px-2 py-0.5 rounded bg-accent-danger/10 text-accent-danger border border-accent-danger/20">{{ t('common.disabled') }}</span>
                         <span v-if="rule.description" :title="rule.description" class="flex-1 text-xs px-1 py-0.5 text-text-dim ">{{ rule.description }}</span>
                       </div>
                       
@@ -180,15 +180,15 @@
 
                     <!-- 操作区 -->
                     <div class="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                      <button @click="ruleStore.toggleDynamicRule(rule)" v-tooltip="rule.enabled ? '禁用规则' : '启用规则'"
+                      <button @click="ruleStore.toggleDynamicRule(rule)" v-tooltip="rule.enabled ? t('rules.disableRule') : t('rules.enableRule')"
                         class="p-2 rounded-lg hover:bg-bg-overlay/10" :class="rule.enabled ? 'text-accent-success' : 'text-accent-danger'">
                         <CircleCheckBig v-if="rule.enabled" class="w-4 h-4" />
                         <CircleOff v-else class="w-4 h-4" />
                       </button>
-                      <button @click="editDynamicRule(rule)" v-tooltip="'编辑'" class="p-2 rounded-lg hover:bg-bg-overlay/10 text-text-dim hover:text-text-main">
+                      <button @click="editDynamicRule(rule)" v-tooltip="t('common.edit')" class="p-2 rounded-lg hover:bg-bg-overlay/10 text-text-dim hover:text-text-main">
                         <Edit3 class="w-4 h-4" />
                       </button>
-                      <button @click="deleteDynamicRule(rule, $event)" v-tooltip="'删除'" class="p-2 rounded-lg hover:bg-accent-danger/10 text-text-dim hover:text-accent-danger">
+                      <button @click="deleteDynamicRule(rule, $event)" v-tooltip="t('common.delete')" class="p-2 rounded-lg hover:bg-accent-danger/10 text-text-dim hover:text-accent-danger">
                         <Trash2 class="w-4 h-4" />
                       </button>
                     </div>
@@ -197,7 +197,7 @@
                 
                 <div v-if="filteredDynamicRules.length === 0" class="flex flex-col items-center justify-center h-64 text-text-disabled">
                   <Zap class="w-12 h-12 mb-2" />
-                  <p class="text-sm">暂无动态规则</p>
+                  <p class="text-sm">{{ t('rules.noDynamicRules') }}</p>
                 </div>
               </div>
 
@@ -205,15 +205,15 @@
               <div v-else class="flex h-full min-h-0 flex-col gap-4">
                 <div v-if="currentTab === 'community'" class="p-4 rounded-xl bg-accent-secondary/10 border border-accent-secondary/20 flex justify-between items-center">
                   <div class="text-sm text-accent-secondary">
-                    <p class="font-bold mb-1">社区规则库 (RimSort)</p>
-                    <p class="opacity-80">包含众多由社区维护的排序建议。关闭“仅显示已安装”后可浏览完整规则库。</p>
+                    <p class="font-bold mb-1">{{ t('rules.communityLibrary') }}</p>
+                    <p class="opacity-80">{{ t('rules.communityLibraryDesc') }}</p>
                   </div>
                   <div class="flex flex-col items-center gap-2">
                     <button @click="ruleStore.updateCommunity" class="px-3 py-1.5 bg-accent-secondary/20 hover:bg-accent-secondary/40 text-accent-secondary rounded-lg text-sm font-bold transition-all border border-accent-secondary/30">
-                      手动更新库
+                      {{ t('rules.manualUpdateLibrary') }}
                     </button>
                     <span class="text-xs px-2 py-0.5 rounded bg-bg-overlay/5 text-text-dim border border-border-base/5">
-                      更新时间: {{ ruleStore.communityRulesUpdateTime? new Date(ruleStore.communityRulesUpdateTime).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '无' }}
+                      {{ t('rules.updatedAt', { time: ruleStore.communityRulesUpdateTime ? new Date(ruleStore.communityRulesUpdateTime).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : t('common.none') }) }}
                       <!-- 更新时间: {{ ruleStore.communityRulesUpdateTime }} -->
                     </span>
                   </div>
@@ -221,15 +221,15 @@
 
                 <div v-if="currentTab === 'workshop'" class="p-4 rounded-xl bg-accent-secondary/10 border border-accent-secondary/20 flex justify-between items-center">
                   <div class="text-sm text-accent-secondary">
-                    <p class="font-bold mb-1">创意工坊离线数据库</p>
-                    <p class="opacity-80">社区维护定期更新的创意工坊离线模组数据。</p>
+                    <p class="font-bold mb-1">{{ t('rules.workshopOfflineDatabase') }}</p>
+                    <p class="opacity-80">{{ t('rules.workshopOfflineDatabaseDesc') }}</p>
                   </div>
                   <div class="flex flex-col items-center gap-2">
                     <button @click="ruleStore.updateWorkshop" class="px-3 py-1.5 bg-accent-secondary/20 hover:bg-accent-secondary/40 text-accent-secondary rounded-lg text-sm font-bold transition-all border border-accent-secondary/30">
-                      手动更新库
+                      {{ t('rules.manualUpdateLibrary') }}
                     </button>
                     <span class="text-xs px-2 py-0.5 rounded bg-bg-overlay/5 text-text-dim border border-border-base/5">
-                      更新时间: {{ ruleStore.workshopRulesUpdateTime? new Date(ruleStore.workshopRulesUpdateTime).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '无' }}
+                      {{ t('rules.updatedAt', { time: ruleStore.workshopRulesUpdateTime ? new Date(ruleStore.workshopRulesUpdateTime).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : t('common.none') }) }}
                       <!-- 更新时间: {{ ruleStore.communityRulesUpdateTime }} -->
                     </span>
                   </div>
@@ -253,19 +253,19 @@
                       <div class="flex items-center gap-1 min-w-0">
                         <div class="text-xs text-text-dim font-mono truncate opacity-60">{{ item.id }}</div>
                         <span v-if="!item.isInstalled" class="shrink-0 rounded px-1.5 py-0.5 text-[0.62rem] border border-border-base/10 bg-bg-inset/70 text-text-disabled">
-                          未安装
+                          {{ t('rules.notInstalled') }}
                         </span>
                       </div>
 
                       <span v-if="item.rules.loadTop?.value"
                         v-tooltip="formatTooltip(item.id, item.rules.loadTop)"
                         class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 w-fit bg-accent-tip/10 text-text-main text-[0.8rem] border border-accent-tip/20 truncate cursor-help">
-                        强制置顶
+                        {{ t('rules.forceTop') }}
                       </span>
                       <span v-else-if="item.rules.loadBottom?.value"
                         v-tooltip="formatTooltip(item.id, item.rules.loadBottom)"
                         class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 w-fit bg-accent-highlight/10 text-text-main text-[0.8rem] border border-accent-highlight/20 truncate cursor-help">
-                        强制置底
+                        {{ t('rules.forceBottom') }}
                       </span>
 
                     </div>
@@ -276,7 +276,7 @@
                   <div class="flex-1 min-w-0 space-y-2 border-l border-border-base/5 pl-4">
                     <!-- Dependencies -->
                     <div v-if="item.rules.dependencies && Object.keys(item.rules.dependencies).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
-                      <span class="text-xs font-bold text-accent-highlight uppercase mt-0.5">依赖:</span>
+                      <span class="text-xs font-bold text-accent-highlight uppercase mt-0.5">{{ t('rules.dependenciesLabel') }}</span>
                       <div class="flex flex-wrap gap-1 w-full min-w-0">
                         <span v-for="(info, targetId) in item.rules.dependencies" :key="targetId" 
                           v-tooltip="formatTooltip(targetId, info)"
@@ -287,7 +287,7 @@
                     </div>
                     <!-- Load After -->
                     <div v-if="item.rules.loadAfter && Object.keys(item.rules.loadAfter).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
-                      <span class="text-xs font-bold text-accent-warn uppercase mt-0.5">前置:</span>
+                      <span class="text-xs font-bold text-accent-warn uppercase mt-0.5">{{ t('rules.loadAfterLabel') }}</span>
                       <div class="flex flex-wrap gap-1 w-full min-w-0">
                         <span v-for="(info, targetId) in item.rules.loadAfter" :key="targetId" 
                           v-tooltip="formatTooltip(targetId, info)"
@@ -298,7 +298,7 @@
                     </div>
                     <!-- Load Before -->
                     <div v-if="item.rules.loadBefore && Object.keys(item.rules.loadBefore).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
-                      <span class="text-xs font-bold text-accent-primary uppercase mt-0.5">后置:</span>
+                      <span class="text-xs font-bold text-accent-primary uppercase mt-0.5">{{ t('rules.loadBeforeLabel') }}</span>
                       <div class="flex flex-wrap gap-1 w-full min-w-0 ">
                         <span v-for="(info, targetId) in item.rules.loadBefore" :key="targetId"
                           v-tooltip="formatTooltip(targetId, info)" 
@@ -309,7 +309,7 @@
                     </div>
                     <!-- Incompatible -->
                     <div v-if="item.rules.incompatibleWith && Object.keys(item.rules.incompatibleWith).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
-                      <span class="text-xs font-bold text-accent-danger uppercase mt-0.5">冲突:</span>
+                      <span class="text-xs font-bold text-accent-danger uppercase mt-0.5">{{ t('rules.incompatibleLabel') }}</span>
                       <div class="flex flex-wrap gap-1 w-full min-w-0 ">
                         <span v-for="(info, targetId) in item.rules.incompatibleWith" :key="targetId"
                           v-tooltip="formatTooltip(targetId, info)"
@@ -322,7 +322,7 @@
 
                   <!-- 操作 (仅用户规则有删除) -->
                   <div class="shrink-0 flex items-center flex-col">
-                    <button @click="toggleModRule(item.id)" v-tooltip="isModExcluded(item.id) ? '启用规则' : '禁用规则'"
+                    <button @click="toggleModRule(item.id)" v-tooltip="isModExcluded(item.id) ? t('rules.enableRule') : t('rules.disableRule')"
                       class="p-2 rounded-lg hover:bg-bg-overlay/10" :class="!isModExcluded(item.id) ? 'text-accent-success' : 'text-accent-danger'">
                       <CircleCheckBig v-if="!isModExcluded(item.id)" class="w-4 h-4" />
                       <CircleOff v-else class="w-4 h-4" />
@@ -341,7 +341,7 @@
                 
                 <div v-else class="flex flex-1 flex-col items-center justify-center text-text-disabled">
                   <Shield class="w-12 h-12 mb-2" />
-                  <p class="text-sm">没有找到相关规则</p>
+                  <p class="text-sm">{{ t('rules.noMatchingRules') }}</p>
                 </div>
               </div>
 
@@ -359,25 +359,25 @@
                   <div class="w-8 h-8 rounded-lg bg-accent-primary/20 flex items-center justify-center">
                     <Zap class="w-4 h-4 text-accent-primary" />
                   </div>
-                  <h2 class="text-lg font-bold text-text-main">{{ editingRule.rule_id.startsWith('new_') ? '新建动态规则' : '编辑规则' }}</h2>
+                  <h2 class="text-lg font-bold text-text-main">{{ editingRule.rule_id.startsWith('new_') ? t('rules.newDynamicRule') : t('rules.editRule') }}</h2>
                 </div>
-                <button @click="editingRule = null" class="modal-close-button" aria-label="关闭编辑面板"><X class="w-4 h-4"/></button>
+                <button @click="editingRule = null" class="modal-close-button" :aria-label="t('rules.closeEditor')"><X class="w-4 h-4"/></button>
               </header>
               
               <div class="modal-body flex-1 overflow-y-auto p-6 space-y-6">
                 
                 <!-- 基础设置 -->
                 <div class="grid grid-cols-12 gap-4">
-                  <CommonInput v-model="editingRule.name" label="规则名称" placeholder="例如: 汉化包置底" class="col-span-8" />
-                  <CommonNumber v-model.number="editingRule.priority" label="优先级 (Priority)" placeholder="例如: 100" class="col-span-4" :step=1 :min="0" :max="1000" />
-                  <CommonInput v-model="editingRule.description" label="描述 (可选)" placeholder="规则的备注说明..." class="col-span-12" />
+                  <CommonInput v-model="editingRule.name" :label="t('rules.ruleName')" :placeholder="t('rules.ruleNamePlaceholder')" class="col-span-8" />
+                  <CommonNumber v-model.number="editingRule.priority" :label="t('rules.priorityLabel')" :placeholder="t('rules.priorityPlaceholder')" class="col-span-4" :step=1 :min="0" :max="1000" />
+                  <CommonInput v-model="editingRule.description" :label="t('rules.descriptionOptional')" :placeholder="t('rules.descriptionPlaceholder')" class="col-span-12" />
                 </div>
 
                 <!-- 条件构建器 -->
                 <div class="space-y-3">
                   <div class="grid grid-cols-4 gap-4 items-center justify-between">
-                    <CommonSelect class="min-w-45" v-model="editingRule.logic" label="触发条件" mini :options="[{label:'满足所有 (AND)',value:'AND'}, {label:'满足任一 (OR)',value:'OR'}]"></CommonSelect>
-                    <button @click="addFilter" class="text-accent-primary text-sm hover:underline flex items-center gap-1"><Plus class="w-3 h-3"/>添加条件</button>
+                    <CommonSelect class="min-w-45" v-model="editingRule.logic" :label="t('rules.triggerCondition')" mini :options="logicOptions"></CommonSelect>
+                    <button @click="addFilter" class="text-accent-primary text-sm hover:underline flex items-center gap-1"><Plus class="w-3 h-3"/>{{ t('rules.addCondition') }}</button>
                   </div>
                   
                   <div class="modal-section-subtle space-y-2 p-3">
@@ -388,17 +388,17 @@
                       <div v-if="shouldUseSelectableConditionValue(filter)" class="flex-1">
                         <CommonSelect v-model="filter.value" :options="getConditionValueOptions(filter.field)" editable ></CommonSelect>
                       </div>
-                      <CommonInput v-else v-model="filter.value" placeholder="值..." class="flex-1" />
+                      <CommonInput v-else v-model="filter.value" :placeholder="t('rules.valuePlaceholder')" class="flex-1" />
                       
                       <button @click="editingRule.filters.splice(idx, 1)" class="p-1.5 text-text-dim hover:text-accent-danger opacity-50 group-hover:opacity-100 transition-opacity"><Trash2 class="w-3.5 h-3.5"/></button>
                     </div>
-                    <div v-if="editingRule.filters.length === 0" class="text-center py-2 text-sm text-text-dim italic">点击右上角添加筛选条件</div>
+                    <div v-if="editingRule.filters.length === 0" class="text-center py-2 text-sm text-text-dim italic">{{ t('rules.noConditionsHint') }}</div>
                   </div>
                 </div>
 
                 <!-- 动作设置 -->
                 <div class="space-y-3 ">
-                  <label class="text-xs uppercase font-bold text-text-dim tracking-wider">执行动作</label>
+                  <label class="text-xs uppercase font-bold text-text-dim tracking-wider">{{ t('rules.actionLabel') }}</label>
                   <div class="mt-1 bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-3 flex gap-2 items-center">
                     <CommonSelect class="min-w-40" v-model="editingRule.action.type" :options="Object.entries(ruleStore.DYNAMIC_RULE_ACTIONS).map(([key, value]) => ({label: value, value: key}))"></CommonSelect>
                     
@@ -411,8 +411,8 @@
                       />
                       <span class="text-sm text-text-dim">
                         {{ editingRule.action.type === 'weight_shift'
-                          ? `(${POSITION_SHIFT_MIN} 到 ${POSITION_SHIFT_MAX}；负数向前，正数向后，最终结果仍会限制在 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX})`
-                          : `(${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}，越小越靠前)` }}
+                          ? t('rules.weightShiftHint', { min: POSITION_SHIFT_MIN, max: POSITION_SHIFT_MAX, weightMin: POSITION_WEIGHT_MIN, weightMax: POSITION_WEIGHT_MAX })
+                          : t('rules.weightSetHint', { min: POSITION_WEIGHT_MIN, max: POSITION_WEIGHT_MAX }) }}
                       </span>
                       <label class="text-sm text-text-dim italic hover:text-text-main cursor-help" v-tooltip="weightTooltip">?</label>
                     </div>
@@ -421,7 +421,7 @@
                       <CommonSelect v-model="editingRule.action.value" :options="modIdList" editable ></CommonSelect>
                     </div>
                     <div v-else class="text-sm text-text-dim flex-1">
-                      无需参数，匹配项将被移至列表最{{ editingRule.action.type === 'top' ? '前' : '后' }}端。
+                      {{ t('rules.noActionParameter', { position: editingRule.action.type === 'top' ? t('rules.front') : t('rules.back') }) }}
                     </div>
                   </div>
                 </div>
@@ -429,8 +429,8 @@
               </div>
 
               <footer class="modal-footer flex justify-end gap-3 p-4">
-                <button @click="editingRule = null" class="px-5 py-2 rounded-lg hover:bg-bg-overlay/5 text-sm font-bold text-text-dim transition-colors">取消</button>
-                <button @click="saveDynamicRule" class="px-6 py-2 bg-accent-primary hover:bg-accent-primary/90 text-on-accent-primary rounded-lg text-sm font-bold shadow-lg transition-transform active:scale-95">保存规则</button>
+                <button @click="editingRule = null" class="px-5 py-2 rounded-lg hover:bg-bg-overlay/5 text-sm font-bold text-text-dim transition-colors">{{ t('common.cancel') }}</button>
+                <button @click="saveDynamicRule" class="px-6 py-2 bg-accent-primary hover:bg-accent-primary/90 text-on-accent-primary rounded-lg text-sm font-bold shadow-lg transition-transform active:scale-95">{{ t('rules.saveRule') }}</button>
               </footer>
             </div>
           </div>
@@ -456,6 +456,7 @@ import { IconSteam, MOD_TYPE_MAP } from '../../shared/lib/constants'
 import { deepClone } from '../../shared/lib/common'
 import CommonModalShell from '../../shared/components/modal/CommonModalShell.vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
+import { useI18n } from 'vue-i18n'
 
 
 
@@ -466,6 +467,7 @@ const modStore = useModStore()
 const ruleStore = useRuleStore()
 const confirmStore = useConfirmStore()
 const groupStore = useGroupStore()
+const { t } = useI18n()
 
 
 // --- 状态管理 ---
@@ -477,10 +479,15 @@ const filterInstalled = ref(true) // 默认开启“仅显示已安装”
 const editingRule = ref(null)
 
 const tabs = computed(() => [
-  { id: 'dynamic', label: '动态群组规则', icon: Zap, count: allRules.value.user_dynamic_rules.length },
-  { id: 'user', label: '用户Mod规则', icon: User, count: Object.keys(allRules.value.user_mod_rules).length },
-  { id: 'community', label: '社区Mod规则', icon: Waypoints, count: Object.keys(allRules.value.community_mod_rules).length },
-  { id: 'workshop', label: '创意工坊依赖规则', icon: IconSteam, count: Object.keys(allRules.value.workshop_mod_rules).length },
+  { id: 'dynamic', label: t('rules.tabDynamic'), icon: Zap, count: allRules.value.user_dynamic_rules.length },
+  { id: 'user', label: t('rules.tabUser'), icon: User, count: Object.keys(allRules.value.user_mod_rules).length },
+  { id: 'community', label: t('rules.tabCommunity'), icon: Waypoints, count: Object.keys(allRules.value.community_mod_rules).length },
+  { id: 'workshop', label: t('rules.tabWorkshop'), icon: IconSteam, count: Object.keys(allRules.value.workshop_mod_rules).length },
+])
+
+const logicOptions = computed(() => [
+  { label: t('rules.logicAll'), value: 'AND' },
+  { label: t('rules.logicAny'), value: 'OR' },
 ])
 
 const allRules = computed(() => ({
@@ -521,7 +528,7 @@ const nameOptionList = computed(() => {
       })
     }
   }
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
+  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN'))
 })
 
 const aliasOptionList = computed(() => {
@@ -536,7 +543,7 @@ const aliasOptionList = computed(() => {
       })
     }
   }
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
+  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN'))
 })
 
 const authorOptionList = computed(() => {
@@ -547,14 +554,14 @@ const authorOptionList = computed(() => {
       if (cleanAuthor) authors.add(cleanAuthor)
     }
   }
-  return Array.from(authors).sort((a, b) => a.localeCompare(b, 'zh-CN')).map(value => ({ label: value, value }))
+  return Array.from(authors).sort((a, b) => a.localeCompare(b, globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN')).map(value => ({ label: value, value }))
 })
 
 const tagOptionList = computed(() =>
   [...(modStore.allModTags || [])]
     .map(tag => String(tag || '').trim())
     .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    .sort((a, b) => a.localeCompare(b, globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN'))
     .map(value => ({ label: value, value }))
 )
 
@@ -562,7 +569,7 @@ const groupOptionList = computed(() =>
   (groupStore.groupList || [])
     .map(group => String(group.name || '').trim())
     .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    .sort((a, b) => a.localeCompare(b, globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN'))
     .map(value => ({ label: value, value }))
 )
 
@@ -573,7 +580,7 @@ const modTypeOptionList = computed(() => {
     if (modType) modTypes.add(modType)
   }
   return Array.from(modTypes)
-    .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    .sort((a, b) => a.localeCompare(b, globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN'))
     .map(value => ({ label: MOD_TYPE_MAP[value] || value, value }))
 })
 
@@ -701,7 +708,7 @@ const filteredStaticRules = computed(() => {
   // 开启过滤时只剩已安装项；关闭过滤时按规则 ID 排列，方便直接浏览完整规则库。
   return list.sort((a, b) => {
     if (filterInstalled.value && a.isInstalled !== b.isInstalled) return Number(b.isInstalled) - Number(a.isInstalled)
-    return a.id.localeCompare(b.id, 'zh-CN')
+    return a.id.localeCompare(b.id, globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN')
   })
 })
 
@@ -726,15 +733,25 @@ const getStaticRuleRowSizeDependencies = (item) => {
 
 // --- 辅助显示方法 ---
 const formatOperator = (op) => {
-  const map = { contains: '包含', equals: '等于', not_contains: '不含', regex: '正则', starts_with: '开头是', ends_with: '结尾是' }
+  const map = {
+    contains: t('rules.operatorShort.contains'),
+    equals: t('rules.operatorShort.equals'),
+    not_contains: t('rules.operatorShort.notContains'),
+    regex: t('rules.operatorShort.regex'),
+    starts_with: t('rules.operatorShort.startsWith'),
+    ends_with: t('rules.operatorShort.endsWith'),
+  }
   return map[op] || op
 }
 // 格式化操作指令
 const formatAction = (act) => {
-  if (act.type === 'weight_shift') return `权重 ${act.value > 0 ? '+' : ''}${act.value}`
-  else if (act.type === 'weight_set') return `权重设为 ${act.value}`
-  else if (act.type.includes('load_')) return `在 ${modStore.displayModName(act.value)} ${act.type === 'load_after' ? '之后' : '之前'}`
-  else return act.type === 'top' ? '置顶' : '置底'
+  if (act.type === 'weight_shift') return t('rules.actionWeightShift', { value: `${act.value > 0 ? '+' : ''}${act.value}` })
+  else if (act.type === 'weight_set') return t('rules.actionWeightSet', { value: act.value })
+  else if (act.type.includes('load_')) return t('rules.actionLoadRelative', {
+    mod: modStore.displayModName(act.value),
+    position: act.type === 'load_after' ? t('rules.after') : t('rules.before'),
+  })
+  else return act.type === 'top' ? t('rules.pinTop') : t('rules.pinBottom')
 }
 // 获取 Mod 显示名称
 const getDisplayName = (id, defaultName) => modStore.displayModName(id, defaultName)
@@ -742,9 +759,9 @@ const getDisplayName = (id, defaultName) => modStore.displayModName(id, defaultN
 const formatTooltip = (targetId, info) => {
   let text = `ID: ${targetId}`
   if (!info) return text
-  if (typeof info === 'string') return `${text}\n\n说明:\n${info}`
+  if (typeof info === 'string') return `${text}\n\n${t('rules.noteLabel')}:\n${info}`
   if (info.name) text += `\nName: ${Array.isArray(info.name) ? info.name[0] : info.name}`
-  if (info.comment) text += `\n\n说明:\n${Array.isArray(info.comment) ? info.comment.join('\n') : info.comment}`
+  if (info.comment) text += `\n\n${t('rules.noteLabel')}:\n${Array.isArray(info.comment) ? info.comment.join('\n') : info.comment}`
   return text
 }
 
@@ -793,29 +810,15 @@ const normalizeDynamicRuleAction = (rule) => {
 }
 
 // 权重说明
-const weightTooltip = `**MOD权重设置规则**
-普通 MOD 默认权重为 ${POSITION_WEIGHT_DEFAULT}。
-“设定权重”只能填 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}，数值越小，自动排序时越靠前。
-“权重偏移”可以填 ${POSITION_SHIFT_MIN} 到 ${POSITION_SHIFT_MAX}，负数向前、正数向后，生效结果会限制在 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}。
-“置顶 / 置底”本质上等于${POSITION_WEIGHT_TOP} 和 ${POSITION_WEIGHT_BOTTOM} ，拥有较高优先级。需要 MOD 排在列表最前或最后时使用。
-
-注意：置顶/置底权重会覆盖其他权重设置，包括默认权重、偏移权重等。
-      权重偏移默认以普通MOD的权重为基准；如果设定了其他权重，会以该设定权重为基准进行偏移；并且多项偏移效果会叠加。总权重会限制在 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}。
-
-建议按照以下权重区间对 MOD 进行分类设置，具体如下：
-
-[[权重区间]]		[[类别描述]]						[[典型例子]]
-0				强制置顶						Harmony 或手动置顶
-1 - 49			极早期底层框架			Harmony 附近的前段框架权重
-50 - 99			官方内容						Core, Royalty, Ideology, Anomaly
-100 - 199		通用基础库					Vanilla Expanded Framework
-201 - 700		普通功能/内容模组		大多数内容 Mod (物品、种族、派系)
-701 - 800		UI与界面增强				RimHUD, Numbers, InventoryTab
-801 - 899		视觉/音频/补丁			纹理替换、音频替换
-900 - 949		语言包/本地化				LanguagePack
-950 - 999		末端优化/逻辑处理		Rocketman, Performance Optimize
-1000			强制置底						手动置底
-`
+const weightTooltip = computed(() => t('rules.weightTooltip', {
+  defaultWeight: POSITION_WEIGHT_DEFAULT,
+  weightMin: POSITION_WEIGHT_MIN,
+  weightMax: POSITION_WEIGHT_MAX,
+  shiftMin: POSITION_SHIFT_MIN,
+  shiftMax: POSITION_SHIFT_MAX,
+  topWeight: POSITION_WEIGHT_TOP,
+  bottomWeight: POSITION_WEIGHT_BOTTOM,
+}))
 
 // --- 操作逻辑 ---
 // 创建新的动态规则
@@ -847,7 +850,7 @@ const addFilter = () => {
 const saveDynamicRule = async () => {
   if (!window.pywebview) return
   if (!editingRule.value.name) {
-    toast.warning("请输入规则名称")
+    toast.warning(t('rules.enterRuleName'))
     return
   }
   // 如果是新建，生成正式ID
@@ -856,7 +859,12 @@ const saveDynamicRule = async () => {
   }
   const wasAdjusted = normalizeDynamicRuleAction(editingRule.value)
   if (wasAdjusted) {
-    toast.info(`动态权重已自动限制到允许范围内（权重 ${POSITION_WEIGHT_MIN}-${POSITION_WEIGHT_MAX}，偏移 ${POSITION_SHIFT_MIN} 到 ${POSITION_SHIFT_MAX}）。`)
+    toast.info(t('rules.weightClamped', {
+      weightMin: POSITION_WEIGHT_MIN,
+      weightMax: POSITION_WEIGHT_MAX,
+      shiftMin: POSITION_SHIFT_MIN,
+      shiftMax: POSITION_SHIFT_MAX,
+    }))
   }
   const res = await ruleStore.saveDynamicRules(editingRule.value)
   if (res) { editingRule.value = null }
@@ -864,8 +872,8 @@ const saveDynamicRule = async () => {
 // 删除动态规则
 const deleteDynamicRule = async (rule, event) => {
   const confirm = await confirmStore.open({
-    title: '确认删除',
-    message: '确定删除该动态规则吗？',
+    title: t('common.confirmDelete'),
+    message: t('rules.confirmDeleteDynamicRule'),
     type: 'error',
     mode: 'confirm',
   },event.target)
@@ -878,8 +886,8 @@ const deleteDynamicRule = async (rule, event) => {
 // 删除用户 Mod 规则
 const deleteUserModRule = async (ruleId, event) => {
   const confirm = await confirmStore.open({
-    title: '确认删除',
-    message: '确定删除该 Mod 规则吗？',
+    title: t('common.confirmDelete'),
+    message: t('rules.confirmDeleteModRule'),
     type: 'error',
     mode: 'confirm',
   },event.target)
@@ -899,13 +907,13 @@ const toggleModRule = (modId) => {
 }
 
 // --- 优先级排序逻辑 ---
-const sourceNames = {
-  user: '用户规则',
-  native: '原版规则',
-  community: '社区规则',
-  dynamic: '动态规则',
-  workshop: '创意工坊规则',
-}
+const sourceNames = computed(() => ({
+  user: t('rules.sourceUser'),
+  native: t('rules.sourceNative'),
+  community: t('rules.sourceCommunity'),
+  dynamic: t('rules.sourceDynamic'),
+  workshop: t('rules.sourceWorkshop'),
+}))
 
 // 本地优先级列表，用于拖拽展示
 const localPriority = ref([])

@@ -1,3 +1,5 @@
+import { getLocale } from '../../app/i18n'
+
 /**
  * 将字节数格式化为更适合展示的存储单位。
  * @param {number|string} bytes 字节数
@@ -28,11 +30,33 @@ export function formatFileSize(bytes, decimals = 2) {
 export function formatDate(dateString) {
   if (!dateString) return ''
 
-  return new Date(dateString).toLocaleString('zh-CN', {
+  return formatDateTime(dateString, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+export function getUiLocale() {
+  return getLocale() === 'en' ? 'en-US' : 'zh-CN'
+}
+
+export function formatDateTime(value, options = undefined) {
+  if (!value) return ''
+  return new Date(value).toLocaleString(getUiLocale(), options)
+}
+
+export function formatDateOnly(value, options = undefined) {
+  if (!value) return ''
+  return new Date(value).toLocaleDateString(getUiLocale(), options)
+}
+
+export function formatNumber(value, options = undefined) {
+  return Number(value || 0).toLocaleString(getUiLocale(), options)
+}
+
+export function localeCompareText(left = '', right = '') {
+  return String(left || '').localeCompare(String(right || ''), getUiLocale())
 }

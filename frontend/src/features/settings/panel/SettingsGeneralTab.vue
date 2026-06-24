@@ -1,69 +1,69 @@
 <template>
               <section class="animate-in fade-in slide-in-from-right-4">
-                <h3 class="text-lg font-bold text-text-main mb-6 flex items-center justify-between">界面与布局
-                  <button @click="guideStore.resetAllGuides()" v-tooltip="'重置界面引导，将界面引导重置为默认值'" class="px-3 py-1 bg-accent-warn/10 hover:bg-accent-warn/20 border border-accent-warn/30 rounded text-xs font-bold text-accent-warn transition-all">
-                    重置界面引导
+                <h3 class="text-lg font-bold text-text-main mb-6 flex items-center justify-between">{{ t('settings.general.title') }}
+                  <button @click="guideStore.resetAllGuides()" v-tooltip="t('settings.general.resetGuidesTip')" class="px-3 py-1 bg-accent-warn/10 hover:bg-accent-warn/20 border border-accent-warn/30 rounded text-xs font-bold text-accent-warn transition-all">
+                    {{ t('settings.general.resetGuides') }}
                   </button>
                 </h3>
                 <div class="space-y-6">
                   <div class="grid grid-cols-2 gap-4">
-                    <CommonSelect class="pointer-events-none opacity-50" label="界面语言" v-model="formData.language" :options="[{label:'简体中文', value:'zh-CN'}, {label:'English', value:'en'}]" />
+                    <CommonSelect :label="t('settings.general.language')" v-model="languageModel" :options="languageOptions" />
                     <ThemeSelect v-if="formData.ui" v-model="currentThemeId" :themes="appStore.themes"
                       @create="openThemeCreate" @edit="openThemeEdit" @delete="handleThemeDelete"
                     />
                   </div>
-                  <CommonSwitch label="在系统浏览器中打开 URL" v-model="formData.open_url_on_system" description="关闭则使用内置浏览器" />
+                  <CommonSwitch :label="t('settings.general.openUrlOnSystem')" v-model="formData.open_url_on_system" :description="t('settings.general.openUrlOnSystemDesc')" />
                   <div class="grid grid-cols-2 gap-4">
-                    <CommonNumber label="字体大小" description="控制界面字体大小，影响所有控件的内容显示" v-model="formData.ui.font_size" :step="1" :min="8" :max="40" />
-                    <CommonNumber label="提示悬停时间" description="控制悬浮提示信息的等待时间，单位是毫秒" v-model="formData.ui.tooltip_hover_time" :step="100" :min="100" :max="5000" />
-                    <CommonNumber label="拖动判定延迟" description="控制列表项拖动操作的判定延迟，单位是毫秒，默认值为 30 毫秒，为 0 时可能使点击操作出现抖动。" v-model="formData.ui.drag_delay" :step="10" :min="0" :max="500" />
+                    <CommonNumber :label="t('settings.general.fontSize')" :description="t('settings.general.fontSizeDesc')" v-model="formData.ui.font_size" :step="1" :min="8" :max="40" />
+                    <CommonNumber :label="t('settings.general.tooltipHoverTime')" :description="t('settings.general.tooltipHoverTimeDesc')" v-model="formData.ui.tooltip_hover_time" :step="100" :min="100" :max="5000" />
+                    <CommonNumber :label="t('settings.general.dragDelay')" :description="t('settings.general.dragDelayDesc')" v-model="formData.ui.drag_delay" :step="10" :min="0" :max="500" />
                     <div></div>
                     
                     <div class="modal-section col-span-2 grid grid-cols-2 gap-2 p-2">
-                      <span class="col-span-2 ml-2 mt-2 text-sm font-bold tracking-wide">列表设定
-                        <label v-tooltip="'可调整列表的显示方式与辅助功能'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
+                      <span class="col-span-2 ml-2 mt-2 text-sm font-bold tracking-wide">{{ t('settings.general.listSettings') }}
+                        <label v-tooltip="t('settings.general.listSettingsTip')" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                       </span>
-                      <CommonSwitch label="Mod 悬停面板" v-model="formData.ui.show_mod_hover_panel" description="控制 Mod 列表中悬停时的面板显示。" />
-                      <CommonSwitch label="双击启用/停用 Mod" v-model="formData.ui.double_click_active_mod" description="控制 Mod 列表中双击启用/停用 Mod 动作。" />
-                      <CommonSwitch label="依赖关系图" v-model="formData.ui.show_dependency_graph" description="控制启用列表中依赖关系图的显示。" />
-                      <CommonSwitch label="平滑定位滚动" v-model="formData.ui.smooth_list_target_scroll" description="开启后，搜索定位或移动后定位会平滑滚动到目标项；关闭后直接跳到目标位置。" />
-                      <CommonSwitch label="列表索引" v-model="formData.ui.show_list_index" description="控制列表中索引列的显示。" />
+                      <CommonSwitch :label="t('settings.general.modHoverPanel')" v-model="formData.ui.show_mod_hover_panel" :description="t('settings.general.modHoverPanelDesc')" />
+                      <CommonSwitch :label="t('settings.general.doubleClickActiveMod')" v-model="formData.ui.double_click_active_mod" :description="t('settings.general.doubleClickActiveModDesc')" />
+                      <CommonSwitch :label="t('settings.general.dependencyGraph')" v-model="formData.ui.show_dependency_graph" :description="t('settings.general.dependencyGraphDesc')" />
+                      <CommonSwitch :label="t('settings.general.smoothListTargetScroll')" v-model="formData.ui.smooth_list_target_scroll" :description="t('settings.general.smoothListTargetScrollDesc')" />
+                      <CommonSwitch :label="t('settings.general.listIndex')" v-model="formData.ui.show_list_index" :description="t('settings.general.listIndexDesc')" />
                     </div>
 
                     <div class="modal-section col-span-2 grid grid-cols-2 gap-2 p-2">
-                      <CommonSwitch class="col-span-2 px-2 pt-2" label="列表图标" v-model="formData.ui.show_list_icon" description="控制列表中的所有图标显示，包括简单视图和详细视图。" mini />
-                      <CommonSwitch :disabled="!formData.ui.show_list_icon" label="列表 Mod 图标" v-model="formData.ui.show_list_mod_icon" description="控制列表中 Mod 图标显示，不影响详细视图。" />
-                      <CommonSwitch :disabled="!formData.ui.show_list_icon" label="列表 Mod 类型图标" v-model="formData.ui.show_list_modtype_icon" description="控制列表中 Mod 类型图标显示，不影响详细视图。" />
+                      <CommonSwitch class="col-span-2 px-2 pt-2" :label="t('settings.general.listIcons')" v-model="formData.ui.show_list_icon" :description="t('settings.general.listIconsDesc')" mini />
+                      <CommonSwitch :disabled="!formData.ui.show_list_icon" :label="t('settings.general.listModIcon')" v-model="formData.ui.show_list_mod_icon" :description="t('settings.general.listModIconDesc')" />
+                      <CommonSwitch :disabled="!formData.ui.show_list_icon" :label="t('settings.general.listModTypeIcon')" v-model="formData.ui.show_list_modtype_icon" :description="t('settings.general.listModTypeIconDesc')" />
                     </div>
                     <div class="modal-section col-span-2 grid grid-cols-2 gap-2 p-2">
-                      <CommonSwitch class="col-span-2 px-2 pt-2" mini label="启用列表分割组" v-model="formData.ui.enable_active_section_collapse" description="仅在启用列表生效。名称或别名满足 `=标题=` 或 `/*标题*/` 的纯分割线模组会被识别为可折叠分割线；折叠后拖动分割线模组即可整组移动。^^可工坊订阅 [[分类排列标签合集]] 配合使用。^^" />
-                      <CommonSwitch :disabled="!formData.ui.enable_active_section_collapse" label="默认折叠分割组" v-model="formData.ui.default_collapse_active_sections" description="开启后，启用列表中的分割组会在初始显示时默认折叠。" />
+                      <CommonSwitch class="col-span-2 px-2 pt-2" mini :label="t('settings.general.activeSectionCollapse')" v-model="formData.ui.enable_active_section_collapse" :description="t('settings.general.activeSectionCollapseDesc')" />
+                      <CommonSwitch :disabled="!formData.ui.enable_active_section_collapse" :label="t('settings.general.defaultCollapseActiveSections')" v-model="formData.ui.default_collapse_active_sections" :description="t('settings.general.defaultCollapseActiveSectionsDesc')" />
                       <div class="flex items-center gap-1" :class="{'pointer-events-none opacity-50': !formData.ui.enable_active_section_collapse}">
                         <button @click="appStore.openSteamWorkshopById('2138932352', false)"
                           class="px-2 py-1.5 bg-bg-overlay/5 hover:bg-bg-overlay/10 border border-border-base/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
                           <span class="flex items-center gap-2">
-                            访问<p class="text-accent-cool">分类排列标签合集</p>工坊页面
+                            {{ t('settings.general.visitWorkshopPrefix') }}<p class="text-accent-cool">{{ t('settings.general.sectionTagCollection') }}</p>{{ t('settings.general.visitWorkshopSuffix') }}
                           </span>
                         </button>
                         <button @click="appStore.openSteamWorkshopById('3542535605', false)"
                           class="px-2 py-1.5 bg-bg-overlay/5 hover:bg-bg-overlay/10 border border-border-base/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
                           <span class="flex items-center gap-2">
-                            访问<p class="text-accent-cool">分类排序合集</p>工坊页面
+                            {{ t('settings.general.visitWorkshopPrefix') }}<p class="text-accent-cool">{{ t('settings.general.sectionSortCollection') }}</p>{{ t('settings.general.visitWorkshopSuffix') }}
                           </span>
                         </button>
                       </div>
                     </div>
                     
                     <div class="modal-section col-span-2 grid grid-cols-2 gap-2 p-2">
-                      <span class="col-span-2 ml-2 mt-2 text-sm font-bold tracking-wide">分组设定
-                        <label v-tooltip="'可调整分组列表的显示方式'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
+                      <span class="col-span-2 ml-2 mt-2 text-sm font-bold tracking-wide">{{ t('settings.general.groupSettings') }}
+                        <label v-tooltip="t('settings.general.groupSettingsTip')" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                       </span>
-                      <CommonSwitch label="分组索引" v-model="formData.ui.show_group_index" description="控制分组列表中Mod索引的显示。" />
-                      <CommonSwitch label="分组图标" v-model="formData.ui.show_group_icon" description="控制分组列表中Mod图标的显示。" />
+                      <CommonSwitch :label="t('settings.general.groupIndex')" v-model="formData.ui.show_group_index" :description="t('settings.general.groupIndexDesc')" />
+                      <CommonSwitch :label="t('settings.general.groupIcon')" v-model="formData.ui.show_group_icon" :description="t('settings.general.groupIconDesc')" />
                     </div>
                     <div class="modal-section col-span-2 grid grid-cols-2 gap-2 p-2">
-                      <span class="col-span-2 ml-2 mt-2 text-sm font-bold tracking-wide">主页布局
-                        <label v-tooltip="'可拖动切换布局顺序'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
+                      <span class="col-span-2 ml-2 mt-2 text-sm font-bold tracking-wide">{{ t('settings.general.homeLayout') }}
+                        <label v-tooltip="t('settings.general.layoutDragTip')" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                       </span>
                       <div class="col-span-2 flex gap-1">
                         <div v-for="item, index in formData.ui.main_layout" :key="item.id"
@@ -81,11 +81,11 @@
                     </div>
 
                     <div class="modal-section col-span-2 grid grid-cols-2 gap-2 p-2">
-                      <CommonSwitch class="col-span-2 px-2 pt-2" mini label="Mod 详情面板" v-model="getDataById('details', formData.ui.main_layout).visible" description="可关闭Mod详情栏。" />
-                      <CommonSwitch :disabled="!getDataById('details', formData.ui.main_layout).visible" label="动态图标云" v-model="formData.ui.show_icons_cloud" description="控制详情页闲置时的动态图标云显示。" />
-                      <CommonNumber label="详情页加载延迟" description="控制 Mod 详情页加载的延迟时间，单位是毫秒，默认值为 200 毫秒。" v-model="formData.ui.detail_delay" :step="10" :min="0" :max="5000" />
-                      <span class="col-span-2 text-xs ml-2 mt-2">Mod 详情布局
-                        <label v-tooltip="'可拖动切换布局顺序'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
+                      <CommonSwitch class="col-span-2 px-2 pt-2" mini :label="t('settings.general.modDetailsPanel')" v-model="getDataById('details', formData.ui.main_layout).visible" :description="t('settings.general.modDetailsPanelDesc')" />
+                      <CommonSwitch :disabled="!getDataById('details', formData.ui.main_layout).visible" :label="t('settings.general.iconsCloud')" v-model="formData.ui.show_icons_cloud" :description="t('settings.general.iconsCloudDesc')" />
+                      <CommonNumber :label="t('settings.general.detailDelay')" :description="t('settings.general.detailDelayDesc')" v-model="formData.ui.detail_delay" :step="10" :min="0" :max="5000" />
+                      <span class="col-span-2 text-xs ml-2 mt-2">{{ t('settings.general.modDetailsLayout') }}
+                        <label v-tooltip="t('settings.general.layoutDragTip')" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                       </span>
                       <div class="col-span-2 flex flex-col gap-1 p-2 rounded-xl bg-bg-deep/10 border border-border-base/10"
                         :class="{ 'pointer-events-none opacity-50': !getDataById('details', formData.ui.main_layout).visible }">
@@ -119,6 +119,8 @@ import { DEFAULT_THEME_ID, applyTheme, createEditableThemeFrom, findThemeById, n
 import { useAppStore } from '../../../app/stores/appStore'
 import { useConfirmStore } from '../../../shared/components/modal/confirmStore'
 import { useGuideStore } from '../../guide/guideStore'
+import { setLocale } from '../../../app/i18n'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   formData: { type: Object, required: true },
@@ -127,6 +129,21 @@ const props = defineProps({
 const appStore = useAppStore()
 const guideStore = useGuideStore()
 const confirmStore = useConfirmStore()
+const { t } = useI18n()
+
+const languageOptions = computed(() => [
+  { label: t('settings.general.simplifiedChinese'), value: 'zh-CN' },
+  { label: 'English', value: 'en' },
+])
+
+const languageModel = computed({
+  get: () => props.formData.language || 'zh-CN',
+  set: async (language) => {
+    props.formData.language = language || 'zh-CN'
+    setLocale(props.formData.language)
+    await appStore.saveSetting('language', props.formData.language)
+  },
+})
 
 const layoutDragState = ref({ key: '', fromIndex: -1, overIndex: -1 })
 
@@ -158,7 +175,11 @@ const openThemeEdit = (theme) => {
 
 const handleThemeDelete = async (theme) => {
   if (!theme || theme.builtin) return
-  const ok = await confirmStore.confirmAction('删除主题', `确定要删除自定义主题「${theme.name}」吗？此操作不可撤销。`, { type: 'error' })
+  const ok = await confirmStore.confirmAction(
+    t('settings.general.deleteThemeTitle'),
+    t('settings.general.deleteThemeMessage', { name: theme.name }),
+    { type: 'error' },
+  )
   if (!ok) return
   const deleted = await appStore.deleteUserTheme(theme.id)
   if (deleted && currentThemeId.value === theme.id) {

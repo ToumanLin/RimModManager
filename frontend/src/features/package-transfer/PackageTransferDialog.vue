@@ -10,54 +10,54 @@
           <section class="modal-section p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="min-w-0">
-                <div class="text-sm font-bold text-text-main">导入包文件</div>
+                <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.importPackageFile') }}</div>
                 <div class="mt-1 text-xs text-text-dim">
-                  {{ selectedBundlePath || '尚未选择文件' }}
+                  {{ selectedBundlePath || t('packageTransfer.noFileSelected') }}
                 </div>
               </div>
               <button class="shrink-0 rounded-xl bg-accent-primary px-4 py-2 text-xs font-black text-on-accent-primary transition-all hover:bg-accent-primary/85"
                 @click="pickImportBundle" >
-                选择文件
+                {{ t('packageTransfer.selectFile') }}
               </button>
             </div>
           </section>
 
           <section v-if="inspectData" class="modal-section p-4">
-            <div class="text-sm font-bold text-text-main">包摘要</div>
+            <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.packageSummary') }}</div>
             <div class="mt-3 grid grid-cols-6 gap-3 text-xs text-text-dim">
               <div class="modal-section-subtle col-span-2 px-3 py-2">
-                <div class="text-text-dim">格式</div>
-                <div class="mt-1 font-mono text-text-main">{{ inspectData.format || '未知' }}</div>
+                <div class="text-text-dim">{{ t('packageTransfer.format') }}</div>
+                <div class="mt-1 font-mono text-text-main">{{ inspectData.format || t('common.unknown') }}</div>
               </div>
               <div class="modal-section-subtle col-span-2 px-3 py-2">
-                <div class="text-text-dim">导出时间</div>
-                <div class="mt-1 font-mono text-text-main">{{ inspectData.exported_at || '未知' }}</div>
+                <div class="text-text-dim">{{ t('packageTransfer.exportedAt') }}</div>
+                <div class="mt-1 font-mono text-text-main">{{ inspectData.exported_at || t('common.unknown') }}</div>
               </div>
               <div v-if="dialogMode === 'mod-import'" class="modal-section-subtle px-3 py-2">
-                <div class="text-text-dim">模组数量</div>
+                <div class="text-text-dim">{{ t('packageTransfer.modCount') }}</div>
                 <div class="mt-1 font-mono text-text-main">{{ inspectData.mods?.length || 0 }}</div>
               </div>
               <div class="modal-section-subtle px-3 py-2">
-                <div class="text-text-dim">环境数据</div>
+                <div class="text-text-dim">{{ t('packageTransfer.environmentData') }}</div>
                 <div class="mt-1 font-mono text-text-main">
-                  {{ inspectData.has_environment_data || (inspectData.profiles?.length > 0) ? `包含 ${inspectData.profiles?.length || 0} 项` : '未附带' }}
+                  {{ inspectData.has_environment_data || (inspectData.profiles?.length > 0) ? t('packageTransfer.includesItems', { count: inspectData.profiles?.length || 0 }) : t('packageTransfer.notIncluded') }}
                 </div>
               </div>
               <div v-if="archiveSummary" class="modal-section-subtle col-span-2 px-3 py-2">
-                <div class="text-text-dim">压缩包大小</div>
+                <div class="text-text-dim">{{ t('packageTransfer.bundleSize') }}</div>
                 <div class="mt-1 font-mono text-text-main">{{ archiveSummary.bundleSize }}</div>
               </div>
               <div v-if="archiveSummary" class="modal-section-subtle col-span-2 px-3 py-2">
-                <div class="text-text-dim">预计解压后大小</div>
+                <div class="text-text-dim">{{ t('packageTransfer.estimatedUnpackedSize') }}</div>
                 <div class="mt-1 font-mono text-text-main">{{ archiveSummary.unpackedSize }}</div>
               </div>
               <div v-if="archiveSummary" class="modal-section-subtle col-span-2 px-3 py-2">
-                <div class="text-text-dim">体积变化</div>
+                <div class="text-text-dim">{{ t('packageTransfer.sizeChange') }}</div>
                 <div class="mt-1 font-mono text-text-main">{{ archiveSummary.ratioText }}</div>
               </div>
               <div v-if="dialogMode === 'mod-import' && targetDiskSpaceSummary" class="rounded-xl border px-3 py-2 col-span-6"
                 :class="targetDiskSpaceSummary.enough ? 'border-accent-tip/20 bg-accent-tip/8' : 'border-accent-danger/25 bg-accent-danger/8'" >
-                <div class="text-text-dim">目标磁盘空间</div>
+                <div class="text-text-dim">{{ t('packageTransfer.targetDiskSpace') }}</div>
                 <div class="mt-1 font-mono" :class="targetDiskSpaceSummary.enough ? 'text-text-main' : 'text-accent-danger'">
                   {{ targetDiskSpaceSummary.text }}
                 </div>
@@ -68,17 +68,17 @@
           <template v-if="dialogMode === 'mod-import' && inspectData">
             <section class="modal-section p-4">
               <div class="mb-3">
-                <div class="text-sm font-bold text-text-main">导入设置</div>
-                <div class="mt-1 text-xs text-text-dim">可以同时处理环境和模组。导入到当前环境目录或管理器目录时，当前列表会自动刷新。</div>
+                <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.importSettings') }}</div>
+                <div class="mt-1 text-xs text-text-dim">{{ t('packageTransfer.importSettingsDesc') }}</div>
               </div>
 
               <div class="space-y-4">
                 <label class="modal-section-subtle flex items-start gap-3 px-3 py-3">
                   <input v-model="modImportForm.import_mods" class="mt-0.5 accent-accent-primary" type="checkbox">
                   <div>
-                    <div class="text-sm font-bold text-text-main">导入模组文件</div>
+                    <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.importModFiles') }}</div>
                     <div class="mt-1 text-xs leading-relaxed text-text-dim">
-                      如果遇到同名文件夹，会按右侧规则处理。导入到管理器目录后，对应环境需要开启“使用管理器模组”。
+                      {{ t('packageTransfer.importModFilesDesc') }}
                     </div>
                   </div>
                 </label>
@@ -88,8 +88,8 @@
                     <div class="flex items-start gap-3">
                       <input v-model="modImportForm.target_kind" value="game_install" class="mt-0.5 accent-accent-primary" type="radio">
                       <div class="min-w-0">
-                        <div class="text-sm font-bold text-text-main">导入到游戏模组目录</div>
-                        <div class="mt-1 text-xs text-text-dim">会直接放进你选中的游戏目录里。</div>
+                        <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.importToGameMods') }}</div>
+                        <div class="mt-1 text-xs text-text-dim">{{ t('packageTransfer.importToGameModsDesc') }}</div>
                       </div>
                     </div>
                   </label>
@@ -97,9 +97,9 @@
                     <div class="flex items-start gap-3">
                       <input v-model="modImportForm.target_kind" value="self_mods" class="mt-0.5 accent-accent-primary" type="radio">
                       <div class="min-w-0">
-                        <div class="text-sm font-bold text-text-main">导入到管理器模组目录</div>
+                        <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.importToManagerMods') }}</div>
                         <div class="mt-1 text-xs leading-relaxed text-text-dim">
-                          {{ selfModsPath || '还没有设置管理器模组目录' }}
+                          {{ selfModsPath || t('packageTransfer.noManagerModsPath') }}
                         </div>
                       </div>
                     </div>
@@ -107,22 +107,22 @@
                 </div>
 
                 <div v-if="modImportForm.import_mods && modImportForm.target_kind === 'game_install'" class="space-y-2">
-                  <CommonSelect v-model="modImportForm.game_install_path" label="目标游戏本体" :options="availableInstallOptions" />
+                  <CommonSelect v-model="modImportForm.game_install_path" :label="t('packageTransfer.targetGameInstall')" :options="availableInstallOptions" />
                   <div v-if="availableInstalls.length === 0" class="text-xs leading-relaxed text-accent-warn">
-                    当前未发现有效游戏本体。仍可导入到管理器模组目录，或先配置有效本体后再导入。
+                    {{ t('packageTransfer.noAvailableGameInstalls') }}
                   </div>
                 </div>
 
                 <div v-if="modImportForm.import_mods && modImportForm.target_kind === 'self_mods'" class="rounded-xl border border-accent-warn/20 bg-accent-warn/8 px-3 py-3 text-xs leading-relaxed text-text-dim">
-                  导入到管理器模组目录后，需要在对应环境开启 <span class="font-bold text-accent-warn">使用管理器模组</span> 才能正常使用。
+                  {{ t('packageTransfer.enableManagerModsBefore') }} <span class="font-bold text-accent-warn">{{ t('packageTransfer.useManagerMods') }}</span> {{ t('packageTransfer.enableManagerModsAfter') }}
                 </div>
 
                 <label v-if="inspectData.has_environment_data" class="modal-section-subtle flex items-start gap-3 px-3 py-3">
                   <input v-model="modImportForm.apply_environment_data" class="mt-0.5 accent-accent-primary" type="checkbox">
                   <div>
-                    <div class="text-sm font-bold text-text-main">同时应用环境数据</div>
+                    <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.applyEnvironmentData') }}</div>
                     <div class="mt-1 text-xs leading-relaxed text-text-dim">
-                      覆盖现有环境时，只会替换这个环境的实际使用数据，不会改名称、说明和绑定关系。新建环境时，会尽量保留原来的环境信息。
+                      {{ t('packageTransfer.applyEnvironmentDataDesc') }}
                     </div>
                   </div>
                 </label>
@@ -132,31 +132,31 @@
             <section v-if="inspectData.has_environment_data"
               class="modal-section p-4" >
               <div class="mb-3">
-                <div class="text-sm font-bold text-text-main">环境数据处理</div>
-                <div class="mt-1 text-xs text-text-dim">环境重名时按名称判断。覆盖只替换实际使用数据，新建会尽量保留导入包里的环境信息。</div>
+                <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.environmentDataHandling') }}</div>
+                <div class="mt-1 text-xs text-text-dim">{{ t('packageTransfer.environmentDataHandlingDesc') }}</div>
               </div>
 
               <div v-if="modImportForm.apply_environment_data && inspectData.profiles?.length" class="space-y-3">
                 <div class="rounded-xl border border-accent-danger/20 bg-accent-danger/8 px-3 py-3 text-xs leading-relaxed text-text-dim">
-                  覆盖环境会替换这个环境里的游戏设置、模组设置和存档排序等内容。
+                  {{ t('packageTransfer.overwriteEnvironmentWarning') }}
                 </div>
                 <ProfileConflictPlanEditor :rows="profilePlanRows" :available-installs="availableInstalls" @strategy="applyProfileStrategy" />
               </div>
               <div v-else class="modal-section-subtle px-3 py-3 text-xs leading-relaxed text-text-dim">
-                当前包附带 {{ inspectData.profiles?.length || 0 }} 个环境。勾选“同时应用环境数据”后，再在这里选择重名环境的处理方式。
+                {{ t('packageTransfer.packageHasProfiles', { count: inspectData.profiles?.length || 0 }) }}
               </div>
             </section>
             
 
               <section class="modal-section p-4">
                 <div class="mb-3">
-                  <div class="text-sm font-bold text-text-main">同名模组处理</div>
-                  <div class="mt-1 text-xs text-text-dim">这里只处理同名文件夹。你可以统一替换、跳过、另存为新文件夹，也可以逐项调整。</div>
+                  <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.duplicateModsHandling') }}</div>
+                  <div class="mt-1 text-xs text-text-dim">{{ t('packageTransfer.duplicateModsHandlingDesc') }}</div>
                 </div>
 
                 <div v-if="modImportForm.import_mods && modConflictRows.length > 0" class="space-y-3">
                   <div class="modal-section-subtle px-3 py-3 text-xs leading-relaxed text-text-dim">
-                    当前发现 {{ modConflictRows.length }} 个同名模组，导入时会按这里的规则处理。
+                    {{ t('packageTransfer.duplicateModsFound', { count: modConflictRows.length }) }}
                   </div>
                   <ModConflictPlanEditor
                     :rows="modConflictRows"
@@ -164,18 +164,18 @@
                   />
                 </div>
                 <div v-else-if="modImportForm.import_mods" class="rounded-xl border border-accent-tip/20 bg-accent-tip/8 px-3 py-3 text-xs leading-relaxed text-text-dim">
-                  当前没有发现同名模组，导入时会直接写入目标目录。
+                  {{ t('packageTransfer.noDuplicateMods') }}
                 </div>
                 <div v-else class="modal-section-subtle px-3 py-3 text-xs leading-relaxed text-text-dim">
-                  本次未勾选“导入模组文件”，这里只需要处理环境数据。
+                  {{ t('packageTransfer.modImportNotSelected') }}
                 </div>
               </section>
           </template>
 
           <section v-if="dialogMode === 'data-import' && inspectData" class="modal-section p-4">
-            <div class="mb-3 text-sm font-bold text-text-main">环境导入冲突处理</div>
+            <div class="mb-3 text-sm font-bold text-text-main">{{ t('packageTransfer.environmentImportConflicts') }}</div>
             <div class="mb-3 rounded-xl border border-accent-danger/20 bg-accent-danger/8 px-3 py-3 text-xs leading-relaxed text-text-dim">
-              这里统一处理所有同名环境。覆盖时只替换环境里的实际使用数据；新建时会尽量保留导入包里的环境信息。
+              {{ t('packageTransfer.environmentImportConflictsDesc') }}
             </div>
             <ProfileConflictPlanEditor
               :rows="profilePlanRows"
@@ -187,12 +187,12 @@
 
         <div v-else-if="dialogMode === 'mod-export'" class="space-y-4">
           <section class="modal-section p-4">
-            <div class="text-sm font-bold text-text-main">导出来源</div>
+            <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.exportSource') }}</div>
             <div class="mt-2 text-xs leading-relaxed text-text-dim">{{ exportSummary }}</div>
           </section>
 
           <section v-if="exportScopeOptions.length > 0" class="modal-section p-4">
-            <div class="mb-2 text-sm font-bold text-text-main">导出范围</div>
+            <div class="mb-2 text-sm font-bold text-text-main">{{ t('packageTransfer.exportScope') }}</div>
             <div class="grid grid-cols-2 gap-3">
               <label v-for="option in exportScopeOptions" :key="option.value" class="rounded-xl border px-3 py-3"
                 :class="exportForm.export_scope === option.value ? 'border-accent-primary/35 bg-accent-primary/8' : 'border-border-base/10 bg-bg-inset/55'" >
@@ -208,7 +208,7 @@
           </section>
 
           <section v-if="showExportExtraOptions" class="modal-section p-4">
-            <div class="mb-2 text-sm font-bold text-text-main">附加导出选项</div>
+            <div class="mb-2 text-sm font-bold text-text-main">{{ t('packageTransfer.extraExportOptions') }}</div>
             <div class="modal-section-subtle mb-3 px-3 py-2 text-xs text-text-dim">
               {{ extraExportSummary }}
             </div>
@@ -217,8 +217,8 @@
                 <div class="flex items-start gap-3">
                   <input v-model="exportForm.include_dependencies" class="mt-0.5 accent-accent-primary" type="checkbox">
                   <div>
-                    <div class="text-sm font-bold text-text-main">附带依赖</div>
-                    <div class="mt-1 text-xs text-text-dim">把相关依赖一起带上，减少导入后缺项。</div>
+                    <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.includeDependencies') }}</div>
+                    <div class="mt-1 text-xs text-text-dim">{{ t('packageTransfer.includeDependenciesDesc') }}</div>
                   </div>
                 </div>
               </label>
@@ -226,8 +226,8 @@
                 <div class="flex items-start gap-3">
                   <input v-model="exportForm.include_interlocks" class="mt-0.5 accent-accent-primary" type="checkbox">
                   <div>
-                    <div class="text-sm font-bold text-text-main">附带联锁项</div>
-                    <div class="mt-1 text-xs text-text-dim">把成套使用的相关模组一起带上。</div>
+                    <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.includeInterlocks') }}</div>
+                    <div class="mt-1 text-xs text-text-dim">{{ t('packageTransfer.includeInterlocksDesc') }}</div>
                   </div>
                 </div>
               </label>
@@ -235,8 +235,8 @@
                 <div class="flex items-start gap-3">
                   <input v-model="exportForm.include_language_packs" class="mt-0.5 accent-accent-primary" type="checkbox">
                   <div>
-                    <div class="text-sm font-bold text-text-main">附带语言包</div>
-                    <div class="mt-1 text-xs text-text-dim">把相关汉化或语言包一起带上。</div>
+                    <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.includeLanguagePacks') }}</div>
+                    <div class="mt-1 text-xs text-text-dim">{{ t('packageTransfer.includeLanguagePacksDesc') }}</div>
                   </div>
                 </div>
               </label>
@@ -247,15 +247,15 @@
             <label v-if="allowExportEnvironmentAttach" class="modal-section-subtle flex items-start gap-3 px-3 py-3">
               <input v-model="exportForm.include_environment_data" class="mt-0.5 accent-accent-primary" type="checkbox">
               <div>
-                <div class="text-sm font-bold text-text-main">附带当前环境数据</div>
+                <div class="text-sm font-bold text-text-main">{{ t('packageTransfer.includeCurrentEnvironmentData') }}</div>
                 <div class="mt-1 text-xs leading-relaxed text-text-dim">
-                  会把当前环境数据一起带上，包括模组排序、配置文件等，方便在另一台机器上继续使用。
+                  {{ t('packageTransfer.includeCurrentEnvironmentDataDesc') }}
                 </div>
               </div>
             </label>
           
-            <CommonSelect v-model="exportForm.folder_name_type" label="包内Mod文件夹命名" showBottom
-              description="只影响导出包里的文件夹名称，不会改动原始Mod目录。遇到不适合作为文件名的字符会自动替换，重名会自动追加序号。"
+            <CommonSelect v-model="exportForm.folder_name_type" :label="t('packageTransfer.modFolderNaming')" showBottom
+              :description="t('packageTransfer.modFolderNamingDesc')"
               :options="modFolderNameTypeOptions" />
           </section>
         </div>
@@ -265,19 +265,19 @@
       <div class="flex items-center justify-between gap-4">
         <div class="text-xs leading-relaxed text-text-dim">
           <template v-if="dialogMode === 'mod-import'">
-            导入到当前环境目录或管理器目录时会自动刷新当前模组列表。缺少本地文件的模组会跳过并提醒你。
+            {{ t('packageTransfer.modImportFooter') }}
           </template>
           <template v-else-if="dialogMode === 'data-import'">
-            环境重名时会按你的选择处理，其它数据仍按原流程导入。
+            {{ t('packageTransfer.dataImportFooter') }}
           </template>
           <template v-else>
-            如果同一个模组有多个来源，会优先带上你当前正在使用的版本，重复副本会自动跳过。
+            {{ t('packageTransfer.modExportFooter') }}
           </template>
         </div>
         <div class="flex items-center gap-2">
           <button class="rounded-xl border border-border-base/10 bg-bg-overlay/5 px-4 py-2 text-xs font-bold text-text-main transition-all hover:bg-bg-overlay/10"
             @click="closeDialog" >
-            关闭
+            {{ t('common.close') }}
           </button>
           <button class="rounded-xl bg-accent-primary px-5 py-2 text-sm font-black text-on-accent-primary transition-all hover:bg-accent-primary/85 disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="!canSubmit" @click="handleSubmit" >
@@ -291,16 +291,17 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../../app/stores/appStore'
 import { useModStore } from '../mod/stores/modStore'
 import { useProfileStore } from '../profiles/profileStore'
 import { formatFileSize } from '../../shared/lib/format'
-import { toast } from '../../shared/lib/common'
 import CommonSelect from '../../shared/components/input/CommonSelect.vue'
 import ProfileConflictPlanEditor from './ProfileConflictPlanEditor.vue'
 import ModConflictPlanEditor from './ModConflictPlanEditor.vue'
 import CommonModalShell from '../../shared/components/modal/CommonModalShell.vue'
 
+const { t } = useI18n()
 const appStore = useAppStore()
 const modStore = useModStore()
 const profileStore = useProfileStore()
@@ -326,13 +327,13 @@ const exportForm = reactive({
   include_environment_data: false,
 })
 
-const modFolderNameTypeOptions = [
-  { label: '默认', value: 'default' },
-  { label: '按别名', value: 'alias_name' },
-  { label: '按原模组名', value: 'name' },
-  { label: '按工坊ID', value: 'workshop_id' },
-  { label: '按包名', value: 'package_id' },
-]
+const modFolderNameTypeOptions = computed(() => [
+  { label: t('packageTransfer.folderNameDefault'), value: 'default' },
+  { label: t('packageTransfer.folderNameAlias'), value: 'alias_name' },
+  { label: t('packageTransfer.folderNameOriginalName'), value: 'name' },
+  { label: t('packageTransfer.folderNameWorkshopId'), value: 'workshop_id' },
+  { label: t('packageTransfer.folderNamePackageId'), value: 'package_id' },
+])
 
 const modImportForm = reactive({
   import_mods: true,
@@ -351,12 +352,12 @@ const availableInstalls = computed(() => {
 const availableInstallOptions = computed(() => {
   const options = availableInstalls.value.map(install => ({
     value: String(install.install_path || ''),
-    label: `${install.game_version || '版本未知'} | ${install.install_path || '路径未知'}`,
+    label: `${install.game_version || t('packageTransfer.unknownVersion')} | ${install.install_path || t('packageTransfer.unknownPath')}`,
   }))
   return [
     {
       value: '',
-      label: availableInstalls.value.length ? '请选择一个可用游戏本体' : '当前无可用游戏本体',
+      label: availableInstalls.value.length ? t('packageTransfer.selectGameInstall') : t('packageTransfer.noAvailableGameInstallOption'),
     },
     ...options,
   ]
@@ -372,8 +373,8 @@ const archiveSummary = computed(() => {
     bundleSize: formatFileSize(bundleSizeBytes || Number(archiveStats.compressed_bytes || 0)),
     unpackedSize: formatFileSize(unpackedBytes),
     ratioText: expansionRatio > 0
-      ? `解压后约为压缩内容的 ${expansionRatio.toFixed(2)} 倍`
-      : '当前无法估算体积变化',
+      ? t('packageTransfer.expansionRatio', { ratio: expansionRatio.toFixed(2) })
+      : t('packageTransfer.sizeChangeUnknown'),
   }
 })
 const targetDiskSpaceSummary = computed(() => {
@@ -384,20 +385,20 @@ const targetDiskSpaceSummary = computed(() => {
   const recommendedText = formatFileSize(Number(disk.recommended_bytes || 0))
   return {
     enough,
-    text: `当前剩余 ${freeText}，按这次导入建议至少预留 ${recommendedText}`,
+    text: t('packageTransfer.diskSpaceText', { free: freeText, recommended: recommendedText }),
   }
 })
 
 const dialogTitle = computed(() => {
-  if (dialogMode.value === 'mod-export') return dialogPreset.value?.title || '导出模组打包'
-  if (dialogMode.value === 'data-import') return '导入软件数据包'
-  return '导入模组打包'
+  if (dialogMode.value === 'mod-export') return dialogPreset.value?.title || t('packageTransfer.exportModPackTitle')
+  if (dialogMode.value === 'data-import') return t('packageTransfer.importDataBundleTitle')
+  return t('packageTransfer.importModPackTitle')
 })
 
 const dialogDesc = computed(() => {
-  if (dialogMode.value === 'mod-export') return dialogPreset.value?.description || '把模组文件打成一个包，按需把当前环境数据一起带上。'
-  if (dialogMode.value === 'data-import') return '导入软件数据，遇到重名环境时按你的选择处理。'
-  return '导入模组包，目标可选游戏目录或管理器模组目录。'
+  if (dialogMode.value === 'mod-export') return dialogPreset.value?.description || t('packageTransfer.exportModPackDesc')
+  if (dialogMode.value === 'data-import') return t('packageTransfer.importDataBundleDesc')
+  return t('packageTransfer.importModPackDesc')
 })
 
 const exportScopeOptions = computed(() => {
@@ -424,10 +425,12 @@ const resolvedExportModIds = computed(() => {
 const formatExportPlanSummary = (selectedCount = 0, resolvedCount = 0, extraCount = 0, compact = false) => {
   if (extraCount > 0) {
     return compact
-      ? `当前选中 ${selectedCount} 个，预计会多带上 ${extraCount} 个相关模组，合计导出 ${resolvedCount} 个。`
-      : `当前选中 ${selectedCount} 个模组，预计导出 ${resolvedCount} 个，其中附加带上 ${extraCount} 个。`
+      ? t('packageTransfer.exportPlanWithExtrasCompact', { selected: selectedCount, extra: extraCount, total: resolvedCount })
+      : t('packageTransfer.exportPlanWithExtras', { selected: selectedCount, extra: extraCount, total: resolvedCount })
   }
-  return `当前选中 ${selectedCount} 个${compact ? '' : '模组'}，预计导出 ${resolvedCount} 个。`
+  return compact
+    ? t('packageTransfer.exportPlanCompact', { selected: selectedCount, total: resolvedCount })
+    : t('packageTransfer.exportPlan', { selected: selectedCount, total: resolvedCount })
 }
 const exportSummary = computed(() => {
   if (dialogMode.value === 'mod-export' && exportPreview.value) {
@@ -436,17 +439,17 @@ const exportSummary = computed(() => {
     const extraCount = Number(exportPreview.value?.extra_count || 0)
     const summary = formatExportPlanSummary(selectedCount, resolvedCount, extraCount, false)
     if (dialogPreset.value?.sourceProfile) {
-      const profileName = dialogPreset.value?.profileName || profileStore.currentProfile?.name || '当前环境'
+      const profileName = dialogPreset.value?.profileName || profileStore.currentProfile?.name || t('appStore.currentProfile')
       if (dialogPreset.value?.scopeOptionsLoading) {
-        return `当前来源：${profileName}。正在读取这个环境的模组统计。`
+        return t('packageTransfer.loadingSourceStats', { profile: profileName })
       }
-      return `当前来源：${profileName}。${summary}`
+      return t('packageTransfer.sourceSummary', { profile: profileName, summary })
     }
     return summary
   }
   if (dialogPreset.value?.summary) return dialogPreset.value.summary
   const count = Array.isArray(dialogPreset.value?.mod_ids) ? dialogPreset.value.mod_ids.length : 0
-  return count > 0 ? `已选 ${count} 个模组。` : '将按当前设置导出。'
+  return count > 0 ? t('packageTransfer.selectedModsSummary', { count }) : t('packageTransfer.exportWithCurrentSettings')
 })
 const extraExportSummary = computed(() => {
   const selectedCount = Number(exportPreview.value?.selected_count || 0)
@@ -473,8 +476,8 @@ const canSubmit = computed(() => {
 })
 
 const submitLabel = computed(() => {
-  if (dialogMode.value === 'mod-export') return '开始导出'
-  return '开始导入'
+  if (dialogMode.value === 'mod-export') return t('packageTransfer.startExport')
+  return t('packageTransfer.startImport')
 })
 
 const closeDialog = () => {

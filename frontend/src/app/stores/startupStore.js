@@ -4,6 +4,7 @@ import { toast } from '../../shared/lib/common'
 import { useAiStore } from '../../features/ai/aiStore'
 import { useModStore } from '../../features/mod/stores/modStore'
 import { useProfileStore } from '../../features/profiles/profileStore'
+import { t } from '../i18n'
 
 // 启动编排只负责“先后顺序”和“阻塞/后台”的取舍，具体业务仍由各自 store/API 执行。
 export const useStartupStore = defineStore('startup', () => {
@@ -45,7 +46,7 @@ export const useStartupStore = defineStore('startup', () => {
         scanForce = true
       }
       if (context.actions_taken?.length > 0) {
-        toast.info(`升级完成: ${context.actions_taken.join(', ')}`)
+        toast.info(t('startup.upgradeComplete', { actions: context.actions_taken.join(', ') }))
       }
     }
     if (context.messages?.length > 0) {
@@ -91,9 +92,9 @@ export const useStartupStore = defineStore('startup', () => {
       // 自动更新探测
       setPhase('startup_update_probe')
       const updateDecision = buildDailyCheckDecision(settings.value.enable_auto_update_check, settings.value.last_update_check_time)
-      logStartupCheck('schedule_decision', { id: 'app-update', name: '软件更新', ...updateDecision })
+      logStartupCheck('schedule_decision', { id: 'app-update', name: t('appUpdate.name'), ...updateDecision })
       if (settings.value.enable_auto_update_check && shouldRunDailyCheck(settings.value.last_update_check_time)) {
-        logStartupCheck('schedule_run', { id: 'app-update', name: '软件更新' })
+        logStartupCheck('schedule_run', { id: 'app-update', name: t('appUpdate.name') })
         void checkUpdate(false)
       }
       // 自动扫描
@@ -106,11 +107,11 @@ export const useStartupStore = defineStore('startup', () => {
       setPhase('maintenance_probe_scheduled')
       window.setTimeout(() => {
         if (uiState.showSettingsPanel) {
-          logStartupCheck('schedule_skip', { id: 'maintenance', name: '启动维护检查', reason: 'settings_panel_open' })
+          logStartupCheck('schedule_skip', { id: 'maintenance', name: t('startup.maintenanceCheck'), reason: 'settings_panel_open' })
           return
         }
         runScheduledMaintenanceChecks().catch((error) => {
-          logStartupCheck('schedule_error', { id: 'maintenance', name: '启动维护检查', message: error?.message || String(error || '') }, 'error')
+          logStartupCheck('schedule_error', { id: 'maintenance', name: t('startup.maintenanceCheck'), message: error?.message || String(error || '') }, 'error')
         })
       }, 3000)
 

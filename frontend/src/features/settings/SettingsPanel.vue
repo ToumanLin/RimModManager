@@ -14,7 +14,7 @@
         <!-- B. 左侧导航栏 -->
         <aside class="w-45 border-r bg-bg-muted border-border-base/5 flex flex-col p-6 relative z-10">
           <div class="mb-10 px-2">
-            <h2 class="text-xl font-black text-text-main tracking-tighter italic">系统 <span class="text-accent-primary">设置</span></h2>
+            <h2 class="text-xl font-black text-text-main tracking-tighter italic">{{ t('settings.titlePrefix') }} <span class="text-accent-primary">{{ t('settings.titleAccent') }}</span></h2>
           </div>
 
           <!-- 动态 Glider 导航 -->
@@ -48,7 +48,7 @@
           <!-- 顶部状态条 -->
           <header class="h-14 flex items-center justify-between px-8 border-b border-border-base/5">
             <span class="text-xs font-mono text-text-disabled uppercase tracking-[0.3em]">
-              / root / {{ currentTabLabel }}
+              {{ t('settings.breadcrumbRoot') }} {{ currentTabLabel }}
             </span>
             <div class="flex gap-1.5 text-text-disabled relative">
               <Settings class="absolute size-23 -top-16 -right-13" />
@@ -86,10 +86,10 @@
 
           <!-- D. 底部操作栏 -->
           <footer class="modal-footer flex items-center justify-end gap-4 px-10 py-3">
-            <button id="btn-cancel" @click="appStore.closeSettingsPanel()" class="text-sm font-bold text-text-dim hover:text-text-main transition-colors">放弃修改</button>
+            <button id="btn-cancel" @click="appStore.closeSettingsPanel()" class="text-sm font-bold text-text-dim hover:text-text-main transition-colors">{{ t('settings.discard') }}</button>
             <button data-tour="settings-save-button" @click="save" class="relative overflow-hidden px-8 py-2.5 bg-accent-primary rounded-xl text-on-accent-primary font-black text-sm shadow-[0_0_20px_rgba(var(--rgb-accent-primary),0.3)] hover:scale-105 active:scale-95 transition-all group">
               <div class="absolute inset-0 bg-bg-overlay/10 -translate-x-full group-hover:translate-x-full transition-transform duration-500 skew-x-12"></div>
-              应用并保存配置
+              {{ t('settings.apply') }}
             </button>
           </footer>
         </main>
@@ -102,6 +102,7 @@ import { ref, watch, h, computed } from 'vue'
 import { FolderTree, AppWindow, Globe, Cpu, Terminal, Component, Settings, Keyboard } from 'lucide-vue-next'
 import { shakeComponent } from '../../shared/lib/domEffects'
 import { createDefaultKeybindingConfig } from '../../shared/commands/keybindingConflicts'
+import { useI18n } from 'vue-i18n'
 
 // 导入 Common UI
 import CommonModalShell from '../../shared/components/modal/CommonModalShell.vue'
@@ -119,6 +120,7 @@ import { useProfileStore } from '../profiles/profileStore'
 
 const appStore = useAppStore()
 const profileStore = useProfileStore()
+const { t } = useI18n()
 
 const currentTab = ref('paths')
 const formData = ref({})
@@ -140,19 +142,19 @@ const Steam = h('svg', { viewBox: "0 0 448 512", fill: "currentColor" },
   [ h('path', { d: "M273.5 177.5a61 61 0 1 1 122 0 61 61 0 1 1 -122 0zm174.5 .2c0 63-51 113.8-113.7 113.8L225 371.3c-4 43-40.5 76.8-84.5 76.8-40.5 0-74.7-28.8-83-67L0 358 0 250.7 97.2 290c15.1-9.2 32.2-13.3 52-11.5l71-101.7C220.7 114.5 271.7 64 334.2 64 397 64 448 115 448 177.7zM203 363c0-34.7-27.8-62.5-62.5-62.5-4.5 0-9 .5-13.5 1.5l26 10.5c25.5 10.2 38 39 27.7 64.5-10.2 25.5-39.2 38-64.7 27.5-10.2-4-20.5-8.3-30.7-12.2 10.5 19.7 31.2 33.2 55.2 33.2 34.7 0 62.5-27.8 62.5-62.5zM410.5 177.7a76.4 76.4 0 1 0 -152.8 0 76.4 76.4 0 1 0 152.8 0z" })]
 )
 
-const tabs = [
-  { id: 'paths', label: '路径配置', icon: FolderTree },
-  { id: 'general', label: '界面设置', icon: AppWindow },
-  { id: 'features', label: '功能设置', icon: Component },
-  { id: 'keybindings', label: '快捷键', icon: Keyboard },
-  { id: 'community', label: '外部依赖', icon: Steam },
-  { id: 'network', label: '网络连接', icon: Globe },
-  { id: 'ai', label: 'AI 集成', icon: Cpu },
-  { id: 'dev', label: '开发调试', icon: Terminal },
-]
+const tabs = computed(() => [
+  { id: 'paths', label: t('settings.tabs.paths'), icon: FolderTree },
+  { id: 'general', label: t('settings.tabs.general'), icon: AppWindow },
+  { id: 'features', label: t('settings.tabs.features'), icon: Component },
+  { id: 'keybindings', label: t('settings.tabs.keybindings'), icon: Keyboard },
+  { id: 'community', label: t('settings.tabs.community'), icon: Steam },
+  { id: 'network', label: t('settings.tabs.network'), icon: Globe },
+  { id: 'ai', label: t('settings.tabs.ai'), icon: Cpu },
+  { id: 'dev', label: t('settings.tabs.dev'), icon: Terminal },
+])
 
 const currentTabLabel = computed(() => (
-  tabs.find(item => item.id === currentTab.value)?.label || currentTab.value
+  tabs.value.find(item => item.id === currentTab.value)?.label || currentTab.value
 ))
 
 // 数据同步：打开时深度拷贝

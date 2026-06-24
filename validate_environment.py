@@ -2,12 +2,16 @@ import mimetypes
 import os
 import socket
 import sys
-import winreg
 import ctypes
 import webbrowser # 这个库用来打开浏览器
 from pathlib import Path
 from urllib.parse import unquote
 from backend.settings import HOME_DIR, BASE_RESOURCE_DIR
+
+if sys.platform == "win32":
+    import winreg
+else:
+    winreg = None
 
 
 def is_port_available(host: str = "localhost", port: int = 5173, timeout: float = 0.5) -> bool:
@@ -95,6 +99,9 @@ def get_webview2_version():
     
     :return: 版本号字符串 (如 '119.0.2151.58')，如果未安装则返回 None
     """
+    if sys.platform != "win32" or winreg is None:
+        return None
+
     # 定义需要检查的注册表位置
     # WebView2 运行时（Evergreen Bootstrapper）通常安装在以下位置
     reg_keys = [
@@ -136,7 +143,10 @@ def show_native_error(title, message):
     使用 Windows 原生 MessageBox 弹出错误，不依赖任何 GUI 库
     """
     # 0x10 是错误图标 + 确定按钮
-    ctypes.windll.user32.MessageBoxW(0, message, title, 0x10 | 0x0)
+    if sys.platform == "win32":
+        ctypes.windll.user32.MessageBoxW(0, message, title, 0x10 | 0x0)
+        return
+    print(f"{title}: {message}", file=sys.stderr)
     
 
 def show_webview2_missing_dialog():
@@ -154,6 +164,10 @@ def show_webview2_missing_dialog():
     
     # 0x10 (错误图标) | 0x4 (是/否按钮) | 0x10000 (置顶)
     # IDYES = 6, IDNO = 7
+    if sys.platform != "win32":
+        print(f"{title}: {message}", file=sys.stderr)
+        return
+
     res = ctypes.windll.user32.MessageBoxW(0, message, title, 0x10 | 0x4 | 0x10000)
     
     if res == 6: # 用户点击了“是”

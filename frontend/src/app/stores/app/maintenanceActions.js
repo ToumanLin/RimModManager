@@ -1,6 +1,7 @@
 import { toast, checkResult } from '../../../shared/lib/common'
 import { useWorkspaceStore } from '../../../features/workspace/workspaceStore'
 import { usePromptQueueStore } from '../../../features/ai/promptQueueStore'
+import { t } from '../../i18n'
 
 export const useMaintenanceActions = ({
   settings,
@@ -34,11 +35,11 @@ export const useMaintenanceActions = ({
 
   const formatDateTime = (timestamp) => {
     const value = Number(timestamp || 0)
-    if (!value) return '未知'
+    if (!value) return t('maintenance.unknown')
     try {
-      return new Date(value).toLocaleString('zh-CN')
+      return new Date(value).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN')
     } catch {
-      return '未知'
+      return t('maintenance.unknown')
     }
   }
 
@@ -51,20 +52,20 @@ export const useMaintenanceActions = ({
 
     if (hasSteamCmdIssue) {
       const res = await window.pywebview.api.steam_tools_install()
-      if (checkResult(res, '处理 SteamCMD 环境')) {
+      if (checkResult(res, t('maintenance.handleSteamcmd'))) {
         started = true
         if (Array.isArray(res.data?.pending_tasks) && res.data.pending_tasks.length > 0) {
-          toast.info('SteamCMD 相关任务已启动，请留意底部状态栏。')
+          toast.info(t('maintenance.steamcmdTasksStarted'))
         }
       }
     }
 
     if (hasToddsIssue) {
       const res = await window.pywebview.api.texture_prepare_download(settings.value.texture_opt)
-      if (checkResult(res, '处理 todds 环境')) {
+      if (checkResult(res, t('maintenance.handleTodds'))) {
         started = true
         if (!res.data?.already_ready) {
-          toast.info('todds 下载任务已启动，请留意底部状态栏。')
+          toast.info(t('maintenance.toddsDownloadStarted'))
         }
       }
     }
@@ -72,10 +73,10 @@ export const useMaintenanceActions = ({
     if (hasRipgrepIssue) {
       const ripgrepIssue = issues.find(item => item?.tool_id === 'ripgrep') || {}
       const res = await window.pywebview.api.ripgrep_prepare_download(ripgrepIssue?.maintenance_action === 'upgrade')
-      if (checkResult(res, '处理 ripgrep 环境')) {
+      if (checkResult(res, t('maintenance.handleRipgrep'))) {
         started = true
         if (!res.data?.already_ready) {
-          toast.info('ripgrep 下载任务已启动，请留意底部状态栏。')
+          toast.info(t('maintenance.ripgrepDownloadStarted'))
         }
       }
     }
@@ -85,18 +86,18 @@ export const useMaintenanceActions = ({
   const getToolIssueActionLabel = (item = {}) => {
     // 后端会把存在性、初始化、升级判断统一成 maintenance_action，前端只负责显示用户能理解的动作。
     const action = String(item?.maintenance_action || '').trim()
-    if (action === 'upgrade') return '升级'
-    if (action === 'initialize') return '初始化'
-    if (action === 'install') return '安装'
-    return '处理'
+    if (action === 'upgrade') return t('maintenance.upgrade')
+    if (action === 'initialize') return t('maintenance.initialize')
+    if (action === 'install') return t('maintenance.install')
+    return t('maintenance.handle')
   }
 
   const triggerGithubManagedModUpdate = async (item = {}) => {
     if (!window.pywebview || !item?.repo_url) return false
     const targetVersion = String(item.target_version || item.latest_version || '').trim()
     const res = await window.pywebview.api.github_trigger_download(item.repo_url, item.install_type || 'source', targetVersion)
-    if (!checkResult(res, `更新 Git 仓库模组 ${item.title || ''}`.trim())) return false
-    toast.info('Git 仓库部署任务已启动，请留意底部状态栏。', { timeout: 4000 })
+    if (!checkResult(res, t('maintenance.updateGitRepoMod', { title: item.title || '' }).trim())) return false
+    toast.info(t('maintenance.gitDeployStarted'), { timeout: 4000 })
     const workspaceStore = useWorkspaceStore()
     workspaceStore.startGithubTimelinePolling(item.repo_url, { intervalMs: 4000, maxPolls: 15 })
     return true
@@ -156,7 +157,7 @@ export const useMaintenanceActions = ({
   const checkToolMaintenance = async ({ manual = true, prompt = true, overrides = null } = {}) => {
     const data = await fetchMaintenanceData({
       apiName: 'maintenance_check_tools',
-      workName: '检查工具环境',
+      workName: t('maintenance.checkToolEnvironment'),
       manual,
       lastCheckKey: 'last_tool_check_time',
       overrides,
@@ -166,35 +167,35 @@ export const useMaintenanceActions = ({
     const issues = Array.isArray(data.issues) ? data.issues : []
     if (!prompt) return data
     if (issues.length === 0) {
-      if (manual) toast.success('工具环境检查完成，当前均已就绪。')
+      if (manual) toast.success(t('maintenance.toolsReady'))
       return data
     }
 
     const promptQueue = usePromptQueueStore()
     await promptQueue.enqueue({
       category: 'startup-tools',
-      title: '工具环境需要处理',
-      message: '以下工具当前未就绪，可单独处理，也可以批量处理。',
+      title: t('maintenance.toolsNeedActionTitle'),
+      message: t('maintenance.toolsNeedActionMessage'),
       type: 'warning',
       priority: manual ? 30 : 60,
       items: issues.map(item => ({
         id: item.tool_id || item.name,
-        title: item.name || item.tool_id || '工具',
-        description: item.message || '需要处理',
+        title: item.name || item.tool_id || t('maintenance.tool'),
+        description: item.message || t('maintenance.needsAction'),
         meta: [
           item.resolved_path,
-          item.current_version ? `当前版本 ${item.current_version}` : '',
-          item.latest_version ? `最新版本 ${item.latest_version}` : '',
+          item.current_version ? t('maintenance.currentVersion', { version: item.current_version }) : '',
+          item.latest_version ? t('maintenance.latestVersion', { version: item.latest_version }) : '',
         ].filter(Boolean),
         raw: item,
         actions: [
           { id: 'install', label: getToolIssueActionLabel(item), kind: 'primary' },
-          { id: 'skip', label: '稍后', kind: 'secondary' },
+          { id: 'skip', label: t('maintenance.later'), kind: 'secondary' },
         ],
       })),
       bulkActions: [
-        { id: 'install_all', label: '全部处理', kind: 'primary' },
-        { id: 'skip_all', label: '全部稍后', kind: 'secondary' },
+        { id: 'install_all', label: t('maintenance.handleAll'), kind: 'primary' },
+        { id: 'skip_all', label: t('maintenance.laterAll'), kind: 'secondary' },
       ],
       onItemAction: async (item, actionId) => {
         if (actionId === 'install') await installToolIssues([item])
@@ -210,7 +211,7 @@ export const useMaintenanceActions = ({
   const checkExternalDataUpdates = async ({ manual = true, prompt = true, overrides = null } = {}) => {
     const data = await fetchMaintenanceData({
       apiName: 'maintenance_check_external_data',
-      workName: '检查外部库更新',
+      workName: t('maintenance.checkExternalDataUpdates'),
       manual,
       lastCheckKey: 'last_external_data_update_check_time',
       overrides,
@@ -227,42 +228,42 @@ export const useMaintenanceActions = ({
     const failed = Array.isArray(data.failed) ? data.failed : []
     if (!prompt) return data
     if (failed.length > 0 && updates.length === 0) {
-      const summary = failed.slice(0, 3).map(item => item.name || item.data_type || '外部库').join('、')
-      const remain = failed.length > 3 ? ` 等 ${failed.length} 项` : ''
-      toast.warning(`外部库检查未完成：${summary}${remain} 检查失败，请稍后重试或检查网络环境。`, { timeout: 4500 })
+      const summary = failed.slice(0, 3).map(item => item.name || item.data_type || t('maintenance.externalData')).join(t('maintenance.listSeparator'))
+      const remain = failed.length > 3 ? t('maintenance.remainingItems', { count: failed.length }) : ''
+      toast.warning(t('maintenance.externalDataCheckFailed', { summary, remain }), { timeout: 4500 })
       return data
     }
     if (updates.length === 0) {
-      if (manual) toast.success('外部库检查完成，当前均已是最新。')
+      if (manual) toast.success(t('maintenance.externalDataLatest'))
       return data
     }
 
     const promptQueue = usePromptQueueStore()
     await promptQueue.enqueue({
       category: 'startup-external-data',
-      title: '发现外部库更新',
+      title: t('maintenance.externalDataUpdatesTitle'),
       message: failed.length > 0
-        ? `另有 ${failed.length} 项外部库暂时检查失败，本次只展示已成功获取到远端状态的更新项。`
-        : '以下外部库文件检测到更新，可单独更新，也可以批量更新。',
+        ? t('maintenance.externalDataPartialFailed', { count: failed.length })
+        : t('maintenance.externalDataUpdatesMessage'),
       type: 'warning',
       priority: manual ? 35 : 65,
       items: updates.map(item => ({
         id: item.data_type || item.name,
-        title: item.name || item.data_type || '外部库',
-        description: item.message || '检测到远端版本与本地不一致。',
+        title: item.name || item.data_type || t('maintenance.externalData'),
+        description: item.message || t('maintenance.remoteVersionDiffers'),
         meta: [
-          item.local_version ? `本地版本 ${item.local_version}` : `本地时间 ${formatDateTime(item.local_mtime)}`,
-          item.remote_version ? `远端签名 ${item.remote_version}` : `远端时间 ${formatDateTime(item.remote_updated_at)}`,
+          item.local_version ? t('maintenance.localVersion', { version: item.local_version }) : t('maintenance.localTime', { time: formatDateTime(item.local_mtime) }),
+          item.remote_version ? t('maintenance.remoteSignature', { version: item.remote_version }) : t('maintenance.remoteTime', { time: formatDateTime(item.remote_updated_at) }),
         ],
         raw: item,
         actions: [
-          { id: 'update', label: '更新', kind: 'primary' },
-          { id: 'skip', label: '稍后', kind: 'secondary' },
+          { id: 'update', label: t('maintenance.update'), kind: 'primary' },
+          { id: 'skip', label: t('maintenance.later'), kind: 'secondary' },
         ],
       })),
       bulkActions: [
-        { id: 'update_all', label: '全部更新', kind: 'primary' },
-        { id: 'skip_all', label: '全部稍后', kind: 'secondary' },
+        { id: 'update_all', label: t('maintenance.updateAll'), kind: 'primary' },
+        { id: 'skip_all', label: t('maintenance.laterAll'), kind: 'secondary' },
       ],
       onItemAction: async (item, actionId) => {
         if (actionId === 'update') await updateExternalDB(item.data_type)
@@ -282,7 +283,7 @@ export const useMaintenanceActions = ({
   const checkManagedModUpdates = async ({ manual = true, prompt = true } = {}) => {
     const data = await fetchMaintenanceData({
       apiName: 'maintenance_check_managed_mod_updates',
-      workName: '检查管理器模组更新',
+      workName: t('maintenance.checkManagedModUpdates'),
       manual,
       lastCheckKey: 'last_steamcmd_mod_update_check_time',
     })
@@ -291,35 +292,35 @@ export const useMaintenanceActions = ({
     const updates = Array.isArray(data.updates) ? data.updates : []
     if (!prompt) return data
     if (updates.length === 0) {
-      if (manual) toast.success('管理器模组检查完成，当前均已是最新。')
+      if (manual) toast.success(t('maintenance.managedModsLatest'))
       return data
     }
 
     const promptQueue = usePromptQueueStore()
     await promptQueue.enqueue({
       category: 'startup-managed-mods',
-      title: '发现管理器模组更新',
-      message: `检测到 ${updates.length} 个由管理器维护的模组有新版本。`,
+      title: t('maintenance.managedModUpdatesTitle'),
+      message: t('maintenance.managedModUpdatesMessage', { count: updates.length }),
       type: 'warning',
       priority: manual ? 40 : 70,
       items: updates.map(item => ({
         id: `${item.source || 'mod'}:${item.workshop_id || item.repo_url || item.title}`,
-        title: item.title || item.workshop_id || '未知模组',
+        title: item.title || item.workshop_id || t('maintenance.unknownMod'),
         description: item.message || (item.workshop_id ? `Workshop ID: ${item.workshop_id}` : item.repo_url || ''),
         meta: [
           item.source_label || item.source,
-          item.installed_version ? `当前版本 ${item.installed_version}` : '',
-          item.latest_version ? `最新版本 ${item.latest_version}` : '',
+          item.installed_version ? t('maintenance.currentVersion', { version: item.installed_version }) : '',
+          item.latest_version ? t('maintenance.latestVersion', { version: item.latest_version }) : '',
         ].filter(Boolean),
         raw: item,
         actions: [
-          { id: 'update', label: '更新', kind: 'primary' },
-          { id: 'skip', label: '稍后', kind: 'secondary' },
+          { id: 'update', label: t('maintenance.update'), kind: 'primary' },
+          { id: 'skip', label: t('maintenance.later'), kind: 'secondary' },
         ],
       })),
       bulkActions: [
-        { id: 'update_all', label: '全部更新', kind: 'primary' },
-        { id: 'skip_all', label: '全部稍后', kind: 'secondary' },
+        { id: 'update_all', label: t('maintenance.updateAll'), kind: 'primary' },
+        { id: 'skip_all', label: t('maintenance.laterAll'), kind: 'secondary' },
       ],
       onItemAction: async (item, actionId) => {
         if (actionId === 'update') await updateManagedModItems([item])
@@ -336,7 +337,7 @@ export const useMaintenanceActions = ({
   const getScheduledMaintenanceChecks = () => [
     {
       id: 'tools',
-      name: '外部工具',
+      name: t('maintenance.externalTools'),
       enabled: settings.value.enable_auto_tool_check,
       lastCheckTime: settings.value.last_tool_check_time,
       intervalDays: settings.value.tool_check_interval_days,
@@ -345,7 +346,7 @@ export const useMaintenanceActions = ({
     },
     {
       id: 'external-data',
-      name: '外部库',
+      name: t('maintenance.externalData'),
       enabled: settings.value.enable_auto_external_data_update_check,
       lastCheckTime: settings.value.last_external_data_update_check_time,
       intervalDays: settings.value.external_data_update_check_interval_days,
@@ -354,7 +355,7 @@ export const useMaintenanceActions = ({
     },
     {
       id: 'managed-mods',
-      name: '管理器模组更新',
+      name: t('maintenance.managedModUpdates'),
       enabled: settings.value.enable_auto_steamcmd_mod_update_check,
       lastCheckTime: settings.value.last_steamcmd_mod_update_check_time,
       intervalDays: settings.value.steamcmd_mod_update_check_interval_days,
@@ -386,24 +387,24 @@ export const useMaintenanceActions = ({
   const updateExternalDB = async (type) => {
     try {
       const workNameMap = {
-        community_rules: '更新社区规则库',
-        workshop_db: '更新社区工坊数据库',
-        instead_db: '更新替代 Mod 数据库',
+        community_rules: t('maintenance.updateCommunityRules'),
+        workshop_db: t('maintenance.updateWorkshopDb'),
+        instead_db: t('maintenance.updateInsteadDb'),
       }
       // 调用 API
       const res = await window.pywebview.api.update_external_db(type)
-      if (checkResult(res, workNameMap[type] || `更新外置数据库 ${type}`)) {
+      if (checkResult(res, workNameMap[type] || t('maintenance.updateExternalDb', { type }))) {
         const task_id = res.data.task_id
         await waitForDownload(task_id)
         // 重新获取数据
-        const historyLabel = `${workNameMap[type] || '外置数据库更新'}后同步模组数据`
+        const historyLabel = t('maintenance.syncModDataAfter', { action: workNameMap[type] || t('maintenance.externalDbUpdate') })
         if (refreshModsData) await refreshModsData(historyLabel)
         else await refreshData(false, historyLabel)
         return true
       }
       return false
     } catch (error) {
-      toast.error("更新社区库失败: " + error.message)
+      toast.error(t('maintenance.updateCommunityDbFailed', { message: error.message }))
       return false
     }
   }

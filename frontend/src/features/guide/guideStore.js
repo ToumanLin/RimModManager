@@ -11,6 +11,7 @@ import { useAiStore } from '../ai/aiStore'
 import { useModStore } from '../mod/stores/modStore'
 import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
+import { t, translateText } from '../../app/i18n'
 import {
   GUIDE_VERSION,
   mainGuideSteps,
@@ -38,44 +39,51 @@ import { useToast } from 'vue-toastification'
 export const allGuides = [
   {
     key: 'main',
-    title: '主界面快速上手',
-    description: '了解软件的基本功能及功能分布，还有一些常用操作。',
+    // zh: 主界面快速上手 / 了解软件的基本功能及功能分布，还有一些常用操作。
+    titleKey: 'guide.definitions.main.title',
+    descriptionKey: 'guide.definitions.main.description',
     steps: mainGuideSteps
   },
   {
     key: 'workflow',
-    title: '主线操作闭环',
-    description: '掌握 刷新 -> 排序 -> 保存 -> 启动 的标准流程。',
+    // zh: 主线操作闭环 / 掌握 刷新 -> 排序 -> 保存 -> 启动 的标准流程。
+    titleKey: 'guide.definitions.workflow.title',
+    descriptionKey: 'guide.definitions.workflow.description',
     steps: workflowGuideSteps,
   },
   {
     key: 'modList',
-    title: '模组列表快速上手',
-    description: '了解如何在模组列表中查看、启用、禁用、搜索模组。',
+    // zh: 模组列表快速上手 / 了解如何在模组列表中查看、启用、禁用、搜索模组。
+    titleKey: 'guide.definitions.modList.title',
+    descriptionKey: 'guide.definitions.modList.description',
     steps: modListGuideSteps
   },
   {
     key: 'issues',
-    title: '问题处理与一键修复',
-    description: '学会看问题汇总、快速补缺失项和逐项排查。',
+    // zh: 问题处理与一键修复 / 学会看问题汇总、快速补缺失项和逐项排查。
+    titleKey: 'guide.definitions.issues.title',
+    descriptionKey: 'guide.definitions.issues.description',
     steps: issueGuideSteps,
   },
   {
     key: 'backup',
-    title: '备份管理快速上手',
-    description: '了解如何备份和管理排序文件。',
+    // zh: 备份管理快速上手 / 了解如何备份和管理排序文件。
+    titleKey: 'guide.definitions.backup.title',
+    descriptionKey: 'guide.definitions.backup.description',
     steps: backupGuideSteps
   },
   {
     key: 'profile',
-    title: '环境管理快速上手',
-    description: '了解如何管理游戏环境、路径设置和其他相关配置。',
+    // zh: 环境管理快速上手 / 了解如何管理游戏环境、路径设置和其他相关配置。
+    titleKey: 'guide.definitions.profile.title',
+    descriptionKey: 'guide.definitions.profile.description',
     steps: profileGuideSteps
   },
   {
     key: 'rules',
-    title: '规则中心快速上手',
-    description: '了解规则来源、优先级、动态规则与全局启停。',
+    // zh: 规则中心快速上手 / 了解规则来源、优先级、动态规则与全局启停。
+    titleKey: 'guide.definitions.rules.title',
+    descriptionKey: 'guide.definitions.rules.description',
     steps: ruleCenterGuideSteps,
     beforeStart: () => {
       const appStore = useAppStore();
@@ -84,14 +92,16 @@ export const allGuides = [
   },
   {
     key: 'textureOpt',
-    title: '贴图优化快速上手',
-    description: '了解贴图优化中心的统计含义、生成/清理规则，以及 todds 的基本使用方式。',
+    // zh: 贴图优化快速上手 / 了解贴图优化中心的统计含义、生成/清理规则，以及 todds 的基本使用方式。
+    titleKey: 'guide.definitions.textureOpt.title',
+    descriptionKey: 'guide.definitions.textureOpt.description',
     steps: textureOptGuideSteps,
   },
   {
     key: 'aiConfig',
-    title: 'AI 配置快速上手',
-    description: '了解如何启用 AI、配置接口并完成连通性测试。',
+    // zh: AI 配置快速上手 / 了解如何启用 AI、配置接口并完成连通性测试。
+    titleKey: 'guide.definitions.aiConfig.title',
+    descriptionKey: 'guide.definitions.aiConfig.description',
     steps: aiConfigGuideSteps,
     beforeStart: () => {
       const appStore = useAppStore();
@@ -100,8 +110,9 @@ export const allGuides = [
   },
   {
     key: 'aiReview',
-    title: 'AI 结果检阅',
-    description: '了解如何复核批量生成结果、单项修订并统一写回。',
+    // zh: AI 结果检阅 / 了解如何复核批量生成结果、单项修订并统一写回。
+    titleKey: 'guide.definitions.aiReview.title',
+    descriptionKey: 'guide.definitions.aiReview.description',
     steps: aiReviewGuideSteps,
     beforeStart: () => {
       const appStore = useAppStore();
@@ -114,8 +125,9 @@ export const allGuides = [
   },
   {
     key: 'logAnalysis',
-    title: '日志分析快速上手',
-    description: '了解如何切换日志、发起 AI 分析，并利用侧栏持续追问排错。',
+    // zh: 日志分析快速上手 / 了解如何切换日志、发起 AI 分析，并利用侧栏持续追问排错。
+    titleKey: 'guide.definitions.logAnalysis.title',
+    descriptionKey: 'guide.definitions.logAnalysis.description',
     steps: logAnalysisGuideSteps,
     beforeStart: () => {
       const appStore = useAppStore();
@@ -145,7 +157,7 @@ export const allGuides = [
       if (!hasMinimalAiConfig) {
         return {
           blocked: true,
-          message: '请先在“设置 -> AI 集成”中启用并配置好 AI，建议完成一次连通性测试后再继续日志分析教程。'
+          message: t('guide.messages.configureAiBeforeLogAnalysis')
         };
       }
       appStore.uiState.showLogDrawer = false;
@@ -154,8 +166,9 @@ export const allGuides = [
   },
   {
     key: 'workspace',
-    title: '库存枢纽导览',
-    description: '了解如何在库存枢纽中查看、管理和操作库存。',
+    // zh: 库存枢纽导览 / 了解如何在库存枢纽中查看、管理和操作库存。
+    titleKey: 'guide.definitions.workspace.title',
+    descriptionKey: 'guide.definitions.workspace.description',
     steps: workspaceGuideSteps,
     // 【关键】增加一个 pre-action，告诉引导中心在开始前要先打开某个弹窗
     beforeStart: () => {
@@ -165,8 +178,9 @@ export const allGuides = [
   },
   {
     key: 'workspaceWorkshop',
-    title: '创意工坊检索',
-    description: '了解如何搜索工坊模组并决定订阅、下载或继续查看依赖。',
+    // zh: 创意工坊检索 / 了解如何搜索工坊模组并决定订阅、下载或继续查看依赖。
+    titleKey: 'guide.definitions.workspaceWorkshop.title',
+    descriptionKey: 'guide.definitions.workspaceWorkshop.description',
     steps: workshopBrowserGuideSteps,
     beforeStart: () => {
       const appStore = useAppStore();
@@ -175,8 +189,9 @@ export const allGuides = [
   },
   {
     key: 'workspaceCollection',
-    title: '合集订阅管理',
-    description: '了解如何导入合集、补齐缺失项并应用合集顺序。',
+    // zh: 合集订阅管理 / 了解如何导入合集、补齐缺失项并应用合集顺序。
+    titleKey: 'guide.definitions.workspaceCollection.title',
+    descriptionKey: 'guide.definitions.workspaceCollection.description',
     steps: collectionGuideSteps,
     beforeStart: () => {
       const appStore = useAppStore();
@@ -185,8 +200,9 @@ export const allGuides = [
   },
   {
     key: 'workspaceGithub',
-    title: 'Git 仓库订阅',
-    description: '了解如何解析仓库、订阅来源并查看部署时间线。',
+    // zh: Git 仓库订阅 / 了解如何解析仓库、订阅来源并查看部署时间线。
+    titleKey: 'guide.definitions.workspaceGithub.title',
+    descriptionKey: 'guide.definitions.workspaceGithub.description',
     steps: githubGuideSteps,
     beforeStart: () => {
       const appStore = useAppStore();
@@ -195,8 +211,9 @@ export const allGuides = [
   },
   {
     key: 'conflict',
-    title: '重复模组冲突处理',
-    description: '了解如何保留正确副本，并批量禁用或删除其余副本。',
+    // zh: 重复模组冲突处理 / 了解如何保留正确副本，并批量禁用或删除其余副本。
+    titleKey: 'guide.definitions.conflict.title',
+    descriptionKey: 'guide.definitions.conflict.description',
     steps: conflictGuideSteps,
     beforeStart: () => {
       const modStore = useModStore();
@@ -241,11 +258,11 @@ export const useGuideStore = defineStore('guide', () => {
         return
       }
       if (canStart && typeof canStart === 'object' && canStart.blocked) {
-        toast.info(canStart.message || '当前教程需要先满足前置条件后才能开始')
+        toast.info(canStart.message || t('guide.messages.preconditionRequired'))
         return
       }
       if (canStart === false) {
-        toast.info('当前教程需要先进入对应场景后才能开始')
+        toast.info(t('guide.messages.sceneRequired'))
         return
       }
       // 等待弹窗动画
@@ -256,10 +273,10 @@ export const useGuideStore = defineStore('guide', () => {
       showProgress: true,
       animate: true,
       allowClose: false,
-      doneBtnText: '我知道了',
-      closeBtnText: '跳过',
-      nextBtnText: '下一步',
-      prevBtnText: '上一步',
+      doneBtnText: t('guide.driver.done'),
+      closeBtnText: t('guide.driver.skip'),
+      nextBtnText: t('guide.driver.next'),
+      prevBtnText: t('guide.driver.prev'),
       // 【关键配置】针对高 z-index 的弹窗，如果不加这个，遮罩可能会被你的弹窗盖住！
       // 我们的弹窗通常 z-index 是 100 左右，这里设个大的
     //   popoverClass: 'driver-popover',
@@ -271,6 +288,8 @@ export const useGuideStore = defineStore('guide', () => {
         ...step,
         popover: {
           ...step.popover,
+          title: translateText(step.popover?.title),
+          description: translateText(step.popover?.description),
           // 拦截下一步点击
           onNextClick: async () => {
             // 如果当前步骤定义了“前往下一步之前”的动作
@@ -320,7 +339,7 @@ export const useGuideStore = defineStore('guide', () => {
     allGuides.forEach(guide => {
       skipGuideByKey(guide.key)
     })
-    toast.info("所有教程引导已跳过！可以随时在界面设置中重置引导。")
+    toast.info(t('guide.messages.allSkipped'))
   }
 
    // 重置所有引导状态
@@ -329,7 +348,7 @@ export const useGuideStore = defineStore('guide', () => {
       appStore.closeSettingsPanel()
       await window.pywebview.api.guide_reset_all()
       appStore.settings.completed_guides = {}
-      toast.success("所有教程引导已重置！")
+      toast.success(t('guide.messages.allReset'))
     }
   }
 

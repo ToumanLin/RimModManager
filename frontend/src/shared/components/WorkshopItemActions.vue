@@ -9,39 +9,39 @@
     </template>
 
     <button v-if="!showUnsubscribe" type="button" :class="[buttonClass, builtInActionClass.primary]"
-      :disabled="!canSubscribe" aria-label="订阅" v-tooltip="'订阅该工坊项目到 Steam'" @click.stop="subscribe">
+      :disabled="!canSubscribe" :aria-label="t('workshopActions.subscribe')" v-tooltip="t('workshopActions.subscribeTip')" @click.stop="subscribe">
       <Flag :class="iconSizeClass" />
-      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">订阅</span>
+      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">{{ t('workshopActions.subscribe') }}</span>
     </button>
 
     <button v-if="showUnsubscribe" type="button" :class="[buttonClass, builtInActionClass.danger]"
-      :disabled="!canUnsubscribe" aria-label="取订" v-tooltip="'取消订阅该工坊项目'"  @click.stop="unsubscribe">
+      :disabled="!canUnsubscribe" :aria-label="t('workshopActions.unsubscribe')" v-tooltip="t('workshopActions.unsubscribeTip')"  @click.stop="unsubscribe">
       <FlagOff :class="iconSizeClass" />
-      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">取订</span>
+      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">{{ t('workshopActions.unsubscribe') }}</span>
     </button>
 
     <button type="button" :class="[buttonClass, builtInActionClass.success]"
-      :disabled="!canDownload" aria-label="下载" v-tooltip="'下载该工坊项目到管理器'" @click.stop="download">
+      :disabled="!canDownload" :aria-label="t('workshopActions.download')" v-tooltip="t('workshopActions.downloadTip')" @click.stop="download">
       <Download :class="iconSizeClass" />
-      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">下载</span>
+      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">{{ t('workshopActions.download') }}</span>
     </button>
 
     <button v-if="showLink" type="button" :class="[buttonClass, builtInActionClass.cool]"
-      :disabled="!canOpenWeb" aria-label="打开网页工坊页面" v-tooltip="'打开网页工坊页面'" @click.stop="openWeb">
+      :disabled="!canOpenWeb" :aria-label="t('workshopActions.openWeb')" v-tooltip="t('workshopActions.openWeb')" @click.stop="openWeb">
       <Link :class="iconSizeClass" />
-      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">网页</span>
+      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">{{ t('workshopActions.web') }}</span>
     </button>
 
     <button v-if="showLink" type="button" :class="[buttonClass, builtInActionClass.special]"
-      :disabled="!canOpenSteam" aria-label="打开 Steam 客户端工坊页面" v-tooltip="'打开 Steam 客户端页面'" @click.stop="openSteam">
+      :disabled="!canOpenSteam" :aria-label="t('workshopActions.openSteam')" v-tooltip="t('workshopActions.openSteamTip')" @click.stop="openSteam">
       <IconSteam :class="iconSizeClass" />
       <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">Steam</span>
     </button>
 
     <button v-if="showDelete" type="button" :class="[buttonClass, builtInActionClass.danger]"
-      :disabled="deleteDisabled" :aria-label="deleteLabel" v-tooltip="deleteTooltip || deleteLabel" @click.stop="deleteItem">
+      :disabled="deleteDisabled" :aria-label="deleteActionLabel" v-tooltip="deleteTooltip || deleteActionLabel" @click.stop="deleteItem">
       <Trash2 :class="iconSizeClass" />
-      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">{{ deleteLabel }}</span>
+      <span v-if="showLabels" class="text-[0.68rem] font-bold leading-none">{{ deleteActionLabel }}</span>
     </button>
 
     <template v-for="action in normalizedAfterActions" :key="action.key">
@@ -56,6 +56,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Download, Flag, FlagOff, Link, Trash2 } from 'lucide-vue-next'
 import { useAppStore } from '../../app/stores/appStore'
 import { IconSteam } from '../lib/constants'
@@ -71,7 +72,7 @@ const props = defineProps({
   showLink: { type: Boolean, default: true },
   showUnsubscribe: { type: Boolean, default: false },
   showDelete: { type: Boolean, default: false },
-  deleteLabel: { type: String, default: '删除' },
+  deleteLabel: { type: String, default: '' },
   deletePayload: { type: null, default: undefined },
   deleteDisabled: { type: Boolean, default: false },
   deleteTooltip: { type: String, default: '' },
@@ -83,6 +84,8 @@ const props = defineProps({
 const emit = defineEmits(['subscribe', 'unsubscribe', 'download', 'delete', 'action'])
 
 const appStore = useAppStore()
+const { t } = useI18n()
+const deleteActionLabel = computed(() => props.deleteLabel || t('workshopActions.delete'))
 
 const normalizedWorkshopId = computed(() => String(props.workshopId || '').trim())
 const workshopPayload = computed(() => normalizedWorkshopId.value)

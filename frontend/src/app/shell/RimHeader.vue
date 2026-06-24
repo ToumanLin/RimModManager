@@ -16,15 +16,15 @@
     </div>
 
     <div class="flex items-center gap-3">
-      <button v-if="appStore.settings.debug_mode" @click="appStore.toggleUiState('showTestDrawer')" v-tooltip="`测试页面`"
+      <button v-if="appStore.settings.debug_mode" @click="appStore.toggleUiState('showTestDrawer')" v-tooltip="t('header.testPage')"
           class="p-2 rounded-full hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
-        测试
+        {{ t('header.test') }}
       </button>
 
-      <button data-tour="workspace-btn" @click="appStore.uiState.showWorkspace = true" v-tooltip="`库存管理中枢`"
+      <button data-tour="workspace-btn" @click="appStore.uiState.showWorkspace = true" v-tooltip="t('header.inventoryHubTip')"
           class="px-4 py-1.5 rounded-xl bg-accent-special/10 hover:bg-accent-special/20 border border-accent-special/30 text-accent-special text-sm font-bold shadow-[0_0_10px_rgba(var(--rgb-accent-special),0.2)] transition-all flex items-center gap-2">
         <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-        库存枢纽
+        {{ t('ui.inventoryHub') }}
       </button>
 
       <!-- 贴图优化入口 -->
@@ -137,6 +137,7 @@ import { BotMessageSquare, ClipboardList, FileSearch2, FileSliders, BrushCleanin
 import { useProfileStore } from '../../features/profiles/profileStore.js';
 import { useOrderStore } from '../../features/load-order/orderStore.js';
 import { useModResidueStore } from '../../features/mod-residue/modResidueStore.js';
+import { useI18n } from 'vue-i18n'
 
 const appStore = useAppStore()
 const aiStore = useAiStore()
@@ -144,6 +145,7 @@ const orderStore = useOrderStore()
 const profileStore = useProfileStore()
 const modResidueStore = useModResidueStore()
 const attrs = useAttrs()
+const { t } = useI18n()
 
 
 // 从导入列表加载

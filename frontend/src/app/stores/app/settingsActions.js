@@ -1,6 +1,8 @@
 import { toast, checkResult } from '../../../shared/lib/common'
 import { useModStore } from '../../../features/mod/stores/modStore'
 import { useProfileStore } from '../../../features/profiles/profileStore'
+import { setLocale, t } from '../../i18n'
+import { ensurePywebviewBridge } from '../../bridge/pywebviewBridge'
 
 const SETTING_KEYS_REQUIRING_LIST_SCAN = [
   'workshop_mods_path',
@@ -43,27 +45,28 @@ export const useSettingsActions = ({
 
   // 保存单项设置
   const saveSetting = async (key, value) => {
-    if (!window.pywebview) return
+    if (!await ensurePywebviewBridge()) return
     isLoading.value = true
     try {
       const res = await window.pywebview.api.save_setting(key, value)
-      if (checkResult(res, "保存单项设置", true)) {
+      if (checkResult(res, t('settingsActions.saveSetting'), true)) {
         const nextSettings = res.data?.settings || null
         if (nextSettings) Object.assign(settings.value, nextSettings)
         else settings.value[key] = value
+        if (key === 'language' || nextSettings?.language) setLocale(settings.value.language)
       }
     } catch (e) {
       console.error("保存单项设置异常:", e)
-      toast.error(`保存单项设置异常: \n${e.message}`)
+      toast.error(t('settingsActions.saveSettingError', { message: e.message }))
     } finally {
       isLoading.value = false
     }
   }
 
   const refreshUserThemes = async () => {
-    if (!window.pywebview) return userThemes.value
+    if (!await ensurePywebviewBridge()) return userThemes.value
     const res = await window.pywebview.api.theme_list_user()
-    if (checkResult(res, "读取用户主题", true)) {
+    if (checkResult(res, t('settingsActions.loadUserThemes'), true)) {
       userThemes.value = res.data?.themes || []
       applyCurrentTheme()
     }
@@ -71,9 +74,9 @@ export const useSettingsActions = ({
   }
 
   const saveUserTheme = async (theme) => {
-    if (!window.pywebview) return null
+    if (!await ensurePywebviewBridge()) return null
     const res = await window.pywebview.api.theme_save_user(theme)
-    if (!checkResult(res, "保存用户主题")) return null
+    if (!checkResult(res, t('settingsActions.saveUserTheme'))) return null
     const savedTheme = res.data?.theme
     if (savedTheme) {
       const nextThemes = userThemes.value.filter(item => item.id !== savedTheme.id)
@@ -84,9 +87,9 @@ export const useSettingsActions = ({
   }
 
   const deleteUserTheme = async (themeId) => {
-    if (!window.pywebview) return false
+    if (!await ensurePywebviewBridge()) return false
     const res = await window.pywebview.api.theme_delete_user(themeId)
-    if (!checkResult(res, "删除用户主题")) return false
+    if (!checkResult(res, t('settingsActions.deleteUserTheme'))) return false
     userThemes.value = userThemes.value.filter(item => item.id !== themeId)
     applyCurrentTheme()
     return !!res.data?.deleted
@@ -94,17 +97,18 @@ export const useSettingsActions = ({
 
   // 应用全部设置（保存到后端并更新本地）
   const applySettings = async (newSettings) => {
-    if (!window.pywebview) return
+    if (!await ensurePywebviewBridge()) return
     isLoading.value = true
     try {
       const profileStore = useProfileStore()
       const previousListSnapshot = takeModListSettingsSnapshot(settings.value, profileStore.activeContext)
       const res = await window.pywebview.api.save_all_settings(newSettings)
-      if (checkResult(res, "应用设置")) {
+      if (checkResult(res, t('settingsActions.applySettings'))) {
         const nextSettings = res.data.settings || {}
         const nextContext = res.data.active_context || profileStore.activeContext
         // 更新本地 store
         Object.assign(settings.value, nextSettings)
+        setLocale(settings.value.language)
         applyCurrentTheme()
         syncRemoteImageCache(res.data.remote_image_cache)
         profileStore.activeContext = nextContext
@@ -126,7 +130,7 @@ export const useSettingsActions = ({
       }
     } catch (e) {
       console.error("应用设置异常:", e)
-      toast.error(`应用设置异常: \n${e.message}`)
+      toast.error(t('settingsActions.applySettingsError', { message: e.message }))
     } finally {
       isLoading.value = false
     }

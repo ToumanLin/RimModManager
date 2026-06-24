@@ -1,4 +1,5 @@
 import { createToastInterface, globalEventBus } from 'vue-toastification'
+import { t, translateText } from '../../app/i18n'
 
 // -----------------------------------------------------------------
 // 文本与列表工具 (Text / Collection Utils)
@@ -136,15 +137,17 @@ export const checkResult = (res, workname, showSuccess = false, options = {}) =>
   )
   const silent = !!options?.silent
   if (debugMode) console.log('checkResult', workname, res)
+  const label = translateText(workname)
+  const message = translateText(res?.message || '')
   if (res.status === 'success') {
-    if (showSuccess && !silent) toast.success(`${workname}成功`, { timeout: 1000 })
+    if (showSuccess && !silent) toast.success(`${label}${t('common.successSuffix')}`, { timeout: 1000 })
     return true
   }
   if (silent) return false
   if (res.status === 'warning') {
-    toast.warning(`${workname}注意: \n${res.message}`)
+    toast.warning(`${label}${t('common.warningSuffix')}: \n${message}`)
   } else {
-    toast.error(`${workname}失败: \n${res.message}`)
+    toast.error(`${label}${t('common.failureSuffix')}: \n${message}`)
   }
   return false
 }

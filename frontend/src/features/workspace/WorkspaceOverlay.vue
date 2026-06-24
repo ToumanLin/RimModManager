@@ -8,10 +8,10 @@
         <!-- 1. 顶部全局导航栏 (Glowing Segmented Control) -->
         <header class="toolbar-surface relative z-20 flex h-16 shrink-0 items-center justify-between px-8">
           <!-- 左侧：返回按钮 -->
-          <button @click="appStore.uiState.showWorkspace = false" v-tooltip="'返回主界面 (Esc)'"
+          <button @click="appStore.uiState.showWorkspace = false" v-tooltip="t('workspace.backToMain')"
             class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-text-dim hover:text-text-main hover:bg-bg-overlay/10 transition-all cursor-pointer">
             <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            <span class="font-bold tracking-wider text-sm">主界面</span>
+            <span class="font-bold tracking-wider text-sm">{{ t('workspace.mainScreen') }}</span>
           </button>
 
           <!-- 中间：水平发光标签页 -->
@@ -34,12 +34,12 @@
 
           <!-- 右侧：全局统计或操作 -->
           <div class="flex items-center gap-4 text-xs font-mono text-text-dim">
-            <div class="flex items-center gap-2" v-tooltip="'基于上次启动时间，检测出新变化'">
+            <div class="flex items-center gap-2" v-tooltip="t('workspace.changeDetectionTip')">
               <span class="relative flex h-2 w-2">
                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-special opacity-75"></span>
                 <span class="relative inline-flex rounded-full h-2 w-2 bg-accent-special"></span>
               </span>
-              <span>同步就绪</span>
+              <span>{{ t('workspace.syncReady') }}</span>
             </div>
           </div>
         </header>
@@ -64,19 +64,21 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, defineAsyncComponent, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../../app/stores/appStore'
 import { Library, FolderArchive, Globe, Github } from 'lucide-vue-next'
 import { useWorkspaceStore } from './workspaceStore'
 
 const workspaceStore = useWorkspaceStore()
 const appStore = useAppStore()
+const { t } = useI18n()
 
-const tabs = [
-  { id: 'library', label: '全库数据管理', icon: Library, colorClass: 'bg-accent-success shadow-[0_0_10px_var(--color-accent-success)]' },
-  { id: 'workshop', label: '创意工坊检索', icon: Globe, colorClass: 'bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]' },
-  { id: 'collection', label: '合集订阅管理', icon: FolderArchive, colorClass: 'bg-accent-warn shadow-[0_0_10px_var(--color-accent-warn)]' },
-  { id: 'github', label: 'Git 仓库订阅', icon: Github, colorClass: 'bg-bg-contrast shadow-[0_0_10px_rgba(var(--rgb-accent-primary),0.55)]' }
-]
+const tabs = computed(() => [
+  { id: 'library', label: t('workspace.tabs.library'), icon: Library, colorClass: 'bg-accent-success shadow-[0_0_10px_var(--color-accent-success)]' },
+  { id: 'workshop', label: t('workspace.tabs.workshop'), icon: Globe, colorClass: 'bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]' },
+  { id: 'collection', label: t('workspace.tabs.collection'), icon: FolderArchive, colorClass: 'bg-accent-warn shadow-[0_0_10px_var(--color-accent-warn)]' },
+  { id: 'github', label: t('workspace.tabs.github'), icon: Github, colorClass: 'bg-bg-contrast shadow-[0_0_10px_rgba(var(--rgb-accent-primary),0.55)]' }
+])
 
 const currentTab = ref('library')
 

@@ -1,15 +1,15 @@
 <template>
   <div class="relative">
     <div class="mb-1 flex items-center justify-between px-1">
-      <label class="text-xs font-bold uppercase tracking-widest text-text-dim">配色方案</label>
+      <label class="text-xs font-bold uppercase tracking-widest text-text-dim">{{ t('theme.colorScheme') }}</label>
       <button type="button" class="text-xs font-bold text-accent-primary hover:text-text-main transition-colors" @click="$emit('create')">
-        创建配色
+        {{ t('theme.create') }}
       </button>
     </div>
 
     <button ref="triggerRef" type="button" class="input-glass flex h-9 w-full items-center justify-between gap-3 px-3 bg-glass-light text-left text-sm text-text-main"
       @click="isOpen = !isOpen" >
-      <span class="min-w-0 flex-1 truncate font-bold">{{ selectedTheme?.name || '未选择主题' }}</span>
+      <span class="min-w-0 flex-1 truncate font-bold">{{ getThemeName(selectedTheme) || t('theme.noneSelected') }}</span>
       <ThemeSwatches :theme="selectedTheme" />
       <svg class="size-4 transition-transform duration-300" :class="{ 'rotate-180 text-accent-primary': isOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" >
         <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
@@ -25,9 +25,9 @@
           @keydown.enter.prevent="selectTheme(theme.id)" >
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <span class="truncate text-sm font-black text-text-main">{{ theme.name }}</span>
+              <span class="truncate text-sm font-black text-text-main">{{ getThemeName(theme) }}</span>
               <span class="rounded border border-border-base/10 px-1.5 py-0.5 text-[0.65rem] text-text-dim">
-                {{ theme.builtin ? '内置' : '自定义' }}
+                {{ theme.builtin ? t('theme.builtin') : t('theme.custom') }}
               </span>
             </div>
             <div class="mt-1 font-mono text-[0.65rem] text-text-dim">{{ theme.id }}</div>
@@ -36,9 +36,9 @@
 
           <div v-if="!theme.builtin" class="absolute shrink-0 gap-1 opacity-0 group-hover:opacity-100 right-3 bg-bg-surface/60 px-2 py-1 rounded-md shadow-sm/20 backdrop-blur-sm border border-border-base/5">
             <button type="button" class="rounded-lg px-2 py-1 text-xs font-bold text-accent-primary hover:bg-accent-primary/15"
-              @click.stop="$emit('edit', theme)" >编辑</button>
+              @click.stop="$emit('edit', theme)" >{{ t('theme.edit') }}</button>
             <button type="button" class="rounded-lg px-2 py-1 text-xs font-bold text-accent-danger hover:bg-accent-danger/15"
-              @click.stop="$emit('delete', theme)" >删除</button>
+              @click.stop="$emit('delete', theme)" >{{ t('theme.delete') }}</button>
           </div>
 
         </div>
@@ -49,6 +49,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import FixedPopover from '../../../shared/components/popover/FixedPopover.vue'
 import ThemeSwatches from './ThemeSwatches.vue'
 
@@ -58,11 +59,19 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'create', 'edit', 'delete'])
+const { t } = useI18n()
 
 const isOpen = ref(false)
 const triggerRef = ref(null)
 
 const selectedTheme = computed(() => props.themes.find(theme => theme.id === props.modelValue) || props.themes[0])
+
+const getThemeName = (theme) => {
+  if (!theme) return ''
+  if (!theme.builtin) return theme.name
+  const translated = t(`theme.names.${theme.id}`)
+  return translated === `theme.names.${theme.id}` ? theme.name : translated
+}
 
 const selectTheme = (themeId) => {
   emit('update:modelValue', themeId)

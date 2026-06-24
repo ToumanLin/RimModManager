@@ -1,12 +1,13 @@
 import { checkResult, normalizeText, toast } from '../../../shared/lib/common'
+import { t } from '../../../app/i18n'
 
 const PENDING_REASONING_CAPABILITIES = {
   supports_reasoning: false,
   supports_reasoning_effort: false,
   reasoning_mode_kind: 'pending',
   reasoning_options: [
-    { value: 'off', label: '关闭' },
-    { value: 'auto', label: '自动' },
+    { value: 'off', label: t('common.disabled') },
+    { value: 'auto', label: t('common.auto') },
   ],
   default_session_reasoning_mode: 'auto',
 }
@@ -16,7 +17,7 @@ const UNSUPPORTED_REASONING_CAPABILITIES = {
   supports_reasoning_effort: false,
   reasoning_mode_kind: 'unsupported',
   reasoning_options: [
-    { value: 'off', label: '关闭' },
+    { value: 'off', label: t('common.disabled') },
   ],
   default_session_reasoning_mode: 'off',
 }
@@ -43,7 +44,7 @@ const normalizeReasoningCapabilityResult = (payload = {}, fallback = UNSUPPORTED
       value: normalizeText(item?.value),
       label: normalizeText(item?.label, normalizeText(item?.value)),
     })).filter(item => item.value)
-    : [...(fallback.reasoning_options || [{ value: 'off', label: '关闭' }])],
+    : [...(fallback.reasoning_options || [{ value: 'off', label: t('common.disabled') }])],
   default_session_reasoning_mode: normalizeText(
     payload?.default_session_reasoning_mode,
     fallback.default_session_reasoning_mode || 'off',
@@ -66,7 +67,7 @@ export const useModelConfigActions = ({
   const getAiConfig = async () => {
     if (!window.pywebview) return
     const res = await window.pywebview.api.ai_get_config()
-    if (checkResult(res, '获取AI配置')) {
+    if (checkResult(res, t('aiStore.loadAiConfig'))) {
       runtimeAiConfig.value = res.data || null
       return res.data
     }
@@ -75,7 +76,7 @@ export const useModelConfigActions = ({
   const saveAIConfig = async (configData) => {
     if (!window.pywebview) return
     const res = await window.pywebview.api.ai_save_config(configData)
-    if (checkResult(res, '保存AI配置', true)) {
+    if (checkResult(res, t('aiStore.saveAiConfig'), true)) {
       return true
     }
   }
@@ -107,13 +108,13 @@ export const useModelConfigActions = ({
     isLoading.value = true
     try {
       const res = await window.pywebview.api.ai_get_models(tempConfig)
-      if (checkResult(res, '获取AI模型', false, { silent })) {
+      if (checkResult(res, t('aiStore.loadAiModels'), false, { silent })) {
         const models = Array.isArray(res.data) ? res.data.map(item => normalizeText(item)).filter(Boolean) : []
         modelListCache[cacheKey] = [...new Set(models)].sort((a, b) => a.localeCompare(b))
         if (warnOnEmpty && modelListCache[cacheKey].length === 0) {
           const provider = normalizeText(tempConfig?.provider, 'unknown')
           const baseUrl = resolveAiProviderBaseUrl(tempConfig?.provider, tempConfig?.base_url)
-          toast.warning(`未获取到 AI 模型列表，请确认 ${provider} 服务已启动且 Base URL 可访问：${baseUrl}`, { timeout: 8000 })
+          toast.warning(t('aiStore.noModelListWarning', { provider, baseUrl }), { timeout: 8000 })
         }
         return getCachedAiModels(tempConfig)
       }
@@ -177,12 +178,12 @@ export const useModelConfigActions = ({
 
   const chatWithAI = async (prompt, tempConfig) => {
     if (!window.pywebview) {
-      return { ok: false, text: '', error: '界面尚未完成初始化', isEmpty: false }
+      return { ok: false, text: '', error: t('aiStore.uiNotInitialized'), isEmpty: false }
     }
     isLoading.value = true
     try {
       const res = await window.pywebview.api.ai_chat(prompt, tempConfig)
-      if (checkResult(res, '测试 AI 回复')) {
+      if (checkResult(res, t('aiStore.testAiResponse'))) {
         const payload = res.data
         const text = typeof payload === 'string'
           ? payload
@@ -190,7 +191,7 @@ export const useModelConfigActions = ({
         return {
           ok: text.trim().length > 0,
           text,
-          error: text.trim().length > 0 ? '' : '模型已返回，但内容为空',
+          error: text.trim().length > 0 ? '' : t('aiStore.emptyModelResponse'),
           isEmpty: text.trim().length === 0,
           raw: payload,
         }
@@ -198,11 +199,11 @@ export const useModelConfigActions = ({
       return {
         ok: false,
         text: '',
-        error: String(res?.message || 'AI 请求失败'),
+        error: String(res?.message || t('aiStore.aiRequestFailed')),
         isEmpty: false,
       }
     } catch (error) {
-      console.error('AI 聊天请求异常:', error)
+      console.error(t('aiStore.aiChatRequestError'), error)
       return {
         ok: false,
         text: '',

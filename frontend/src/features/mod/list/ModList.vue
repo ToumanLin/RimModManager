@@ -11,11 +11,11 @@
         <!-- 状态提示 -->
         <span v-if="isFiltered" v-tooltip="filterTooltip" @click="clearFilter"
           class="text-xs text-text-soft bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
-          已筛选
+          {{ t('ui.filtered') }}
         </span>
         <span v-if="sortMode !== 'default' || !isSortAsc" v-tooltip="sortTooltip" @click="clearSort"
           class="text-xs text-text-soft bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
-          已排序
+          {{ t('ui.sorted') }}
         </span>
       </span>
 
@@ -51,21 +51,21 @@
       <div class="flex items-center justify-center gap-1 relative">
         <!-- 搜索定位 (Find) -->
         <TagSearchInput :list-color="listColor" v-model="searchQuery" v-model:logic="searchLogic" ref="searchTagsRef" class="z-10"
-          :controller="engine?.controller" @search="executeSearch(true)" placeholder="输入关键词定位Mod位置……">
+          :controller="engine?.controller" @search="executeSearch(true)" :placeholder="t('ui.searchLocatePlaceholder')">
           <template #right>
             <div class="flex gap-1 items-center justify-center">
               <!-- 定位按钮 -->
-              <button @click="searchTagsRef?.addTag();executeSearch(true)" v-tooltip="'搜索定位下一个符合条件的结果'"
+              <button @click="searchTagsRef?.addTag();executeSearch(true)" v-tooltip="t('ui.locateNext')"
                 :class="`px-2.5 py-1 m-0 relative rounded-lg bg-accent-${listColor}/50 hover:bg-accent-${listColor} 
                 text-text-dim hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10 
-                transition-all cursor-pointer hover:scale-105 active:scale-95`">定位
+                transition-all cursor-pointer hover:scale-105 active:scale-95`">{{ t('ui.locate') }}
                 <div v-if="currentSearchIndex !== -1 && searchQuery.length > 0" class="text-[0.55rem] absolute -top-2 -left-1 text-text-main bg-accent-highlight px-1 rounded-lg">{{ currentSearchIndex + 1 }} / {{ searchResults.length }}</div>
               </button>
               <!-- 视图切换按钮 -->
               <Motion :class="`p-1 size-7 rounded-md bg-accent-${listColor}/20 border border-accent-${listColor}/30 hover:bg-accent-${listColor}/50 text-accent-${listColor} hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10 flex items-center justify-center cursor-pointer `"
                 :initial="{ rotateX: 0, opacity: 1 }" :animate="{ rotateX: isSimpleView ? 180 : 0 /*切换时旋转180度*/}" 
                 :transition="{ type: 'spring', /*弹性过渡动画*/ stiffness: 300, /*动画刚度*/ damping: 20 /*动画阻尼（回弹效果）*/}"
-                @click="isSimpleView = !isSimpleView" v-tooltip="'切换列表视图'" >
+                @click="isSimpleView = !isSimpleView" v-tooltip="t('ui.switchListView')" >
                 <svg v-if="!isSimpleView" class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><path d="M14 4h7"/><path d="M14 9h7"/><path d="M14 15h7"/><path d="M14 20h7"/></svg>
                 <svg v-else class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg>
               </Motion>
@@ -77,7 +77,7 @@
       <div class="flex items-center justify-center gap-1">
         <!-- 筛选过滤 (Filter) -->
         <TagSearchInput :list-color="listColor" v-model="filterQuery" v-model:logic="filterLogic" class="z-5"
-          :controller="engine?.controller" search-help-text="" placeholder="输入关键词筛选Mod……">
+          :controller="engine?.controller" search-help-text="" :placeholder="t('ui.searchFilterPlaceholder')">
           <template #icon>
             <svg class="w-3 h-3 text-text-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
           </template>
@@ -97,7 +97,7 @@
               <Motion :class="`p-1 size-7 rounded-md bg-accent-${listColor}/20 border border-accent-${listColor}/30 hover:bg-accent-${listColor}/50 text-accent-${listColor} hover:text-text-main text-xs font-bold shadow-lg shadow-accent-${listColor}/10 flex items-center justify-center cursor-pointer `"
                 :initial="{ rotateX: 0, opacity: 1 }" :animate="{ rotateX: isSortAsc ? 0 : 180 /*切换时旋转180度*/}" 
                 :transition="{ type: 'spring', /*弹性过渡动画*/ stiffness: 300, /*动画刚度*/ damping: 20 /*动画阻尼（回弹效果）*/}"
-                @click="isSortAsc=!isSortAsc" v-tooltip="isSortAsc?'切换为降序排列':'切换为升序排列'" >
+                @click="isSortAsc=!isSortAsc" v-tooltip="isSortAsc?t('ui.descending'):t('ui.ascending')" >
                 <svg v-if="isSortAsc" class="size-4 rotate-x-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h4"/><path d="M11 8h7"/><path d="M11 12h10"/></svg>
                 <svg v-else class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="M11 12h4"/><path d="M11 16h7"/><path d="M11 20h10"/></svg>
               </Motion>
@@ -126,7 +126,7 @@
       <div @click.self="modStore.clearSelection()" class="flex-1 h-full min-h-0 pl-1 pr-1 min-w-0 relative" :data-tour="listId=='active'?'list-modItem':null">
         <!-- 列表为空时的提示 -->
         <div v-show="modelValue.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed border-border-base/18 text-text-subtle/70 text-xs bg-bg-deep/90 select-none pointer-events-none">
-          可拖拽模组到此
+          {{ t('ui.dragModsHere') }}
           <!-- 点阵背景 -->
           <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(var(--color-text-main) 1px, transparent 1px); background-size: 20px 20px;"></div>
         </div>
@@ -231,6 +231,7 @@ import { useModListDrag } from './useModListDrag'
 import { useModListViewport } from './useModListViewport'
 import { setActiveKeyScope } from '../../../shared/commands/keyScopeStore'
 import { registerModListActions } from '../../../app/commands/modListActions'
+import { useI18n } from 'vue-i18n'
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -249,6 +250,7 @@ const profileStore = useProfileStore()
 const supplementStore = useSupplementStore()
 const missingInstallStore = useMissingInstallStore()
 const toast = useToast();
+const { t } = useI18n()
 const vListRef = ref(null)  // 虚拟列表引用, 用于滚动到选中项
 
 const searchTagsRef = ref(null)

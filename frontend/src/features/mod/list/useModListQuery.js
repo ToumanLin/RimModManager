@@ -1,16 +1,17 @@
 import { computed, ref, watch } from 'vue'
 import { ISSUE_TYPE } from '../../../shared/lib/constants'
+import { t } from '../../../app/i18n'
 
 const SORT_MODE_MAP = {
-  'default': '默认',
-  'name': '名称',
-  'package_id': '包名',
-  'author': '作者',
-  'last_active_time': '启用时间',
-  'last_moved_time': '移动时间',
-  'file_create_time': '创建时间',
-  'file_modify_time': '修改时间',
-  'file_size': '文件大小',
+  'default': 'modList.sortDefault',
+  'name': 'modList.sortName',
+  'package_id': 'modList.sortPackageId',
+  'author': 'modList.sortAuthor',
+  'last_active_time': 'modList.sortLastActiveTime',
+  'last_moved_time': 'modList.sortLastMovedTime',
+  'file_create_time': 'modList.sortFileCreateTime',
+  'file_modify_time': 'modList.sortFileModifyTime',
+  'file_size': 'modList.sortFileSize',
 }
 
 export function useModListQuery({
@@ -92,21 +93,21 @@ export function useModListQuery({
 
   // 排序提示
   const sortTooltip = computed(() => {
-    let text = `按${SORT_MODE_MAP[sortMode.value]}排序`
-    text += `${isSortAsc.value ? '（升序）' : '（降序）'}`
-    text += "\n__筛选和排序只供视觉检阅，^^不影响实际顺序^^，\n并且此状态下^^禁止拖拽排序或插入^^__"
-    text += `\n\n__[[(点击恢复默认排序)]]__`
+    let text = t('modList.sortByTooltip', { mode: t(SORT_MODE_MAP[sortMode.value] || SORT_MODE_MAP.default) })
+    text += t(isSortAsc.value ? 'modList.sortAscendingSuffix' : 'modList.sortDescendingSuffix')
+    text += t('modList.visualOnlyRestriction')
+    text += t('modList.clickResetSort')
     return text
   })
   // 筛选提示
   const filterTooltip = computed(() => {
     let text = ''
-    if (filterQuery.value.length > 0) { text += `已筛选检索关键词` }
-    if (isFilterByIssue.value) { text += '\n已筛选问题项' }
-    if (filterByLine.value.length > 0) { text += `\n已筛选依赖组` }
+    if (filterQuery.value.length > 0) { text += t('modList.filteredKeywords') }
+    if (isFilterByIssue.value) { text += `\n${t('modList.filteredIssues')}` }
+    if (filterByLine.value.length > 0) { text += `\n${t('modList.filteredDependencyGroups')}` }
     text = text.trim()
-    text += "\n__筛选和排序只供视觉检阅，^^不影响实际顺序^^，\n并且此状态下^^禁止拖拽排序或插入^^__"
-    text += `\n\n__[[(点击清除所有筛选)]]__`
+    text += t('modList.visualOnlyRestriction')
+    text += t('modList.clickClearFilters')
     return text
   })
   // 处理点击依赖图线路（筛选依赖组）
@@ -178,7 +179,7 @@ export function useModListQuery({
   })
 
   const sortIcon = computed(() => {
-    return SORT_MODE_MAP[sortMode.value] || '默认'
+    return t(SORT_MODE_MAP[sortMode.value] || SORT_MODE_MAP.default)
   })
 
   // 执行搜索
@@ -207,7 +208,7 @@ export function useModListQuery({
       index++
       if (index >= results.length) {
         index = 0 // 循环
-        toast.info("已到达最后一个搜索结果，循环回到第一个", { timeout: 2000 })
+        toast.info(t('modList.searchWrapped'), { timeout: 2000 })
       }
     }
     // 定位
@@ -234,7 +235,7 @@ export function useModListQuery({
       // 2. 检查是否被当前的筛选器过滤掉了
       if (!displayList.value.includes(resolvedTargetId)) {
         console.info(`Item ${resolvedTargetId} is filtered out by current ${props.title} filter.`)
-        toast.warning(`搜索项 ${resolvedTargetId} 已被 ${props.title} 列表筛选器过滤，请清除筛选后重试。`)
+        toast.warning(t('modList.searchItemFiltered', { id: resolvedTargetId, title: props.title }))
       }
       await revealCollapsedSectionFor(resolvedTargetId)
 

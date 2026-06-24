@@ -345,7 +345,7 @@ const normalizeTimestamp = (value) => {
 const formatTime = (value) => {
   const timestamp = normalizeTimestamp(value)
   if (!timestamp) return '-'
-  return new Date(timestamp).toLocaleString('zh-CN', { hour12: false })
+  return new Date(timestamp).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', { hour12: false })
 }
 
 const getPathLength = (mod) => String(mod?.path || '').length

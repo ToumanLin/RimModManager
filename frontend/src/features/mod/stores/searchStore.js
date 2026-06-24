@@ -4,71 +4,76 @@ import { useModStore } from './modStore'
 import { TagSearchEngine, TAG_FIELD_TYPES } from '../../../shared/components/tag-search/tagSearchEngine'
 import { MOD_SIGN_COLOR_MAP } from '../../../shared/lib/constants'
 import { useAppStore } from '../../../app/stores/appStore'
+import { t } from '../../../app/i18n'
 
 export const useSearchStore = defineStore('search', () => {
   const modStore = useModStore()
   const appStore = useAppStore()
-  const STORE_MAP = {'local': '本地', 'self': '管理器', 'workshop': '创意工坊'}
+  const STORE_MAP = {
+    local: () => t('searchStore.local'),
+    self: () => t('searchStore.manager'),
+    workshop: () => t('searchStore.workshop'),
+  }
 
   // 统一声明 Mod 列表可搜索字段。这里只放用户能理解、且适合 key:value 检索的字段；
   // 路径、描述、规则等长文本不进入语法字段，避免建议列表变脏、搜索结果难解释。
   const searchSchema = {
     // 基础信息
-    name: { type: TAG_FIELD_TYPES.STRING, defaultSearch: true, label: '名称' },
-    alias_name: { type: TAG_FIELD_TYPES.STRING, defaultSearch: true, label: '别名' },
-    author: { type: TAG_FIELD_TYPES.STRING, suggest: true, defaultSearch: true, label: '作者' },
-    package_id: { type: TAG_FIELD_TYPES.STRING, label: '包名' },
-    workshop_id: { type: TAG_FIELD_TYPES.STRING, label: '工坊ID' },
+    name: { type: TAG_FIELD_TYPES.STRING, defaultSearch: true, label: t('searchStore.name') },
+    alias_name: { type: TAG_FIELD_TYPES.STRING, defaultSearch: true, label: t('searchStore.alias') },
+    author: { type: TAG_FIELD_TYPES.STRING, suggest: true, defaultSearch: true, label: t('searchStore.author') },
+    package_id: { type: TAG_FIELD_TYPES.STRING, label: t('searchStore.packageId') },
+    workshop_id: { type: TAG_FIELD_TYPES.STRING, label: t('searchStore.workshopId') },
 
     // 用户标记
     sign_color: {
       type: TAG_FIELD_TYPES.STRING,
       suggest: true,
-      label: '颜色',
-      label_getter: (color) => MOD_SIGN_COLOR_MAP[color] || color || '无',
+      label: t('searchStore.color'),
+      label_getter: (color) => MOD_SIGN_COLOR_MAP[color] || color || t('common.none'),
       color_getter: (color) => color || 'var(--color-text-main)',
     },
-    tags: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: '标签' },
-    groups: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: '分组' },
+    tags: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: t('searchStore.tags') },
+    groups: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: t('searchStore.groups') },
 
     // 来源与类型
     mod_type: {
       type: TAG_FIELD_TYPES.STRING,
       suggest: true,
-      label: '类型',
+      label: t('searchStore.type'),
       getter: (mod) => modStore.displayModType(mod)
     },
     source: {
       type: TAG_FIELD_TYPES.STRING,
       suggest: true,
-      label: '来源',
+      label: t('searchStore.source'),
     },
     store: {
       type: TAG_FIELD_TYPES.STRING,
       suggest: true,
-      label: '位置',
-      label_getter: (store) => STORE_MAP[store] || '未知'
+      label: t('searchStore.location'),
+      label_getter: (store) => STORE_MAP[store]?.() || t('common.unknown')
     },
 
     // 支持信息
-    supported_versions: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: '支持版本' },
-    supported_languages: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: '支持语言' },
-    ignored_issues: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: '忽略问题' },
+    supported_versions: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: t('searchStore.supportedVersions') },
+    supported_languages: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: t('searchStore.supportedLanguages') },
+    ignored_issues: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: t('searchStore.ignoredIssues') },
 
     // 状态判断
     last_active: {
       type: TAG_FIELD_TYPES.BOOLEAN,
-      label: '最近启用',
+      label: t('searchStore.recentlyEnabled'),
       getter: (mod) => mod.last_active_time > appStore.settings.last_run_time
     },
     coexist_variant: {
       type: TAG_FIELD_TYPES.BOOLEAN,
-      label: '存在共存',
+      label: t('searchStore.hasCoexistence'),
       getter: (mod) => !!mod.coexist_workshop_variant
     },
-    shadow_paths: { type: TAG_FIELD_TYPES.BOOLEAN, label: '存在禁用' },
-    replacement: { type: TAG_FIELD_TYPES.BOOLEAN, label: '存在替代' },
-    save_breaking: { type: TAG_FIELD_TYPES.BOOLEAN, label: '是否坏档' },
+    shadow_paths: { type: TAG_FIELD_TYPES.BOOLEAN, label: t('searchStore.hasDisabledCopy') },
+    replacement: { type: TAG_FIELD_TYPES.BOOLEAN, label: t('searchStore.hasReplacement') },
+    save_breaking: { type: TAG_FIELD_TYPES.BOOLEAN, label: t('searchStore.saveBreaking') },
   }
 
   // 引擎内部持有 Map/Set 索引，只需要在重建时替换实例，不需要深层响应式代理。

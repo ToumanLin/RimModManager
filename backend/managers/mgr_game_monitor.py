@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import threading
 from dataclasses import asdict, dataclass
@@ -42,9 +43,10 @@ class GameMonitor:
         self.resume_url = None
         # 手动覆写标志，True 表示玩家强制要求唤醒，即使游戏在运行
         self.manual_override_idle = False 
+        self.platform_supported = sys.platform == "win32"
         # Windows API
-        self.psapi = ctypes.windll.psapi
-        self.kernel32 = ctypes.windll.kernel32
+        self.psapi = ctypes.windll.psapi if self.platform_supported else None
+        self.kernel32 = ctypes.windll.kernel32 if self.platform_supported else None
 
         # 准备静默页面的路径 (生成真实 html 文件，避免长字符串常驻内存)
         self.idle_home_page_path = str(DATA_DIR / 'idle.html')
@@ -184,6 +186,9 @@ class GameMonitor:
         return self.runtime_session, {"running": False, "runtime_session": self.runtime_session.to_dict()}
 
     def start(self):
+        if not self.platform_supported:
+            logger.info("[Monitor] Game process monitor is disabled on this platform")
+            return
         self.running = True
         EventBus.resume()   # 恢复事件总线
         self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
@@ -341,5 +346,4 @@ class GameMonitor:
         """静默模式下打开日志页。"""
         self._create_idle_pages()
         self._load_url_deferred(f"file://{self.idle_logs_page_path}")
-
 

@@ -2,6 +2,7 @@ import { normalizeText } from '../../../shared/lib/common'
 import { cleanRichText } from '../../../shared/lib/text'
 import { buildAttachmentDisplayMeta, buildDiagnosisContextAttachmentDraft } from './runtime/aiAttachmentRuntime'
 import { createAttachmentDraft, normalizeTimestamp } from './factories'
+import { t } from '../../../app/i18n'
 
 export const useAttachmentActions = ({
   runtimeDefinitionEditorMeta, globalAttachmentEntries, sessionsById,
@@ -100,7 +101,7 @@ export const useAttachmentActions = ({
     const summaryText = normalizeText(summary) || (
       normalizedMods.length <= 1
         ? firstName
-        : `已选 ${normalizedMods.length} 个模组`
+        : t('aiStore.selectedMods', { count: normalizedMods.length })
     )
     return createAttachmentDraft({
       kind: 'mod_selection',

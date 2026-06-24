@@ -4131,7 +4131,7 @@ class API:
             self._log_maintenance_check("api_result", "external-data", status="success", checked_at=checked_at, updates=len(checked.get("updates") or []), failed=len(failed), total=len(items))
             return ApiResponse.success(checked)
         except Exception as e:
-            logger.error("Check external data maintenance failed: %s", e, exc_info=True)
+            logger.error("Check Databases maintenance failed: %s", e, exc_info=True)
             return ApiResponse.error(f"检查外部库更新失败: {e}")
 
     @log_api_call
@@ -4959,7 +4959,7 @@ class API:
     
     
     # ==========================================
-    #  14. 外置数据管理 (External Data)
+    #  14. 外置数据管理 (Databases)
     # ==========================================
     @log_api_call
     def update_external_db(self, data_type: str):
@@ -5012,7 +5012,7 @@ class API:
             if not os.path.exists(file_folder):
                 os.makedirs(file_folder, exist_ok=True)
 
-            logger.info("Start updating external dataset %s from: %s", data_type, url)
+            logger.info("Start updating Databasesset %s from: %s", data_type, url)
 
             def on_db_ready(task):
                 try:
@@ -5021,7 +5021,7 @@ class API:
                         reload_fn()
                     EventBus.send_toast(str(spec["success_message"]), type="success")
                 except Exception as reload_error:
-                    logger.error("External dataset reload failed: %s", reload_error, exc_info=True)
+                    logger.error("Databasesset reload failed: %s", reload_error, exc_info=True)
                     EventBus.send_toast(f"{spec['success_message']} 但重载失败，请稍后手动刷新。", type="warning")
 
             def on_db_error(task):

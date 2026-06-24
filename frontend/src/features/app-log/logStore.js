@@ -2,6 +2,7 @@ import { computed, reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { checkResult, normalizeText } from '../../shared/lib/common'
 import { useAiStore } from '../ai/aiStore'
+import { t } from '../../app/i18n'
 
 // -----------------------------------------------------------------
 // 日志分析选择态 Store
@@ -30,8 +31,8 @@ const createEmptySourceState = () => ({
 })
 
 const LOG_SOURCE_LABELS = {
-  game: '游戏日志',
-  app: '系统日志',
+  game: 'appLog.gameLog',
+  app: 'appLog.appLog',
 }
 
 const cloneLogSnapshot = (log = {}) => ({
@@ -91,7 +92,7 @@ export const useLogStore = defineStore('log', () => {
   }
 
   const getSourceLabel = (sourceType = 'game') => (
-    LOG_SOURCE_LABELS[normalizeText(sourceType, 'game')] || '日志'
+    t(LOG_SOURCE_LABELS[normalizeText(sourceType, 'game')] || 'appLog.log')
   )
 
   const getSelectedLogs = (sourceType = 'game') => {
@@ -341,7 +342,7 @@ export const useLogStore = defineStore('log', () => {
       if (requestSeq && !isCurrentSelectionRequest(normalizedSourceType, requestSeq)) {
         return null
       }
-      if (!checkResult(res, 'Token检测')) {
+      if (!checkResult(res, t('appLog.tokenCheck'))) {
         const emptyInfo = createEmptyTokenInfo()
         setTokenInfo(normalizedSourceType, emptyInfo, { syncAttachment: true })
         return emptyInfo
@@ -357,7 +358,7 @@ export const useLogStore = defineStore('log', () => {
       setTokenInfo(normalizedSourceType, nextTokenInfo, { syncAttachment: true })
       return nextTokenInfo
     } catch (error) {
-      console.error('Token 计算失败:', error)
+      console.error(t('appLog.tokenEstimateFailed'), error)
       if (requestSeq && !isCurrentSelectionRequest(normalizedSourceType, requestSeq)) {
         return null
       }
@@ -401,7 +402,7 @@ export const useLogStore = defineStore('log', () => {
       if (requestSeq && !isCurrentSelectionRequest(normalizedSourceType, requestSeq)) {
         return null
       }
-      if (!checkResult(res, '全局扫描')) {
+      if (!checkResult(res, t('appLog.globalScan'))) {
         clearSelection(normalizedSourceType)
         return null
       }

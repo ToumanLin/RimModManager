@@ -10,12 +10,12 @@
           <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-accent-primary/35 bg-accent-primary/15 text-accent-primary shadow-[0_0_25px_rgba(var(--rgb-accent-primary),0.18)]">
             <svg class="size-7" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
           </div>
-          <div class="text-base font-bold tracking-wide text-text-main">拖入加载序列文件</div>
+          <div class="text-base font-bold tracking-wide text-text-main">{{ t('loadOrderBackup.dropTitle') }}</div>
           <div class="mt-2 text-sm leading-relaxed text-text-dim">
-            松手后将自动尝试导入到对比视图
+            {{ t('loadOrderBackup.dropDescription') }}
           </div>
           <div class="mt-3 text-xs text-text-dim">
-            支持 `xml` / `rws` / `rml` / `json` / `txt` / `list`
+            {{ t('loadOrderBackup.dropFormats') }}
           </div>
         </div>
       </div>
@@ -25,7 +25,7 @@
     <div class="px-3 h-8 border-b rounded-t-2xl border-border-base/5 flex justify-between items-center bg-bg-muted/50">
       <span :class="`text-sm font-bold text-accent-primary uppercase tracking-wider flex items-center gap-2`">
         <div :class="`w-1.5 h-1.5 rounded-full bg-accent-primary shadow-[0_0_8px_var(--color-accent-primary)]`"></div>
-        备份
+        {{ t('loadOrderBackup.title') }}
       </span>
       <span :class="`text-xs bg-bg-inset/70 px-2 py-0.5 rounded text-accent-primary`">
         {{ dataCount.total }}
@@ -37,7 +37,7 @@
         <HelpCircle v-tooltip="backupRulesTooltip" class="size-5 m-1 text-text-dim transition-colors duration-200 cursor-help hover:text-accent-primary"></HelpCircle>
       </div>
       <div class="flex items-center justify-end gap-1">
-      <CommonSelect v-model="selectedBackupProfileId" mini  placeholder="选择环境" description="切换其它环境备份"
+      <CommonSelect v-model="selectedBackupProfileId" mini  :placeholder="t('loadOrderBackup.selectProfile')" :description="t('loadOrderBackup.switchProfileDescription')"
         :options="backupProfileOptions" @change="handleBackupProfileChange" />
       <div class="relative w-6 h-6 flex items-center justify-center">
         <div class="absolute top-0 overflow-visible gap-1 group text-sm font-medium flex flex-col items-center rtl:space-y-reverse">
@@ -46,7 +46,7 @@
           text-text-dim bg-accent-primary/1
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20"
-          @click="loadOrder('0')" v-tooltip="'导入加载序列（支持 ModsConfig.xml / ModList.xml / .rml / 存档.rws / RimPy XML / RimSort JSON / 文本列表 / Workshop ID 列表）'">
+          @click="loadOrder('0')" v-tooltip="t('loadOrderBackup.importLoadOrderTip')">
             <span class="relative transition duration-300 only:-mx-6">
               <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M16 4h2a2 2 0 0 1 2 2v4"/><path d="M21 14H11"/><path d="m15 10-4 4 4 4"/></svg>
             </span>
@@ -57,7 +57,7 @@
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20
             group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
-            @click="importShareCode()" v-tooltip="'导入分享码（粘贴 RMM1 分享码）'" >
+            @click="importShareCode()" v-tooltip="t('loadOrderBackup.importShareCodeTip')" >
             <span class="relative only:-mx-6">
               <ClipboardPlus class="size-5" />
             </span>
@@ -72,7 +72,7 @@
           text-text-dim bg-accent-primary/1
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20"
-          @click="exportOrder()" v-tooltip="'导出为 ModsConfig.xml（仅含包名）'">
+          @click="exportOrder()" v-tooltip="t('loadOrderBackup.exportModsConfigTip')">
             <span class="relative transition duration-300 only:-mx-6">
               <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 14h10"/><path d="M16 4h2a2 2 0 0 1 2 2v1.344"/><path d="m17 18 4-4-4-4"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
             </span>
@@ -83,7 +83,7 @@
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20
             group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
-            @click="exportRml()" v-tooltip="'导出为 RML 游戏原生格式（含包名和工坊ID）'" >
+            @click="exportRml()" v-tooltip="t('loadOrderBackup.exportRmlTip')" >
             <span class="relative only:-mx-6">
               <svg class="size-5.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor"><path d="m648-140 112-112v92h40v-160H640v40h92L620-168l28 28Zm-448 20q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v268q-19-9-39-15.5t-41-9.5v-243H200v560h242q3 22 9.5 42t15.5 38H200Zm0-120v40-560 243-3 280Zm80-40h163q3-21 9.5-41t14.5-39H280v80Zm0-160h244q32-30 71.5-50t84.5-27v-3H280v80Zm0-160h400v-80H280v80ZM720-40q-83 0-141.5-58.5T520-240q0-83 58.5-141.5T720-440q83 0 141.5 58.5T920-240q0 83-58.5 141.5T720-40Z"/></svg>
             </span>
@@ -94,18 +94,18 @@
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20
             group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
-            @click="exportShareCode()" v-tooltip="'生成当前启用序列的分享码并复制到剪贴板'" >
+            @click="exportShareCode()" v-tooltip="t('loadOrderBackup.exportShareCodeTip')" >
             <span class="relative only:-mx-6">
               <Copy class="size-5" />
             </span>
           </button>
         </div>
       </div>
-      <button @click="orderStore.openBackupPath()" v-tooltip="'打开备份文件夹'"
+      <button @click="orderStore.openBackupPath()" v-tooltip="t('loadOrderBackup.openBackupFolder')"
         class="rounded-lg hover:bg-bg-overlay/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 duration-300">
         <svg class="size-5"  xmlns="http://www.w3.org/2000/svg"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
       </button>
-      <button @click="refresh()" v-tooltip="'刷新'"
+      <button @click="refresh()" v-tooltip="t('ui.refresh')"
         class="rounded-lg hover:bg-bg-overlay/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 duration-300">
         <svg :class="{'spin-once-reverse': loading}" @animationend.self="loading = false" class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       </button>
@@ -118,7 +118,7 @@
       <!-- 0. 临时导入 (import) -->
       <section v-if="parsedData.import.length > 0">
         <div class="px-2 mb-2 text-xs font-bold text-accent-warn uppercase opacity-80 flex items-center gap-2">
-          <span>临时导入</span>
+          <span>{{ t('loadOrderBackup.sections.import') }}</span>
           <div class="h-px flex-1 bg-accent-warn/20"></div>
         </div>
         <div class="space-y-1">
@@ -133,7 +133,7 @@
 
       <section v-if="parsedData.last_backup.length > 0">
         <div class="px-2 mb-2 text-xs font-bold text-accent-warn uppercase opacity-80 flex items-center gap-2">
-          <span>最新备份</span>
+          <span>{{ t('loadOrderBackup.sections.latest') }}</span>
           <div class="h-px flex-1 bg-accent-warn/20"></div>
         </div>
         <div class="space-y-1">
@@ -148,7 +148,7 @@
       <!-- 1. 今日备份 (Today) -->
       <section v-if="parsedData.today.length > 0">
         <div class="px-2 mb-2 text-xs font-bold text-accent-primary uppercase opacity-80 flex items-center gap-2">
-          <span>今日动态</span>
+          <span>{{ t('loadOrderBackup.sections.today') }}</span>
           <div class="h-px flex-1 bg-accent-primary/20"></div>
         </div>
         <div class="space-y-1">
@@ -168,7 +168,7 @@
       <!-- 2. 早期归档 (Earlier) -->
       <section v-if="parsedData.earlier.length > 0">
         <div class="px-2 mt-4 mb-2 text-xs font-bold text-text-dim uppercase opacity-60 flex items-center gap-2">
-          <span>历史归档</span>
+          <span>{{ t('loadOrderBackup.sections.earlier') }}</span>
           <div class="h-px flex-1 bg-bg-overlay/5"></div>
         </div>
         <div class="space-y-1">
@@ -188,7 +188,7 @@
       <!-- 3. 其他备份 (Other) -->
       <section v-if="parsedData.other.length > 0">
         <div class="px-2 mt-4 mb-2 text-xs font-bold text-text-dim uppercase opacity-60 flex items-center gap-2">
-          <span>手动备份</span>
+          <span>{{ t('loadOrderBackup.sections.manual') }}</span>
           <div class="h-px flex-1 bg-bg-overlay/5"></div>
         </div>
         <div class="space-y-1">
@@ -206,7 +206,7 @@
       <!-- 空状态 -->
       <div v-if="isEmpty" class="flex flex-col items-center justify-center h-40 text-text-disabled">
         <svg class="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-        <span class="text-sm">暂无备份记录</span>
+        <span class="text-sm">{{ t('loadOrderBackup.empty') }}</span>
       </div>
 
     </div>
@@ -215,6 +215,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { toast } from '../../shared/lib/common.js'
 import { useOrderStore } from './orderStore.js'
 import { useAppStore } from '../../app/stores/appStore.js'
@@ -222,7 +223,7 @@ import { useConfirmStore } from '../../shared/components/modal/confirmStore.js'
 import { useContextMenuStore } from '../../shared/components/context-menu/contextMenuStore.js'
 import { useProfileStore } from '../profiles/profileStore.js'
 import { parse, formatDistanceToNow, differenceInCalendarDays } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { enUS, zhCN } from 'date-fns/locale'
 import { ClipboardPlus, Copy, Download, Edit3, FileInput, FileText, FolderOpen, HelpCircle, Trash2, X } from 'lucide-vue-next'
 import CommonSelect from '../../shared/components/input/CommonSelect.vue'
 import BackupItem from './BackupItem.vue'
@@ -233,6 +234,7 @@ const orderStore = useOrderStore()
 const confirmStore = useConfirmStore()
 const contextMenuStore = useContextMenuStore()
 const profileStore = useProfileStore()
+const { locale, t } = useI18n()
 const loading = ref(false)
 const showDropOverlay = ref(false)
 const dragDepth = ref(0)
@@ -259,6 +261,7 @@ const viewedProfile = computed(() =>
   (profileStore.profiles || []).find(profile => profile.id === selectedBackupProfileId.value) || profileStore.currentProfile
 )
 const isViewingCurrentProfile = computed(() => selectedBackupProfileId.value === currentProfileId.value)
+const dateFnsLocale = computed(() => locale.value === 'en' ? enUS : zhCN)
 
 // 原始数据
 const rawData = ref({ today: [], earlier: [], other: [], last_backup: [] })
@@ -292,12 +295,7 @@ const parseFileTime = (filename) => {
 
 // 备份规则说明
 const backupRulesTooltip = computed(() => {
-    return `**[[自动备份与手动备份说明：]]**
-^^短期备份：^^每次保存或运行操作后，系统会自动备份当前配置文件(有变动才会备份)。短期备份默认保留 1 天，过期自动删除（每次启动时清理），仅保留最近一个作为当天的备份，归入长期备份。
-^^长期备份：^^默认保留最近 30 天的自动长期备份，过期将会删除。
-^^手动备份：^^用户可手动触发备份，文件将保存至指定目录，不会被自动删除。
-__自动列表备份格式：RML_YYYYMMDD_HHMMSS.rml__
-__手动导出支持：ModsConfig.xml / ModList.rml__`
+    return t('loadOrderBackup.rulesTooltip')
 })
 
 // 核心：处理数据并生成显示文本
@@ -308,8 +306,8 @@ const parsedData = computed(() => {
       const time = parseFileTime(name) || new Date(file.modify_time) || null
 
       let displayTitle = file.list_name || ''
-      let displayTime = '未知时间'
-      let distanceNow = '未知时间'
+      let displayTime = t('loadOrderBackup.unknownTime')
+      let distanceNow = t('loadOrderBackup.unknownTime')
       // 用短标签提示当前条目来自哪种排序文件格式。
       const formatLabelMap = {
         modsconfig: 'ModsConfig',
@@ -328,7 +326,7 @@ const parsedData = computed(() => {
       if (time) {
         const now = new Date()
         // 生成 displayTime (具体时间)
-        displayTime = time.toLocaleString('zh-CN', {
+        displayTime = time.toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', {
           year: 'numeric', month: '2-digit', day: '2-digit',
           hour: '2-digit', minute: '2-digit', second: '2-digit'
         })
@@ -336,13 +334,13 @@ const parsedData = computed(() => {
         // 生成 displayTitle (相对时间)
         if (type === 'today') {
           // Today: 刚刚, xx分钟前, xx小时前
-          distanceNow = formatDistanceToNow(time, { locale: zhCN, addSuffix: true }).replace('大约 ', '')
+          distanceNow = formatDistanceToNow(time, { locale: dateFnsLocale.value, addSuffix: true }).replace(t('loadOrderBackup.approxPrefix'), '')
         } else if (type === 'earlier') {
           // Earlier: 昨天, 前天, xx天前
           const diffDays = differenceInCalendarDays(now, time)
-          if (diffDays === 1) distanceNow = '昨天'
-          else if (diffDays === 2) distanceNow = '前天'
-          else distanceNow = `${diffDays} 天前`
+          if (diffDays === 1) distanceNow = t('loadOrderBackup.yesterday')
+          else if (diffDays === 2) distanceNow = t('loadOrderBackup.dayBeforeYesterday')
+          else distanceNow = t('loadOrderBackup.daysAgo', { count: diffDays })
         } else if (!displayTitle) {
           // Other: 直接显示文件名去后缀。这里把常见导入扩展名一起处理掉。
           displayTitle = name.replace(/\.(xml|rws|json|txt|list|rml)$/i, '')
@@ -410,7 +408,7 @@ const sanitizeBackupName = (name) => {
     .replace(/^\.+|\.+$/g, '')
     .trim()
   if (sanitizedName && sanitizedName !== normalizedName) {
-    toast.warning('文件名中的特殊字符已替换为下划线')
+    toast.warning(t('loadOrderBackup.filenameSanitized'))
   }
   return sanitizedName
 }
@@ -432,20 +430,20 @@ const handleSaveAs = async (item) => {
 
 const handleRename = async (event, item) => {
   const inputName = await confirmStore.open({
-    title: '重命名备份',
-    message: '请输入新的备份名称。',
+    title: t('loadOrderBackup.renameTitle'),
+    message: t('loadOrderBackup.renameMessage'),
     mode: 'prompt',
     type: 'info',
     inputValue: getBackupBaseName(item),
-    placeholder: '备份名称',
-    confirmText: '保存',
-    cancelText: '取消',
+    placeholder: t('loadOrderBackup.backupName'),
+    confirmText: t('ui.save'),
+    cancelText: t('common.cancel'),
   }, event?.target)
   if (!inputName) return
 
   const nextName = sanitizeBackupName(inputName)
   if (!nextName) {
-    toast.warning('请输入新的备份名称')
+    toast.warning(t('loadOrderBackup.enterBackupName'))
     return
   }
 
@@ -460,15 +458,15 @@ const buildBackupMenuItems = (item) => {
   const isTempImport = item?.type === 'import'
   const isManualBackup = item?.type === 'other'
   return [
-    { label: '加载文件', icon: FileInput, action: () => handleLoad(null, item) },
-    { label: '打开文件', icon: FileText, disabled: !canUsePath, action: () => handleOpenFile(item) },
-    { label: '打开所在目录', icon: FolderOpen, disabled: !canUsePath, action: () => handleOpenFolder(item) },
-    { label: '另存为...', icon: Download, disabled: isTempImport || !canUsePath, action: () => handleSaveAs(item) },
-    { label: '重命名', icon: Edit3, disabled: !isManualBackup, action: () => handleRename(null, item) },
+    { label: t('loadOrderBackup.menu.loadFile'), icon: FileInput, action: () => handleLoad(null, item) },
+    { label: t('loadOrderBackup.menu.openFile'), icon: FileText, disabled: !canUsePath, action: () => handleOpenFile(item) },
+    { label: t('loadOrderBackup.menu.openContainingFolder'), icon: FolderOpen, disabled: !canUsePath, action: () => handleOpenFolder(item) },
+    { label: t('loadOrderBackup.menu.saveAs'), icon: Download, disabled: isTempImport || !canUsePath, action: () => handleSaveAs(item) },
+    { label: t('loadOrderBackup.menu.rename'), icon: Edit3, disabled: !isManualBackup, action: () => handleRename(null, item) },
     { divider: true },
     isTempImport
-      ? { label: '从列表移除', icon: X, level: 'warn', action: () => handleRemove(item) }
-      : { label: '删除文件', icon: Trash2, level: 'danger', action: () => handleDelete(null, item) },
+      ? { label: t('loadOrderBackup.menu.removeFromList'), icon: X, level: 'warn', action: () => handleRemove(item) }
+      : { label: t('loadOrderBackup.menu.deleteFile'), icon: Trash2, level: 'danger', action: () => handleDelete(null, item) },
   ]
 }
 
@@ -541,7 +539,7 @@ const importDroppedFile = async (filePath, source = 'dom') => {
   if (!normalizedPath || shouldSkipDuplicateDrop(normalizedPath)) return false
 
   if (activeDroppedFile.value && activeDroppedFile.value !== normalizedPath) {
-    toast.info('上一个拖入文件仍在处理中，请稍候')
+    toast.info(t('loadOrderBackup.dropBusy'))
     return false
   }
 
@@ -564,7 +562,7 @@ const importDroppedBrowserFile = async (file) => {
   if (!dropKey || shouldSkipDuplicateDrop(dropKey)) return false
 
   if (activeDroppedFile.value && activeDroppedFile.value !== dropKey) {
-    toast.info('上一个拖入文件仍在处理中，请稍候')
+    toast.info(t('loadOrderBackup.dropBusy'))
     return false
   }
 
@@ -578,7 +576,7 @@ const importDroppedBrowserFile = async (file) => {
     const data = await orderStore.importPayloadFile(file, selectedBackupProfileId.value)
     if (!data) return false
     if ((data.errors || []).length > 0) {
-      console.warn('导入文件包含解析错误:', data.errors)
+      console.warn(t('loadOrderBackup.importParseErrors'), data.errors)
     }
     appStore.uiState.showDiffDrawer = true
     await refresh(selectedBackupProfileId.value)
@@ -595,12 +593,12 @@ const handleNativeBackupDrop = async (paths = []) => {
     : []
 
   if (normalizedPaths.length === 0) {
-    toast.warning('原生拖放未返回有效文件路径')
+    toast.warning(t('loadOrderBackup.nativeDropNoPath'))
     return
   }
 
   if (normalizedPaths.length > 1) {
-    toast.warning('一次只能导入一个文件，已自动使用第一个文件')
+    toast.warning(t('loadOrderBackup.singleFileOnly'))
   }
 
   await importDroppedFile(normalizedPaths[0], 'native')
@@ -628,7 +626,7 @@ const bindNativeDropZone = async () => {
       }, 250)
     }
   } catch (error) {
-    console.warn('绑定原生拖放区域失败:', error)
+    console.warn(t('loadOrderBackup.bindNativeDropFailed'), error)
   }
 }
 
@@ -675,11 +673,11 @@ const handleDrop = async (event) => {
   resetDropState()
   const files = Array.from(event?.dataTransfer?.files || [])
   if (files.length === 0) {
-    toast.warning('未检测到可导入文件')
+    toast.warning(t('loadOrderBackup.noImportableFile'))
     return
   }
   if (files.length > 1) {
-    toast.warning('一次只能导入一个文件，已自动使用第一个文件')
+    toast.warning(t('loadOrderBackup.singleFileOnly'))
   }
 
   const filePath = extractDroppedFilePath(event)
@@ -701,8 +699,8 @@ const selectItem = async (item) => {
 // 从备份列表加载
 const handleLoad = async (e, item) => {
   const confirmed = await confirmStore.open({
-    title: '加载确认',
-    message: `确定要恢复到此备份文件的状态吗？\n当前未保存的更改将丢失。`,
+    title: t('loadOrderBackup.loadConfirmTitle'),
+    message: t('loadOrderBackup.loadConfirmMessage'),
     mode: 'confirm',
     type: 'warning'
   }, e?.target)
@@ -712,8 +710,8 @@ const handleLoad = async (e, item) => {
 // 删除备份文件
 const handleDelete = async (e, item) => {
   const confirmed = await confirmStore.open({
-    title: '删除确认',
-    message: '确定要删除此备份文件吗？',
+    title: t('loadOrderBackup.deleteConfirmTitle'),
+    message: t('loadOrderBackup.deleteConfirmMessage'),
     mode: 'confirm',
     type: 'error'
   }, e?.target)
@@ -761,7 +759,7 @@ const loadOrder = async (path) => {
   const data = await orderStore.importExternalOrder(path, selectedBackupProfileId.value)
   if (data) {
     if ((data.errors || []).length > 0) {
-      console.warn('导入文件包含解析错误:', data.errors)
+      console.warn(t('loadOrderBackup.importParseErrors'), data.errors)
     }
     appStore.uiState.showDiffDrawer = true
   }

@@ -20,10 +20,10 @@
               <div>
                 <h2 class="text-xl font-black italic text-text-main flex items-center gap-2">
                   <Database class="size-5 text-accent-primary" />
-                  环境<span class="text-accent-primary">管理</span>
+                  {{ t('profileDrawer.titlePrefix') }}<span class="text-accent-primary">{{ t('profileDrawer.titleAccent') }}</span>
                 </h2>
               </div>
-              <button @click="openCreate" v-tooltip="'创建新环境'" data-tour="profile-create"
+              <button @click="openCreate" v-tooltip="t('profileDrawer.createProfile')" data-tour="profile-create"
                 class="p-2 rounded-xl bg-accent-primary/10 text-accent-primary hover:bg-accent-primary hover:text-on-accent-primary transition-all">
                 <Plus class="size-5" />
               </button>
@@ -33,7 +33,7 @@
           <!-- 列表区 -->
           <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar" data-tour="profile-list">
             <!-- 当前激活标识 -->
-            <div class="px-2 text-[0.65rem] font-bold text-text-dim uppercase tracking-tighter opacity-60">已记录环境</div>
+            <div class="px-2 text-[0.65rem] font-bold text-text-dim uppercase tracking-tighter opacity-60">{{ t('profileDrawer.recordedProfiles') }}</div>
 
             <div v-for="p in profileStore.profiles" :key="p.id"
               @click="p.check ? profileStore.switchProfile(p.id) : null"
@@ -64,13 +64,13 @@
                     </div>
                     <!-- 操作组 -->
                     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button @click.stop="openExportDialog(p)" v-tooltip="'导出环境模组包'" class="p-1.5 rounded-lg text-text-dim transition-all hover:text-accent-special hover:bg-accent-special/15"
+                      <button @click.stop="openExportDialog(p)" v-tooltip="t('profileDrawer.exportProfileModPack')" class="p-1.5 rounded-lg text-text-dim transition-all hover:text-accent-special hover:bg-accent-special/15"
                         :class="p.check ? '' : 'cursor-not-allowed pointer-events-none opacity-40'"><Package class="size-3.5" /></button>
-                      <button v-if="p.id !== 'default'" @click.stop="handleCreateShortcut(p)" v-tooltip="p.check ? '创建桌面快捷方式' : '环境无效，无法创建快捷方式'" class="p-1.5 rounded-lg text-text-dim transition-all hover:text-accent-primary hover:bg-accent-primary/15"
+                      <button v-if="p.id !== 'default'" @click.stop="handleCreateShortcut(p)" v-tooltip="p.check ? t('profileDrawer.createShortcutTooltip') : t('profileDrawer.invalidProfileShortcutTooltip')" class="p-1.5 rounded-lg text-text-dim transition-all hover:text-accent-primary hover:bg-accent-primary/15"
                         :class="p.check ? '' : 'cursor-not-allowed pointer-events-none opacity-40'" ><SquareArrowOutUpRight class="size-3.5" /></button>
-                      <button v-if="p.id !== 'default'" @click.stop="handleDelete(p)" v-tooltip="'删除环境'" class="p-1.5 rounded-lg hover:bg-accent-danger/20 text-text-dim hover:text-accent-danger transition-all"><Trash2 class="size-3.5" /></button>
-                      <button @click.stop="handleEdit(p)" v-tooltip="'编辑环境'" class="p-1.5 rounded-lg hover:bg-bg-overlay/10 text-text-dim hover:text-text-main transition-all"><Settings2 class="size-3.5" /></button>
-                      <button @click.stop="handlePlay(p)" v-tooltip="'运行环境'" class="p-1.5 rounded-lg text-text-dim  transition-all hover:text-accent-success hover:bg-accent-success/20"
+                      <button v-if="p.id !== 'default'" @click.stop="handleDelete(p)" v-tooltip="t('profileDrawer.deleteProfile')" class="p-1.5 rounded-lg hover:bg-accent-danger/20 text-text-dim hover:text-accent-danger transition-all"><Trash2 class="size-3.5" /></button>
+                      <button @click.stop="handleEdit(p)" v-tooltip="t('profileDrawer.editProfile')" class="p-1.5 rounded-lg hover:bg-bg-overlay/10 text-text-dim hover:text-text-main transition-all"><Settings2 class="size-3.5" /></button>
+                      <button @click.stop="handlePlay(p)" v-tooltip="t('profileDrawer.runProfile')" class="p-1.5 rounded-lg text-text-dim  transition-all hover:text-accent-success hover:bg-accent-success/20"
                         :class="p.check ? '' : 'cursor-not-allowed pointer-events-none opacity-40'"><Play class="size-3.5" />
                       </button>
                     </div>
@@ -78,27 +78,27 @@
 
                   <!-- 标识 -->
                   <div class="flex items-center gap-1 min-w-0">
-                    <span v-tooltip="'游戏版本'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-secondary/20 text-accent-secondary border border-border-base/10 ">{{ p.game_version || '版本未知' }}</span>
-                    <span v-if="showSteamVersionBadge(p)" v-tooltip="p.is_steam_managed ? '游戏由 Steam 管理。' : '这是一个 Steam 版环境。'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-primary/10 text-accent-primary border border-border-base/10 ">Steam 版</span>
-                    <span v-if="showWorkshopRuntimeBadge(p)" v-tooltip="'当前环境会使用创意工坊模组'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-success/10 text-accent-success border border-border-base/10 ">工坊模组</span>
-                    <span v-if="p.use_self_mods" v-tooltip="'当前环境会使用管理器模组'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-success/10 text-accent-success border border-border-base/10 ">管理器模组</span>
-                    <span v-if="p.id === 'default'" v-tooltip="'默认环境'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-highlight/20 text-accent-highlight border border-border-base/10 ">默认</span>
-                    <span v-if="p.id === runtimeProfileId && appStore.runtimeSession?.state === 'running'" v-tooltip="runtimeProfileLabel" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-primary/15 text-accent-primary border border-border-base/10 ">运行中</span>
+                    <span v-tooltip="t('profileDrawer.gameVersion')" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-secondary/20 text-accent-secondary border border-border-base/10 ">{{ p.game_version || t('profileDrawer.unknownVersion') }}</span>
+                    <span v-if="showSteamVersionBadge(p)" v-tooltip="p.is_steam_managed ? t('profileDrawer.steamManagedTooltip') : t('profileDrawer.steamProfileTooltip')" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-primary/10 text-accent-primary border border-border-base/10 ">{{ t('profileDrawer.steamVersion') }}</span>
+                    <span v-if="showWorkshopRuntimeBadge(p)" v-tooltip="t('profileDrawer.usesWorkshopModsTooltip')" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-success/10 text-accent-success border border-border-base/10 ">{{ t('profileDrawer.workshopMods') }}</span>
+                    <span v-if="p.use_self_mods" v-tooltip="t('profileDrawer.usesManagerModsTooltip')" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-success/10 text-accent-success border border-border-base/10 ">{{ t('profileDrawer.managerMods') }}</span>
+                    <span v-if="p.id === 'default'" v-tooltip="t('profileDrawer.defaultProfileTooltip')" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-highlight/20 text-accent-highlight border border-border-base/10 ">{{ t('profileDrawer.defaultProfile') }}</span>
+                    <span v-if="p.id === runtimeProfileId && appStore.runtimeSession?.state === 'running'" v-tooltip="runtimeProfileLabel" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-primary/15 text-accent-primary border border-border-base/10 ">{{ t('profileDrawer.running') }}</span>
                   </div>
 
                   <!-- 路径 -->
-                  <span class="flex items-center" v-tooltip="'游戏安装路径:\n' + p.game_install_path">
+                  <span class="flex items-center" v-tooltip="t('profileDrawer.gameInstallPathTooltip', { path: p.game_install_path })">
                     <span class="text-[0.7rem] py-0.5 px-1 w-10 shrink-0 text-center bg-accent-cool/70 rounded-2xl">Game</span>
                     <span class="text-[0.7rem] px-1 text-text-dim font-mono opacity-50 truncate">{{ p.game_install_path }}</span>
                   </span>
 
-                  <span class="flex items-center" v-tooltip="'用户数据路径:\n' + p.user_data_path">
+                  <span class="flex items-center" v-tooltip="t('profileDrawer.userDataPathTooltip', { path: p.user_data_path })">
                     <span class="text-[0.7rem] py-0.5 px-1 w-10 shrink-0 text-center bg-accent-tip/70 rounded-2xl">Data</span>
                     <span class="text-[0.7rem] px-1 text-text-dim font-mono opacity-50 truncate">{{ p.user_data_path }}</span>
                   </span>
 
                   <div class=" w-fit bg-accent-special/70 backdrop-blur-xl px-1 py-0.5 rounded-sm text-[0.65rem] text-text-main">
-                    上次运行：{{ p.last_played_time ? formatDate(p.last_played_time) : '未运行' }}
+                    {{ t('profileDrawer.lastRun') }}{{ p.last_played_time ? formatDate(p.last_played_time) : t('profileDrawer.neverRun') }}
                   </div>
 
                 </div>
@@ -108,7 +108,7 @@
 
             <!-- 待恢复/孤立环境 -->
             <div v-if="profileStore.orphanedProfiles.length > 0" class="mt-8 space-y-3">
-              <div class="px-2 text-[0.65rem] font-bold text-accent-warn uppercase tracking-tighter">待恢复环境</div>
+              <div class="px-2 text-[0.65rem] font-bold text-accent-warn uppercase tracking-tighter">{{ t('profileDrawer.profilesToRestore') }}</div>
               <div v-for="orphan in profileStore.orphanedProfiles" :key="orphan.id"
                 class="p-4 rounded-xl border border-dashed border-accent-warn/30 bg-accent-warn/5 flex items-center justify-between group">
                 <div class="min-w-0">
@@ -116,7 +116,7 @@
                   <div class="text-[0.7rem] text-text-dim truncate w-48 mt-1">{{ orphan._folder_path }}</div>
                 </div>
                 <button @click="profileStore.importOrphan(orphan)" class="px-3 py-1.5 rounded-lg bg-accent-warn/20 hover:bg-accent-warn text-accent-warn hover:text-on-accent-warn text-[0.7rem] font-black transition-all">
-                  接入
+                  {{ t('profileDrawer.importOrphan') }}
                 </button>
               </div>
             </div>
@@ -126,7 +126,7 @@
           <footer class="bg-bg-elevated/90 flex items-center justify-between p-4">
             <div></div>
             <button @click="appStore.uiState.showProfileDrawer = false" class="px-4 py-1.5 rounded-lg bg-bg-overlay/5 hover:bg-bg-overlay/10 text-text-main text-xs font-bold transition-all">
-              收起
+              {{ t('profileDrawer.collapse') }}
             </button>
           </footer>
 
@@ -148,37 +148,37 @@
     <div v-if="showModal" class="fixed inset-0 z-150 flex items-center justify-center bg-bg-deep/40 backdrop-blur-md">
       <div class="modal-surface w-full max-w-[70%] overflow-hidden rounded-2xl bg-bg-highlight/90 animate-scale-in">
         <header class="modal-header flex items-center justify-between px-6 py-4">
-          <h3 class="text-lg font-bold text-text-main">{{ isEditing ? '编辑环境属性' : '创建新环境快照' }}</h3>
+          <h3 class="text-lg font-bold text-text-main">{{ isEditing ? t('profileDrawer.editProfileTitle') : t('profileDrawer.createProfileSnapshot') }}</h3>
           <button @click="showModal = false" class="text-text-dim hover:text-text-main"><X class="size-5" /></button>
         </header>
 
         <div class="p-6 space-y-3">
-          <CommonInput label="显示名称" v-model="form.name" placeholder="例如: 1.5 中世纪" />
-          <CommonInput label="环境描述" v-model="form.description" placeholder="这里可以写一些关于这个环境的说明..." />
-          <CommonPathInput label="游戏执行目录" v-model="form.game_install_path" @browse="browsePath('game_install_path')"
+          <CommonInput :label="t('profileDrawer.displayName')" v-model="form.name" :placeholder="t('profileDrawer.displayNamePlaceholder')" />
+          <CommonInput :label="t('profileDrawer.profileDescription')" v-model="form.description" :placeholder="t('profileDrawer.profileDescriptionPlaceholder')" />
+          <CommonPathInput :label="t('profileDrawer.gameExecutableDir')" v-model="form.game_install_path" @browse="browsePath('game_install_path')"
             :check="form.check_info?.game_install_path" @blur="checkPath('game_install_path', form.game_install_path)"
-            description="游戏安装目录，即游戏主程序所在的目录" />
-          <CommonPathInput label="用户数据目录" v-model="form.user_data_path" @browse="browsePath('user_data_path')"
+            :description="t('profileDrawer.gameExecutableDirDesc')" />
+          <CommonPathInput :label="t('profileDrawer.userDataDir')" v-model="form.user_data_path" @browse="browsePath('user_data_path')"
             :check="form.check_info?.user_data_path" @blur="checkPath('user_data_path', form.user_data_path)"
-            description="游戏数据目录，可随意指定位置，或者留空自动生成，包含游戏配置及排序存档等用户信息。"
-            :placeholder= '(!isEditing?"可空，默认在软件 data/profiles 目录下自动生成":"编辑模式下不可留空！")' />
-          <CommonSwitch v-if="showWorkshopSwitch" :disabled="!canUseSteamLaunch" label="优先使用 Steam 启动" v-model="form.prefer_steam_launch" description="适用于 Steam 版游戏。开启后，管理器会优先通过 Steam 启动游戏，进而挂载创意工坊内容。（前提是账号正常使用该游戏和相关关创意工坊内容。）" />
-          <CommonSwitch v-if="showWorkshopSwitch" :disabled="form.prefer_steam_launch" label="使用创意工坊 Mod" v-model="form.use_workshop_mods" description="适用于非 Steam 版环境。为当前环境使用创意工坊模组，启用后将通过链接方式自动为游戏添加创意工坊模组。（前提是账号正常使用该游戏和相关关创意工坊内容。）" />
-          <CommonSwitch v-if="appStore.settings.self_mods_path" label="使用管理器 Mod" v-model="form.use_self_mods" description="启用后将通过链接方式自动为游戏添加管理器模组。" />
-          <CommonSwitch v-if="!isEditing" label="继承当前配置" v-model="form.copy_current_data" description="自动复制当前的游戏配置到新环境" />
-          <CommonTagInput label="游戏启动参数" v-model="form.run_commands" :allTags="RUN_COMMAND_TAGS" placeholder="请输入一个完整指令后回车确认……" description="注意不要使用 [[-savedatafolder]] 指令，多环境管理已经默认使用此指令，无需手动配置。" />
+            :description="t('profileDrawer.userDataDirDesc')"
+            :placeholder="isEditing ? t('profileDrawer.userDataDirEditPlaceholder') : t('profileDrawer.userDataDirCreatePlaceholder')" />
+          <CommonSwitch v-if="showWorkshopSwitch" :disabled="!canUseSteamLaunch" :label="t('settings.paths.preferSteamLaunch')" v-model="form.prefer_steam_launch" :description="t('settings.paths.preferSteamLaunchDesc')" />
+          <CommonSwitch v-if="showWorkshopSwitch" :disabled="form.prefer_steam_launch" :label="t('settings.paths.useWorkshopMods')" v-model="form.use_workshop_mods" :description="t('settings.paths.useWorkshopModsDesc')" />
+          <CommonSwitch v-if="appStore.settings.self_mods_path" :label="t('settings.paths.useSelfMods')" v-model="form.use_self_mods" :description="t('settings.paths.useSelfModsDesc')" />
+          <CommonSwitch v-if="!isEditing" :label="t('profileDrawer.inheritCurrentConfig')" v-model="form.copy_current_data" :description="t('profileDrawer.inheritCurrentConfigDesc')" />
+          <CommonTagInput :label="t('profileDrawer.launchArgs')" v-model="form.run_commands" :allTags="RUN_COMMAND_TAGS" :placeholder="t('profileDrawer.launchArgsPlaceholder')" :description="t('profileDrawer.launchArgsDesc')" />
 
           <div class="text-[0.7rem] text-text-disabled leading-relaxed">
-            * 每一个环境都拥有完全独立的存档、设置和 Mod 排序文件。系统将通过启动参数自动执行数据隔离。Mod 文件则会共用游戏本体所在的 Mods 目录。
-            <p class="ml-2">游戏本体与环境无直接关联，同一个游戏本体可以与多个环境同时建立联系。</p>
-            <p class="ml-2 text-accent-warning">注意：如果游戏执行目录不存在或游戏文件损坏，环境将无法正常启动。</p>
+            {{ t('profileDrawer.profileIsolationNote') }}
+            <p class="ml-2">{{ t('profileDrawer.gameProfileRelationNote') }}</p>
+            <p class="ml-2 text-accent-warning">{{ t('profileDrawer.invalidGameDirWarning') }}</p>
           </div>
         </div>
 
         <footer class="modal-footer flex justify-end gap-3 px-6 py-4">
-          <button @click="showModal = false" class="px-4 py-2 text-sm text-text-dim hover:text-text-main">取消</button>
+          <button @click="showModal = false" class="px-4 py-2 text-sm text-text-dim hover:text-text-main">{{ t('common.cancel') }}</button>
           <button @click="submitForm" class="px-6 py-2 rounded-xl bg-accent-primary text-on-accent-primary font-black text-sm shadow-lg shadow-accent-primary/20 transition-all hover:scale-105 active:scale-95">
-            {{ isEditing ? '保存变更' : '确认创建' }}
+            {{ isEditing ? t('profileDrawer.saveChanges') : t('profileDrawer.confirmCreate') }}
           </button>
         </footer>
       </div>
@@ -188,6 +188,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Database, Plus, Trash2, Settings2, X, Play, AlertTriangle, SquareArrowOutUpRight, Package } from 'lucide-vue-next'
 import { toast } from '../../shared/lib/common'
 import { useProfileStore } from './profileStore'
@@ -205,6 +206,7 @@ const profileStore = useProfileStore()
 const modStore = useModStore()
 const appStore = useAppStore()
 const confirmStore = useConfirmStore()
+const { t } = useI18n()
 
 // --- 状态 ---
 const showModal = ref(false)
@@ -244,9 +246,9 @@ const showSteamVersionBadge = (profile) => !!profile?.is_steam
 const runtimeProfileId = computed(() => String(appStore.runtimeSession?.profile_id || '').trim())
 const runtimeProfileLabel = computed(() => {
   if (appStore.runtimeSession?.source === 'external') {
-    return '当前游戏由外部启动，后端已按 default 环境接管。'
+    return t('profileDrawer.externalRuntimeTooltip')
   }
-  return '当前游戏正在按这个环境运行。'
+  return t('profileDrawer.profileRuntimeTooltip')
 })
 const showWorkshopRuntimeBadge = (profile) => {
   const caps = profile?.runtime_capabilities || {}
@@ -314,25 +316,25 @@ const browsePath = async (type) => {
 
 const submitForm = async () => {
   if (!form.name) {
-    toast.warning('请输入显示名称')
+    toast.warning(t('profileDrawer.enterDisplayName'))
     return
   }
   if (!form.game_install_path) {
-    toast.warning('请选择游戏执行目录')
+    toast.warning(t('profileDrawer.selectGameExecutableDir'))
     return
   }
   if (!form.user_data_path && isEditing.value) {
-    toast.warning('请输入用户数据目录')
+    toast.warning(t('profileDrawer.enterUserDataDir'))
     return
   }
   await checkPath('user_data_path', form.user_data_path)
   await checkPath('game_install_path', form.game_install_path)
   if (form['check_info']['game_install_path'] && !form['check_info']['game_install_path']['pass']) {
-    toast.warning('请选择一个有效的游戏执行目录')
+    toast.warning(t('profileDrawer.selectValidGameExecutableDir'))
     return
   }
   if (form['check_info']['user_data_path'] && !form['check_info']['user_data_path']['pass'] && isEditing.value) {
-    toast.warning('请输入一个有效的用户数据目录')
+    toast.warning(t('profileDrawer.enterValidUserDataDir'))
     return
   }
   if (isEditing.value) {
@@ -358,11 +360,11 @@ const checkPath = async (type, path) => {
 
 const handleDelete = async (p) => {
   const decision = await confirmStore.confirmDeleteAction(
-    '危险操作',
-    `确定要删除环境 "${p.name}" 吗？\n环境记录会被移除；其隔离区数据默认移入回收站，也可选择强制彻底删除。`,
+    t('profileDrawer.dangerAction'),
+    t('profileDrawer.deleteProfileMessage', { name: p.name }),
     {
-      trashOptionText: '移入回收站',
-      forceOptionText: '强制删除隔离区数据',
+      trashOptionText: t('profileDrawer.moveProfileDataToTrash'),
+      forceOptionText: t('profileDrawer.forceDeleteProfileData'),
     }
   )
   if (decision?.confirmed) {
@@ -379,11 +381,11 @@ const handlePlay = (p) => {
 
 const handleCreateShortcut = async (p) => {
   const ok = await confirmStore.confirmAction(
-    '创建桌面快捷方式',
-    `确定要为环境 "${p.name}" 创建桌面快捷方式吗？\n快捷方式会按当前环境的启动方式生成，并放到桌面。\n若当前环境优先使用 Steam 启动，且游戏本体路径不同于默认环境，管理器会改写 Steam 的非 Steam 游戏快捷方式配置并在桌面生成 Steam 协议入口；该流程需要 Steam 完全退出，并在写入后重启 Steam 才会生效。\n若多个环境共用同一个游戏目录，快捷方式只能保证启动目标和参数准确，不能保证目录中的链接状态始终与该环境完全一致。`,
+    t('profileDrawer.createShortcutTitle'),
+    t('profileDrawer.createShortcutMessage', { name: p.name }),
     {
-      confirmText: '创建',
-      cancelText: '取消',
+      confirmText: t('profileDrawer.create'),
+      cancelText: t('common.cancel'),
     }
   )
   if (!ok) return
@@ -396,12 +398,12 @@ const buildProfileExportScopeOptions = ({
   loading = false,
 } = {}) => {
   const formatLabel = (title, count) => {
-    if (loading) return `${title}（读取中）`
-    return Number.isFinite(count) ? `${title}（${count}）` : title
+    if (loading) return t('profileDrawer.scopeLabelLoading', { title })
+    return Number.isFinite(count) ? t('profileDrawer.scopeLabelCount', { title, count }) : title
   }
   return [
-    { value: 'profile-effective', label: formatLabel('当前环境有效模组', effectiveCount), description: loading ? '正在读取这个环境里可导出的模组数量。' : '导出当前环境里能正常使用的模组。' },
-    { value: 'profile-active', label: formatLabel('当前环境启用模组', activeCount), description: loading ? '正在读取这个环境里已启用的模组数量。' : '导出当前环境里已经启用的模组。' },
+    { value: 'profile-effective', label: formatLabel(t('profileDrawer.currentProfileEffectiveMods'), effectiveCount), description: loading ? t('profileDrawer.loadingEffectiveExportCount') : t('profileDrawer.exportEffectiveModsDesc') },
+    { value: 'profile-active', label: formatLabel(t('profileDrawer.currentProfileActiveMods'), activeCount), description: loading ? t('profileDrawer.loadingActiveExportCount') : t('profileDrawer.exportActiveModsDesc') },
   ]
 }
 
@@ -415,11 +417,11 @@ const openExportDialog = async (profile) => {
     })
     : buildProfileExportScopeOptions({ loading: true })
   appStore.openPackageTransferDialog('mod-export', {
-    title: `导出环境模组: ${profile?.name || '未命名环境'}`,
-    description: '可选择导出当前环境有效模组或当前启用模组，并按需附带环境数据。',
+    title: t('profileDrawer.exportProfileModsTitle', { name: profile?.name || t('profileDrawer.unnamedProfile') }),
+    description: t('profileDrawer.exportProfileModsDesc'),
     sourceProfile: true,
     profileId,
-    profileName: profile?.name || '当前环境',
+    profileName: profile?.name || t('appStore.currentProfile'),
     scopeOptions,
     scopeOptionsLoading: !isCurrentProfile,
     export_scope: 'profile-effective',

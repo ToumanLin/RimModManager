@@ -15,6 +15,7 @@ import {vTooltip} from '../shared/directives/vTooltip.js'
 import { vSelectableList } from '../shared/directives/vSelection' // 引入指令
 import { imageViewerOptions } from '../shared/lib/domEffects'
 import { setupPywebviewBridge } from '../app/bridge/pywebviewBridge'
+import { i18n, setupDomLocalization } from './i18n'
 
 await setupPywebviewBridge()
 
@@ -33,6 +34,7 @@ app.use(VueViewer, {
 })
 app.use(Toast, options);
 app.use(pinia) 
+app.use(i18n)
 
 
 
@@ -41,3 +43,4 @@ app.directive('tooltip', vTooltip) // 注册 Tooltip 指令
 app.directive('selectable-list', vSelectableList) // 注册列表项选择指令
 
 app.mount('#app')
+setupDomLocalization()

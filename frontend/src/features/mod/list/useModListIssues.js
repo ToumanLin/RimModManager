@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import { ISSUE_TITLE_MAP } from '../../../shared/lib/constants'
 import { Megaphone, MegaphoneOff, SearchAlert } from 'lucide-vue-next'
+import { t } from '../../../app/i18n'
 
 export function useModListIssues({
   props,
@@ -19,9 +20,9 @@ export function useModListIssues({
     const summary = issuesSummary.value // Store 返回的对象
     // console.log('问题摘要:', summary)
     if (summary.count === 0) return null
-    const errorInfo = summary.errorCount > 0 ? `!!${summary.errorCount} 个错误!!` : ''
-    const warningInfo = summary.warnCount > 0 ? `^^${summary.warnCount} 个警告^^` : ''
-    let text = `**发现 ${summary.count} 个问题Mod**（${errorInfo} ${warningInfo}）`
+    const errorInfo = summary.errorCount > 0 ? t('modListIssues.errorCountMarkup', { count: summary.errorCount }) : ''
+    const warningInfo = summary.warnCount > 0 ? t('modListIssues.warningCountMarkup', { count: summary.warnCount }) : ''
+    let text = t('modListIssues.summary', { count: summary.count, errorInfo, warningInfo })
     // 遍历 stats 对象生成详情
     // 格式:
     // !!缺失前置(10):!!
@@ -40,12 +41,12 @@ export function useModListIssues({
       })
       // 剩余数量提示
       if (ids.length > 3) {
-        text += `\n  __...及其他 ${ids.length - 3} 项__`
+        text += `\n  ${t('modListIssues.andMore', { count: ids.length - 3 })}`
       }
     }
-    text += isFilterByIssue.value ? '\n\n__[[(再次点击取消筛选)]]__' : '\n\n__[[(点击筛选查看全部问题项)]]__'
-    text += '\n__[[(可从^^右键菜单^^筛选单项问题)]]__'
-    text += appStore.settings.check_language_support ? '\n__(可在设置中关闭语言支持检查)__' : ''
+    text += isFilterByIssue.value ? `\n\n${t('modListIssues.clickCancelFilter')}` : `\n\n${t('modListIssues.clickFilterAll')}`
+    text += `\n${t('modListIssues.contextMenuHint')}`
+    text += appStore.settings.check_language_support ? `\n${t('modListIssues.languageSupportHint')}` : ''
     return text
   })
 
@@ -55,7 +56,7 @@ export function useModListIssues({
     if (invalidMods.length === 0) return
     await modStore.runListHistoryTransaction({
       type: 'batch-remove-list-items',
-      label: `移除 ${invalidMods.length} 个无效 Mod`,
+      label: t('modListIssues.removeInvalidTransaction', { count: invalidMods.length }),
       trackedModIds: invalidMods
     }, async () => {
       modStore.removeUnavailableIdsCompletely(invalidMods)
@@ -90,10 +91,10 @@ export function useModListIssues({
     // 如果并集不为空，显示“筛选...”子菜单
     if (uniqueIssueTypes.length > 0) {
       issueManagementItems.push({
-        label: props.modelValue.length > 1 ? `筛选单项问题 (${uniqueIssueTypes.length})...` : '筛选单项问题...',
+        label: props.modelValue.length > 1 ? t('modListIssues.filterIssuesCount', { count: uniqueIssueTypes.length }) : t('modListIssues.filterIssues'),
         icon: SearchAlert,
         children: uniqueIssueTypes.map(type => ({
-          label: `单独筛选：${ISSUE_TITLE_MAP[type] || type}`,
+          label: t('modListIssues.filterSingleIssue', { issue: ISSUE_TITLE_MAP[type] || type }),
           // 这里的 level 可以取该类型在所有 Mod 中的最高级别
           level: allSelectedIssues.find(i => i.type === type)?.level || 'warn',
           action: () => toggleIssueTypeFilter(type)
@@ -104,10 +105,10 @@ export function useModListIssues({
     if (uniqueIssueTypes.length > 0) {
       issueManagementItems.push({ divider: true })
       issueManagementItems.push({
-        label: props.modelValue.length > 1 ? `忽略所有问题 (${uniqueIssueTypes.length})...` : '忽略问题...',
+        label: props.modelValue.length > 1 ? t('modListIssues.ignoreIssuesCount', { count: uniqueIssueTypes.length }) : t('modListIssues.ignoreIssues'),
         icon: MegaphoneOff,
         children: uniqueIssueTypes.map(type => ({
-          label: `忽略：${ISSUE_TITLE_MAP[type] || type}`,
+          label: t('modListIssues.ignoreIssue', { issue: ISSUE_TITLE_MAP[type] || type }),
           // 这里的 level 可以取该类型在所有 Mod 中的最高级别
           level: allSelectedIssues.find(i => i.type === type)?.level || 'warn',
           action: () => modStore.batchIgnoreIssues(props.modelValue, type)
@@ -119,7 +120,7 @@ export function useModListIssues({
       // 如果之前没加 divider，补一个
       if (issueManagementItems.length === 0) issueManagementItems.push({ divider: true })
       issueManagementItems.push({
-        label: props.modelValue.length > 1 ? '恢复所有警告' : '恢复警告',
+        label: props.modelValue.length > 1 ? t('modListIssues.restoreAllWarnings') : t('modListIssues.restoreWarning'),
         icon: Megaphone,
         level: 'warn',
         action: () => modStore.batchIgnoreIssues(props.modelValue, null)

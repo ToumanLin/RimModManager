@@ -1,6 +1,6 @@
 <template>
   <div v-if="loading" class="flex h-full items-center justify-center text-sm text-text-dim">
-    正在读取文件...
+    {{ t('fileSearch.readingFile') }}
   </div>
 
   <div v-else-if="error" class="flex h-full items-center justify-center px-6 text-center text-sm text-accent-danger">
@@ -29,6 +29,9 @@ import { EditorSelection, RangeSetBuilder, StateEffect, StateField } from '@code
 import { Decoration, EditorView } from '@codemirror/view'
 import { getTailwindColorRgba } from '../../shared/lib/color'
 import { buildSearchRegExp, rememberSelectedText } from '../../shared/lib/text'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   filePath: {
@@ -73,7 +76,7 @@ const props = defineProps({
   },
   emptyText: {
     type: String,
-    default: '选择左侧文件或命中项后，这里显示只读文件内容。',
+    default: '',
   },
 })
 
@@ -81,6 +84,7 @@ const editorView = ref(null)
 const editorContent = ref('')
 
 const hasContent = computed(() => String(props.content || '').length > 0)
+const emptyText = computed(() => props.emptyText || t('fileSearch.previewEmpty'))
 const editorCssVars = computed(() => ({
   '--file-search-match-bg': getTailwindColorRgba('accent-highlight', 0.5),
   '--file-search-match-current-bg': getTailwindColorRgba('accent-highlight', 1),

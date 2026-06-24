@@ -7,6 +7,7 @@ import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 import { useMissingInstallStore } from '../supplement/missingInstallStore'
 import { useSupplementStore } from '../supplement/supplementStore'
 import { normalizeInstallSource, normalizePackageId, normalizePackageToken } from '../mod/lib/modIdentity'
+import { t } from '../../app/i18n'
 
 export const useOrderStore = defineStore('order', () => {
   const appStore = useAppStore()
@@ -172,7 +173,7 @@ export const useOrderStore = defineStore('order', () => {
     }
     return true
   }
-  const showDiskConflict = async (payload = {}, toastMessage = '检测到磁盘序列已变化，请先处理冲突。') => {
+  const showDiskConflict = async (payload = {}, toastMessage = t('loadOrder.diskOrderChanged')) => {
     const diskOrder = payload.disk_order || {}
     const editingIds = payload.editing_order?.active_ids || []
     await applyDiskOrder(diskOrder)
@@ -182,7 +183,7 @@ export const useOrderStore = defineStore('order', () => {
       file: 'conflict://unsaved',
       modify_time: Date.now(),
       format: 'conflict',
-      list_name: '未保存改动',
+      list_name: t('loadOrder.unsavedChanges'),
       source_profile_id: '',
       source_profile_name: '',
       workshop_ids: [],
@@ -209,7 +210,7 @@ export const useOrderStore = defineStore('order', () => {
       file: 'runtime://before-refresh',
       modify_time: snapshot?.captured_at || Date.now(),
       format: 'conflict',
-      list_name: snapshot?.is_dirty ? '刷新前未保存改动' : '刷新前工作序列',
+      list_name: snapshot?.is_dirty ? t('loadOrder.unsavedBeforeRefresh') : t('loadOrder.workOrderBeforeRefresh'),
       source_profile_id: '',
       source_profile_name: '',
       workshop_ids: [],
@@ -220,8 +221,8 @@ export const useOrderStore = defineStore('order', () => {
     appStore.uiState.showDiffDrawer = true
     toast.warning(
       snapshot?.is_dirty
-        ? '游戏退出后磁盘序列已刷新，未保存改动已转入差异对比。'
-        : '游戏退出后磁盘序列与管理器工作序列不同，已打开差异对比。',
+        ? t('loadOrder.diskRefreshedAfterGameExit')
+        : t('loadOrder.diskDiffAfterGameExit'),
       { timeout: 3600 }
     )
     return true
@@ -248,7 +249,7 @@ export const useOrderStore = defineStore('order', () => {
       // active_load_modify_time 保留兼容旧数据结构，优先兼容旧接口，缺失时回退到新字段。
       await modStore.runListHistoryTransaction({
         type: 'load-order',
-        label: '加载文件序列'
+        label: t('loadOrder.loadFileOrder')
       }, async () => {
         modStore.setListIds('active', order.active_ids || [])
         modStore.mergeInstallSourceHintsFromMods?.(order.mods || [], 'import')
@@ -263,7 +264,7 @@ export const useOrderStore = defineStore('order', () => {
         // 加载外部存档文件时解析未知项
         await modStore.fetchAndCacheGhostMods(modStore.activeIds)
       })
-      toast.success("Mod序列已加载")
+      toast.success(t('loadOrder.modOrderLoaded'))
       return true
     }
     return false
@@ -303,7 +304,7 @@ export const useOrderStore = defineStore('order', () => {
     if (!order) return null
 
     if ((order.warnings || []).length > 0) {
-      toast.info(`导入完成，但有 ${order.warnings.length} 条提示`, { timeout: 1800 })
+      toast.info(t('loadOrder.importCompletedWithWarnings', { count: order.warnings.length }), { timeout: 1800 })
     }
     const entry = registerTempImport(buildCurrentBackupMeta())
     return activateTempImportEntry(entry)
@@ -315,7 +316,7 @@ export const useOrderStore = defineStore('order', () => {
     if (!backupIds.value) return false
     await modStore.runListHistoryTransaction({
       type: 'apply-backup',
-      label: '应用文件序列'
+      label: t('loadOrder.applyFileOrder')
     }, async () => {
       modStore.setListIds('active', backupIds.value)
       modStore.mergeInstallSourceHintsFromMods?.(backupMods.value || [], 'import')
@@ -323,7 +324,7 @@ export const useOrderStore = defineStore('order', () => {
       // 加载外部存档文件时解析未知项
       await modStore.fetchAndCacheGhostMods(modStore.activeIds)
     })
-    toast.success("已应用Mod序列")
+    toast.success(t('loadOrder.modOrderApplied'))
     return true
   }
   // 保存停用列表顺序
@@ -341,7 +342,7 @@ export const useOrderStore = defineStore('order', () => {
       const cleanInactive = finalInactive.filter(id => !activeSet.has(normalizePackageId(id)))
       const cleanTemp = finalTemp.filter(id => !activeSet.has(normalizePackageId(id)))
       const res = await window.pywebview.api.load_order_inactive_save(cleanInactive, cleanTemp)
-      if (checkResult(res, "保存停用列表顺序")) {
+      if (checkResult(res, t('loadOrder.saveInactiveOrder'))) {
         modStore.savedInactiveIds = [...cleanInactive] || []
         modStore.savedTempIds = [...cleanTemp] || []
         return true
@@ -352,7 +353,7 @@ export const useOrderStore = defineStore('order', () => {
     return false
   }
   // 保存Mod加载顺序
-  const saveLoadOrder = async ({ actionLabel = '保存' } = {}) => {
+  const saveLoadOrder = async ({ actionLabel = t('common.save') } = {}) => {
     const modStore = useModStore()
     // if (!modStore.isDirty) {
     //   setTimeout(() => {
@@ -381,9 +382,9 @@ export const useOrderStore = defineStore('order', () => {
         modStore.activeLoadVersionToken || {}
       )
       if (res?.status === 'warning' && res?.data?.status === 'conflict') {
-        return await showDiskConflict(res.data, '磁盘加载顺序已被外部修改，未执行保存。')
+        return await showDiskConflict(res.data, t('loadOrder.diskModifiedSaveSkipped'))
       }
-      if (checkResult(res, "保存Mod加载顺序", true)) {
+      if (checkResult(res, t('loadOrder.saveModLoadOrder'), true)) {
         modStore.setActiveLoadBaseline(
           res.data?.active_ids || modStore.activeIds,
           res.data?.modify_time || Date.now(),
@@ -410,7 +411,7 @@ export const useOrderStore = defineStore('order', () => {
       if (!resolvedPath && trigger_dialog) {
         const pickRes = await window.pywebview.api.load_order_export_pick_path(export_format)
         if (pickRes?.status === 'warning') return false
-        if (!checkResult(pickRes, "选择导出路径")) return false
+        if (!checkResult(pickRes, t('loadOrder.chooseExportPath'))) return false
         resolvedPath = pickRes.data?.path || ''
         rememberDialogDir = !!resolvedPath
         trigger_dialog = false
@@ -424,14 +425,14 @@ export const useOrderStore = defineStore('order', () => {
         list_name,
         rememberDialogDir
       )
-      if (checkResult(res, "导出Mod加载顺序")) {
+      if (checkResult(res, t('loadOrder.exportModLoadOrder'))) {
         // console.log("导出加载顺序成功:", res)
-        toast.success("Mod序列已导出")
+        toast.success(t('loadOrder.modOrderExported'))
         return true
       }
     } catch (e) {
-      console.error("导出Mod序列异常:", e)
-      toast.error(`导出Mod序列异常: \n${e.message}`)
+      console.error('Export mod order failed:', e)
+      toast.error(t('loadOrder.exportModOrderError', { message: e.message }))
     }
     return false
   }
@@ -439,7 +440,7 @@ export const useOrderStore = defineStore('order', () => {
     if (!window.pywebview || !path) return false
     const pickRes = await window.pywebview.api.backup_file_save_as_pick_dir()
     if (pickRes?.status === 'warning') return false
-    if (!checkResult(pickRes, '选择保存目录')) return false
+    if (!checkResult(pickRes, t('loadOrder.chooseSaveDirectory'))) return false
     const targetDir = pickRes.data?.path || ''
     if (!targetDir) return false
 
@@ -448,8 +449,8 @@ export const useOrderStore = defineStore('order', () => {
       targetDir,
       profile_id || backupProfileId.value || null
     )
-    if (checkResult(res, '另存备份')) {
-      toast.success(`备份已另存为: \n${res.data?.path || targetDir}`)
+    if (checkResult(res, t('loadOrder.saveBackupAs'))) {
+      toast.success(t('loadOrder.backupSavedAs', { path: res.data?.path || targetDir }))
       return true
     }
     return false
@@ -461,15 +462,15 @@ export const useOrderStore = defineStore('order', () => {
       new_name,
       profile_id || backupProfileId.value || null
     )
-    if (checkResult(res, '重命名备份')) {
+    if (checkResult(res, t('loadOrder.renameBackup'))) {
       const data = res.data || {}
       if (data.sanitized) {
-        toast.warning('文件名中的特殊字符已替换为下划线')
+        toast.warning(t('loadOrder.filenameSanitized'))
       }
       if (currentBackupFile.value === path && data.path) {
         currentBackupFile.value = data.path
       }
-      toast.success('备份已重命名')
+      toast.success(t('loadOrder.backupRenamed'))
       return data
     }
     return null
@@ -505,36 +506,36 @@ export const useOrderStore = defineStore('order', () => {
   const exportLoadOrderShareCode = async (list_name = null) => {
     if (!window.pywebview) return ''
     if (!modStore.activeIds || modStore.activeIds.length === 0) {
-      toast.warning('当前没有可分享的启用序列')
+      toast.warning(t('loadOrder.noShareableActiveOrder'))
       return ''
     }
     try {
       const res = await window.pywebview.api.load_order_share_export(modStore.activeIds, list_name)
-      if (!checkResult(res, '生成分享码')) return ''
+      if (!checkResult(res, t('loadOrder.generateShareCode'))) return ''
 
       const shareCode = res.data?.share_code || ''
       if (!shareCode) {
-        toast.error('后端没有返回有效的分享码')
+        toast.error(t('loadOrder.invalidShareCodeFromBackend'))
         return ''
       }
 
       const copied = await copyTextToClipboard(shareCode)
       await confirmStore.open({
-        title: copied ? '分享码已复制' : '分享码已生成',
+        title: copied ? t('loadOrder.shareCodeCopied') : t('loadOrder.shareCodeGenerated'),
         message: copied
-          ? `已生成 ${res.data?.count || modStore.activeIds.length} 个模组的分享码，并已复制到剪贴板。`
-          : '自动复制失败，请手动复制下面的分享码。',
+          ? t('loadOrder.shareCodeCopiedMessage', { count: res.data?.count || modStore.activeIds.length })
+          : t('loadOrder.shareCodeCopyFailed'),
         mode: 'prompt',
         type: copied ? 'success' : 'warning',
         inputValue: shareCode,
         placeholder: 'RMM1-...',
-        confirmText: '关闭',
-        cancelText: '取消',
+        confirmText: t('common.close'),
+        cancelText: t('common.cancel'),
       })
       return shareCode
     } catch (e) {
-      console.error('生成分享码异常:', e)
-      toast.error(`生成分享码异常: \n${e.message}`)
+      console.error('Generate share code failed:', e)
+      toast.error(t('loadOrder.generateShareCodeError', { message: e.message }))
     }
     return ''
   }
@@ -545,8 +546,8 @@ export const useOrderStore = defineStore('order', () => {
       await window.pywebview.api.load_order_file_open(mods_config_file_path, source_profile_id || null) :
       await window.pywebview.api.load_order_get()
 
-    if (checkResult(res, "打开加载顺序")) {
-      console.log("打开加载顺序:", res)
+    if (checkResult(res, t('loadOrder.openLoadOrder'))) {
+      console.log('Open load order:', res)
       return res.data
     }
   }
@@ -563,11 +564,11 @@ export const useOrderStore = defineStore('order', () => {
       },
       source_profile_id || null
     )
-    if (checkResult(res, '导入加载顺序')) {
+    if (checkResult(res, t('loadOrder.importLoadOrder'))) {
       const order = res.data || {}
       setBackupOrder(order, order.file || normalizedName)
       if ((order.warnings || []).length > 0) {
-        toast.info(`导入完成，但有 ${order.warnings.length} 条提示`, { timeout: 1800 })
+        toast.info(t('loadOrder.importCompletedWithWarnings', { count: order.warnings.length }), { timeout: 1800 })
       }
       const entry = registerTempImport(buildCurrentBackupMeta())
       return activateTempImportEntry(entry)
@@ -577,17 +578,17 @@ export const useOrderStore = defineStore('order', () => {
   const importShareCode = async (shareCode, source_profile_id='') => {
     const normalizedCode = String(shareCode || '').trim()
     if (!normalizedCode) {
-      toast.warning('分享码不能为空')
+      toast.warning(t('loadOrder.shareCodeRequired'))
       return null
     }
     if (!window.pywebview) return null
 
     const res = await window.pywebview.api.load_order_share_import(normalizedCode, source_profile_id || null)
-    if (checkResult(res, '导入分享码')) {
+    if (checkResult(res, t('loadOrder.importShareCode'))) {
       const order = res.data || {}
       setBackupOrder(order, order.file || order.share_code_ref || '')
       if ((order.warnings || []).length > 0) {
-        toast.info(`导入完成，但有 ${order.warnings.length} 条提示`, { timeout: 1800 })
+        toast.info(t('loadOrder.importCompletedWithWarnings', { count: order.warnings.length }), { timeout: 1800 })
       }
       const entry = registerTempImport(buildCurrentBackupMeta())
       return activateTempImportEntry(entry)
@@ -596,19 +597,19 @@ export const useOrderStore = defineStore('order', () => {
   }
   const promptImportShareCode = async (source_profile_id='') => {
     const shareCode = await confirmStore.open({
-      title: '导入分享码',
-      message: '请粘贴 RMM1 开头的分享码，解析后会进入差异对比视图。',
+      title: t('loadOrder.importShareCode'),
+      message: t('loadOrder.importShareCodeMessage'),
       mode: 'prompt',
       type: 'info',
       placeholder: 'RMM1-...',
-      confirmText: '导入',
-      cancelText: '取消',
+      confirmText: t('common.import'),
+      cancelText: t('common.cancel'),
     })
     if (!shareCode) return null
 
     const order = await importShareCode(shareCode, source_profile_id)
     if (order) {
-      toast.success('分享码已导入')
+      toast.success(t('loadOrder.shareCodeImported'))
     }
     return order
   }
@@ -624,18 +625,18 @@ export const useOrderStore = defineStore('order', () => {
 
     if ((items || []).length > 0 && (importableIds || []).length === 0) {
       await confirmStore.open({
-        title: '无法直接导入',
-        message: `该文件包含 ${workshopOnlyItems.length} 个纯 WorkshopID 条目。\n游戏加载序列只识别包名，这些条目会被自动剔除。\n剔除后当前没有可导入的包名项，请先在对比列表里处理订阅/下载。`,
+        title: t('loadOrder.cannotImportDirectly'),
+        message: t('loadOrder.workshopOnlyCannotImport', { count: workshopOnlyItems.length }),
         mode: 'alert',
         type: 'warning',
-        confirmText: '知道了',
+        confirmText: t('common.gotIt'),
       })
       return false
     }
 
     return await confirmStore.open({
-      title: '导入提示',
-      message: `该文件包含 ${workshopOnlyItems.length} 个纯 WorkshopID 条目。\n这些条目只会用于对比和订阅/下载提示，不会写入游戏加载序列。\n继续时将自动剔除它们，是否继续？`,
+      title: t('loadOrder.importNotice'),
+      message: t('loadOrder.workshopOnlyImportNotice', { count: workshopOnlyItems.length }),
       mode: 'confirm',
       type: 'warning',
     })
@@ -670,7 +671,7 @@ export const useOrderStore = defineStore('order', () => {
     const sources = collectImportCheckSources(items)
     const hasWorkshopSource = sources.some(source => source.kind === 'workshop')
     if (!hasWorkshopSource) {
-      toast.info("当前筛选结果中没有可订阅的工坊项目")
+      toast.info(t('loadOrder.noSubscribableWorkshopItems'))
       return false
     }
     return await appStore.subscribeInstallSources(sources)
@@ -679,7 +680,7 @@ export const useOrderStore = defineStore('order', () => {
     const items = takeImportCheckItems(statuses, rowKeys).filter(item => !item.installed_via_replacement)
     const sources = collectImportCheckSources(items)
     if (sources.length === 0) {
-      toast.info("当前筛选结果中没有可下载的目标来源")
+      toast.info(t('loadOrder.noDownloadableSources'))
       return false
     }
     return await appStore.downloadInstallSources(sources)
@@ -728,7 +729,7 @@ export const useOrderStore = defineStore('order', () => {
       summary: _rebuildImportCheckSummary(nextItems),
       items: nextItems,
     }
-    toast.success(`已移除 ${items.length} 个导入项`)
+    toast.success(t('loadOrder.importItemsRemoved', { count: items.length }))
     return true
   }
   // 打开备份目录
@@ -739,7 +740,7 @@ export const useOrderStore = defineStore('order', () => {
   const getBackups = async (profile_id=null) => {
     if(!window.pywebview) return
     const res = await window.pywebview.api.backups_get_all(profile_id)
-    if (checkResult(res, "获取备份文件")) {
+    if (checkResult(res, t('loadOrder.fetchBackupFiles'))) {
       const payload = res.data || {}
       const files = {
         today: payload.today || [],
@@ -756,7 +757,7 @@ export const useOrderStore = defineStore('order', () => {
       } else if (!backupProfileId.value) {
         setBackupProfile(appStore.settings.current_profile_id || 'default')
       }
-      console.log("获取备份文件:", backups.value)
+      console.log('Fetched backup files:', backups.value)
       return payload
     }
   }

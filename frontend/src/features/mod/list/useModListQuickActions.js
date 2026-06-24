@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue'
+import { t } from '../../../app/i18n'
 
 const EMPTY_MISSING_INSTALL_SUMMARY = {
   dangerTotal: 0,
@@ -39,21 +40,21 @@ export function useModListQuickActions({
 
   const missingInstallTooltip = computed(() => {
     if ((missingInstallSummary.value.dangerTotal || 0) + (missingInstallSummary.value.warnTotal || 0) + (missingInstallSummary.value.unknownTotal || 0) === 0) {
-      return '当前没有可处理的安装项'
+      return t('modListQuickActions.noMissingInstallItems')
     }
     const lines = []
     if (missingInstallSummary.value.dangerTotal > 0) {
-      lines.push(`!!需处理 ${missingInstallSummary.value.dangerTotal} 项!!`)
+      lines.push(t('modListQuickActions.dangerCountMarkup', { count: missingInstallSummary.value.dangerTotal }))
     } else if (missingInstallSummary.value.unknownTotal > 0) {
-      lines.push(`!!未知来源 ${missingInstallSummary.value.unknownTotal} 项!!`)
+      lines.push(t('modListQuickActions.unknownCountMarkup', { count: missingInstallSummary.value.unknownTotal }))
     } else if (missingInstallSummary.value.warnTotal > 0) {
-      lines.push(`^^建议处理 ${missingInstallSummary.value.warnTotal} 项^^`)
+      lines.push(t('modListQuickActions.warnCountMarkup', { count: missingInstallSummary.value.warnTotal }))
     }
-    if (missingInstallSummary.value.dangerTotal > 0) lines.push(`• 必要处理: ${missingInstallSummary.value.dangerTotal}`)
-    if (missingInstallSummary.value.warnTotal > 0) lines.push(`• 警告项: ${missingInstallSummary.value.warnTotal}`)
-    if (missingInstallSummary.value.unknownTotal > 0) lines.push(`• 未知来源: ${missingInstallSummary.value.unknownTotal}`)
+    if (missingInstallSummary.value.dangerTotal > 0) lines.push(t('modListQuickActions.requiredLine', { count: missingInstallSummary.value.dangerTotal }))
+    if (missingInstallSummary.value.warnTotal > 0) lines.push(t('modListQuickActions.warningLine', { count: missingInstallSummary.value.warnTotal }))
+    if (missingInstallSummary.value.unknownTotal > 0) lines.push(t('modListQuickActions.unknownLine', { count: missingInstallSummary.value.unknownTotal }))
     lines.push('')
-    lines.push('__[[(点击打开安装处理窗口)]]__')
+    lines.push(t('modListQuickActions.openMissingInstallDialog'))
     return lines.join('\n')
   })
 
@@ -86,23 +87,23 @@ export function useModListQuickActions({
   })
 
   const supplementTooltip = computed(() => {
-    if (supplementSummary.value.visibleCount === 0) return '当前没有可补齐的未启用模组'
+    if (supplementSummary.value.visibleCount === 0) return t('modListQuickActions.noSupplementItems')
     const groupLines = supplementSummary.value.groups
       .filter(group => group.severity !== 'info')
-      .map(group => `• ${group.title}: ${group.count} 项`)
+      .map(group => t('modListQuickActions.groupLine', { title: group.title, count: group.count }))
       .join('\n')
     const lines = []
     if (supplementSummary.value.dangerCount > 0) {
-      lines.push(`!!需处理 ${supplementSummary.value.dangerCount} 项!!`)
+      lines.push(t('modListQuickActions.dangerCountMarkup', { count: supplementSummary.value.dangerCount }))
     } else if (supplementSummary.value.warnCount > 0) {
-      lines.push(`^^建议处理 ${supplementSummary.value.warnCount} 项^^`)
+      lines.push(t('modListQuickActions.warnCountMarkup', { count: supplementSummary.value.warnCount }))
     }
-    lines.push(`发现 ${supplementSummary.value.visibleCount} 项可补齐内容`)
-    if (supplementSummary.value.dangerCount > 0) lines.push(`• 必要项: ${supplementSummary.value.dangerCount}`)
-    if (supplementSummary.value.warnCount > 0) lines.push(`• 建议项: ${supplementSummary.value.warnCount}`)
+    lines.push(t('modListQuickActions.supplementFound', { count: supplementSummary.value.visibleCount }))
+    if (supplementSummary.value.dangerCount > 0) lines.push(t('modListQuickActions.requiredSupplementLine', { count: supplementSummary.value.dangerCount }))
+    if (supplementSummary.value.warnCount > 0) lines.push(t('modListQuickActions.suggestedSupplementLine', { count: supplementSummary.value.warnCount }))
     if (groupLines) lines.push(groupLines)
     lines.push('')
-    lines.push('__[[(点击打开补齐窗口)]]__')
+    lines.push(t('modListQuickActions.openSupplementDialog'))
     return lines.join('\n')
   })
 
@@ -118,7 +119,7 @@ export function useModListQuickActions({
     if (props.listId !== 'active') return
     await supplementStore.openForActiveList({
       activeIds: props.modelValue,
-      message: '选择要启用的模组。',
+      message: t('modListQuickActions.selectModsToEnable'),
     })
   }
 

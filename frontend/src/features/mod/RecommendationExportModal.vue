@@ -1,31 +1,31 @@
 <template>
   <CommonModalShell :show="show" size="compact" accent="special" panel-class="border-accent-special/20"
-    content-class="min-h-0 flex flex-col" :title="title"
-    :description="`导出「${sourceName}」中的 ${exportMods.length} 个模组介绍。`"
+    content-class="min-h-0 flex flex-col" :title="modalTitle"
+    :description="t('recommendationExport.description', { source: displaySourceName, count: exportMods.length })"
     @close="emit('close')">
     <div class="flex-1 overflow-y-auto px-5 py-4 custom-scrollbar">
       <div class="grid grid-cols-2 gap-3">
-        <CommonInput class="col-span-2" label="导出名称" v-model="form.exportName" placeholder="例如：RimWorld 必备模组推荐" />
-        <CommonSelect label="导出格式" v-model="form.format" :options="formatOptions" />
-        <CommonSelect label="介绍内容" v-model="form.bodySource" :options="bodySourceOptions" />
-        <CommonSelect v-if="form.format === 'image'" label="图片文件名" v-model="form.imageNameSource" :options="imageNameOptions" />
+        <CommonInput class="col-span-2" :label="t('recommendationExport.exportName')" v-model="form.exportName" :placeholder="t('recommendationExport.exportNamePlaceholder')" />
+        <CommonSelect :label="t('recommendationExport.format')" v-model="form.format" :options="formatOptions" />
+        <CommonSelect :label="t('recommendationExport.bodySource')" v-model="form.bodySource" :options="bodySourceOptions" />
+        <CommonSelect v-if="form.format === 'image'" :label="t('recommendationExport.imageNameSource')" v-model="form.imageNameSource" :options="imageNameOptions" />
       </div>
 
       <div class="mt-4 grid grid-cols-2 gap-2">
-        <CommonSwitch label="序号" v-model="form.includeSequence" description="在每个模组前显示 001、002 这类序号。" />
-        <CommonSwitch label="封面图" v-model="form.includeCover" :description="coverDescription" />
-        <CommonSwitch label="标签" v-model="form.includeTags" description="导出为 #tag1 #tag2 形式。" />
-        <CommonSwitch label="分组" v-model="form.includeGroupNames" description="导出该模组所属分组名称。" />
-        <CommonSwitch label="作者" v-model="form.includeAuthors" description="导出模组作者名称。" />
-        <CommonSwitch label="工坊 ID" v-model="form.includeWorkshopId" description="导出 Steam 创意工坊 ID。" />
-        <CommonSwitch label="网址" v-model="form.includeUrl" description="导出模组来源网址。" />
-        <CommonSwitch label="包名" v-model="form.includePackageId" description="默认隐藏，适合需要精确定位时开启。" />
+        <CommonSwitch :label="t('recommendationExport.sequence')" v-model="form.includeSequence" :description="t('recommendationExport.sequenceDesc')" />
+        <CommonSwitch :label="t('recommendationExport.cover')" v-model="form.includeCover" :description="coverDescription" />
+        <CommonSwitch :label="t('recommendationExport.tags')" v-model="form.includeTags" :description="t('recommendationExport.tagsDesc')" />
+        <CommonSwitch :label="t('recommendationExport.groups')" v-model="form.includeGroupNames" :description="t('recommendationExport.groupsDesc')" />
+        <CommonSwitch :label="t('recommendationExport.authors')" v-model="form.includeAuthors" :description="t('recommendationExport.authorsDesc')" />
+        <CommonSwitch :label="t('recommendationExport.workshopId')" v-model="form.includeWorkshopId" :description="t('recommendationExport.workshopIdDesc')" />
+        <CommonSwitch :label="t('recommendationExport.url')" v-model="form.includeUrl" :description="t('recommendationExport.urlDesc')" />
+        <CommonSwitch :label="t('recommendationExport.packageId')" v-model="form.includePackageId" :description="t('recommendationExport.packageIdDesc')" />
       </div>
 
       <div class="mt-4 rounded-lg border border-border-base/10 bg-bg-inset/45 px-3 py-2">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-xs font-bold text-text-dim uppercase tracking-wider">预览</span>
-          <span class="text-xs text-text-dim">{{ exportMods.length }} 个模组</span>
+          <span class="text-xs font-bold text-text-dim uppercase tracking-wider">{{ t('recommendationExport.preview') }}</span>
+          <span class="text-xs text-text-dim">{{ t('recommendationExport.modCount', { count: exportMods.length }) }}</span>
         </div>
         <pre class="mt-2 max-h-44 overflow-auto whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-text-soft custom-scrollbar">{{ previewText }}</pre>
       </div>
@@ -34,11 +34,13 @@
     <template #footer>
       <div class="flex items-center justify-between gap-4">
         <p class="min-w-0 text-xs leading-relaxed text-text-dim">
-          Markdown 会在导出目录内创建 <span class="font-bold text-accent-special">img</span> 文件夹；纯图片会按导出名称新建文件夹，每个模组一张图。
+          <i18n-t keypath="recommendationExport.footerHint" tag="span">
+            <template #img><span class="font-bold text-accent-special">img</span></template>
+          </i18n-t>
         </p>
         <button @click="handleExport" :disabled="isExporting || exportMods.length === 0"
           class="shrink-0 rounded-xl bg-accent-special px-5 py-2 text-sm font-black text-on-accent-special transition-all hover:bg-accent-special/85 disabled:cursor-not-allowed disabled:opacity-50">
-          {{ isExporting ? '导出中...' : '开始导出' }}
+          {{ isExporting ? t('recommendationExport.exporting') : t('recommendationExport.startExport') }}
         </button>
       </div>
     </template>
@@ -47,6 +49,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import CommonModalShell from '../../shared/components/modal/CommonModalShell.vue'
 import CommonInput from '../../shared/components/input/CommonInput.vue'
 import CommonSelect from '../../shared/components/input/CommonSelect.vue'
@@ -59,8 +62,8 @@ import { useModStore } from './stores/modStore'
 
 const props = defineProps({
   show: Boolean,
-  title: { type: String, default: '推荐导出' },
-  sourceName: { type: String, default: '已选模组' },
+  title: { type: String, default: '' },
+  sourceName: { type: String, default: '' },
   modIds: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['close'])
@@ -69,10 +72,11 @@ const appStore = useAppStore()
 const confirmStore = useConfirmStore()
 const groupStore = useGroupStore()
 const modStore = useModStore()
+const { t } = useI18n()
 
 const isExporting = ref(false)
 const form = reactive({
-  exportName: '模组推荐清单',
+  exportName: '',
   format: 'markdown',
   bodySource: 'notes',
   imageNameSource: 'alias',
@@ -86,22 +90,22 @@ const form = reactive({
   includeUrl: true,
 })
 
-const formatOptions = [
-  { value: 'clipboard', label: '复制纯文本' },
+const formatOptions = computed(() => [
+  { value: 'clipboard', label: t('recommendationExport.formats.clipboard') },
   { value: 'txt', label: 'TXT' },
   { value: 'markdown', label: 'Markdown' },
   { value: 'docx', label: 'DOCX' },
   { value: 'pdf', label: 'PDF' },
-  { value: 'image', label: '纯图片' },
-]
-const bodySourceOptions = [
-  { value: 'notes', label: '备注' },
-  { value: 'description', label: '原始描述' },
-]
-const imageNameOptions = [
-  { value: 'alias', label: '别名' },
-  { value: 'original', label: '原名' },
-]
+  { value: 'image', label: t('recommendationExport.formats.image') },
+])
+const bodySourceOptions = computed(() => [
+  { value: 'notes', label: t('recommendationExport.bodySources.notes') },
+  { value: 'description', label: t('recommendationExport.bodySources.description') },
+])
+const imageNameOptions = computed(() => [
+  { value: 'alias', label: t('recommendationExport.imageNames.alias') },
+  { value: 'original', label: t('recommendationExport.imageNames.original') },
+])
 
 // 弹窗打开时只接收 ID，模组内容实时从 store 取，避免导出前编辑别名/备注后仍使用旧快照。
 const exportMods = computed(() => (
@@ -111,13 +115,15 @@ const exportMods = computed(() => (
 ))
 const defaultExportName = computed(() => {
   const sourceName = String(props.sourceName || '').trim()
-  return sourceName && sourceName !== '已选模组' ? `${sourceName}推荐清单` : '模组推荐清单'
+  return sourceName && sourceName !== t('recommendationExport.selectedMods') ? t('recommendationExport.sourceExportName', { source: sourceName }) : t('recommendationExport.defaultExportName')
 })
+const modalTitle = computed(() => String(props.title || '').trim() || t('recommendationExport.title'))
+const displaySourceName = computed(() => String(props.sourceName || '').trim() || t('recommendationExport.selectedMods'))
 const exportName = computed(() => String(form.exportName || '').trim() || defaultExportName.value)
 const coverDescription = computed(() => (
   ['clipboard', 'txt'].includes(form.format)
-    ? '纯文本和 TXT 不包含图片。'
-    : 'Markdown 会复制图片，DOCX/PDF/纯图片会嵌入封面。'
+    ? t('recommendationExport.coverPlainTextDesc')
+    : t('recommendationExport.coverRichDesc')
 ))
 
 const normalizeTextList = (values) => {
@@ -167,29 +173,29 @@ const buildPayload = () => ({
 
 const previewText = computed(() => {
   const mod = exportMods.value[0]
-  if (!mod) return '当前没有可导出的模组。'
+  if (!mod) return t('recommendationExport.noExportableMods')
   // 预览只展示第一个模组，用来确认字段顺序和开关效果，不渲染完整清单以免弹窗过重。
   const lines = []
   const name = modStore.displayModName(mod)
-  const originalName = mod.name || mod.package_id || '未知模组'
+  const originalName = mod.name || mod.package_id || t('recommendationExport.unknownMod')
   const titleOnlyFormat = ['markdown', 'docx', 'pdf', 'image'].includes(form.format)
   if (form.includeSequence || titleOnlyFormat) {
     lines.push(`${form.includeSequence ? '001. ' : ''}${name}`)
   } else {
-    lines.push(`名称：${name}`)
+    lines.push(t('recommendationExport.previewName', { name }))
   }
   if (mod.alias_name && mod.alias_name !== originalName) {
-    lines.push(`原名：${originalName}`)
+    lines.push(t('recommendationExport.previewOriginalName', { name: originalName }))
   }
   if (form.includeTags && mod.tags?.length) lines.push(mod.tags.map(tag => `#${tag}`).join(' '))
   const groupNames = takeGroupNamesByMod(mod)
-  if (form.includeGroupNames && groupNames.length) lines.push(`分组：${groupNames.join('、')}`)
+  if (form.includeGroupNames && groupNames.length) lines.push(t('recommendationExport.previewGroups', { groups: groupNames.join(t('recommendationExport.listSeparator')) }))
   const authors = normalizeTextList(mod.author || [])
-  if (form.includeAuthors && authors.length) lines.push(`作者：${authors.join('、')}`)
-  lines.push(`介绍：${form.bodySource === 'description' ? (mod.description || '暂无介绍') : (mod.notes || '暂无介绍')}`)
-  if (form.includePackageId) lines.push(`包名：${mod.package_id_raw || mod.package_id}`)
-  if (form.includeWorkshopId && mod.workshop_id) lines.push(`工坊ID：${mod.workshop_id}`)
-  if (form.includeUrl && mod.url) lines.push(`网址：${mod.url}`)
+  if (form.includeAuthors && authors.length) lines.push(t('recommendationExport.previewAuthors', { authors: authors.join(t('recommendationExport.listSeparator')) }))
+  lines.push(t('recommendationExport.previewIntro', { text: form.bodySource === 'description' ? (mod.description || t('recommendationExport.noIntro')) : (mod.notes || t('recommendationExport.noIntro')) }))
+  if (form.includePackageId) lines.push(t('recommendationExport.previewPackageId', { id: mod.package_id_raw || mod.package_id }))
+  if (form.includeWorkshopId && mod.workshop_id) lines.push(t('recommendationExport.previewWorkshopId', { id: mod.workshop_id }))
+  if (form.includeUrl && mod.url) lines.push(t('recommendationExport.previewUrl', { url: mod.url }))
   return lines.join('\n')
 })
 
@@ -201,30 +207,30 @@ const copyTextToClipboard = async (text) => {
     await navigator.clipboard.writeText(value)
     return true
   } catch (error) {
-    console.warn('推荐文本复制失败:', error)
+    console.warn(t('recommendationExport.copyFailedLog'), error)
     return false
   }
 }
 
 const showExportComplete = async (result) => {
   if (form.format === 'clipboard') {
-    toast.success('推荐文本已复制到剪贴板')
+    toast.success(t('recommendationExport.copied'))
     return
   }
   const targetPath = result?.path || ''
   if (!targetPath) {
     // 目录型导出可能只返回目录或文件列表，这里保留一个兜底完成提示。
-    toast.success('推荐导出完成')
+    toast.success(t('recommendationExport.completed'))
     return
   }
   const action = await confirmStore.confirmAction(
-    '推荐导出完成',
-    `导出路径：${targetPath}`,
+    t('recommendationExport.completed'),
+    t('recommendationExport.exportPath', { path: targetPath }),
     {
       type: 'success',
       actionButtons: [
-        { label: '打开导出目录', value: 'open', kind: 'primary' },
-        { label: '关闭', value: 'close', kind: 'secondary' },
+        { label: t('recommendationExport.openExportFolder'), value: 'open', kind: 'primary' },
+        { label: t('loadOrderDiff.close'), value: 'close', kind: 'secondary' },
       ],
     }
   )
@@ -238,12 +244,12 @@ const handleExport = async () => {
   isExporting.value = true
   try {
     const res = await window.pywebview.api.recommendation_export(buildPayload())
-    if (!checkResult(res, '推荐导出', form.format !== 'clipboard')) return
+    if (!checkResult(res, t('recommendationExport.operation'), form.format !== 'clipboard')) return
     if (form.format === 'clipboard') {
       // 剪贴板导出没有文件路径，必须等后端生成文本后再写入系统剪贴板。
       const copied = await copyTextToClipboard(res.data?.text || '')
       if (!copied) {
-        toast.error('复制失败，可能是浏览器权限限制')
+        toast.error(t('recommendationExport.copyFailed'))
         return
       }
     }

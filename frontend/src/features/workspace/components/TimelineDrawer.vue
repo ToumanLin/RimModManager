@@ -93,7 +93,7 @@ watch(() => props.isOpen, (val) => {
 })
 
 const formatDate = (ts) => {
-  return new Date(ts).toLocaleString('zh-CN', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return new Date(ts).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 // 监听点击外侧事件
 onClickOutside(drawerRef, (event) => {

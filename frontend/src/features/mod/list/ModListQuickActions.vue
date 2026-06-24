@@ -17,7 +17,7 @@
     </button>
     <button v-if="invalidModsToRemove.length > 0"
       @click="removeInvalidMod"
-      v-tooltip="`^^一键移除共计 ${invalidModsToRemove.length} 个无效Mod^^`"
+      v-tooltip="t('modListQuickActions.removeInvalidTooltip', { count: invalidModsToRemove.length })"
       class="px-1 py-1 bg-accent-danger/80 text-text-disabled rounded-md hover:bg-accent-danger hover:text-text-main transition-all">
       <Trash2 />
     </button>
@@ -26,6 +26,9 @@
 
 <script setup>
 import { Download, Megaphone, Trash2 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps({
   listId: { type: String, required: true },

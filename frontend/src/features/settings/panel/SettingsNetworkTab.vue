@@ -1,45 +1,46 @@
 <template>
               <section class="animate-in fade-in slide-in-from-right-4">
-                <h3 class="text-lg font-bold text-text-main mb-6">网络协议与代理</h3>
+                <h3 class="text-lg font-bold text-text-main mb-6">{{ t('settings.network.title') }}</h3>
                 <div class="space-y-8">
                   <div class="modal-section space-y-6 p-4">
-                    <CommonSwitch label="启用代理服务" v-model="formData.network.proxy.enabled" :description="'启用代理服务，所有网络请求将通过代理服务器处理，部分外置数据下载、更新检查、简介图片加载、内部浏览器访问等功能可能需要该配置才能正常使用。\n\n也可以在软件外部自行配置全局网络环境。'" mini />
+                    <!-- 原文：启用代理服务 -->
+                    <CommonSwitch :label="t('settings.network.enableProxy')" v-model="formData.network.proxy.enabled" :description="t('settings.network.enableProxyDesc')" mini />
                     <div v-if="formData.network.proxy.enabled" class="grid grid-cols-6 gap-3 animate-in zoom-in-95">
-                      <CommonSelect class="col-span-2" label="协议" v-model="formData.network.proxy.type" :options="[{label:'HTTP', value:'http'},{label:'SOCKS5', value:'socks5'}]" />
-                      <CommonInput class="col-span-3" label="主机地址" v-model="formData.network.proxy.host" placeholder="127.0.0.1" />
-                      <CommonNumber class="col-span-1" label="端口" v-model="formData.network.proxy.port" :step="1" :min="1" :max="65535" />
-                      <CommonInput class="col-span-3" label="用户名" v-model="formData.network.proxy.username" />
-                      <CommonInput class="col-span-3" label="密码" v-model="formData.network.proxy.password" is-password />
+                      <CommonSelect class="col-span-2" :label="t('settings.network.protocol')" v-model="formData.network.proxy.type" :options="[{label:'HTTP', value:'http'},{label:'SOCKS5', value:'socks5'}]" />
+                      <CommonInput class="col-span-3" :label="t('settings.network.host')" v-model="formData.network.proxy.host" placeholder="127.0.0.1" />
+                      <CommonNumber class="col-span-1" :label="t('settings.network.port')" v-model="formData.network.proxy.port" :step="1" :min="1" :max="65535" />
+                      <CommonInput class="col-span-3" :label="t('settings.network.username')" v-model="formData.network.proxy.username" />
+                      <CommonInput class="col-span-3" :label="t('settings.network.password')" v-model="formData.network.proxy.password" is-password />
                       <div class="col-span-6">
-                        <CommonTagInput label="不走代理的域名" v-model="formData.network.proxy.bypass_list" />
+                        <CommonTagInput :label="t('settings.network.bypass')" v-model="formData.network.proxy.bypass_list" />
                       </div>
 
                       <div class="col-span-6 grid grid-cols-2 gap-3">
-                        <CommonSwitch label="是否为 SteamCMD 使用代理" v-model="formData.network.use_proxy_on_steamcmd" :description="'SteamCMD 是否使用代理服务器。\n\n如果启用，SteamCMD 下载、更新、安装等操作将通过代理服务器进行。'" />
-                        <CommonSwitch label="是否为 AI请求 使用代理" v-model="formData.network.use_proxy_on_ai" :description="'如果启用，AI 将通过代理服务器进行。已经是国内代理后的端口不用开此选项。'" />
+                        <CommonSwitch :label="t('settings.network.useSteamcmdProxy')" v-model="formData.network.use_proxy_on_steamcmd" :description="t('settings.network.useSteamcmdProxyDesc')" />
+                        <CommonSwitch :label="t('settings.network.useAiProxy')" v-model="formData.network.use_proxy_on_ai" :description="t('settings.network.useAiProxyDesc')" />
                       </div>
                     </div>
                   </div>
-                  <CommonKVEditor label="自定义 Hosts 映射" v-model="formData.network.hosts" />
-                  <CommonSwitch label="将自定义 Hosts 写入系统 hosts 文件" v-model="formData.network.write_to_system_hosts" description="注意：这将直接修改系统 hosts 文件，可能需要管理员权限。" />
+                  <CommonKVEditor :label="t('settings.network.customHosts')" v-model="formData.network.hosts" />
+                  <CommonSwitch :label="t('settings.network.writeHosts')" v-model="formData.network.write_to_system_hosts" :description="t('settings.network.writeHostsDesc')" />
                 
                   <div class="modal-section space-y-4 p-4">
-                    <CommonSwitch label="启用工坊增强信息" v-model="formData.enable_steam_enhanced_api" mini description="开启并填写 Key 后，工坊页会优先使用在线增强信息；没有 Key 或关闭此项时会自动使用本地缓存搜索。" />
+                    <CommonSwitch :label="t('settings.network.enhancedWorkshop')" v-model="formData.enable_steam_enhanced_api" mini :description="t('settings.network.enhancedWorkshopDesc')" />
                     <div class="flex items-end gap-2" :class="{'cursor-not-allowed opacity-50 pointer-events-none': !formData.enable_steam_enhanced_api}">
-                      <CommonInput class="flex-1" label="Steam Web API Key" v-model="formData.steam_web_api_key" is-password placeholder="填写后启用增强搜索" description="Key 只保存在本地配置。没有 Key 时会自动回到缓存搜索。" />
+                      <CommonInput class="flex-1" :label="t('settings.network.steamApiKey')" v-model="formData.steam_web_api_key" is-password :placeholder="t('settings.network.steamApiKeyPlaceholder')" :description="t('settings.network.steamApiKeyDesc')" />
                       <button @click="openUrlOnSteam('https://steamcommunity.com/dev/apikey')"
                         class="px-2 py-2 m-0.5 bg-bg-overlay/5 hover:bg-bg-overlay/10 border border-border-base/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
                         <span class="flex items-center gap-2">
-                          访问<p class="text-accent-cool">API Key</p>获取页面
+                          {{ t('settings.network.visit') }}<p class="text-accent-cool">{{ t('settings.network.apiKey') }}</p>{{ t('settings.network.page') }}
                         </span>
                       </button>
                     </div>
                     <div class="text-xs ">
                       <p class="mt-1 leading-relaxed text-text-dim">
-                        开启并填写 Key 后，会使用 Steam Web API 获取更完整的工坊搜索、合集搜索、作者作品和依赖关联信息。关闭时仍可使用本地缓存工坊数据库。
+                        {{ t('settings.network.steamWebApiDesc') }}
                       </p>
-                      <span class="text-accent-warn">注意！“API 密钥（API Key）相当于你的 Steam 账号后门钥匙”。可以读取账号公开数据/库存信息 以及 管理与监听交易报价。</span>
-                      <p>任何人一旦获取了此 Key，就可以在不触发 Steam 令牌的情况下，暗中取消玩家的真实交易，并替换为发给骗子的假交易。绝对不要将 API 密钥分享给任何人或任何未经验证的第三方网站。</p>
+                      <span class="text-accent-warn">{{ t('settings.network.steamWebApiWarning') }}</span>
+                      <p>{{ t('settings.network.steamWebApiDanger') }}</p>
                     </div>
                   </div>
 
@@ -54,10 +55,13 @@ import CommonNumber from '../../../shared/components/input/CommonNumber.vue'
 import CommonSelect from '../../../shared/components/input/CommonSelect.vue'
 import CommonTagInput from '../../../shared/components/input/CommonTagInput.vue'
 import CommonKVEditor from '../../../shared/components/input/CommonKVEditor.vue'
+import { useI18n } from 'vue-i18n'
 
 defineProps({
   formData: { type: Object, required: true },
 })
+
+const { t } = useI18n()
 
 const openUrlOnSteam = (url) => {
   window.open('steam://openurl/' + url, '_blank')

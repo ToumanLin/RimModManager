@@ -1,6 +1,7 @@
 import { toast, checkResult } from '../../../shared/lib/common'
 import { useConfirmStore } from '../../../shared/components/modal/confirmStore'
 import { usePromptQueueStore } from '../../../features/ai/promptQueueStore'
+import { t } from '../../i18n'
 
 export const useUpdateActions = ({
   updateState,
@@ -12,35 +13,35 @@ export const useUpdateActions = ({
   // 检查更新
   const checkUpdate = async (manual = true) => {
     updateState.isChecking = true
-    logMaintenanceCheck('api_start', { id: 'app-update', name: '软件更新', manual })
+    logMaintenanceCheck('api_start', { id: 'app-update', name: t('appUpdate.name'), manual })
     try {
       const res = await window.pywebview.api.update_check(manual)
-      if (checkResult(res, "检查更新")) {
+      if (checkResult(res, t('appUpdate.checkUpdate'))) {
         const info = res.data
-        logMaintenanceCheck('api_result', { id: 'app-update', name: '软件更新', manual, status: res.status, hasUpdate: !!info?.has_update, version: info?.version || '', localStatus: info?.local_status || '' })
+        logMaintenanceCheck('api_result', { id: 'app-update', name: t('appUpdate.name'), manual, status: res.status, hasUpdate: !!info?.has_update, version: info?.version || '', localStatus: info?.local_status || '' })
         if (info.has_update) {
           updateState.hasUpdate = true
           updateState.info = info
           const promptQueue = usePromptQueueStore()
           await promptQueue.enqueue({
             category: 'startup-app-update',
-            title: `发现新版本 v${info.version}`,
-            message: `来源: ${info.source_name || '未知'}。文件大小: ${info.file_size || '未知'}。`,
+            title: t('appUpdate.newVersionTitle', { version: info.version }),
+            message: t('appUpdate.newVersionMessage', { source: info.source_name || t('common.unknown'), size: info.file_size || t('common.unknown') }),
             type: 'success',
             priority: manual ? 20 : 50,
             items: [{
               id: info.version || 'app-update',
               title: `RimModManager v${info.version}`,
-              description: info.changelog || '发现可用更新。',
+              description: info.changelog || t('appUpdate.updateAvailable'),
               raw: info,
               actions: [
-                { id: 'update', label: '立即更新', kind: 'primary' },
-                { id: manual ? 'skip' : 'ignore', label: manual ? '以后再说' : '忽略此版本', kind: 'secondary' },
+                { id: 'update', label: t('appUpdate.updateNow'), kind: 'primary' },
+                { id: manual ? 'skip' : 'ignore', label: manual ? t('appUpdate.later') : t('appUpdate.ignoreVersion'), kind: 'secondary' },
               ],
             }],
             bulkActions: [
-              { id: 'update_all', label: '立即更新', kind: 'primary' },
-              { id: manual ? 'skip_all' : 'ignore_all', label: manual ? '以后再说' : '忽略此版本', kind: 'secondary' },
+              { id: 'update_all', label: t('appUpdate.updateNow'), kind: 'primary' },
+              { id: manual ? 'skip_all' : 'ignore_all', label: manual ? t('appUpdate.later') : t('appUpdate.ignoreVersion'), kind: 'secondary' },
             ],
             onItemAction: async (_item, actionId) => {
               if (actionId === 'update') {
@@ -58,13 +59,13 @@ export const useUpdateActions = ({
             },
           })
         } else if (manual) {
-          toast.success("当前已是最新版本")
+          toast.success(t('appUpdate.alreadyLatest'))
         }
       } else {
-        logMaintenanceCheck('api_result', { id: 'app-update', name: '软件更新', manual, status: res?.status || 'error', message: res?.message || '' }, 'warn')
+        logMaintenanceCheck('api_result', { id: 'app-update', name: t('appUpdate.name'), manual, status: res?.status || 'error', message: res?.message || '' }, 'warn')
       }
     } catch (error) {
-      logMaintenanceCheck('api_error', { id: 'app-update', name: '软件更新', manual, message: error?.message || String(error || '') }, 'error')
+      logMaintenanceCheck('api_error', { id: 'app-update', name: t('appUpdate.name'), manual, message: error?.message || String(error || '') }, 'error')
       throw error
     } finally {
       updateState.isChecking = false
@@ -81,7 +82,7 @@ export const useUpdateActions = ({
           upgradeContext.value.changelog = res.data
         }
       } catch (e) {
-          console.error("无法获取更新日志:", e)
+          console.error(t('appUpdate.changelogFetchFailed'), e)
       } finally {
           isLoading.value = false
       }
@@ -93,11 +94,11 @@ export const useUpdateActions = ({
   const _showInstallPrompt = async (data) => {
     const confirmStore = useConfirmStore()
     const ok = await confirmStore.confirmAction(
-      `确认安装更新？`,
-      `压缩包已经下载到：${data.path}\n是否继续安装更新？安装后将重启应用程序。`,
-      { confirmText: '确认安装', cancelText: '取消', type: 'warning' }
+      t('appUpdate.confirmInstallTitle'),
+      t('appUpdate.confirmInstallMessage', { path: data.path }),
+      { confirmText: t('appUpdate.confirmInstall'), cancelText: t('common.cancel'), type: 'warning' }
     )
-    if (!ok) return toast.info("用户取消安装")
+    if (!ok) return toast.info(t('appUpdate.installCancelled'))
     await _performUpdateAction()
   }
 
@@ -109,19 +110,19 @@ export const useUpdateActions = ({
     if (info.local_status === 'ready') {
       const confirmStore = useConfirmStore()
       const ok = await confirmStore.confirmAction(
-        "准备重启",
-        "安装包已准备就绪。点击确认将关闭当前程序并自动安装更新。",
-        { confirmText: '立即重启安装', type: 'warning' }
+        t('appUpdate.readyRestartTitle'),
+        t('appUpdate.readyRestartMessage'),
+        { confirmText: t('appUpdate.restartInstallNow'), type: 'warning' }
       )
       if (!ok) return
     }
 
     // 调用统一接口
     const res = await window.pywebview.api.update_trigger_action()
-    if (checkResult(res,'开始下载更新包')) {
+    if (checkResult(res, t('appUpdate.startDownloadPackage'))) {
       // 如果后端开始下载，这里不需要做什么，因为 EventListener 会接管进度条
       if (res.data && res.data.status === 'downloading') {
-        toast.info("开始下载更新包...")
+        toast.info(t('appUpdate.downloadingPackage'))
       }
     } else {
       toast.error(res.message)

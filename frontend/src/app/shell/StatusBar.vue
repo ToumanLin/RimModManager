@@ -4,27 +4,27 @@
     <div class="flex items-center gap-4">
       <div class="flex items-center gap-1.5 hover:text-text-main transition-colors cursor-pointer">
         <div :class="['w-1.5 h-1.5 rounded-full', modStore.isDirty ? 'bg-accent-warn' : 'bg-accent-success']"></div>
-        <span>{{ modStore.isDirty ? '未保存更改' : '就绪' }}</span>
+        <span>{{ modStore.isDirty ? t('ui.unsavedChanges') : t('ui.ready') }}</span>
       </div>
 
       <div>
-        模组总数: <span class="text-text-main">{{ modStore.allModsMap.size }}</span>
+        {{ t('ui.totalMods') }} <span class="text-text-main">{{ modStore.allModsMap.size }}</span>
       </div>
 
       <div>
-        已启用: <span class="text-accent-success font-bold">{{ modStore.activeIds.length }}</span>
+        {{ t('ui.enabled') }} <span class="text-accent-success font-bold">{{ modStore.activeIds.length }}</span>
       </div>
 
       <div v-tooltip="historyStateTooltip">
-        历史状态:
+        {{ t('ui.historyState') }}
         <template v-if="modStore.listHistoryTotal > 0">
           <span class="text-text-main font-bold">{{ modStore.listHistoryPosition }}</span>/<span class="text-text-dim">{{ modStore.listHistoryTotal }}</span>
         </template>
-        <span v-else class="text-text-disabled">无</span>
+        <span v-else class="text-text-disabled">{{ t('ui.none') }}</span>
       </div>
 
       <div v-show="modStore.selectedIds.length > 0">
-        已选择: <span class="text-accent-primary font-bold">{{ modStore.selectedIds.length }}</span>
+        {{ t('ui.selected') }} <span class="text-accent-primary font-bold">{{ modStore.selectedIds.length }}</span>
       </div>
     </div>
 
@@ -112,9 +112,9 @@
     </Teleport>
 
     <div class="flex items-center gap-2 hover:text-text-main">
-      <span>上次软件运行：{{ formatDate(appStore.settings.last_run_time) || '未运行' }}</span> |
-      <span>上次游戏运行：{{ formatDate(profileStore.currentProfile?.last_played_time) || '未运行' }}</span> |
-      <span>RimWorld {{ profileStore.activeContext.game_version || '未知版本' }}</span>
+      <span>{{ t('ui.lastAppRun') }}{{ formatDate(appStore.settings.last_run_time) || t('ui.neverRun') }}</span> |
+      <span>{{ t('ui.lastGameRun') }}{{ formatDate(profileStore.currentProfile?.last_played_time) || t('ui.neverRun') }}</span> |
+      <span>RimWorld {{ profileStore.activeContext.game_version || t('ui.unknownVersion') }}</span>
     </div>
   </div>
 </template>
@@ -127,11 +127,13 @@ import { useAppStore } from '../stores/appStore'
 import { useProfileStore } from '../../features/profiles/profileStore'
 import { useTaskStore } from '../stores/taskStore'
 import { formatDate } from '../../shared/lib/format'
+import { useI18n } from 'vue-i18n'
 
 const modStore = useModStore()
 const appStore = useAppStore()
 const profileStore = useProfileStore()
 const taskStore = useTaskStore()
+const { t } = useI18n()
 
 const activeTask = computed(() => taskStore.latestTask)
 

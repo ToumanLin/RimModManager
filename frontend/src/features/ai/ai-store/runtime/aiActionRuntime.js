@@ -1,6 +1,8 @@
 // -----------------------------------------------------------------
 // AI 动作展示与执行运行时
 // -----------------------------------------------------------------
+import { t } from '../../../../app/i18n'
+
 // 这里集中处理两类问题：
 // 1. 把后端动作定义翻译成前端可渲染的卡片/提示/确认文案
 // 2. 把最终确认后的动作路由到具体 store 执行
@@ -134,11 +136,11 @@ export const createActionPresentationRuntime = ({
     const definition = resolveActionDefinition(getActionType(action))
     return String(definition?.[field] || '').trim()
   }
-  const getActionExecuteLabel = (action) => getActionMetaText(action, 'execute_label') || getActionMetaText(action, 'label') || '执行操作'
-  const getActionTitle = (action) => getActionMetaText(action, 'title') || getActionMetaText(action, 'label') || '执行操作'
-  const getActionDescription = (action) => getActionMetaText(action, 'description') || '执行这条 AI 建议。'
+  const getActionExecuteLabel = (action) => getActionMetaText(action, 'execute_label') || getActionMetaText(action, 'label') || t('aiStore.executeAction')
+  const getActionTitle = (action) => getActionMetaText(action, 'title') || getActionMetaText(action, 'label') || t('aiStore.executeAction')
+  const getActionDescription = (action) => getActionMetaText(action, 'description') || t('aiStore.executeSuggestion')
   const getActionPreview = (action) => formatActionTemplate(getActionMetaText(action, 'preview_template'), action)
-  const getActionMissingPayloadMessage = (action) => getActionMetaText(action, 'missing_payload_message') || '这条动作缺少必要字段，已跳过。'
+  const getActionMissingPayloadMessage = (action) => getActionMetaText(action, 'missing_payload_message') || t('aiStore.actionMissingPayload')
   const getActionBlockedMessage = (action) => formatActionTemplate(getActionMetaText(action, 'blocked_message'), action)
   const getActionConfirmMeta = (action) => ({
     title: getActionMetaText(action, 'confirm_title'),
@@ -401,9 +403,9 @@ export const createActionExecutorRegistry = ({
 
     const confirmMeta = getActionConfirmMeta(action)
     const confirmed = await confirmStore.confirmAction(
-      confirmMeta.title || '确认执行操作',
+      confirmMeta.title || t('aiStore.confirmRunAction'),
       confirmMeta.message || getActionPreview(action) || getActionDescription(action),
-      { type: 'warning', confirmText: confirmMeta.confirmText || '确认', cancelText: '取消' },
+      { type: 'warning', confirmText: confirmMeta.confirmText || t('common.confirm'), cancelText: t('common.cancel') },
     )
     if (!confirmed) return
 
@@ -411,9 +413,9 @@ export const createActionExecutorRegistry = ({
 
     const postSuccessMeta = getActionPostSuccessMeta(action)
     if (postSuccessMeta.message && await confirmStore.confirmAction(
-      postSuccessMeta.title || '操作已应用',
+      postSuccessMeta.title || t('aiStore.actionApplied'),
       postSuccessMeta.message,
-      { type: 'success', confirmText: postSuccessMeta.confirmText || '确定', cancelText: '稍后' },
+      { type: 'success', confirmText: postSuccessMeta.confirmText || t('common.ok'), cancelText: t('aiStore.later') },
     )) {
       await modStore.autoSortMods()
       return
@@ -459,7 +461,7 @@ export const createActionExecutorRegistry = ({
         : []
     )
     if (allowedSettingKeys.size > 0 && !allowedSettingKeys.has(settingKey)) {
-      toast.warning(getActionBlockedMessage(action) || '当前不允许执行这条设置修改动作。')
+      toast.warning(getActionBlockedMessage(action) || t('aiStore.settingActionBlocked'))
       return
     }
     await appStore.saveSetting(settingKey, payload.value)

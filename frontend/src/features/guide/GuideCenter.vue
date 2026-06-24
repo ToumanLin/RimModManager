@@ -12,7 +12,7 @@
         </span>
         <!-- 给文字加上跳动类 -->
         <span class="guide-text text-sm font-black text-on-accent-primary z-10 uppercase tracking-tight">
-          {{ uncompletedCount > 0 ? `使用指引 (${uncompletedCount})` : '教程中心' }}
+          {{ uncompletedCount > 0 ? t('guide.center.incomplete', { count: uncompletedCount }) : t('guide.center.title') }}
         </span>
       </div>
 
@@ -23,8 +23,8 @@
           :class="panelPositionClass" >
           <!-- Header -->
           <div class="px-2 pb-2 mb-2 border-b border-border-base/10">
-            <h4 class="font-bold text-text-main">使用引导中心</h4>
-            <p class="text-xs text-text-dim">点击下方条目开始了解软件操作。</p>
+            <h4 class="font-bold text-text-main">{{ t('guide.center.heading') }}</h4>
+            <p class="text-xs text-text-dim">{{ t('guide.center.description') }}</p>
           </div>
 
           <!-- 教程列表 -->
@@ -36,15 +36,15 @@
                   <Play class="size-4" />
                 </div>
                 <div>
-                  <p class="font-bold text-sm text-text-main">{{ guide.title }}</p>
-                  <p class="text-xs text-text-dim">{{ guide.description }}</p>
+                  <p class="font-bold text-sm text-text-main">{{ guideTitle(guide) }}</p>
+                  <p class="text-xs text-text-dim">{{ guideDescription(guide) }}</p>
                 </div>
               </div>
 
               <!-- 跳过按钮 -->
               <button class="shrink-0 px-2 py-1 rounded-md text-xs font-bold text-text-dim hover:bg-accent-warn/15 hover:text-accent-warn transition-colors" 
                 @click.stop="skipGuide(guide.key)" >
-                跳过
+                {{ t('guide.center.skip') }}
               </button>
             </div>
 
@@ -53,7 +53,7 @@
               <button class="w-full text-left text-xs text-text-dim px-2 py-1.5 mt-2 flex items-center gap-1 hover:text-text-main"
                 @click="showCompleted = !showCompleted" >
                 <ChevronRight class="size-3 transition-transform" :class="{ 'rotate-90': showCompleted }" />
-                已完成 ({{ completedGuides.length }})
+                {{ t('guide.center.completed', { count: completedGuides.length }) }}
               </button>
 
               <transition name="list-fade">
@@ -61,7 +61,7 @@
                   <div v-for="guide in completedGuides" :key="guide.key" class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-accent-secondary/10 text-text-dim cursor-pointer transition-colors"
                     @click="startGuide(guide.key, true)" >
                     <Check class="size-3 text-accent-success" />
-                    <span class="text-xs">{{ guide.title }}</span>
+                    <span class="text-xs">{{ guideTitle(guide) }}</span>
                   </div>
                 </div>
               </transition>
@@ -72,11 +72,11 @@
           <div class="mt-2 pt-2 border-t border-border-base/10 flex items-center justify-between gap-3">
             <button class="text-xs text-text-dim hover:text-accent-warn transition-colors"
               @click="skipAllGuides" >
-              全部跳过
+              {{ t('guide.center.skipAll') }}
             </button>
             <button class="text-xs text-text-dim hover:text-accent-danger transition-colors"
-              @click="resetAllGuides" v-tooltip="'重置所有引导记录，它们将重新出现'" >
-              全部重置
+              @click="resetAllGuides" v-tooltip="t('guide.center.resetAllTooltip')" >
+              {{ t('guide.center.resetAll') }}
             </button>
           </div>
         </div>
@@ -92,6 +92,7 @@ import { useGuideStore, allGuides } from './guideStore'
 import { useAppStore } from '../../app/stores/appStore'
 import { Check, Play, ChevronRight } from 'lucide-vue-next'
 import { GUIDE_VERSION } from './guideConfig'
+import { useI18n } from 'vue-i18n'
 
 const DRAG_THRESHOLD = 4
 const PANEL_WIDTH = 320
@@ -100,6 +101,7 @@ const PANEL_EDGE_GAP = 12
 
 const guideStore = useGuideStore()
 const appStore = useAppStore()
+const { t } = useI18n()
 
 const rootRef = ref(null)
 const panelRef = ref(null)
@@ -131,6 +133,8 @@ const uncompletedGuides = computed(() => allGuides.filter(g => !isGuideCompleted
 const completedGuides = computed(() => allGuides.filter(g => isGuideCompleted(g.key)))
 const hasGuides = computed(() => uncompletedGuides.value.length > 0)
 const uncompletedCount = computed(() => uncompletedGuides.value.length)
+const guideTitle = (guide) => guide.titleKey ? t(guide.titleKey) : guide.title
+const guideDescription = (guide) => guide.descriptionKey ? t(guide.descriptionKey) : guide.description
 const rootStyle = computed(() => ({
   transform: `translate3d(${dragOffset.value.x}px, ${dragOffset.value.y}px, 0)`,
 }))

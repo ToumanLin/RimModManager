@@ -1,5 +1,6 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { extractSectionHeaderTitle, isSectionHeaderTitle } from '../../../shared/lib/common'
+import { t } from '../../../app/i18n'
 
 export function useModListSections({
   props,
@@ -71,7 +72,7 @@ export function useModListSections({
   const getSectionGroupLabel = (id) => {
     const mod = modStore.takeModById(id)
     const rawText = mod?.alias_name || mod?.name || id
-    return extractSectionHeaderTitle(rawText) || rawText || '未命名分割组'
+    return extractSectionHeaderTitle(rawText) || rawText || t('modList.unnamedSectionGroup')
   }
   const buildSectionGroupsFromList = (sourceList = []) => {
     if (!splitGroupFeatureEnabled.value) return []
@@ -110,10 +111,11 @@ export function useModListSections({
     return []
   }
   const LIST_LABEL_MAP = {
-    active: '启用列表',
-    inactive: '停用列表',
-    temp: '临时列表',
+    active: 'modList.activeList',
+    inactive: 'modList.inactiveList',
+    temp: 'modList.tempList',
   }
+  const getListLabel = (listId = props.listId) => (LIST_LABEL_MAP[listId] ? t(LIST_LABEL_MAP[listId]) : props.title)
   const correctInterlockInsertIndex = (baseList, insertIndex) => {
     let correctedIndex = Math.max(0, Math.min(insertIndex, baseList.length))
     if (correctedIndex <= 0 || correctedIndex >= baseList.length) return correctedIndex
@@ -134,7 +136,7 @@ export function useModListSections({
     targetListId = props.listId,
     insertIndex = 0,
     type = 'reorder-list',
-    label = `调整${LIST_LABEL_MAP[targetListId] || props.title}顺序`,
+    label = t('modList.reorderListLabel', { list: getListLabel(targetListId) }),
   }) => {
     if (appStore.isLoading || !allowSort.value) return false
     const movingIds = normalizeMoveIds(ids)
@@ -181,7 +183,7 @@ export function useModListSections({
       targetListId: listId,
       insertIndex: position === 'top' ? 0 : targetList.length,
       type: position === 'top' ? 'move-list-top' : 'move-list-bottom',
-      label: `移动 ${normalizeMoveIds(ids).length} 项到${LIST_LABEL_MAP[listId] || props.title}${position === 'top' ? '顶部' : '底部'}`,
+      label: t('modList.moveItemsToListBoundary', { count: normalizeMoveIds(ids).length, list: getListLabel(listId), position: t(position === 'top' ? 'modList.top' : 'modList.bottom') }),
     })
   }
   const moveIdsToActiveSectionGroup = async ({ ids, targetGroupId, position = 'bottom' }) => {
@@ -193,13 +195,12 @@ export function useModListSections({
     const activeBaseList = modStore.activeIds.filter(id => !movingIds.some(movingId => sameId(movingId, id)))
     const insertIndex = resolveSectionInsertIndex(activeBaseList, targetGroupId, position)
     if (insertIndex < 0) return false
-    const groupPositionText = position === 'top' ? '顶部' : '底部'
     return await moveIdsToList({
       ids: movingIds,
       targetListId: 'active',
       insertIndex,
       type: position === 'top' ? 'move-to-section-top' : 'move-to-section-bottom',
-      label: `移动 ${movingIds.length} 项到分割组「${targetGroup.label}」${groupPositionText}`,
+      label: t('modList.moveItemsToSectionBoundary', { count: movingIds.length, group: targetGroup.label, position: t(position === 'top' ? 'modList.top' : 'modList.bottom') }),
     })
   }
   const moveIdsToCurrentSectionBoundary = async ({ ids, position = 'top' }) => {
