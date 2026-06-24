@@ -4,6 +4,7 @@ import { toast } from '../../shared/lib/common'
 import { useAiStore } from '../../features/ai/aiStore'
 import { useModStore } from '../../features/mod/stores/modStore'
 import { useProfileStore } from '../../features/profiles/profileStore'
+import { useWorkspaceStore } from '../../features/workspace/workspaceStore'
 
 // 启动编排只负责“先后顺序”和“阻塞/后台”的取舍，具体业务仍由各自 store/API 执行。
 export const useStartupStore = defineStore('startup', () => {
@@ -64,6 +65,8 @@ export const useStartupStore = defineStore('startup', () => {
     upgradeContext,
     uiState,
     checkUpdate,
+    confirmStore,
+    requestModScan,
     runScheduledMaintenanceChecks,
   }) => {
     lastError.value = ''
@@ -85,9 +88,14 @@ export const useStartupStore = defineStore('startup', () => {
       setPhase('post_hydration')
       const scanForce = handleUpgradeContext(upgradeContext)
       const profileStore = useProfileStore()
+      const modStore = useModStore()
+      const workspaceStore = useWorkspaceStore()
       if (settings.value.current_profile_id) {
         profileStore.currentProfileId = settings.value.current_profile_id
       }
+      const startupWorkshopMods = Array.from(modStore.allModsMap.values()).filter(mod => mod?.store === 'workshop')
+      const startupWorkshopChanges = workspaceStore.detectStartupWorkshopChanges(startupWorkshopMods)
+      const startupWorkshopPaths = workspaceStore.takeStartupWorkshopChangesForScan().map(item => item.path)
       // 自动更新探测
       setPhase('startup_update_probe')
       const updateDecision = buildDailyCheckDecision(settings.value.enable_auto_update_check, settings.value.last_update_check_time)
@@ -99,7 +107,37 @@ export const useStartupStore = defineStore('startup', () => {
       // 自动扫描
       setPhase('startup_scan')
       if (settings.value.enable_auto_scan !== false) {
-        useModStore().scanMods(null, scanForce)
+        await requestModScan({
+          forcedUpdate: scanForce,
+          preserveListState: true,
+          sizeCheckPaths: startupWorkshopPaths,
+          startupWorkshopChanges,
+        })
+      } else if (startupWorkshopChanges.length) {
+        window.setTimeout(async () => {
+          const changedNames = workspaceStore.formatStartupWorkshopChangeNames(startupWorkshopChanges)
+          const action = await confirmStore.confirmAction(
+            '检测到工坊模组变化',
+            `Steam 已同步以下工坊模组，建议刷新库存数据：\n${changedNames}`,
+            {
+              type: 'warning',
+              actionButtons: [
+                { label: '立即扫描', value: 'scan', kind: 'primary' },
+                { label: '查看详情', value: 'details', kind: 'secondary' },
+                { label: '稍后', value: 'close', kind: 'secondary' },
+              ],
+            }
+          )
+          if (action === 'scan') {
+            await requestModScan({
+              preserveListState: true,
+              sizeCheckPaths: startupWorkshopPaths,
+              startupWorkshopChanges,
+            })
+          } else if (action === 'details') {
+            await workspaceStore.openWorkspaceForStartupChanges(startupWorkshopChanges)
+          }
+        }, 800)
       }
 
       // 给主界面一次渲染和用户操作机会，再排队启动维护检查，避免首屏刚出现就被弹窗抢占。

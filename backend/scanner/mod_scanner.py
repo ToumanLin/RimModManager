@@ -93,7 +93,7 @@ class ModScanner:
             "message": message,
         }
 
-    def scan_paths_async( self, search_paths, forced_update=False, size_check_override: bool | None = None, emit_events: bool = True, residue_active_tokens: list[str] | None = None, residue_scan_enabled: bool | None = None ):
+    def scan_paths_async( self, search_paths, forced_update=False, size_check_override: bool | None = None, size_check_paths: list[str] | None = None, emit_events: bool = True, residue_active_tokens: list[str] | None = None, residue_scan_enabled: bool | None = None ):
         """
         异步扫描入口。立即返回，任务在后台运行。
         """
@@ -111,13 +111,13 @@ class ModScanner:
                 status="pending",
                 progress=0,
                 message="准备扫描任务...",
-                metrics={ "title": "模组扫描", "forced_update": forced_update, "size_check_override": size_check_override },
+                metrics={ "title": "模组扫描", "forced_update": forced_update, "size_check_override": size_check_override, "size_check_paths_count": len(size_check_paths or []) },
             )
         # 提交到线程池
-        self.executor.submit( self._scan_paths_task, task_id, search_paths, forced_update, size_check_override, emit_events, residue_active_tokens, residue_scan_enabled )
+        self.executor.submit( self._scan_paths_task, task_id, search_paths, forced_update, size_check_override, size_check_paths, emit_events, residue_active_tokens, residue_scan_enabled )
         return {'status': 'started', 'task_id': task_id}
 
-    def _scan_paths_task( self, task_id, search_paths, forced_update=False, size_check_override: bool | None = None, emit_events: bool = True, residue_active_tokens: list[str] | None = None, residue_scan_enabled: bool | None = None ):
+    def _scan_paths_task( self, task_id, search_paths, forced_update=False, size_check_override: bool | None = None, size_check_paths: list[str] | set[str] | None = None, emit_events: bool = True, residue_active_tokens: list[str] | None = None, residue_scan_enabled: bool | None = None ):
         """
         后台执行的扫描主逻辑
         """
@@ -163,6 +163,11 @@ class ModScanner:
                     EventBus.emit_progress(task_id, "scan", status="failed", progress=0, message="没有有效路径", metrics={"title": "模组扫描"})
                 self._finish_scan({'error': '没有有效路径', 'task_id': task_id}, task_id, emit_events=emit_events)
                 return
+            size_check_path_set = {
+                normalize_path_for_storage(path)
+                for path in (size_check_paths or [])
+                if path
+            }
             # 初始化 DLC Parser
             dlc_parser = DLCParser(self.context.game_dlc_path)
             existing_snapshots = ModDAO.get_mod_snapshots()   # 从数据库获取已存在的 Mod 时间戳及大小
@@ -181,6 +186,11 @@ class ModScanner:
                 try:
                     # 判断是否是 DLC 目录 (Data)
                     is_data_dir = (os.path.basename(base_path).lower() == 'data')
+                    if not is_data_dir:
+                        about_state = ModAnalyzer.resolve_mod_about_state(base_path, cleanup_dual_files=False)
+                        if about_state.resolved_path:
+                            mod_folders.append((normalize_path_for_storage(base_path), False))
+                            continue
                     with os.scandir(base_path) as it:
                         for entry in it:
                             if entry.is_dir():
@@ -221,7 +231,7 @@ class ModScanner:
                             },
                         )
                 # 处理单个 Mod
-                mod_data = self._process_single_mod( mod_path, is_dlc, existing_snapshots, dlc_parser, forced_update, size_check_override, stats, scan_details )
+                mod_data = self._process_single_mod( mod_path, is_dlc, existing_snapshots, dlc_parser, forced_update, size_check_override, size_check_path_set, stats, scan_details )
                 if mod_data:
                     # 如果是增量跳过，需要补全 package_id 以便后续逻辑使用
                     # _process_single_mod 返回 {'_skipped': True, 'package_id': ...}
@@ -441,7 +451,7 @@ class ModScanner:
         if emit_events:
             EventBus.emit('scan-complete', payload)
 
-    def _process_single_mod( self, mod_path, is_dlc_dir, existing_snapshots, dlc_parser: DLCParser | None, forced_update=False, size_check_override: bool | None = None, stats: dict | None = None, scan_details: dict | None = None ):
+    def _process_single_mod( self, mod_path, is_dlc_dir, existing_snapshots, dlc_parser: DLCParser | None, forced_update=False, size_check_override: bool | None = None, size_check_paths: set[str] | None = None, stats: dict | None = None, scan_details: dict | None = None ):
         """
         处理单个 Mod 的纯函数逻辑。
         返回: Mod数据字典 或 None(无效) 或 {'_skipped': True, 'package_id': ...}
@@ -501,6 +511,8 @@ class ModScanner:
             need_size_check = settings.config.enable_file_size_scan or forced_update
         else:
             need_size_check = bool(size_check_override)
+        if not need_size_check and size_check_paths and mod_path in size_check_paths:
+            need_size_check = True
 
         disabled_change = not(snapshot and snapshot['disabled'] is is_disabled)
         snapshot_missing = bool(

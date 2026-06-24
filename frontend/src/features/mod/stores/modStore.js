@@ -775,16 +775,20 @@ export const useModStore = defineStore('mods', () => {
   }
   // --- 扫描处理 ---
   // 扫描 Mod 文件
-  const scanMods = async (path_list=null, forced_update=false) => {
-    if (appStore.isScanRunning || !window.pywebview) return
+  const scanMods = async (path_list=null, forced_update=false, size_check_override=null, size_check_paths=null) => {
+    if (appStore.isScanRunning || !window.pywebview) return false
     strictDisableRestoreFailures.value = {}
     try {
       // 调用 API，会立即返回 { status: 'started' }
-      const res = await window.pywebview.api.scan_mods(path_list, forced_update)
+      const res = await window.pywebview.api.scan_mods(path_list, forced_update, size_check_override, size_check_paths)
+      if (res.status === 'warning') {
+        toast.info(res.message || '扫描已在进行中')
+        return false
+      }
       if (res.status !== 'success' && res.status !== 'started') {
         console.error("启动扫描失败:", res)
         toast.error(`扫描启动失败: \n${res.message}`)
-        return
+        return false
       }
       const taskDetail = res?.data?.details || {}
       const taskId = String(taskDetail?.task_id || '')
@@ -802,9 +806,11 @@ export const useModStore = defineStore('mods', () => {
           },
         })
       }
+      return true
     } catch (e) {
       console.error("扫描请求异常:", e)
       toast.error(`扫描请求异常: \n${e.message}`)
+      return false
     }
   }
   // 扫描完成事件处理
@@ -937,30 +943,62 @@ export const useModStore = defineStore('mods', () => {
     }
     return false
   }
-  // 创建本地共存
+  const getLocalizeActionTitle = (totalCount = 0, existingCount = 0) => {
+    const createCount = Math.max(Number(totalCount || 0) - Number(existingCount || 0), 0)
+    if (existingCount > 0) return createCount > 0 ? '本地化/同步本地共存模组' : '同步本地共存模组'
+    return '本地化共存模组'
+  }
+  const resolveLocalizeCandidates = (mods = [], store='workshop') => {
+    const candidateMap = new Map()
+    for (const mod of (Array.isArray(mods) ? mods : [])) {
+      if (mod?.store === store && mod.path_hash) {
+        candidateMap.set(mod.path_hash, { pathHash: mod.path_hash, isExisting: !!mod.is_coexistence })
+      } else if (store === 'workshop' && mod?.coexist_workshop_variant?.path_hash) {
+        candidateMap.set(mod.coexist_workshop_variant.path_hash, { pathHash: mod.coexist_workshop_variant.path_hash, isExisting: true })
+      }
+    }
+    const candidates = [...candidateMap.values()]
+    const existingCount = candidates.filter(m => m.isExisting).length
+    return {
+      candidates,
+      pathHashes: candidates.map(m => m.pathHash),
+      existingCount,
+      createCount: Math.max(candidates.length - existingCount, 0),
+      actionTitle: getLocalizeActionTitle(candidates.length, existingCount),
+    }
+  }
+  // 本地化或同步本地共存
   const localizeSelectedMods = async (store='workshop') => {
     if (selectedIds.value.length === 0) return;
     // 使用 path_hash 精确定位当前副本，避免共存场景误选到另一份同包名模组。
-    const pathHashes = selectedMods.value
-      .filter(m => m.store === store)
-      .map(m => m.path_hash)
-      .filter(Boolean);
+    const { pathHashes, existingCount } = resolveLocalizeCandidates(selectedMods.value, store)
     if (pathHashes.length === 0) {
       toast.info("选中的模组中没有来自工坊的项");
       return;
     }
-    await localizeMods(pathHashes, store)
+    await localizeMods(pathHashes, store, { existingCount })
   }
-  const localizeMods = async (pathHashes, store='workshop') => {
+  const localizeMods = async (pathHashes, store='workshop', options = {}) => {
+    const storeText = store === 'workshop' ? '工坊' : store
+    const existingCount = Number(options?.existingCount || 0)
+    const createCount = Math.max(pathHashes.length - existingCount, 0)
+    const actionTitle = getLocalizeActionTitle(pathHashes.length, existingCount)
+    const syncMessage = existingCount > 0
+      ? (
+          createCount > 0
+            ? `选中的 ${pathHashes.length} 个${storeText}模组中，${createCount} 个会本地化为共存模组，${existingCount} 个会同步已有本地共存副本。`
+            : `选中的 ${pathHashes.length} 个${storeText}模组已经存在本地共存模组。\n继续后会用当前${storeText}文件同步已有本地副本。`
+        )
+      : `确定要将选中的 ${pathHashes.length} 个${storeText}模组本地化为共存模组吗？\n本地化后会独立占用磁盘空间，后续${storeText}更新不会自动改动这些本地副本。`
     const confirm = await confirmStore.confirmAction(
-      '本地化确认',
-      `确定要将选中的 ${pathHashes.length} 个${store}模组复制到本地目录吗？\n复制后将独立占用磁盘空间，Steam / 管理器 的更新将不再影响这些本地副本。`,
-      { type: 'info' }
+      actionTitle,
+      syncMessage,
+      { type: existingCount > 0 ? 'warning' : 'info', confirmText: existingCount > 0 ? '开始处理' : '开始本地化' }
     );
     if (confirm) {
       appStore.isLoading = true;
       const res = await window.pywebview.api.localize_workshop_mods(pathHashes, store);
-      if (checkResult(res, '模组本地化')) {
+      if (checkResult(res, actionTitle)) {
         // 成功后会在完成时刷新数据
       }
       appStore.isLoading = false;
@@ -1436,7 +1474,7 @@ export const useModStore = defineStore('mods', () => {
     getInstallSourceHints, mergeInstallSourceHintsFromMods, clearInstallSourceHints, clearInstallSourceHintsByOrigin,
     updateInactiveIds, takeInactiveIds, setListIds, removeIdsOnAllList, removeDeletedModsFromLocalData, removeUnavailableIdsCompletely, selectMods, clearSelection, changeModsActive, getModInterlockChain, loadInterlockDetails,
     // 扫描、排序与模组操作
-    scanMods, scanComplete, autoSortMods, localizeSelectedMods, localizeMods, disableMods, disableSelectedMods, deleteMods, deleteSelectedModFiles, unsubscribeSelectedWorkshopMods, smartInsertMods,
+    scanMods, scanComplete, autoSortMods, resolveLocalizeCandidates, localizeSelectedMods, localizeMods, disableMods, disableSelectedMods, deleteMods, deleteSelectedModFiles, unsubscribeSelectedWorkshopMods, smartInsertMods,
     canSwitchCoexistenceSource, switchCoexistenceSource, toggleCoexistenceSource, toggleSelectedCoexistenceSource, revealSelectedMod,
     // 用户数据与联锁
     updateModUserData, updateModTime, linkMods, unlinkMods, healInterlock, getInterlockMissingDetails, batchUpdateModsUserData,

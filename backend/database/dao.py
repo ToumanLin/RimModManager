@@ -90,6 +90,54 @@ def _normalize_language_fields(asset: dict[str, Any]) -> dict[str, Any]:
     return asset
 
 
+def _normalize_file_stats(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, int] = {}
+    for key, count in value.items():
+        try:
+            normalized[str(key)] = int(count or 0)
+        except (TypeError, ValueError):
+            normalized[str(key)] = 0
+    return normalized
+
+
+def _build_coexist_sync_info(local_asset: dict[str, Any], workshop_asset: dict[str, Any]) -> dict[str, Any]:
+    """判断本地共存副本是否落后于工坊版本，时间方向明确时优先用时间。"""
+    local_modify_time = int(local_asset.get("file_modify_time") or 0)
+    workshop_modify_time = int(workshop_asset.get("file_modify_time") or 0)
+    local_size = int(local_asset.get("file_size") or 0)
+    workshop_size = int(workshop_asset.get("file_size") or 0)
+    local_stats = _normalize_file_stats(local_asset.get("file_stats"))
+    workshop_stats = _normalize_file_stats(workshop_asset.get("file_stats"))
+
+    known_differences = []
+    has_comparable_time = local_modify_time > 0 and workshop_modify_time > 0
+    workshop_is_newer = has_comparable_time and workshop_modify_time > local_modify_time
+    workshop_is_not_older = (not has_comparable_time) or workshop_modify_time >= local_modify_time
+
+    if workshop_is_newer:
+        known_differences.append("modify_time")
+    if workshop_is_not_older:
+        if local_size > 0 and workshop_size > 0 and local_size != workshop_size:
+            known_differences.append("size")
+        if local_stats and workshop_stats and local_stats != workshop_stats:
+            known_differences.append("file_stats")
+
+    return {
+        "coexist_sync_state": "outdated" if known_differences else "synced",
+        "coexist_sync_diff": {
+            "signals": known_differences,
+            "local_modify_time": local_modify_time,
+            "workshop_modify_time": workshop_modify_time,
+            "local_size": local_size,
+            "workshop_size": workshop_size,
+            "local_file_stats": local_stats,
+            "workshop_file_stats": workshop_stats,
+        },
+    }
+
+
 def _should_include_workshop_in_runtime_detection(context: ProfileContext | None) -> bool:
     return bool(resolve_profile_runtime_capabilities(context).get("workshop_detection_enabled", False))
 
@@ -475,11 +523,41 @@ class ModDAO:
                     workshop_variant = workshop_variants[0]
                     workshop_variant["groups"] = group_map.get(package_id, [])
                     winner["is_coexistence"] = True
+                    winner.update(_build_coexist_sync_info(winner, workshop_variant))
                     winner["coexist_workshop_variant"] = workshop_variant
 
             visible_mods.append(winner)
 
         return visible_mods
+
+    @staticmethod
+    def get_localizable_assets(context: ProfileContext | None, path_hashes: Sequence[str] | str, store: str):
+        """
+        获取当前 Profile 路径范围内允许同步为本地共存的资产。
+
+        API 层传入的是 path_hash，但数据库里可能残留其它环境的同类资产；
+        这里再按当前 Profile 的运行时路径做一次约束，避免跨环境误同步。
+        """
+        scope = _ProfilePathScope.from_context(context)
+        hashes = _normalize_path_hashes(path_hashes)
+        normalized_store = str(store or "").strip().lower()
+        if not context or not hashes or not normalized_store:
+            return []
+
+        query = (
+            ModAsset.select(ModAsset, UserModData.alias_name)
+            .join(UserModData, on=(ModAsset.package_id == UserModData.mod_id), join_type=JOIN.LEFT_OUTER)
+            .where(
+                (ModAsset.path_hash << hashes)  # type: ignore
+                & (ModAsset.store == normalized_store)
+                & _present_asset_condition()
+            )
+            .dicts()
+        )
+        return [
+            asset for asset in query
+            if scope.includes_runtime_path(asset.get("path"), include_workshop=True)
+        ]
 
     @staticmethod
     def get_profile_disabled_mods(context: ProfileContext | None):

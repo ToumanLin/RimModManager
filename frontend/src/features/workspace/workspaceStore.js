@@ -11,6 +11,7 @@ import {
   normalizePackageId, normalizeUrl, normalizeWorkshopId,
 } from '../mod/lib/modIdentity'
 import { hasWorkshopSearchText, resolveWorkshopDays, resolveWorkshopSort } from './workshopSearchOptions'
+import { normalizeMatrixTimestamp } from './lib/matrixItemState'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const appStore = useAppStore()
@@ -21,6 +22,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     librariesLoaded: false,
     githubLoaded: false,
     collectionsLoaded: false,
+  })
+  const startupWorkshopChangeState = reactive({
+    detected: false,
+    prompted: false,
+    changes: [],
   })
 
   const storeSortOrder = {
@@ -221,6 +227,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const isFetching = ref(false)
   const matrixFocusTarget = ref(null)
+  const matrixFilterTarget = ref(null)
+  const workspaceTargetTab = ref('')
   let workshopSearchReadyPromise = null
 
   const allLibraryMods = computed(() => [
@@ -431,6 +439,95 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
     return true
   }
+  const normalizeSizeRefreshPathKey = (path = '') => String(path || '').trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  const resolveWorkshopChangedMods = (mods = []) => {
+    const seen = new Set()
+    return (Array.isArray(mods) ? mods : [])
+      .map(mod => {
+        const path = String(mod?.path || '').trim()
+        const downloadTime = normalizeMatrixTimestamp(mod?.download_status?.download_time)
+        const scannedTime = normalizeMatrixTimestamp(mod?.last_scanned_at)
+        const key = `${normalizeSizeRefreshPathKey(path)}\n${downloadTime}`
+        if (!path || seen.has(key) || mod?.download_status?.source !== 'steam_sync_log' || !downloadTime || downloadTime <= scannedTime) return null
+        seen.add(key)
+        return {
+          workshopId: normalizeWorkshopId(mod?.workshop_id),
+          pathHash: String(mod?.path_hash || '').trim(),
+          path,
+          name: mod?.name || mod?.package_id || mod?.workshop_id || '未知模组',
+          downloadTime,
+          scannedTime,
+        }
+      })
+      .filter(Boolean)
+  }
+  const detectStartupWorkshopChanges = (mods = librariesMods.workshop) => {
+    if (startupWorkshopChangeState.detected) return startupWorkshopChangeState.changes
+    startupWorkshopChangeState.detected = true
+    startupWorkshopChangeState.prompted = false
+    startupWorkshopChangeState.changes = resolveWorkshopChangedMods(mods)
+    return startupWorkshopChangeState.changes
+  }
+  const takeStartupWorkshopChangesForScan = () => startupWorkshopChangeState.changes.filter(item => item.path)
+  const formatStartupWorkshopChangeNames = (changes = [], limit = 8) => {
+    const targets = (Array.isArray(changes) ? changes : []).filter(item => item?.path)
+    const shown = targets.slice(0, limit).map(item => `· ${item.name}`).join('\n')
+    const more = targets.length > limit ? `\n等 ${targets.length} 个模组。` : ''
+    return shown ? `${shown}${more}` : ''
+  }
+  const resolveStartupWorkshopChangePathHashes = (changes = []) => {
+    const targets = Array.isArray(changes) ? changes : []
+    const byPath = new Map()
+    const byWorkshopId = new Map()
+    librariesMods.workshop.forEach(mod => {
+      const pathKey = normalizeSizeRefreshPathKey(mod?.path)
+      const workshopId = normalizeWorkshopId(mod?.workshop_id)
+      if (pathKey && mod?.path_hash) byPath.set(pathKey, mod.path_hash)
+      if (workshopId && mod?.path_hash) byWorkshopId.set(workshopId, mod.path_hash)
+    })
+    return [...new Set(targets.map(item => {
+      const pathKey = normalizeSizeRefreshPathKey(item?.path)
+      const workshopId = normalizeWorkshopId(item?.workshopId)
+      return (pathKey && byPath.get(pathKey)) || (workshopId && byWorkshopId.get(workshopId)) || String(item?.pathHash || '').trim()
+    }).filter(Boolean))]
+  }
+  const openWorkspaceForStartupChanges = async (changes = startupWorkshopChangeState.changes) => {
+    appStore.uiState.showWorkspace = true
+    workspaceTargetTab.value = 'library'
+    await ensureWorkspaceTabLoaded('library')
+    const pathHashes = resolveStartupWorkshopChangePathHashes(changes)
+    matrixFilterTarget.value = {
+      store: 'workshop',
+      pathHashes,
+      stamp: Date.now(),
+    }
+    if (pathHashes.length === 1) {
+      window.setTimeout(() => {
+        jumpToMatrixItem(pathHashes[0])
+      }, 0)
+    }
+    return true
+  }
+  const showStartupWorkshopChangesPrompt = async (changes = startupWorkshopChangeState.changes) => {
+    const targets = (Array.isArray(changes) ? changes : []).filter(item => item?.path)
+    if (!targets.length || startupWorkshopChangeState.prompted) return false
+    startupWorkshopChangeState.prompted = true
+    const action = await confirmStore.confirmAction(
+      '工坊模组已刷新',
+      `Steam 已同步以下工坊模组，库存数据已完成刷新：\n${formatStartupWorkshopChangeNames(targets)}`,
+      {
+        type: 'success',
+        actionButtons: [
+          { label: '查看详情', value: 'details', kind: 'primary' },
+          { label: '关闭', value: 'close', kind: 'secondary' },
+        ],
+      }
+    )
+    if (action === 'details') {
+      await openWorkspaceForStartupChanges(targets)
+    }
+    return true
+  }
 
   const applyLifecycleUpdateState = (updates = []) => {
     const normalizedUpdates = Array.isArray(updates) ? updates : []
@@ -521,6 +618,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (normalizedTabId === 'collection') return await ensureCollectionsLoaded(options)
     return true
   }
+
   // 仅刷新当前已经加载过的数据区，避免全局刷新时再次触发未打开页面的预热请求。
   const refreshLoadedData = async ({ librariesOnly = false } = {}) => {
     const jobs = []
@@ -2243,7 +2341,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     // 库矩阵状态
     librariesMods, isFetching, librariesSize, activeChildrenWithStatus,
     workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
-    matrixFocusTarget, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
+    matrixFocusTarget, matrixFilterTarget, workspaceTargetTab, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
+    detectStartupWorkshopChanges, takeStartupWorkshopChangesForScan, formatStartupWorkshopChangeNames, showStartupWorkshopChangesPrompt, openWorkspaceForStartupChanges,
     // 库数据与工坊时间线
     fetchLibrariesMods, refreshLifecycleUpdateStates, doWorkshopSearch, fetchWorkshopDetails, loadSteamLanguageOptions, loadTranslationProviders, loadWorkshopDlcOptions, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode, syncWorkshopSearchModeFromSettings, ensureWorkshopSearchReady,
     openWorkshopTransientList, loadWorkshopTransientList, closeWorkshopTransientList,

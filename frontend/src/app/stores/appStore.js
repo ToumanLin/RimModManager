@@ -24,6 +24,7 @@ import { useUpdateActions } from './app/updateActions'
 
 export const useAppStore = defineStore('app', () => {
   const taskStore = useTaskStore()
+  const confirmStore = useConfirmStore()
 
   const createDefaultRuntimeSession = () => ({
     profile_id: '',
@@ -699,7 +700,7 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  const requestModScan = async ({ forcedUpdate = false, specificPaths = null, preserveListState = false } = {}) => {
+  const requestModScan = async ({ forcedUpdate = false, specificPaths = null, preserveListState = false, sizeCheckOverride = null, sizeCheckPaths = null, startupWorkshopChanges = null } = {}) => {
     // 多次扫描请求合并时，任意一次要求保留列表状态，最终扫描完成也要保留。
     const normalizeScanRequest = (request = {}) => {
       const normalizedPaths = Array.isArray(request.specificPaths)
@@ -709,6 +710,13 @@ export const useAppStore = defineStore('app', () => {
         forcedUpdate: !!request.forcedUpdate,
         specificPaths: normalizedPaths && normalizedPaths.length > 0 ? [...new Set(normalizedPaths)] : null,
         preserveListState: !!request.preserveListState,
+        sizeCheckOverride: request.sizeCheckOverride == null ? null : !!request.sizeCheckOverride,
+        sizeCheckPaths: Array.isArray(request.sizeCheckPaths)
+          ? [...new Set(request.sizeCheckPaths.map(path => String(path || '').trim()).filter(Boolean))]
+          : [],
+        startupWorkshopChanges: Array.isArray(request.startupWorkshopChanges)
+          ? request.startupWorkshopChanges
+          : [],
       }
     }
     const mergeScanRequest = (left, right) => {
@@ -720,9 +728,14 @@ export const useAppStore = defineStore('app', () => {
           ? null
           : [...new Set([...left.specificPaths, ...right.specificPaths])],
         preserveListState: !!(left.preserveListState || right.preserveListState),
+        sizeCheckOverride: left.sizeCheckOverride === true || right.sizeCheckOverride === true
+          ? true
+          : (left.sizeCheckOverride === false || right.sizeCheckOverride === false ? false : null),
+        sizeCheckPaths: [...new Set([...(left.sizeCheckPaths || []), ...(right.sizeCheckPaths || [])])],
+        startupWorkshopChanges: [...(left.startupWorkshopChanges || []), ...(right.startupWorkshopChanges || [])],
       }
     }
-    const scanRequest = normalizeScanRequest({ forcedUpdate, specificPaths, preserveListState })
+    const scanRequest = normalizeScanRequest({ forcedUpdate, specificPaths, preserveListState, sizeCheckOverride, sizeCheckPaths, startupWorkshopChanges })
     if (isScanRunning.value) {
       pendingModScanRequested.value = mergeScanRequest(pendingModScanRequested.value, scanRequest)
       return false
@@ -732,8 +745,9 @@ export const useAppStore = defineStore('app', () => {
     // 扫描任务本身不带前端选项，先暂存在这里，等 scan-complete 事件回来再使用。
     activeModScanRequest.value = scanRequest
     const modStore = useModStore()
-    await modStore.scanMods(scanRequest.specificPaths, scanRequest.forcedUpdate)
-    return true
+    const started = await modStore.scanMods(scanRequest.specificPaths, scanRequest.forcedUpdate, scanRequest.sizeCheckOverride, scanRequest.sizeCheckPaths)
+    if (!started) activeModScanRequest.value = null
+    return !!started
   }
 
   const flushQueuedModScan = async () => {
@@ -743,8 +757,9 @@ export const useAppStore = defineStore('app', () => {
     // 延迟扫描同样要保留原始请求选项，避免排队后丢失列表状态策略。
     activeModScanRequest.value = queuedRequest
     const modStore = useModStore()
-    await modStore.scanMods(queuedRequest.specificPaths, queuedRequest.forcedUpdate)
-    return true
+    const started = await modStore.scanMods(queuedRequest.specificPaths, queuedRequest.forcedUpdate, queuedRequest.sizeCheckOverride, queuedRequest.sizeCheckPaths)
+    if (!started) activeModScanRequest.value = null
+    return !!started
   }
 
   const recoverFromSuspendedState = async () => {
@@ -795,6 +810,8 @@ export const useAppStore = defineStore('app', () => {
         upgradeContext,
         uiState,
         checkUpdate,
+        confirmStore,
+        requestModScan,
         runScheduledMaintenanceChecks,
       })
     } catch (e) {
@@ -863,6 +880,9 @@ export const useAppStore = defineStore('app', () => {
       await modStore.scanComplete(detail, {
         preserveListState: !!scanRequest?.preserveListState,
       })
+      if (detail.status === 'success' && scanRequest?.startupWorkshopChanges?.length) {
+        void useWorkspaceStore().showStartupWorkshopChangesPrompt(scanRequest.startupWorkshopChanges)
+      }
       if (residuePayload?.summary?.item_count > 0) {
         useModResidueStore().setOverview(residuePayload)
         uiState.showModResidueCleanup = true
@@ -874,21 +894,21 @@ export const useAppStore = defineStore('app', () => {
       }
     })
 
-    // 监听：本地化完成
+    // 监听：本地共存任务完成
     window.addEventListener('localize-complete', (e) => {
-        const { success_count, error_count, errors, status } = e.detail;
-        console.log(`本地化完成。成功: ${success_count}, 失败: ${error_count}`, errors)
+        const { success_count, error_count, errors, status, title } = e.detail;
+        const taskTitle = title || '本地共存任务'
+        console.log(`${taskTitle}完成。成功: ${success_count}, 失败: ${error_count}`, errors)
         if (status === 'cancelled') {
-            toast.info('本地化任务已取消');
+            toast.info(`${taskTitle}已取消`);
             return
         }
         if (error_count > 0) {
-            toast.warning(`本地化完成。成功: ${success_count}, 失败: ${error_count}`);
+            toast.warning(`${taskTitle}完成。成功: ${success_count}, 失败: ${error_count}`);
         } else {
-            toast.success(`成功本地化 ${success_count} 个模组`);
+            toast.success(`${taskTitle}完成：${success_count} 个模组`);
         }
-        const modStore = useModStore()
-        modStore.scanMods()
+        void requestModScan({ preserveListState: true, sizeCheckOverride: true })
     });
     // 监听：游戏暂停
     window.addEventListener('app-suspending', () => {

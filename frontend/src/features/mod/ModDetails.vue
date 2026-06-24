@@ -126,7 +126,7 @@
                 <svg class="size-6" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 8C5 6.89543 5.89543 6 7 6H19L24 12H41C42.1046 12 43 12.8954 43 14V40C43 41.1046 42.1046 42 41 42H7C5.89543 42 5 41.1046 5 40V8Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 23L16 28L21 33" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 28H32V22" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <div class="flex-1 min-w-0 m-0">
                   <div class="text-xs text-text-dim uppercase flex justify-between items-center">
-                    <span class="min-w-0 truncate flex gap-2 items-center">本地路径<Copy v-if="selectedMod.is_coexistence" class="size-3 cursor-help text-accent-primary hover:text-text-main" v-tooltip="'该Mod为共存状态，在创意工坊目录同样存在'" /></span>
+                    <span class="min-w-0 truncate flex gap-2 items-center">文件路径<Copy v-if="selectedMod.is_coexistence" class="size-3 cursor-help text-accent-primary hover:text-text-main" v-tooltip="'该Mod为共存状态，在创意工坊目录同样存在'" /></span>
                     <svg class="shrink-0 size-4" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 32L33 15" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 15H33V33" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   </div>
                   <div class="text-sm text-accent-cool truncate direction-rtl m-0">{{ selectedMod.path }}</div>

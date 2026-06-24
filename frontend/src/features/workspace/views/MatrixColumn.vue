@@ -28,6 +28,10 @@
       </div>
 
       <div class="flex flex-col items-center gap-2">
+        <div v-if="activePathHashFilter.size" class="flex w-full items-center justify-between rounded-lg border border-accent-primary/20 bg-accent-primary/10 px-3 py-1 text-xs text-accent-primary">
+          <span class="font-bold">仅显示本次工坊变更：{{ activePathHashFilter.size }} 项</span>
+          <button class="font-bold text-text-dim hover:text-text-main" @click="clearMatrixFilter">清除</button>
+        </div>
         <div class="relative w-full">
           <input v-model="searchQuery" placeholder="在此域检索..."
             class="w-full bg-bg-inset border border-border-base/10 rounded-lg pl-3 pr-2 py-1.5 text-xs text-text-main focus:border-accent-primary outline-none transition-colors"
@@ -151,8 +155,10 @@ const sortBy = ref('change')
 const isSortDsc = ref(true)
 const filterState = ref('default')
 const localSelectedPathHashes = ref([])
+const activeFilterPathHashes = ref([])
 const scrollRef = ref(null)
 const columnSize = computed(() => (props.mods || []).reduce((acc, mod) => acc + (mod.file_size || 0), 0))
+const activePathHashFilter = computed(() => new Set(activeFilterPathHashes.value))
 
 const lastPlayedTime = computed(() => profileStore.currentProfile?.last_played_time || 0)
 const hasWorkshopLibrary = computed(() => !!appStore.settings.workshop_mods_path)
@@ -185,6 +191,9 @@ const showOfficialLocalModsModel = computed({
 
 const clearSelection = () => {
   localSelectedPathHashes.value = []
+}
+const clearMatrixFilter = () => {
+  activeFilterPathHashes.value = []
 }
 
 const getModsData = (pathHashes, type = null) => {
@@ -224,6 +233,7 @@ const focusMatrixItem = async (pathHash) => {
   if (!displayMods.value.some(mod => mod.path_hash === pathHash)) {
     searchQuery.value = ''
     filterState.value = 'default'
+    activeFilterPathHashes.value = []
   }
 
   localSelectedPathHashes.value = [pathHash]
@@ -260,6 +270,9 @@ const displayMods = computed(() => {
 
   if (filterState.value !== 'default') {
     list = list.filter(({ state }) => matchesMatrixFilter(state, filterState.value))
+  }
+  if (activePathHashFilter.value.size) {
+    list = list.filter(({ mod }) => activePathHashFilter.value.has(mod.path_hash))
   }
 
   list.sort((a, b) => {
@@ -313,6 +326,25 @@ watch(
     await focusMatrixItem(target.pathHash)
   },
   { deep: true }
+)
+
+watch(
+  () => workspaceStore.matrixFilterTarget,
+  async (target) => {
+    if (!target || target.store !== props.storeType) return
+    const pathHashes = Array.isArray(target.pathHashes) ? target.pathHashes.filter(Boolean) : []
+    if (!pathHashes.length) return
+    searchQuery.value = ''
+    filterState.value = 'default'
+    activeFilterPathHashes.value = pathHashes
+    localSelectedPathHashes.value = pathHashes
+    await nextTick()
+    scrollToPathHash(pathHashes[0])
+    requestAnimationFrame(() => {
+      scrollToPathHash(pathHashes[0])
+    })
+  },
+  { deep: true, immediate: true }
 )
 
 const handleSelect = (pathHashes) => {

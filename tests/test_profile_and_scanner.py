@@ -1442,6 +1442,123 @@ class TestModScanner(unittest.TestCase):
         self.assertEqual(payload["id"], "task-2")
         self.assertEqual(payload["progress"], 0)
 
+    def test_process_single_mod_uses_size_check_for_target_path_only(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        install_dir = temp_root / "install"
+        mod_dir = install_dir / "Mods" / "DemoMod"
+        about_file = mod_dir / "About" / "About.xml"
+        about_file.parent.mkdir(parents=True)
+        about_file.write_text("<ModMetaData />", encoding="utf-8")
+        mod_path = normalize_path_for_storage(str(mod_dir))
+        stat = about_file.stat()
+        snapshot = {
+            "package_id": "author.demo",
+            "workshop_id": "",
+            "name": "Demo Mod",
+            "version": "",
+            "store": "local",
+            "supported_versions": [],
+            "mtime": int(stat.st_mtime * 1000),
+            "size": 100,
+            "disabled": False,
+            "state": "present",
+            "path": mod_path,
+        }
+        context = ProfileContext(
+            profile_id="profile-a",
+            game_version="1.5.4100",
+            game_install_path=str(install_dir),
+            user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
+            use_workshop_mods=False,
+            use_self_mods=False,
+        )
+        scanner = ModScanner(context)
+        scanner.xml_parser = Mock()
+        scanner.xml_parser.parse.return_value = {"package_id": "author.demo", "url": "", "icon_path": ""}
+        scanner.analyzer = Mock()
+        scanner.analyzer.analyze.return_value = {
+            "supported_languages": [],
+            "file_stats": {},
+            "mod_type": "mod",
+        }
+        scanner._resolve_workshop_id = Mock(return_value=None)
+        scanner._resolve_images = Mock(return_value=("", ""))
+        about_state = SimpleNamespace(resolved_path=str(about_file), is_disabled=False)
+
+        config = SimpleNamespace(
+            enable_file_size_scan=False,
+            workshop_mods_path=str(temp_root / "workshop"),
+            self_mods_path=str(temp_root / "selfmods"),
+        )
+        with patch("backend.scanner.mod_scanner.settings.config", config), \
+             patch("backend.scanner.mod_scanner.ModAnalyzer.resolve_mod_about_state", return_value=about_state), \
+             patch("backend.scanner.mod_scanner.get_folder_size", return_value=200) as get_size:
+            mod_data = scanner._process_single_mod(
+                str(mod_dir),
+                False,
+                existing_snapshots={generate_path_hash(mod_path): snapshot},
+                dlc_parser=None,
+                forced_update=False,
+                size_check_override=None,
+                size_check_paths={mod_path},
+            )
+
+        get_size.assert_called()
+        scanner.xml_parser.parse.assert_called_once()
+        self.assertEqual(mod_data["file_size"], 200)
+
+    def test_scan_paths_task_accepts_single_mod_directory(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        mod_dir = temp_root / "Workshop" / "123456"
+        about_file = mod_dir / "About" / "About.xml"
+        about_file.parent.mkdir(parents=True)
+        about_file.write_text("<ModMetaData />", encoding="utf-8")
+
+        context = SimpleNamespace(profile_id="profile-a", game_dlc_path=str(temp_root / "Data"))
+        scanner = ModScanner(context)
+        mod_result = {
+            "package_id": "author.demo",
+            "path_hash": generate_path_hash(str(mod_dir)),
+            "path": str(mod_dir),
+            "disabled": False,
+            "is_new": True,
+        }
+        scanner._process_single_mod = Mock(return_value=mod_result)
+
+        about_state = SimpleNamespace(resolved_path=str(about_file), is_disabled=False)
+        with patch("backend.scanner.mod_scanner.db.connect"), \
+             patch("backend.scanner.mod_scanner.db.atomic", return_value=nullcontext()), \
+             patch("backend.scanner.mod_scanner.db.is_closed", return_value=True), \
+             patch("backend.scanner.mod_scanner.ModMaintenanceDAO.find_missing_mods", return_value={"deleted_mods": []}), \
+             patch("backend.scanner.mod_scanner.ModMaintenanceDAO.clean_invalid_shadow_paths", return_value=0), \
+             patch("backend.scanner.mod_scanner.SteamManager") as steam_manager_cls, \
+             patch("backend.scanner.mod_scanner.ModDAO.get_mod_snapshots", return_value={}), \
+             patch("backend.scanner.mod_scanner.ModDAO.batch_upsert_mods"), \
+             patch("backend.scanner.mod_scanner.ModDAO.batch_update_mods"), \
+             patch("backend.scanner.mod_scanner.ModDAO.batch_update_shadow_paths"), \
+             patch("backend.scanner.mod_scanner.ModDAO.get_profile_conflict_analysis", return_value={"hard_conflicts": [], "coexistences": []}), \
+             patch("backend.scanner.mod_scanner.DLCParser"), \
+             patch("backend.scanner.mod_scanner.ModAnalyzer.resolve_mod_about_state", return_value=about_state), \
+             patch("backend.scanner.mod_scanner.EventBus.emit_progress"), \
+             patch("backend.scanner.mod_scanner.EventBus.emit"):
+            steam_manager_cls.return_value.reconcile_steamcmd_acf = Mock()
+            scanner._scan_paths_task(
+                "task-single",
+                [str(mod_dir)],
+                forced_update=True,
+                size_check_override=True,
+                size_check_paths=None,
+                residue_scan_enabled=False,
+            )
+
+        scanner._process_single_mod.assert_called_once()
+        self.assertEqual(scanner._process_single_mod.call_args.args[0], normalize_path_for_storage(str(mod_dir)))
+
 
 class TestProfileConflictAnalysis(unittest.TestCase):
     def test_conflict_analysis_ignores_disabled_domain_assets(self):
@@ -1674,12 +1791,18 @@ class TestProfileConflictAnalysis(unittest.TestCase):
                 "path": str(local_path),
                 "name": "Local Copy",
                 "disabled": False,
+                "file_modify_time": 300,
+                "file_size": 1024,
+                "file_stats": {"game_xml": 8, "patch_xml": 1, "code_dll": 0},
             },
             {
                 "package_id": "Author.Mod",
                 "path": str(workshop_path),
                 "name": "Workshop Copy",
                 "disabled": False,
+                "file_modify_time": 200,
+                "file_size": 1024,
+                "file_stats": {"game_xml": 8, "patch_xml": 1, "code_dll": 0},
             },
         ]
 
@@ -1692,8 +1815,179 @@ class TestProfileConflictAnalysis(unittest.TestCase):
         self.assertEqual(len(mods), 1)
         self.assertEqual(mods[0]["path"], str(local_path))
         self.assertTrue(mods[0]["is_coexistence"])
+        self.assertEqual(mods[0]["coexist_sync_state"], "synced")
+        self.assertEqual(mods[0]["coexist_sync_diff"]["signals"], [])
+        self.assertEqual(mods[0]["coexist_sync_diff"]["workshop_modify_time"], 200)
         self.assertEqual(mods[0]["coexist_workshop_variant"]["path"], str(workshop_path))
 
+    def test_get_profile_mods_marks_coexist_variant_outdated_when_workshop_is_newer(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        install_dir = temp_root / "install"
+        context = ProfileContext(
+            profile_id="profile-a",
+            game_version="1.5.4100",
+            game_install_path=str(install_dir),
+            user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
+            use_workshop_mods=True,
+            use_self_mods=False,
+        )
+
+        local_root = install_dir / "Mods"
+        workshop_root = temp_root / "workshop"
+        local_path = local_root / "Author.Mod"
+        workshop_path = workshop_root / "123456"
+
+        config = SimpleNamespace(
+            workshop_mods_path=str(workshop_root),
+            self_mods_path=str(temp_root / "selfmods"),
+            enable_tool_mods=False,
+        )
+        assets = [
+            {
+                "package_id": "Author.Mod",
+                "path": str(local_path),
+                "name": "Local Copy",
+                "disabled": False,
+                "file_modify_time": 100,
+                "file_size": 1024,
+                "file_stats": {"game_xml": 8, "patch_xml": 1},
+            },
+            {
+                "package_id": "Author.Mod",
+                "path": str(workshop_path),
+                "name": "Workshop Copy",
+                "disabled": False,
+                "file_modify_time": 200,
+                "file_size": 1024,
+                "file_stats": {"game_xml": 8, "patch_xml": 1},
+            },
+        ]
+
+        with patch("backend.database.dao.settings.config", config), \
+             patch("backend.database.dao._load_group_names_by_mod_id", return_value={}), \
+             patch("backend.database.dao.ModAsset.select") as select_mock:
+            select_mock.return_value.join.return_value.where.return_value.dicts.return_value = assets
+            mods = ModDAO.get_profile_mods(context)
+
+        self.assertEqual(len(mods), 1)
+        self.assertEqual(mods[0]["coexist_sync_state"], "outdated")
+        self.assertEqual(mods[0]["coexist_sync_diff"]["signals"], ["modify_time"])
+
+    def test_get_profile_mods_marks_coexist_variant_outdated_by_content_signals(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        install_dir = temp_root / "install"
+        context = ProfileContext(
+            profile_id="profile-a",
+            game_version="1.5.4100",
+            game_install_path=str(install_dir),
+            user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
+            use_workshop_mods=True,
+            use_self_mods=False,
+        )
+
+        local_root = install_dir / "Mods"
+        workshop_root = temp_root / "workshop"
+        local_path = local_root / "Author.Mod"
+        workshop_path = workshop_root / "123456"
+
+        config = SimpleNamespace(
+            workshop_mods_path=str(workshop_root),
+            self_mods_path=str(temp_root / "selfmods"),
+            enable_tool_mods=False,
+        )
+        assets = [
+            {
+                "package_id": "Author.Mod",
+                "path": str(local_path),
+                "name": "Local Copy",
+                "disabled": False,
+                "file_modify_time": 0,
+                "file_size": 1024,
+                "file_stats": {"game_xml": 8, "patch_xml": 1},
+            },
+            {
+                "package_id": "Author.Mod",
+                "path": str(workshop_path),
+                "name": "Workshop Copy",
+                "disabled": False,
+                "file_modify_time": 0,
+                "file_size": 2048,
+                "file_stats": {"game_xml": 9, "patch_xml": 1},
+            },
+        ]
+
+        with patch("backend.database.dao.settings.config", config), \
+             patch("backend.database.dao._load_group_names_by_mod_id", return_value={}), \
+             patch("backend.database.dao.ModAsset.select") as select_mock:
+            select_mock.return_value.join.return_value.where.return_value.dicts.return_value = assets
+            mods = ModDAO.get_profile_mods(context)
+
+        self.assertEqual(len(mods), 1)
+        self.assertEqual(mods[0]["coexist_sync_state"], "outdated")
+        self.assertEqual(mods[0]["coexist_sync_diff"]["signals"], ["size", "file_stats"])
+        self.assertEqual(mods[0]["coexist_sync_diff"]["workshop_size"], 2048)
+
+    def test_get_profile_mods_marks_coexist_variant_outdated_when_time_equal_but_content_differs(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        install_dir = temp_root / "install"
+        context = ProfileContext(
+            profile_id="profile-a",
+            game_version="1.5.4100",
+            game_install_path=str(install_dir),
+            user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
+            use_workshop_mods=True,
+            use_self_mods=False,
+        )
+
+        local_root = install_dir / "Mods"
+        workshop_root = temp_root / "workshop"
+        local_path = local_root / "Author.Mod"
+        workshop_path = workshop_root / "123456"
+
+        config = SimpleNamespace(
+            workshop_mods_path=str(workshop_root),
+            self_mods_path=str(temp_root / "selfmods"),
+            enable_tool_mods=False,
+        )
+        assets = [
+            {
+                "package_id": "Author.Mod",
+                "path": str(local_path),
+                "name": "Local Copy",
+                "disabled": False,
+                "file_modify_time": 200,
+                "file_size": 1024,
+                "file_stats": {"game_xml": 8, "patch_xml": 1},
+            },
+            {
+                "package_id": "Author.Mod",
+                "path": str(workshop_path),
+                "name": "Workshop Copy",
+                "disabled": False,
+                "file_modify_time": 200,
+                "file_size": 2048,
+                "file_stats": {"game_xml": 9, "patch_xml": 1},
+            },
+        ]
+
+        with patch("backend.database.dao.settings.config", config), \
+             patch("backend.database.dao._load_group_names_by_mod_id", return_value={}), \
+             patch("backend.database.dao.ModAsset.select") as select_mock:
+            select_mock.return_value.join.return_value.where.return_value.dicts.return_value = assets
+            mods = ModDAO.get_profile_mods(context)
+
+        self.assertEqual(len(mods), 1)
+        self.assertEqual(mods[0]["coexist_sync_state"], "outdated")
+        self.assertEqual(mods[0]["coexist_sync_diff"]["signals"], ["size", "file_stats"])
 
 class TestApiScanMods(unittest.TestCase):
     def test_scan_mods_always_scans_all_configured_domains_for_inventory_sync(self):
@@ -1729,6 +2023,8 @@ class TestApiScanMods(unittest.TestCase):
                 "D:/Steam/workshop/content/294100",
             ],
             forced_update=False,
+            size_check_override=None,
+            size_check_paths=None,
             residue_active_tokens=[],
             residue_scan_enabled=True,
         )
@@ -1755,7 +2051,7 @@ class TestApiScanMods(unittest.TestCase):
 
         with patch("backend.api.settings.config", config), \
              patch("backend.api.os.path.exists", return_value=True):
-            res = API.scan_mods(api)
+            res = API.scan_mods(api, size_check_override=True)
 
         self.assertEqual(res["status"], "success")
         api.scanner.scan_paths_async.assert_called_once_with(
@@ -1765,9 +2061,44 @@ class TestApiScanMods(unittest.TestCase):
                 "D:/Steam/workshop/content/294100",
             ],
             forced_update=False,
+            size_check_override=True,
+            size_check_paths=None,
             residue_active_tokens=[],
             residue_scan_enabled=True,
         )
+
+    def test_scan_mods_forwards_targeted_size_check_paths(self):
+        api = API.__new__(API)
+        api.active_context = None
+        api.scanner = Mock()
+        api._read_active_mod_tokens = Mock(return_value=[])
+        api.scanner.scan_paths_async.return_value = {"status": "started", "task_id": "task-1"}
+
+        with patch("backend.api.settings.config", SimpleNamespace(enable_mod_residue_scan=True)):
+            res = API.scan_mods(api, specific_paths=["D:/Mods"], size_check_paths=["D:/Mods/123456"])
+
+        self.assertEqual(res["status"], "success")
+        api.scanner.scan_paths_async.assert_called_once_with(
+            ["D:/Mods"],
+            forced_update=False,
+            size_check_override=None,
+            size_check_paths=["D:/Mods/123456"],
+            residue_active_tokens=[],
+            residue_scan_enabled=True,
+        )
+
+    def test_scan_mods_returns_warning_when_scanner_is_busy(self):
+        api = API.__new__(API)
+        api.active_context = None
+        api.scanner = Mock()
+        api._read_active_mod_tokens = Mock(return_value=[])
+        api.scanner.scan_paths_async.return_value = {"status": "busy", "message": "扫描已在进行中"}
+
+        with patch("backend.api.settings.config", SimpleNamespace(enable_mod_residue_scan=True)):
+            res = API.scan_mods(api, specific_paths=["D:/Mods"])
+
+        self.assertEqual(res["status"], "warning")
+        self.assertEqual(res["data"]["details"]["status"], "busy")
 
     def test_workspace_classification_treats_current_local_self_path_as_local_only(self):
         scope = _ProfilePathScope(

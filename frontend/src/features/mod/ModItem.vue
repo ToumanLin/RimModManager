@@ -54,7 +54,6 @@
               <svg v-else class="fill-current -m-0.5 size-4.5" viewBox="100 -20 420 640" xmlns="http://www.w3.org/2000/svg"><path d="M512 512L128 512C92.7 512 64 483.3 64 448L64 160C64 124.7 92.7 96 128 96L266.7 96C280.5 96 294 100.5 305.1 108.8L343.5 137.6C349 141.8 355.8 144 362.7 144L512 144C547.3 144 576 172.7 576 208L576 448C576 483.3 547.3 512 512 512zM248 304C234.7 304 224 314.7 224 328C224 341.3 234.7 352 248 352L392 352C405.3 352 416 341.3 416 328C416 314.7 405.3 304 392 304L248 304z"/></svg>
               <span v-if="canToggleCoexistSource" class="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-accent-primary shadow-sm shadow-accent-primary/60"></span>
             </button>
-
             </div>
         </div>
         <!-- 缩略图 -->
@@ -134,10 +133,10 @@
         </span>
       </div>
 
-      <!-- 可替换版本提示 -->
-      <div v-if="!sectionHeader && modData?.replacement" :class="[`rounded-4xl cursor-help text-sm font-bold
-        hover:scale-110  text-shadow-2xs text-shadow-black hover:shadow-bg-deep/50 transition-all`, replacementInstalled?'text-text-dim':'text-accent-tip']"
-        v-tooltip="replacementTooltip">
+      <!-- 可替换版本 / 共存同步提示 -->
+      <div v-if="!sectionHeader && modNoticeTooltip" :class="[`rounded-4xl cursor-help text-sm font-bold
+        hover:scale-110  text-shadow-2xs text-shadow-black hover:shadow-bg-deep/50 transition-all`, modNoticeClass]"
+        v-tooltip="modNoticeTooltip">
         <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
         </svg>
@@ -197,7 +196,7 @@ import { useCommandStore } from '../../shared/commands/commandStore'
 import { DEFAULT_ACCENT_HEX, hexToRgba, hexToRgb, normalizeHexColor } from '../../shared/lib/color'
 import { extractSectionHeaderTitle, isSectionHeaderTitle, sortByDisplayName, sortTextByName, toast } from '../../shared/lib/common'
 import { normalizePackageId, normalizePackageToken } from './lib/modIdentity'
-import { X, FolderInput, Tag, Group, Palette, BetweenHorizontalStart, Redo2, ChevronDown, ChevronsDown, ChevronUp, ChevronsUp, ChessPawn, MessageSquareHeart, Download, Eraser, FolderMinus, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight, Lock, SquaresExclude, Package, ChevronsDownUp, ChevronsUpDown } from 'lucide-vue-next';
+import { X, FolderInput, Tag, Group, Palette, BetweenHorizontalStart, Redo2, ChevronDown, ChevronsDown, ChevronUp, ChevronsUp, ChessPawn, MessageSquareHeart, Download, Eraser, FolderMinus, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, RefreshCw, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight, Lock, SquaresExclude, Package, ChevronsDownUp, ChevronsUpDown } from 'lucide-vue-next';
 
 
 const props = defineProps({
@@ -290,6 +289,22 @@ const sourceToggleTooltip = computed(() => {
   return isWorkshopCoexistSource.value
     ? `储存位置：${sourceLabel}\n点击切换到本地版`
     : `储存位置：${sourceLabel}\n点击切换到工坊版`
+})
+const coexistSyncOutdated = computed(() => modData.value?.coexist_sync_state === 'outdated')
+const coexistSyncTooltip = computed(() => (
+  coexistSyncOutdated.value
+    ? '工坊版本已更新，可右键同步本地共存模组'
+    : '本地共存副本与工坊版本一致'
+))
+const modNoticeTooltip = computed(() => {
+  const parts = []
+  if (replacementTooltip.value) parts.push(replacementTooltip.value)
+  if (coexistSyncOutdated.value) parts.push(coexistSyncTooltip.value)
+  return parts.join('\n')
+})
+const modNoticeClass = computed(() => {
+  if (coexistSyncOutdated.value) return 'text-accent-warn'
+  return replacementInstalled.value ? 'text-text-dim' : 'text-accent-tip'
 })
 const handleSourceToggle = async () => {
   if (!canToggleCoexistSource.value) return
@@ -495,6 +510,12 @@ const handleContextMenu = async (event) => {
     action: () => copySelectedModInfo(field.key, field.label, [...selectedIds]),
   }))
   const selectedHasPathHash = modStore.selectedMods.some(m => !!m?.path_hash)
+  const localizeSummary = modStore.resolveLocalizeCandidates(modStore.selectedMods, 'workshop')
+  const selectedLocalizeCandidates = localizeSummary.candidates
+  const selectedCoexistWorkshopCount = localizeSummary.existingCount
+  const localizeMenuLabel = localizeSummary.actionTitle
+  const localizeMenuIcon = selectedCoexistWorkshopCount > 0 ? RefreshCw : Copy
+  const localizeCandidateCountStr = selectedLocalizeCandidates.length>1?` (${selectedLocalizeCandidates.length}项)`:''
   const coexistSelectedIds = selectedIds.filter(id => modStore.canSwitchCoexistenceSource(id))
   const coexistSelectedCountStr = coexistSelectedIds.length>1?` (${coexistSelectedIds.length}项)`:''
   modStore.lastSelectedMod=modStore.takeModById(props.item_id)  // 记录最后选中的模组
@@ -600,7 +621,8 @@ const handleContextMenu = async (event) => {
   const fileMenuItems = [
     { divider: true },
     { commandId: 'mods.openSelectedFolder', args: { modId: props.item_id }, labelOverride: '打开文件夹', icon: FolderInput },
-    { label: '创建本地共存'+ selectedCountStr, icon: Copy, disabled: !modStore.selectedMods.some(m => m.store === 'workshop'), action: () => modStore.localizeSelectedMods('workshop'), },
+    { label: localizeMenuLabel + localizeCandidateCountStr, icon: localizeMenuIcon, disabled: !selectedLocalizeCandidates.length,
+      action: () => modStore.localizeMods(localizeSummary.pathHashes, 'workshop', { existingCount: selectedCoexistWorkshopCount }) },
     { label: '切换共存版本', icon: SquaresExclude, disabled: !coexistSelectedIds.length,
       children: [
         { label: '切换为工坊版' + coexistSelectedCountStr, icon: IconSteam, action: () => modStore.switchCoexistenceSource(coexistSelectedIds, 'steam') },

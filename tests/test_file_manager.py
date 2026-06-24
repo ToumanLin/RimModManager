@@ -1,4 +1,5 @@
 import os
+import shutil
 import struct
 import tempfile
 import unittest
@@ -53,6 +54,65 @@ class TestFileManager(unittest.TestCase):
             self.assertTrue(os.path.isfile(target_path))
             with Image.open(target_path) as image:
                 self.assertEqual(image.format, "WEBP")
+
+    def test_copy_folders_with_progress_syncs_existing_destination(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            src = temp_path / "src"
+            dst = temp_path / "dst"
+            src.mkdir()
+            dst.mkdir()
+            (src / "About").mkdir()
+            (dst / "old.txt").write_text("old", encoding="utf-8")
+            (src / "About" / "About.xml").write_text("<ModMetaData />", encoding="utf-8")
+
+            cleanup_calls = []
+            def fake_delete(path, force=False):
+                cleanup_calls.append((Path(path).name, force))
+                shutil.rmtree(path)
+                return True
+
+            with patch("backend.managers.mgr_files.delete_fs_path", side_effect=fake_delete):
+                success, errors, total = FileManager.copy_folders_with_progress([
+                    {"src": str(src), "dst": str(dst), "label": "Test Mod"}
+                ])
+
+            self.assertEqual(total, 1)
+            self.assertEqual(errors, [])
+            self.assertEqual(success, [str(dst)])
+            self.assertTrue((dst / "About" / "About.xml").is_file())
+            self.assertFalse((dst / "old.txt").exists())
+            self.assertFalse((temp_path / "dst_1").exists())
+            self.assertTrue(any(name.startswith("dst.__sync_backup_") and force for name, force in cleanup_calls))
+
+    def test_copy_folders_with_progress_restores_existing_destination_when_replace_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            src = temp_path / "src"
+            dst = temp_path / "dst"
+            src.mkdir()
+            dst.mkdir()
+            (src / "About").mkdir()
+            (src / "About" / "About.xml").write_text("<ModMetaData />", encoding="utf-8")
+            (dst / "old.txt").write_text("old", encoding="utf-8")
+
+            real_move = shutil.move
+            def fail_tmp_move(src_path, dst_path, *args, **kwargs):
+                if ".__sync_tmp_" in str(src_path):
+                    raise OSError("move failed")
+                return real_move(src_path, dst_path, *args, **kwargs)
+
+            with patch("backend.managers.mgr_files.shutil.move", side_effect=fail_tmp_move):
+                success, errors, total = FileManager.copy_folders_with_progress([
+                    {"src": str(src), "dst": str(dst), "label": "Test Mod"}
+                ])
+
+            self.assertEqual(total, 1)
+            self.assertEqual(success, [])
+            self.assertEqual(len(errors), 1)
+            self.assertTrue((dst / "old.txt").is_file())
+            self.assertFalse((dst / "About" / "About.xml").exists())
+            self.assertFalse(list(temp_path.glob("dst.__sync_*")))
 
 
 if __name__ == "__main__":

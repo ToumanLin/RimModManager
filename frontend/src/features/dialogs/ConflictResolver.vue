@@ -605,6 +605,7 @@ const setItemAction = (group, mod, action) => {
 }
 
 const canLocalize = (mod) => !!mod?.path_hash && !!mod?.workshop_id && ['workshop', 'self'].includes(normalizeStore(mod.store))
+const getLocalizeLabel = (mod) => mod?.is_coexistence ? '同步本地共存' : '本地化共存'
 const canUnsubscribe = (mod) => !!mod?.workshop_id && !!mod?.path_hash && normalizeStore(mod.store) === 'workshop'
 const canOpenModPage = (mod) => {
   const info = normalizeModMenuSource(mod)
@@ -627,7 +628,7 @@ const openConflictItemMenu = (event, group, mod) => {
     { divider: true },
     { label: '打开目录', icon: Folder, disabled: !mod?.path, action: () => appStore.openPath(mod.path) },
     { divider: true },
-    { label: '本地化共存', icon: FolderInput, disabled: !canLocalize(mod), action: () => handleLocalize(mod) },
+    { label: getLocalizeLabel(mod), icon: FolderInput, disabled: !canLocalize(mod), action: () => handleLocalize(mod) },
     { label: '退订并删除', icon: XCircle, level: 'danger', disabled: !canUnsubscribe(mod), action: () => handleUnsubscribe(mod) },
   ], { group, mod })
 }
@@ -805,7 +806,7 @@ const handleLocalize = async (mod) => {
   if (!mod?.path_hash) return
   const store = normalizeStore(mod.store)
   if (!['self', 'workshop'].includes(store)) return
-  await modStore.localizeMods([mod.path_hash], store)
+  await modStore.localizeMods([mod.path_hash], store, { existingCount: mod?.is_coexistence ? 1 : 0 })
 }
 
 const handleUnsubscribe = async (mod) => {

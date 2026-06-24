@@ -960,7 +960,7 @@ class FileManager:
     @staticmethod
     def localize_workshop_mods(query, local_root: str, folder_name_type: str = 'workshop_id'):
         """
-        将工坊模组转为本地模组，并推送实时进度
+        将工坊模组本地化或同步为本地共存模组，并推送实时进度
         :param query: 包含工坊模组信息的查询结果
         :param local_root: 本地模组存储根目录
         :param folder_name_type: 文件夹命名类型，可选 'alias_name', 'name', 'package_id', 'workshop_id'
@@ -982,9 +982,18 @@ class FileManager:
             tasks.append({
                 'src': mod_data['path'],
                 'dst': os.path.join(local_root, folder_name),
-                'label': display_name # 用于进度显示
+                'label': display_name, # 用于进度显示
+                'is_sync': os.path.exists(os.path.join(local_root, folder_name)),
             })
         if not tasks: return False
+        sync_count = sum(1 for task in tasks if task.get('is_sync'))
+        create_count = len(tasks) - sync_count
+        if sync_count and create_count:
+            action_title = "本地化/同步本地共存模组"
+        elif sync_count:
+            action_title = "同步本地共存模组"
+        else:
+            action_title = "本地化共存模组"
         cancel_event = threading.Event()
         with FileManager._localize_lock:
             FileManager._localize_cancel_events[task_id] = cancel_event
@@ -993,8 +1002,8 @@ class FileManager:
             "localize",
             status="pending",
             progress=0,
-            message="准备本地化任务...",
-            metrics={"total": len(tasks), "current": 0, "title": "本地化模组"},
+            message=f"准备{action_title}...",
+            metrics={"total": len(tasks), "current": 0, "title": action_title},
         )
             
         # 2. 定义进度回调函数，通过 EventBus 发送到前端
@@ -1005,8 +1014,8 @@ class FileManager:
                 "localize",
                 status="running",
                 progress=percent,
-                message=f"正在本地化 ({current}/{total}): {label}",
-                metrics={"current": current, "total": total, "label": label, "title": "本地化模组"},
+                message=f"正在{action_title} ({current}/{total}): {label}",
+                metrics={"current": current, "total": total, "label": label, "title": action_title},
             )
         # 3. 在后台线程执行，避免阻塞 UI（如果是大批量复制）
         def run_task():
@@ -1014,7 +1023,7 @@ class FileManager:
             errors = []
             total = len(tasks)
             final_status = "success"
-            final_message = "本地化完成"
+            final_message = f"{action_title}完成"
             try:
                 success, errors, total = FileManager.copy_folders_with_progress(
                     tasks,
@@ -1025,18 +1034,18 @@ class FileManager:
                 error_count = len(errors)
                 if cancel_event.is_set():
                     final_status = "cancelled"
-                    final_message = "本地化已取消"
+                    final_message = f"{action_title}已取消"
                 elif success_count == 0 and error_count > 0:
                     final_status = "failed"
-                    final_message = "本地化失败"
+                    final_message = f"{action_title}失败"
             except InterruptedError:
                 final_status = "cancelled"
-                final_message = "本地化已取消"
+                final_message = f"{action_title}已取消"
             except Exception as e:
                 logger.error(f"Localize task failed: {e}", exc_info=True)
                 errors.append(str(e))
                 final_status = "failed"
-                final_message = "本地化失败"
+                final_message = f"{action_title}失败"
             finally:
                 with FileManager._localize_lock:
                     FileManager._localize_cancel_events.pop(task_id, None)
@@ -1055,7 +1064,7 @@ class FileManager:
                     "success_count": success_count,
                     "error_count": error_count,
                     "errors": errors,
-                    "title": "本地化模组",
+                    "title": action_title,
                 },
             )
             # 这里无论成功、失败还是取消都发完成事件，让前端决定是否刷新视图。
@@ -1065,6 +1074,7 @@ class FileManager:
                 'error_count': error_count,
                 'errors': errors,
                 'status': final_status,
+                'title': action_title,
             })
         threading.Thread(target=run_task, daemon=True).start()
         return task_id
@@ -1097,18 +1107,23 @@ class FileManager:
             src = task['src']
             dst = task['dst']
             label = task.get('label', os.path.basename(src))
+            final_dst = dst
+            tmp_dst = f"{dst}.__sync_tmp_{uuid.uuid4().hex}"
+            backup_dst = ""
+
+            def cleanup_internal_path(path):
+                if path and os.path.exists(path):
+                    delete_fs_path(path, force=True)
 
             # 触发进度回调
             if progress_callback:
                 progress_callback(i + 1, total, label)
 
             try:
-                # 自动处理重名
-                final_dst = dst
-                counter = 1
-                while os.path.exists(final_dst):
-                    final_dst = f"{dst}_{counter}"
-                    counter += 1
+                src_abs = os.path.normcase(os.path.abspath(src))
+                dst_abs = os.path.normcase(os.path.abspath(final_dst))
+                if src_abs == dst_abs:
+                    raise ValueError("源目录和目标目录相同")
 
                 def copy_with_cancel(source_file, dest_file, *, follow_symlinks=True):
                     # 复制过程只能做到“文件粒度”的中断，至少保证不会继续复制后续文件。
@@ -1116,18 +1131,41 @@ class FileManager:
                         raise InterruptedError("Localize task cancelled by user")
                     return shutil.copy2(source_file, dest_file, follow_symlinks=follow_symlinks)
 
-                shutil.copytree(src, final_dst, copy_function=copy_with_cancel)
+                shutil.copytree(src, tmp_dst, copy_function=copy_with_cancel)
+                if cancel_event and cancel_event.is_set():
+                    raise InterruptedError("Localize task cancelled by user")
+
+                if os.path.exists(final_dst):
+                    backup_dst = f"{dst}.__sync_backup_{uuid.uuid4().hex}"
+                    shutil.move(final_dst, backup_dst)
+                try:
+                    shutil.move(tmp_dst, final_dst)
+                except Exception:
+                    if backup_dst and os.path.exists(backup_dst):
+                        cleanup_internal_path(final_dst)
+                        shutil.move(backup_dst, final_dst)
+                        backup_dst = ""
+                    raise
+                if backup_dst and os.path.exists(backup_dst):
+                    try:
+                        cleanup_internal_path(backup_dst)
+                    except Exception as cleanup_error:
+                        logger.debug(f"Cleanup localize backup folder failed: {backup_dst} - {cleanup_error}")
                 success_list.append(final_dst)
             except InterruptedError:
                 try:
-                    if os.path.exists(final_dst):
-                        delete_fs_path(final_dst)
+                    cleanup_internal_path(tmp_dst)
                 except Exception as cleanup_error:
-                    logger.debug(f"Cleanup cancelled localize folder failed: {final_dst} - {cleanup_error}")
+                    logger.debug(f"Cleanup cancelled localize temp folder failed: {tmp_dst} - {cleanup_error}")
                 raise
             except Exception as e:
+                for cleanup_path in (tmp_dst, backup_dst):
+                    try:
+                        cleanup_internal_path(cleanup_path)
+                    except Exception as cleanup_error:
+                        logger.debug(f"Cleanup failed localize temp folder failed: {cleanup_path} - {cleanup_error}")
                 logger.error(f"Copy failed: {src} -> {dst}: {e}")
-                error_list.append(f"模组 {label} 复制失败: {str(e)}")
+                error_list.append(f"模组 {label} 处理失败: {str(e)}")
 
         return success_list, error_list, total
     

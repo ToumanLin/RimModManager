@@ -1816,13 +1816,15 @@ class API:
     #  3. Mod 扫描与管理 (Scanning & Mods)
     # =========================================================================
     @log_api_call
-    def scan_mods(self, specific_paths: List[str]|None = None, forced_update: bool = False):
+    def scan_mods(self, specific_paths: List[str]|None = None, forced_update: bool = False, size_check_override: bool | None = None, size_check_paths: List[str]|None = None):
         """
         触发后台模组扫描。
         扫描完成后，Scanner 会回调当前环境的运行态收敛入口。
         立即返回状态，前端通过统一任务流和 `scan-complete` 事件获取更新。
         :param specific_paths: 可选，指定要扫描的路径列表。如果为空，则使用设置中的默认路径。
         :param forced_update: 可选，是否强制更新所有 Mod 的数据。默认 False。
+        :param size_check_override: 可选，临时覆盖目录大小检测开关。
+        :param size_check_paths: 可选，只对指定 Mod 路径强制计算目录大小。
         """
         try:
             paths_to_scan = []
@@ -1869,12 +1871,16 @@ class API:
             result = self.scanner.scan_paths_async(
                 paths_to_scan,
                 forced_update=forced_update,
+                size_check_override=size_check_override,
+                size_check_paths=size_check_paths,
                 residue_active_tokens=self._read_active_mod_tokens(),
                 residue_scan_enabled=bool(getattr(settings.config, "enable_mod_residue_scan", True)),
             )
         except Exception as e:
             logger.error(f"Scan mods failed: {str(e)}", exc_info=True)
             return ApiResponse.error(f"扫描模组失败：{str(e)}")
+        if isinstance(result, dict) and result.get("status") == "busy":
+            return ApiResponse.warning(result.get("message") or "扫描已在进行中", {"details": result})
         return ApiResponse.success({ "details": result },"后台扫描已启动")
     
     @log_api_call
@@ -3627,7 +3633,7 @@ class API:
     @log_api_call
     def localize_workshop_mods(self, path_hashes: List[str], store: str = 'workshop'):
         """
-        将指定副本转为本地模组，并推送实时进度。
+        将指定副本本地化或同步为本地共存模组，并推送实时进度。
         这里使用 path_hash 精确定位副本，避免共存场景下 workshop_id/package_id 指向不唯一。
         """
         cfg = settings.config
@@ -3636,23 +3642,18 @@ class API:
 
         normalized_hashes = [str(item or "").strip() for item in path_hashes if str(item or "").strip()]
         if not normalized_hashes:
-            return ApiResponse.warning(f"没有可转换的{store}模组")
+            return ApiResponse.warning(f"没有可同步的{store}模组")
 
-        # 1. 准备任务 (使用 JOIN 一次性查出所有需要的数据)
-        # 使用 path_hash 锁定当前副本，避免共存副本间串改。
-        query = (ModAsset.select(ModAsset, UserModData.alias_name)
-            .join(UserModData, on=(ModAsset.package_id == UserModData.mod_id), join_type=JOIN.LEFT_OUTER)
-            .where(ModAsset.path_hash << normalized_hashes, ModAsset.store == store) # type: ignore
-            .dicts())
+        # 使用 path_hash 锁定当前副本，并在 DAO 内按当前 Profile 路径范围二次约束。
+        query = ModDAO.get_localizable_assets(self.active_context, normalized_hashes, store)
         try:
-            # 2. 执行任务
             res = file_mgr.localize_workshop_mods(query, local_root, cfg.coexist_mod_folder_name_type)
-            if not res: return ApiResponse.warning(f"没有可转换的{store}模组")
+            if not res: return ApiResponse.warning(f"没有可同步的{store}模组")
         except Exception as e:
             logger.error(f"Localize workshop mods failed: {e}", exc_info=True)
-            return ApiResponse.error(f"本地化任务失败: {str(e)}")
+            return ApiResponse.error(f"本地共存任务失败: {str(e)}")
         
-        return ApiResponse.success({"task_id": res}, message="本地化任务已在后台启动")
+        return ApiResponse.success({"task_id": res}, message="本地共存任务已在后台启动")
     
     @log_api_call
     def workspace_transfer_mods(self, path_hashes: list, target_store: str, mode: str = 'copy'):
@@ -4126,7 +4127,7 @@ class API:
             if not normalized_task_id:
                 return ApiResponse.error("缺少任务 ID")
             ok = file_mgr.cancel_localize_task(normalized_task_id)
-            return ApiResponse.success(message="已请求取消本地化任务") if ok else ApiResponse.error("当前没有可取消的本地化任务")
+            return ApiResponse.success(message="已请求取消本地共存任务") if ok else ApiResponse.error("当前没有可取消的本地共存任务")
 
         if normalized_type == "scan":
             if not self.scanner:

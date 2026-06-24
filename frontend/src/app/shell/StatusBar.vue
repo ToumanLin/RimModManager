@@ -145,7 +145,7 @@ const taskTypeMeta = {
   'texture-opt': { title: '贴图优化', icon: Image, text: 'text-accent-secondary', bar: 'bg-accent-secondary', border: 'border-accent-secondary/30' },
   'texture-opt-analyze': { title: '贴图分析', icon: ScanSearch, text: 'text-accent-secondary', bar: 'bg-accent-secondary', border: 'border-accent-secondary/30' },
   'ai-task': { title: 'AI 生成任务', icon: Bot, text: 'text-accent-special', bar: 'bg-accent-special', border: 'border-accent-special/30' },
-  localize: { title: '本地化模组', icon: Box, text: 'text-accent-success', bar: 'bg-accent-success', border: 'border-accent-success/30' },
+  localize: { title: '本地共存任务', icon: Box, text: 'text-accent-success', bar: 'bg-accent-success', border: 'border-accent-success/30' },
   'mod-import': { title: '导入模组包', icon: Package, text: 'text-accent-primary', bar: 'bg-accent-primary', border: 'border-accent-primary/30' },
   'mod-export': { title: '导出模组包', icon: Package, text: 'text-accent-special', bar: 'bg-accent-special', border: 'border-accent-special/30' },
   'steamcmd-init': { title: 'SteamCMD 初始化', icon: Download, text: 'text-accent-warning', bar: 'bg-accent-warning', border: 'border-accent-warning/30' },
