@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from contextlib import suppress
 from pathlib import Path
 from typing import List
 
@@ -43,17 +44,29 @@ datas = collect_data_files(
         f.write(hook_content)
     return hook_dir
 
+def resolve_upx_dir(default_dir: str = r"D:\Environment\upx-5.0.0-win64") -> str:
+    """解析 UPX 目录，不存在时跳过压缩参数，避免换机器打包直接失败。"""
+    raw_path = os.environ.get("UPX_DIR") or default_dir
+    upx_path = Path(raw_path)
+    if upx_path.is_file():
+        upx_path = upx_path.parent
+    if upx_path.exists():
+        return str(upx_path)
+    print(f"提示: 未找到 UPX 目录，已跳过压缩参数: {upx_path}")
+    return ""
+
+
 def create_version_file(version="1.0.0.0", company_name="", file_description="", internal_name="", legal_copyright="", product_name=""):
     """
     生成 PyInstaller 所需的版本信息文件
     """
     # 将版本号字符串 "1.0.0" 转换为元组 (1, 0, 0, 0)
     try:
-        v = version.split(".")
+        v = str(version).split(".")
         while len(v) < 4:
             v.append("0")
         v_tuple = tuple(map(int, v[:4]))
-    except:
+    except (TypeError, ValueError):
         v_tuple = (1, 0, 0, 0)
         
     version_str = str(v_tuple)
@@ -123,6 +136,7 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
             product_name=name
         )
         hook_dir_path = create_pyinstaller_hook_dir()
+        upx_dir_path = resolve_upx_dir()
 
         # 2. 构建命令
         # 这些模块在源码运行时可以被 Python 正常动态发现，
@@ -136,11 +150,12 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
             "-w",  # 无控制台窗口
             "--noconfirm",  # 跳过确认提示
             "--contents-directory", "lib",
+            "--paths", "submodules/SteamworksPy",
             "--additional-hooks-dir", hook_dir_path,
             "--add-data", "frontend/dist;frontend/dist", # 注意：Windows下通常用分号; Linux用冒号:
-            "--collect-binaries", "steamworks",
             "--collect-binaries", "tiktoken",
             "--collect-data", "tiktoken",
+            "--collect-submodules", "steamworks",
             "--collect-submodules", "tiktoken",
             "--collect-submodules", "tiktoken_ext",
             "--hidden-import", "tiktoken_ext",
@@ -152,11 +167,12 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
             "--exclude-module", "pkg_resources", # 通常这两个是一起出现的，建议一并排除
             
             "--clean",  # 清理旧构建文件
-            "--upx-dir", r"D:\Environment\upx-5.0.0-win64",  # 指定 UPX 路径
             "-n", name,  # 指定名称
             main_file  # 主程序文件
         ]
         cmd = pyinstaller_args
+        if upx_dir_path:
+            cmd.extend(["--upx-dir", upx_dir_path])
         if icon_path and os.path.exists(icon_path):
             cmd.extend(["-i", icon_path])
         if splash_path and os.path.exists(splash_path):
@@ -175,8 +191,7 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
             return True
         else:
             print("打包失败！")
-            print("错误信息：")
-            print(result.stderr)
+            print(f"PyInstaller 退出码: {result.returncode}")
             return False
     except Exception as e:
         print(f"打包过程中出错: {str(e)}")
@@ -184,11 +199,9 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
     finally:
         # 清理临时版本文件
         if version_file_path and os.path.exists(version_file_path):
-            try: os.remove(version_file_path)
-            except: pass
+            with suppress(OSError): os.remove(version_file_path)
         if hook_dir_path and os.path.exists(hook_dir_path):
-            try: shutil.rmtree(hook_dir_path)
-            except: pass
+            with suppress(OSError): shutil.rmtree(hook_dir_path)
 
 def _iter_toolmods_files(toolmods_dir: Path):
     """遍历 ToolMods 发布文件，排除任意层级下以 Source 开头的目录内容。"""
@@ -264,7 +277,7 @@ def buildFrontend(start_path: str = 'frontend'):
     """
     构建前端项目
     """
-    subprocess.run(["npm", "run", "build"], cwd=start_path, check=True, text=True, encoding='utf-8', shell=True)
+    subprocess.run(["npm", "run", "build"], cwd=start_path, check=True, text=True, encoding='utf-8')
 
 # --- 优化后的目录树生成 ---
 
@@ -278,7 +291,7 @@ def get_gitignore_spec(root_path: str):
             return pathspec.PathSpec.from_lines('gitwildmatch', f)
     return None
 
-def filestree( start_path: str = '.', exclude_dirs: List[str] = [], max_depth: int = -1, use_gitignore: bool = True ) -> str:
+def filestree( start_path: str = '.', exclude_dirs: List[str] | None = None, max_depth: int = -1, use_gitignore: bool = True ) -> str:
     """
     生成目录树结构字符串（重构版：递归逻辑更清晰，支持 .gitignore）
     

@@ -10,7 +10,6 @@ import {
   dedupeNormalizedPackageIds, normalizeInstallSources,
   normalizePackageId, normalizeUrl, normalizeWorkshopId,
 } from '../mod/lib/modIdentity'
-import { escapeHtml } from '../../shared/lib/text'
 import { hasWorkshopSearchText, resolveWorkshopDays, resolveWorkshopSort } from './workshopSearchOptions'
 import { isMatrixModAvailable, isMatrixModDeleted, isMatrixModMissing, normalizeMatrixTimestamp } from './lib/matrixItemState'
 
@@ -28,6 +27,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     detected: false,
     prompted: false,
     changes: [],
+  })
+  const startupInventoryDialog = reactive({
+    visible: false,
+    title: '',
+    message: '',
+    groups: [],
+    targets: [],
+    pendingActions: [],
+    resolve: null,
   })
   const STARTUP_INVENTORY_ACK_KEY = 'rmm.startupInventoryPromptAck.v1'
 
@@ -499,9 +507,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
   const takeStartupWorkshopChangesForScan = () => startupWorkshopChangeState.changes.filter(item => item.status === 'changed' && item.path)
   const STARTUP_EVENT_GROUPS = [
-    ['deleted', '已删除/失效', '这些库存记录原本有本地目录，但现在目录不存在或不再包含有效 About.xml。常见原因是文件被手动删除、Steam 清理缓存、磁盘迁移后路径失效，或同步中断留下了记录。'],
-    ['missing', '工坊缺失', 'Steam 仍显示这些工坊项已订阅，但本地没有可扫描的有效 Mod。工坊订阅超过 1000 项时，Steam 同步队列偶尔会漏掉少量项目；重新订阅可以再次把请求发送给 Steam，促使它重新校验并补下载。'],
-    ['changed', '工坊变更', '这些模组最近被作者在 Steam 工坊更新过。重新扫描后，管理器才能刷新文件时间、大小和库存状态，避免继续按旧数据判断。'],
+    ['deleted', '已删除模组', '库存记录还在，但本地文件夹已不存在。确认无误后可清理残留记录。'],
+    ['missing', '缺失模组', '仍在工坊订阅列表中，但本地文件不完整或不存在。订阅内容很多时，Steam 同步队列可能漏掉少量项目导致文件缺失；工坊订阅超过 1000 项时更容易遇到。可重新下载补齐。'],
+    ['changed', '已变更模组', '工坊内容已被作者更新。建议重新扫描，刷新大小、时间和状态。'],
   ]
   const STARTUP_EVENT_FILTER_MAP = {
     deleted: 'deleted',
@@ -515,31 +523,41 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return shown ? `${shown}${more}` : ''
   }
   const formatStartupWorkshopChangeNames = (changes = [], limit = 8) => formatStartupEventNames(changes, 'changed', limit)
-  const formatStartupInventorySummaryHtml = (changes = [], beforeScan = false, limit = 8) => {
-    const prefix = beforeScan ? '检测到以下库存状态，建议刷新库存数据：' : '已根据扫描结果确认以下库存状态：'
-    const groups = STARTUP_EVENT_GROUPS
-      .map(([status, title, description]) => {
-        const targets = (Array.isArray(changes) ? changes : []).filter(item => item?.status === status)
-        if (!targets.length) return ''
-        const items = targets.slice(0, limit)
-          .map(item => `<li class="rounded-md bg-bg-inset/60 px-2 py-1 text-text-main">${escapeHtml(item.name || item.packageId || item.workshopId || '未知模组')}</li>`)
-          .join('')
-        const more = targets.length > limit ? `<li class="px-2 py-1 text-text-dim">还有 ${targets.length - limit} 项未显示。</li>` : ''
-        return `
-          <section class="space-y-1">
-            <div class="flex items-center justify-between gap-3">
-              <div class="font-bold text-text-main">${title}</div>
-              <div class="shrink-0 rounded-md border border-border-base/10 bg-bg-overlay/5 px-1.5 py-0.5 text-[10px] text-text-dim">${targets.length} 项</div>
-            </div>
-            <div class="text-[11px] text-text-dim">${description}</div>
-            <ul class="space-y-1">${items}${more}</ul>
-          </section>
-        `
+  const formatStartupInventorySummary = (changes = [], beforeScan = false) => {
+    const prefix = beforeScan ? '检测到库存可能有变化。' : '库存检测完成。'
+    const counts = STARTUP_EVENT_GROUPS
+      .map(([status, title]) => {
+        const count = (Array.isArray(changes) ? changes : []).filter(item => item?.status === status).length
+        return count ? `${title} ${count} 项` : ''
       })
       .filter(Boolean)
-      .join('')
-    return `<div class="space-y-3 max-h-[46vh] overflow-y-auto pr-1"><p>${prefix}</p>${groups}</div>`
+    return counts.length ? `${prefix}\n${counts.join('，')}。` : prefix
   }
+  const resolveStartupMissingWorkshopIds = (changes = []) => [...new Set((Array.isArray(changes) ? changes : [])
+    .filter(item => item?.status === 'missing')
+    .map(item => normalizeWorkshopId(item?.workshopId))
+    .filter(Boolean))]
+  const getStartupEventGroupConfig = (status = '') => STARTUP_EVENT_GROUPS.find(([key]) => key === status)
+  const getStartupEventGroupLabel = (status = '') => getStartupEventGroupConfig(status)?.[1] || '库存状态'
+  const buildStartupInventoryDialogItems = (changes = []) => (Array.isArray(changes) ? changes : []).map((item, index) => {
+    const workshopId = normalizeWorkshopId(item?.workshopId)
+    const status = String(item?.status || '').trim()
+    return {
+      id: `${status}:${item?.pathHash || workshopId || index}`,
+      title: item?.name || workshopId || '未知模组',
+      description: item?.path || (workshopId ? `Workshop ID: ${workshopId}` : ''),
+      meta: [getStartupEventGroupLabel(status), workshopId ? `Workshop ID: ${workshopId}` : ''].filter(Boolean),
+      status,
+      workshopId,
+      raw: item,
+    }
+  })
+  const buildStartupInventoryDialogGroups = (items = []) => STARTUP_EVENT_GROUPS
+    .map(([status, title, description]) => {
+      const groupItems = items.filter(item => item?.status === status)
+      return groupItems.length ? { id: status, title, description, items: groupItems } : null
+    })
+    .filter(Boolean)
   const resolveStartupInventoryFilterState = (changes = []) => {
     const statuses = new Set((Array.isArray(changes) ? changes : []).map(item => item?.status).filter(Boolean))
     const status = STARTUP_EVENT_GROUPS.find(([key]) => statuses.has(key))?.[0]
@@ -609,19 +627,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const ack = loadStartupPromptAck()
     return targets.filter(item => !ack.has(getStartupEventFingerprint(item)))
   }
-  const cleanupDeletedStartupRecords = async (changes = []) => {
+  const cleanupDeletedStartupRecords = async (changes = [], options = {}) => {
     const deletedHashes = [...new Set((Array.isArray(changes) ? changes : [])
       .filter(item => item?.status === 'deleted')
       .map(item => String(item?.pathHash || '').trim())
       .filter(pathHash => pathHash && !pathHash.startsWith('ghost_')))]
     if (!deletedHashes.length || !window.pywebview) return false
 
-    const check = await confirmStore.confirmAction(
-      '清理已删除记录',
-      `确定要清理这些已删除/失效的库存记录吗？（${deletedHashes.length} 项）\n这不会删除任何文件，也不会清理用户标签、笔记和分组。`,
-      { type: 'warning' }
-    )
-    if (!check) return false
+    if (options.confirm !== false) {
+      const check = await confirmStore.confirmAction(
+        '清理已删除记录',
+        `确定要清理这些已删除/失效的库存记录吗？（${deletedHashes.length} 项）\n这不会删除任何文件，也不会清理用户标签、笔记和分组。`,
+        { type: 'warning' }
+      )
+      if (!check) return false
+    }
 
     const res = await window.pywebview.api.mods_delete(deletedHashes, false, false)
     if (!checkResult(res, '清理已删除记录')) return false
@@ -629,44 +649,68 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     await fetchLibrariesMods()
     return true
   }
-  const addStartupDetailButton = (actionButtons, targets, status, label) => {
-    if (targets.some(item => item?.status === status)) {
-      actionButtons.push({ label, value: `details_${status}`, kind: actionButtons.length ? 'secondary' : 'primary' })
+  const removeStartupInventoryDialogItems = (itemIds = []) => {
+    const ids = new Set(itemIds)
+    startupInventoryDialog.groups.forEach(group => {
+      group.items = group.items.filter(item => !ids.has(item.id))
+    })
+    startupInventoryDialog.groups = startupInventoryDialog.groups.filter(group => group.items.length > 0)
+  }
+  const closeStartupInventoryDialog = () => {
+    startupInventoryDialog.visible = false
+    saveStartupPromptAck(startupInventoryDialog.targets)
+    if (typeof startupInventoryDialog.resolve === 'function') {
+      startupInventoryDialog.resolve(true)
+      startupInventoryDialog.resolve = null
     }
+  }
+  const runStartupInventoryDialogAction = async (actionId, items = [], options = {}) => {
+    const targets = (Array.isArray(items) ? items : []).map(item => item?.raw || item).filter(Boolean)
+    if (!targets.length) return false
+    const pendingTarget = options.pendingTarget || 'default'
+    const pendingKey = `${actionId}:${pendingTarget}`
+    if (startupInventoryDialog.pendingActions.includes(pendingKey)) return false
+    startupInventoryDialog.pendingActions = [...startupInventoryDialog.pendingActions, pendingKey]
+    try {
+      let ok = false
+      if (actionId === 'download_missing') {
+        const workshopIds = resolveStartupMissingWorkshopIds(targets)
+        if (!workshopIds.length) {
+          toast.warning('没有可下载的工坊缺失项')
+          return false
+        }
+        ok = await appStore.downloadWorkshopItemsViaSteam(workshopIds, { highPriority: true, waitSeconds: 30 })
+      } else if (actionId === 'cleanup_deleted') {
+        ok = await cleanupDeletedStartupRecords(targets, { confirm: false })
+      }
+      if (ok) {
+        const handledIds = (Array.isArray(items) ? items : []).map(item => item?.id).filter(Boolean)
+        removeStartupInventoryDialogItems(handledIds)
+      }
+      return ok
+    } finally {
+      startupInventoryDialog.pendingActions = startupInventoryDialog.pendingActions.filter(key => key !== pendingKey)
+    }
+  }
+  const openStartupInventoryDialogDetails = async (status) => {
+    const targets = startupInventoryDialog.targets.filter(item => item?.status === status)
+    closeStartupInventoryDialog()
+    if (targets.length) await openWorkspaceForStartupChanges(targets)
   }
   const showStartupWorkshopChangesPrompt = async (changes = startupWorkshopChangeState.changes, options = {}) => {
     const targets = getPromptableStartupEvents(changes)
     if (!targets.length || startupWorkshopChangeState.prompted) return false
     startupWorkshopChangeState.prompted = true
-    const deletedTargets = targets.filter(item => item.status === 'deleted')
-    const actionButtons = []
-    if (options?.scanAction) actionButtons.push({ label: '立即扫描', value: 'scan', kind: 'primary' })
-    if (deletedTargets.length) actionButtons.push({ label: '清理已删除记录', value: 'cleanup_deleted', kind: options?.scanAction ? 'secondary' : 'primary' })
-    addStartupDetailButton(actionButtons, targets, 'deleted', '删除项详情')
-    addStartupDetailButton(actionButtons, targets, 'missing', '缺失项详情')
-    addStartupDetailButton(actionButtons, targets, 'changed', '变更项详情')
-    actionButtons.push(
-      { label: '关闭', value: 'close', kind: 'secondary' },
-    )
-    const action = await confirmStore.confirmAction(
-      options?.beforeScan ? '检测到库存状态变化' : '库存状态已刷新',
-      formatStartupInventorySummaryHtml(targets, !!options?.beforeScan),
-      {
-        type: deletedTargets.length ? 'warning' : 'success',
-        isHtml: true,
-        actionButtons,
-      }
-    )
-    saveStartupPromptAck(targets)
-    if (action === 'scan' && options?.scanAction) {
-      await options.scanAction()
-    } else if (action === 'cleanup_deleted') {
-      await cleanupDeletedStartupRecords(targets)
-    } else if (typeof action === 'string' && action.startsWith('details_')) {
-      const status = action.replace('details_', '')
-      await openWorkspaceForStartupChanges(targets.filter(item => item?.status === status))
-    }
-    return true
+    const items = buildStartupInventoryDialogItems(targets)
+    startupInventoryDialog.title = options?.beforeScan ? '检测到库存状态变化' : '库存状态已刷新'
+    startupInventoryDialog.message = formatStartupInventorySummary(targets, !!options?.beforeScan)
+    startupInventoryDialog.targets = targets
+    startupInventoryDialog.groups = buildStartupInventoryDialogGroups(items)
+    startupInventoryDialog.pendingActions = []
+    startupInventoryDialog.visible = true
+    return new Promise(resolve => {
+      startupInventoryDialog.resolve = resolve
+    })
   }
 
   const applyLifecycleUpdateState = (updates = []) => {
@@ -2483,6 +2527,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
     matrixFocusTarget, matrixFilterTarget, workspaceTargetTab, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
     detectStartupWorkshopChanges, takeStartupWorkshopChangesForScan, formatStartupWorkshopChangeNames, showStartupWorkshopChangesPrompt, openWorkspaceForStartupChanges,
+    startupInventoryDialog, closeStartupInventoryDialog, runStartupInventoryDialogAction, openStartupInventoryDialogDetails,
     // 库数据与工坊时间线
     fetchLibrariesMods, refreshLifecycleUpdateStates, doWorkshopSearch, fetchWorkshopDetails, loadSteamLanguageOptions, loadTranslationProviders, loadWorkshopDlcOptions, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode, syncWorkshopSearchModeFromSettings, ensureWorkshopSearchReady,
     openWorkshopTransientList, loadWorkshopTransientList, closeWorkshopTransientList,

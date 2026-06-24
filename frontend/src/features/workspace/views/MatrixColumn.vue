@@ -109,7 +109,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { Motion } from 'motion-v'
-import { Activity, ArrowRightLeft, Cable, Copy, CornerUpRight, DownloadCloud, Flag, FlagOff, FolderInput, Lock, LockOpen, Trash2, Upload } from 'lucide-vue-next'
+import { Activity, ArrowRightLeft, Cable, Copy, CornerUpRight, DownloadCloud, Flag, FlagOff, FolderInput, Lock, LockOpen, Download, Trash2, Upload } from 'lucide-vue-next'
 import CommonSelect from '../../../shared/components/input/CommonSelect.vue'
 import MatrixItem from '../components/MatrixItem.vue'
 import { useAppStore } from '../../../app/stores/appStore'
@@ -388,6 +388,48 @@ const unsubscribeAndClearMissingWorkshopRecords = async (mods) => {
   return true
 }
 
+const resubscribeMissingWorkshopItems = async (mods) => {
+  const targets = (mods || []).filter(mod => mod?.is_missing && mod?.workshop_id && mod?.steam_status?.is_subscribed === true)
+  const workshopIds = getUniqueWorkshopIds(targets)
+  if (!workshopIds.length) return false
+
+  const check = await confirmStore.confirmAction(
+    '重新订阅缺失项',
+    `将处理 ${workshopIds.length} 个仍处于订阅状态但本地文件缺失的工坊项。\n\n此操作会先向 Steam 发送取消订阅请求，并等待 Steam 返回成功；随后再重新发送订阅请求，让 Steam 重新拉取这些项目。\n\n由于 Steam 客户端和网络状态不可控，过程中可能出现取消订阅成功但重新订阅失败、Steam 下载排队较久、或列表刷新延迟。执行后请等待 Steam 下载完成，再刷新库存或重新扫描。`,
+    { type: 'warning', confirmText: '开始重新订阅', cancelText: '取消' }
+  )
+  if (!check) return false
+
+  const unsubscribeResult = await appStore.unsubscribeWorkshopIds(workshopIds, null, { skipConfirm: true })
+  if (!unsubscribeResult) return false
+
+  const subscribeResult = await appStore.subscribeWorkshopIds(workshopIds)
+  if (!subscribeResult) return false
+
+  toast.success(`已重新发送 ${workshopIds.length} 个缺失项的订阅请求，请等待 Steam 下载完成`)
+  await workspaceStore.fetchLibrariesMods()
+  return true
+}
+
+const downloadMissingWorkshopItemsViaSteam = async (mods) => {
+  const targets = (mods || []).filter(mod => mod?.is_missing && mod?.workshop_id && mod?.steam_status?.is_subscribed === true)
+  const workshopIds = getUniqueWorkshopIds(targets)
+  if (!workshopIds.length) return false
+
+  const check = await confirmStore.confirmAction(
+    'Steam 下载缺失项',
+    `将处理 ${workshopIds.length} 个仍处于订阅状态但本地文件缺失的工坊项。\n\n此操作不会取消订阅，而是直接请求 Steam 客户端重新下载或校验这些项目，并在任务栏等待 Steam 确认本地文件已下载完成。\n\n如果 Steam 网络异常、下载排队过久或项目本身不可用，任务会显示失败。`,
+    { type: 'warning', confirmText: '请求 Steam 下载', cancelText: '取消' }
+  )
+  if (!check) return false
+
+  const result = await appStore.downloadWorkshopItemsViaSteam(workshopIds, { highPriority: true, waitSeconds: 30 })
+  if (!result) return false
+
+  await workspaceStore.fetchLibrariesMods()
+  return true
+}
+
 const clearMissingRecords = async (pathHashes) => {
   if (!window.pywebview) return false
   const hashes = (Array.isArray(pathHashes) ? pathHashes : [pathHashes]).filter(Boolean)
@@ -521,7 +563,7 @@ const handleContextMenu = async (event, targetMod) => {
       })
     }
   }
-  menuItems.push({ label: '下载到管理器' + selectedWorkshopNumStr, disabled: selectedWorkshopIds.length === 0, icon: DownloadCloud, action: () => appStore.downloadWorkshopItems(selectedWorkshopIds) })
+  menuItems.push({ label: '下载到管理器' + selectedWorkshopNumStr, disabled: selectedWorkshopIds.length === 0, icon: Download, action: () => appStore.downloadWorkshopItems(selectedWorkshopIds) })
   // 3. Steam API 相关操作
   const steamMenuChildren = [
     { label: '访问创意工坊', disabled: !targetMod.workshop_id, icon: IconSteam, action: () => appStore.openSteamWorkshopById(targetMod.workshop_id) },
@@ -540,7 +582,16 @@ const handleContextMenu = async (event, targetMod) => {
   if (props.storeType === 'workshop' && selectedSubscribedMissingMods.length > 0) {
     // 工坊列中仍处于订阅状态的缺失项，代表“订阅还在但文件异常丢失”。
     menuItems.push(
-      { label: '重新订阅缺失项' + selectedSubscribedMissingNumStr, icon: Flag, action: () => appStore.subscribeWorkshopIds(selectedSubscribedMissingWorkshopIds) },
+      {
+        label: '重新下载缺失项' + selectedSubscribedMissingNumStr, level: 'success', icon: DownloadCloud,
+        tooltip: '直接请求 Steam 重新下载或校验这些缺失项。',
+        action: () => downloadMissingWorkshopItemsViaSteam(selectedSubscribedMissingMods),
+      },
+      {
+        label: '重新订阅缺失项' + selectedSubscribedMissingNumStr, level: 'warn', icon: Flag,
+        tooltip: '先取消订阅，再重新订阅，让 Steam 重新排队获取这些缺失项。\n此操作会改变订阅状态，网络异常时可能出现取消成功但重新订阅失败，请谨慎使用。',
+        action: () => resubscribeMissingWorkshopItems(selectedSubscribedMissingMods),
+      },
       { label: '清理失效并取消订阅' + selectedSubscribedMissingNumStr, icon: Trash2, level: 'danger', action: () => unsubscribeAndClearMissingWorkshopRecords(selectedSubscribedMissingMods) }
     )
   }

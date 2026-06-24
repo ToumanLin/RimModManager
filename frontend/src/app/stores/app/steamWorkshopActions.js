@@ -25,6 +25,56 @@ export const useSteamWorkshopActions = ({
     return false
   }
 
+  const downloadWorkshopItemsViaSteam = async (workshop_ids, options = {}) => {
+    if (!window.pywebview) return false
+    if (!workshop_ids || workshop_ids.length === 0) return false
+    toast.info('正在连接 Steam...', { timeout: 2500 })
+    const res = await window.pywebview.api.steam_workshop_download(
+      workshop_ids,
+      options.highPriority !== false,
+      Number(options.waitSeconds || 30)
+    )
+    if (res?.status === 'success') {
+      const taskId = String(res?.data?.task_id || '')
+      let task = null
+      toast.info(`已向 Steam 提交 ${workshop_ids.length} 个创意工坊项目的下载请求，正在等待下载完成...`, { timeout: 3500 })
+      if (taskId) {
+        try {
+          task = await useTaskStore().waitForTaskCompletion(taskId)
+        } catch (e) {
+          toast.error(`Steam 下载未完成：${e.message}`)
+          return false
+        }
+      }
+      return { success: true, taskId, task }
+    }
+    if (res?.status === 'warning') {
+      if (res?.data?.action === 'steam_not_ready') {
+        showSteamNotReadyHint(res)
+      } else {
+        toast.warning(res?.message || 'Steam 暂时无法处理工坊下载请求')
+      }
+      return false
+    }
+    toast.error(`Steam 工坊下载请求失败：${res?.message || '未知错误'}`)
+    return false
+  }
+
+  const querySteamWorkshopDetails = async (workshop_ids, options = {}) => {
+    if (!window.pywebview) return null
+    if (!workshop_ids || workshop_ids.length === 0) return null
+    const res = await window.pywebview.api.steam_workshop_details(
+      workshop_ids,
+      Number(options.waitSeconds || 20)
+    )
+    if (res?.status === 'success') return res.data
+    if (res?.status === 'warning') {
+      if (res?.data?.action === 'steam_not_ready') showSteamNotReadyHint(res)
+      else toast.warning(res?.message || 'Steam 暂时无法查询工坊详情')
+    }
+    return null
+  }
+
   // 打开Steam创意工坊
   const openSteamWorkshopUrl = (url) => {
     if(url) {
@@ -217,6 +267,7 @@ export const useSteamWorkshopActions = ({
     // 订阅与下载
     downloadWorkshopItems, subscribeInstallSources, downloadInstallSources,
     downloadPackageIds, subscribePackageIds, subscribeWorkshopIds, unsubscribeWorkshopIds,
+    downloadWorkshopItemsViaSteam, querySteamWorkshopDetails,
     // 合集
     getCollectionItems,
   }

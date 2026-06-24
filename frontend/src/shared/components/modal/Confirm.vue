@@ -139,7 +139,7 @@
                       {{ item.statusMessage }}
                     </div>
                   </div>
-                  <div class="shrink-0 flex flex-wrap justify-end gap-1">
+                  <div v-if="item.actions?.length" class="shrink-0 flex flex-wrap justify-end gap-1">
                     <button
                       v-for="action in item.actions"
                       :key="action.id"

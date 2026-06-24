@@ -4143,7 +4143,7 @@ class API:
             ok = self.steam_mgr.cancel_steamcmd_task(normalized_task_id)
             return ApiResponse.success(message="已请求取消 SteamCMD 任务") if ok else ApiResponse.error("当前没有可取消的 SteamCMD 任务")
 
-        if normalized_type in {"steam-subscribe", "steam-unsubscribe"}:
+        if normalized_type in {"steam-subscribe", "steam-unsubscribe", "steam-workshop-download"}:
             if not normalized_task_id:
                 return ApiResponse.error("缺少任务 ID")
             ok = self.steam_mgr.abort_monitor_task(normalized_task_id)
@@ -4445,6 +4445,45 @@ class API:
             # 启动后台下载
             task_id = self.steam_mgr.download_workshop_items(workshop_ids, on_success=lambda: self.scan_mods())
             return ApiResponse.success({"task_id": task_id}, message="SteamCMD 下载任务已启动")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def steam_workshop_download(self, workshop_ids: list, high_priority: bool = True, wait_seconds: float = 30.0):
+        """
+        通过 Steam 客户端触发工坊项目下载或修复。
+        """
+        try:
+            ok, steam_status, message = self._ensure_steam_ready(timeout_seconds=45)
+            if not ok:
+                return ApiResponse.warning(message, data={"action": "steam_not_ready", "steam_status": steam_status})
+            task_id = self.steam_mgr.download_items_via_steamworks_task(
+                workshop_ids,
+                high_priority=high_priority,
+            )
+            if task_id:
+                normalized_ids = [str(workshop_ids)] if isinstance(workshop_ids, (int, str)) else [str(i) for i in workshop_ids]
+                return ApiResponse.success({
+                    "task_id": task_id,
+                    "workshop_ids": [item.strip() for item in normalized_ids if item.strip()],
+                }, message="已向 Steam 提交工坊下载请求")
+            return ApiResponse.error("操作失败：Steam 未接受工坊下载请求")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def steam_workshop_details(self, workshop_ids: list, wait_seconds: float = 20.0):
+        """
+        通过 Steamworks 查询工坊项目详情。
+        """
+        try:
+            ok, steam_status, message = self._ensure_steam_ready(timeout_seconds=45)
+            if not ok:
+                return ApiResponse.warning(message, data={"action": "steam_not_ready", "steam_status": steam_status})
+            result = self.steam_mgr.query_workshop_item_details(workshop_ids, wait_seconds=wait_seconds)
+            if not result.get("ready"):
+                return ApiResponse.warning("Steam 客户端暂时无法查询工坊详情", data=result)
+            return ApiResponse.success(result, message="已获取工坊详情")
         except Exception as e:
             return ApiResponse.error(str(e))
     

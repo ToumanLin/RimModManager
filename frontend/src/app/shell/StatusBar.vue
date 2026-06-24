@@ -142,6 +142,7 @@ const taskTypeMeta = {
   'steamcmd-download': { title: 'SteamCMD 下载', icon: Download, text: 'text-accent-cool', bar: 'bg-accent-cool', border: 'border-accent-cool/30' },
   'steam-subscribe': { title: 'Steam 订阅', icon: Flag, text: 'text-accent-success', bar: 'bg-accent-success', border: 'border-accent-success/30' },
   'steam-unsubscribe': { title: 'Steam 取消订阅', icon: FlagOff, text: 'text-accent-danger', bar: 'bg-accent-danger', border: 'border-accent-danger/30' },
+  'steam-workshop-download': { title: 'Steam 工坊下载', icon: Download, text: 'text-accent-cool', bar: 'bg-accent-cool', border: 'border-accent-cool/30' },
   'texture-opt': { title: '贴图优化', icon: Image, text: 'text-accent-secondary', bar: 'bg-accent-secondary', border: 'border-accent-secondary/30' },
   'texture-opt-analyze': { title: '贴图分析', icon: ScanSearch, text: 'text-accent-secondary', bar: 'bg-accent-secondary', border: 'border-accent-secondary/30' },
   'ai-task': { title: 'AI 生成任务', icon: Bot, text: 'text-accent-special', bar: 'bg-accent-special', border: 'border-accent-special/30' },

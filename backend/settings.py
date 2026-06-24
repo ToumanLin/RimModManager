@@ -15,13 +15,18 @@ from backend.utils.secret_store import SECRET_FIELDS, SecretStoreError, secret_s
 from backend.utils.tools import normalize_path_for_storage, same_path
 
 
+def _resolve_base_resource_dir() -> Path:
+    """解析内置资源目录，兼容 PyInstaller 与 Nuitka 的不同冻结模型。"""
+    if getattr(sys, 'frozen', False):
+        pyinstaller_temp_dir = getattr(sys, '_MEIPASS', None)
+        if pyinstaller_temp_dir:
+            return Path(pyinstaller_temp_dir)
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
 # 1. 资源目录：存放前端文件、内置工具 (对应开发时的项目根目录)
-if getattr(sys, 'frozen', False):
-    # 打包后，指向临时解压目录
-    BASE_RESOURCE_DIR = Path(getattr(sys, '_MEIPASS'))
-else:
-    # 开发时，指向当前文件所在目录的上一级（项目根目录）
-    BASE_RESOURCE_DIR = Path(__file__).resolve().parent.parent
+BASE_RESOURCE_DIR = _resolve_base_resource_dir()
 
 # 配置文件路径
 HOME_DIR = Path(os.getcwd())

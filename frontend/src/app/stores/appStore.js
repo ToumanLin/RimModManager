@@ -466,6 +466,7 @@ export const useAppStore = defineStore('app', () => {
     // 订阅与下载
     downloadWorkshopItems, subscribeInstallSources, downloadInstallSources,
     downloadPackageIds, subscribePackageIds, subscribeWorkshopIds, unsubscribeWorkshopIds,
+    downloadWorkshopItemsViaSteam, querySteamWorkshopDetails,
     // 合集
     getCollectionItems,
   } = useSteamWorkshopActions({
@@ -500,7 +501,7 @@ export const useAppStore = defineStore('app', () => {
 
 
   // === Getters ===
-  const isDownloading = computed(() => taskStore.hasActiveTaskOfType(['download', 'update', 'steamcmd-download']))
+  const isDownloading = computed(() => taskStore.hasActiveTaskOfType(['download', 'update', 'steamcmd-download', 'steam-workshop-download']))
   const isScanRunning = computed(() => taskStore.hasActiveTaskOfType('scan'))
   const updateInstallPrompted = new Set()
   const exportCompletePrompted = new Set()
@@ -519,6 +520,7 @@ export const useAppStore = defineStore('app', () => {
     'steamcmd-init',
     'steam-subscribe',
     'steam-unsubscribe',
+    'steam-workshop-download',
     'texture-opt',
     'texture-opt-analyze',
     'ai-task',
@@ -974,6 +976,15 @@ export const useAppStore = defineStore('app', () => {
       }
       if (task.type === 'steamcmd-download' && task.status === 'failed') {
         toast.error(`SteamCMD 下载失败: ${task.metrics?.error || task.message}`)
+      }
+      if (task.type === 'steam-workshop-download' && task.status === 'success') {
+        void (async () => {
+          await requestModScan({ preserveListState: true })
+          toast.success('Steam 下载已完成')
+        })()
+      }
+      if (task.type === 'steam-workshop-download' && task.status === 'failed') {
+        toast.error(`Steam 下载失败: ${task.metrics?.error || task.message}`)
       }
       if (task.type === 'steam-subscribe' && task.status === 'success') {
         void (async () => {
@@ -1438,6 +1449,7 @@ export const useAppStore = defineStore('app', () => {
     // 下载与工坊
     startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds, openSteamWorkshopById,
     openSteamWorkshopUrl, unsubscribeWorkshopIds, subscribeWorkshopIds, subscribeInstallSources, downloadInstallSources, openInstallSource,
+    downloadWorkshopItemsViaSteam, querySteamWorkshopDetails,
     // 设置、任务与应用维护
     saveSetting, applySettings, revealSecret, clearSecret, refreshUserThemes, saveUserTheme, deleteUserTheme, openSettingsPanel, closeSettingsPanel, resetDatabase, repairDatabase, restartApplication, showChangelog, setSidebarTab, cancelTextureTask, cancelTaskByProgress, supportsTaskCancellation, canCancelTask, isTaskCancelPending,
     checkSteamTools, checkToolMaintenance, checkExternalDataUpdates, checkManagedModUpdates, checkSteamcmdModUpdates, runScheduledMaintenanceChecks, checkUpdate, updateExternalDB,

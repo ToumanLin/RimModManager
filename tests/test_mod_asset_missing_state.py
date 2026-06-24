@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from backend.database.dao import ModDAO, ModMaintenanceDAO, _ProfilePathScope
-from backend.database.models import MOD_ASSET_STATE_MISSING, MOD_ASSET_STATE_PRESENT, ModAsset, ModInterlock, UserModData, db
+from backend.database.models import MOD_ASSET_STATE_DELETED, MOD_ASSET_STATE_MISSING, MOD_ASSET_STATE_PRESENT, ModAsset, ModInterlock, UserModData, db
 from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.managers.mgr_profile import ProfileContext
 from backend.scanner.mod_scanner import ModScanner
@@ -26,7 +26,7 @@ class TestModAssetMissingState(unittest.TestCase):
         if not db.is_closed():
             db.close()
 
-    def test_find_missing_marks_state_and_keeps_last_path(self):
+    def test_find_missing_marks_deleted_state_and_keeps_last_path(self):
         missing_path = str(Path(self.temp_dir.name) / "Mods" / "LostMod")
         ModAsset.create(
             path_hash="lost-hash",
@@ -41,6 +41,27 @@ class TestModAssetMissingState(unittest.TestCase):
         asset = ModAsset.get_by_id("lost-hash")
 
         self.assertEqual(result["deleted_mods"], ["lost-hash"])
+        self.assertEqual(asset.path, missing_path)
+        self.assertEqual(asset.state, MOD_ASSET_STATE_DELETED)
+        self.assertGreater(asset.file_modify_time, 0)
+
+    def test_find_missing_marks_subscribed_workshop_record_as_missing(self):
+        missing_path = str(Path(self.temp_dir.name) / "Workshop" / "123")
+        ModAsset.create(
+            path_hash="workshop-missing-hash",
+            package_id="author.workshopmissing",
+            name="Workshop Missing",
+            path=missing_path,
+            source="steam",
+            store="workshop",
+            workshop_id="123",
+        )
+
+        result = ModMaintenanceDAO.find_missing_mods(delete=False, subscribed_workshop_ids=["123"])
+        asset = ModAsset.get_by_id("workshop-missing-hash")
+
+        self.assertEqual(result["missing_mods"], ["workshop-missing-hash"])
+        self.assertEqual(result["deleted_mods"], [])
         self.assertEqual(asset.path, missing_path)
         self.assertEqual(asset.state, MOD_ASSET_STATE_MISSING)
         self.assertGreater(asset.file_modify_time, 0)

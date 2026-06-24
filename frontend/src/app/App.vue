@@ -226,6 +226,9 @@
     <!-- 工坊更新管理中心 -->
     <WorkspaceOverlay />
 
+    <!-- 启动库存状态检测 -->
+    <StartupInventoryChangesModal />
+
     <!-- 贴图优化功能面板 -->
     <TextureOptModal />
 
@@ -328,6 +331,7 @@ import FileSearchWorkbench from '../features/file-search/FileSearchWorkbench.vue
 import { useFileSearchStore } from '../features/file-search/fileSearchStore'
 import AIDefinitionManager from '../features/ai/AIDefinitionManager.vue'
 import WorkspaceOverlay from '../features/workspace/WorkspaceOverlay.vue'
+import StartupInventoryChangesModal from '../features/workspace/components/StartupInventoryChangesModal.vue'
 import UpdateModal from '../features/dialogs/UpdateModal.vue'
 import GuideCenter from '../features/guide/GuideCenter.vue'
 import TextureOptModal from '../features/texture-opt/TextureOptModal.vue'
