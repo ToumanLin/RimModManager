@@ -202,7 +202,6 @@
     <!-- 测试 -->
     <div v-if="appStore.settings.debug_mode">
       <TestPage class="fixed bottom-4 left-4 " v-show="appStore.uiState.showTestDrawer" />
-      <DebugPanel />
     </div>
     <!-- 重复包名冲突弹窗 -->
     <ConflictResolver />
@@ -308,7 +307,6 @@ import BackupList from '../features/load-order/BackupList.vue'
 import ListDiffView from '../features/load-order/ListDiffView.vue'
 import LogViewer from '../features/app-log/LogViewer.vue'
 import ConflictResolver from '../features/dialogs/ConflictResolver.vue'
-import DebugPanel from '../dev/DebugPanel.vue'
 import RulePanel from '../features/rules/RulePanel.vue'
 import ModRuleEditor from '../features/rules/ModRuleEditor.vue'
 import Confirm from '../shared/components/modal/Confirm.vue'

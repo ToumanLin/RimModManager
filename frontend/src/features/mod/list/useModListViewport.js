@@ -1,5 +1,4 @@
 import { nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
-import { useGuideStore } from '../../guide/guideStore'
 
 export function useModListViewport({
   props,
@@ -125,7 +124,6 @@ export function useModListViewport({
       // 加载完成：等待 DOM 渲染
       await nextTick()
       restorePosition()
-      useGuideStore()
     }
   })
 

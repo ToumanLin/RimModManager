@@ -4,7 +4,6 @@
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
-@plugin "@tailwindcss/typography";
 
 /* 相当于 v3 配置文件(tailwind.config.js) 中的 safelist 属性 */
 /* 通过正则表达式模式和变体动态生成所需 CSS 类 */
