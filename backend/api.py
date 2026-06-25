@@ -42,6 +42,7 @@ from backend.utils.event_bus import EventBus
 from backend._version import __version__, __build__, get_all_changelogs
 from backend.utils.tools import normalize_package_id, normalize_workshop_id
 from backend.utils.tools import current_ms, generate_path_hash
+from backend.i18n.translation import t
 from backend.utils.constants import RIMWORLD_DLC_OPTIONS, get_steam_elanguage_options
 from backend.i18n.language_registry import normalize_language_code
 from backend.utils.logger import logger, app_log_reader
@@ -165,20 +166,23 @@ class ApiResponse:
     data: Any = None         # 数据载体 (可以是 dict, list, None)
 
     @classmethod
-    def success(cls, data=None, message=""):
+    def success(cls, data=None, message="", message_params=None):
         # logger.debug(f"API Success: {message}, data={cls.serialize_data(data)}")
-        return asdict(cls(status="success", data=cls.serialize_data(data), message=message))
+        translated_message = t(message, **(message_params or {})) if message else ""
+        return asdict(cls(status="success", data=cls.serialize_data(data), message=translated_message))
 
     @classmethod
-    def error(cls, message, data=None):
+    def error(cls, message, data=None, message_params=None):
         has_exc = sys.exc_info()[0] is not None
-        logger.error( f"API Error: {message}", exc_info=has_exc, stacklevel=2)
-        return asdict(cls(status="error", message=message, data=cls.serialize_data(data)))
+        translated_message = t(message, **(message_params or {})) if message else ""
+        logger.error( f"API Error: {translated_message}", exc_info=has_exc, stacklevel=2)
+        return asdict(cls(status="error", message=translated_message, data=cls.serialize_data(data)))
     
     @classmethod
-    def warning(cls, message, data=None):
+    def warning(cls, message, data=None, message_params=None):
         logger.warning(f"API Warning: {message}", stacklevel=2)
-        return asdict(cls(status="warning", message=message, data=cls.serialize_data(data)))
+        translated_message = t(message, **(message_params or {})) if message else ""
+        return asdict(cls(status="warning", message=translated_message, data=cls.serialize_data(data)))
 
     @classmethod
     def serialize_data(cls, obj):

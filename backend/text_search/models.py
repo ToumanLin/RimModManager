@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 import re
 from pathlib import Path
 from typing import Any
+from backend.i18n.translation import t
 
 
 DEFAULT_FILE_TYPES = (
@@ -62,11 +63,11 @@ class SearchRequest:
         data = dict(payload or {})
         query = str(data.get("query") or "").strip()
         if not query:
-            raise ValueError("搜索词不能为空")
+            raise ValueError(t("search.query_empty"))
 
         scope = str(data.get("scope") or "current-active").strip().lower()
         if scope not in SEARCH_SCOPES:
-            raise ValueError(f"不支持的搜索范围: {scope}")
+            raise ValueError(t("search.unsupported_scope", scope=scope))
 
         exclude_options = dict(DEFAULT_EXCLUDE_OPTIONS)
         extra_excludes = data.get("exclude_options")
