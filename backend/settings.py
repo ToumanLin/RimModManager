@@ -314,12 +314,13 @@ class AppConfig:
     enable_auto_update_check: bool = True  # 自动检查更新开关
     ignored_update_version: str = ""       # 跳过的版本号
     last_update_check_time: float = 0      # 上次检查时间（用于限流）
-    # 以下三类检查都只负责“发现问题并提醒”，真正更新仍需用户确认后手动触发。
+    # 以下三类检查负责启动维护；外部库可选择自动刷新，工具和管理器模组仍只提醒。
     enable_auto_tool_check: bool = True
     tool_check_interval_days: int = 3
     last_tool_check_time: float = 0
     
     enable_auto_external_data_update_check: bool = True
+    enable_silent_external_data_update: bool = False
     external_data_update_check_interval_days: int = 1
     last_external_data_update_check_time: float = 0
     

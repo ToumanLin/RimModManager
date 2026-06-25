@@ -166,7 +166,9 @@ class MaintenanceManager:
 
     def check_external_data(self, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         checked_at = current_ms()
-        items = [self._check_external_dataset(spec, overrides or {}) for spec in self.EXTERNAL_DATASETS]
+        check_overrides = overrides or {}
+        items = [self._check_external_dataset(spec, check_overrides) for spec in self.EXTERNAL_DATASETS]
+        items.append(self._check_provider_catalog(check_overrides))
         updates = [item for item in items if item.get("needs_update")]
         missing = [item for item in items if not item.get("exists")]
         # 远端检查失败不等于“已是最新”。
@@ -357,18 +359,24 @@ class MaintenanceManager:
         remote_updated_at = int(remote_info.get("updated_at") or 0)
 
         needs_update = False
+        comparison_mode = "unavailable"
         if not exists:
             needs_update = True
+            comparison_mode = "missing"
         elif remote_info.get("available") and remote_signature:
+            comparison_mode = "signature"
             needs_update = local_signature != remote_signature
         elif remote_info.get("available") and remote_size > 0 and local_size != remote_size:
+            comparison_mode = "size"
             needs_update = True
+        elif remote_info.get("available") and remote_size > 0:
+            comparison_mode = "size"
 
         message = ""
         if not exists:
             message = "未检测到本地文件。"
         elif remote_info.get("available"):
-            message = "检测到远端版本与本地不一致。" if needs_update else "本地文件已是最新。"
+            message = "检测到远端文件与本地不一致。" if needs_update else "本地文件已是最新。"
         else:
             message = str(remote_info.get("message") or "暂时无法获取远端状态。")
 
@@ -383,14 +391,71 @@ class MaintenanceManager:
             "local_size": local_size,
             "local_mtime": local_mtime,
             "local_signature": local_signature,
+            "local_signature_short": local_signature[:12],
             "local_version": local_version,
             "remote_available": bool(remote_info.get("available")),
             "remote_supported": bool(remote_info.get("supported")),
             "remote_signature": remote_signature,
+            "remote_signature_short": remote_signature[:12],
             "remote_size": remote_size,
             "remote_updated_at": remote_updated_at,
             "remote_version": str(remote_info.get("version") or ""),
+            "remote_etag": str(remote_info.get("etag") or ""),
+            "comparison_mode": comparison_mode,
             "download_url": str(remote_info.get("download_url") or ""),
+        }
+
+    def _check_provider_catalog(self, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+        overrides = overrides or {}
+        url = (
+            str(overrides.get("git_provider_catalog_url") or "")
+            if "git_provider_catalog_url" in overrides
+            else str(getattr(settings.config, "git_provider_catalog_url", "") or "")
+        )
+        remote_info = self.github_mgr.check_provider_catalog_updates(url)
+        sources = remote_info.get("sources") if isinstance(remote_info, dict) else []
+        sources = sources if isinstance(sources, list) else []
+        exists = bool(sources) and all(bool(source.get("exists")) for source in sources)
+        remote_available = bool(remote_info.get("remote_available"))
+        needs_update = bool(remote_info.get("needs_update")) and remote_available
+        failed_sources = [source for source in sources if not source.get("remote_available")]
+        source_labels = [str(source.get("label") or source.get("source_id") or "").strip() for source in sources]
+
+        if not exists:
+            message = "未检测到 Git 推荐清单缓存。"
+            comparison_mode = "missing"
+        elif remote_available:
+            message = "检测到 Git 推荐清单有更新。" if needs_update else "Git 推荐清单已是最新。"
+            comparison_mode = "signature"
+        else:
+            message = "Git 推荐清单检查未完成。"
+            comparison_mode = "unavailable"
+
+        return {
+            "data_type": "git_provider_catalog",
+            "name": "Git 推荐清单",
+            "path": "",
+            "url": url,
+            "exists": exists,
+            "needs_update": needs_update,
+            "message": message,
+            "local_size": int(remote_info.get("local_count") or 0),
+            "local_mtime": 0,
+            "local_signature": str(remote_info.get("local_signature") or ""),
+            "local_signature_short": str(remote_info.get("local_signature") or "")[:12],
+            "local_version": "",
+            "remote_available": remote_available,
+            "remote_supported": True,
+            "remote_signature": str(remote_info.get("remote_signature") or ""),
+            "remote_signature_short": str(remote_info.get("remote_signature") or "")[:12],
+            "remote_size": int(remote_info.get("remote_count") or 0),
+            "remote_updated_at": 0,
+            "remote_version": "",
+            "remote_etag": "",
+            "comparison_mode": comparison_mode,
+            "download_url": "",
+            "source_labels": [label for label in source_labels if label],
+            "failed_sources": failed_sources,
         }
 
     def _resolve_local_dataset_version(self, data_type: str) -> str:
@@ -473,7 +538,9 @@ class MaintenanceManager:
                 return {
                     "supported": True,
                     "available": True,
-                    "signature": etag,
+                    # HTTP ETag 语义由服务端决定，不一定是文件内容哈希；
+                    # 不能拿它和本地 Git blob SHA 直接比较，否则会造成误报。
+                    "etag": etag,
                     "size": size,
                     "download_url": str(response.url or url),
                     "updated_at": updated_at,

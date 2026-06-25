@@ -52,7 +52,7 @@
                     />
                     <CommonSwitch label="使用管理器模组" v-model="formData.use_self_mods" description="开启后将通过链接方式自动为游戏加载管理器Mod。" />
                     <CommonSwitch label="改变路径时移动模组" v-model="formData.move_old_self_mods" description="开启后，修改路径时会将原有模组移动到新路径；不开启则保留原有的文件结构。" />
-                    <CommonSwitch class="col-span-1" label="自动检查管理器模组更新" v-model="formData.enable_auto_steamcmd_mod_update_check" description="按设定间隔检查管理器模组目录中由 SteamCMD 下载的工坊模组更新。" />
+                    <CommonSwitch class="col-span-1" label="自动检查管理器模组更新" v-model="formData.enable_auto_steamcmd_mod_update_check" description="按设定间隔检查管理器模组目录中由 SteamCMD 下载的工坊模组和 Git 仓库订阅模组更新。" />
                     <div class="col-span-1 grid grid-cols-2 gap-3 items-end">
                       <CommonNumber class="col-span-1" label="检查间隔（天）" v-model="formData.steamcmd_mod_update_check_interval_days" :step="1" :min="1" :max="365" />
                       <button @click="handleCheckSteamcmdMods" :disabled="isPending('steamcmd-mods')" :class="isPending('steamcmd-mods') ? 'rmm-action-disabled' : ''"

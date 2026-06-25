@@ -377,6 +377,7 @@ export const useAppStore = defineStore('app', () => {
     tool_check_interval_days: 3,
     last_tool_check_time: 0,
     enable_auto_external_data_update_check: true,
+    enable_silent_external_data_update: false,
     external_data_update_check_interval_days: 1,
     last_external_data_update_check_time: 0,
     enable_auto_steamcmd_mod_update_check: true,

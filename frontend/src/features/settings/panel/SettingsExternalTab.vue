@@ -47,16 +47,23 @@
                     </div>
                     <CommonPathInput label="社区规则库路径" v-model="formData.community_rules_path" @browse="handleBrowse('community_rules_path', ['JSON Files (*.json)'])" :check="formData.check_info?.community_rules_path" />
                     <div class="py-2 pt-2 place-self-center w-[90%] border-b border-border-base/10"></div>
-                    <div class="w-full">
-                      <div class="flex justify-between items-center px-1 mb-1">
-                        <label class="text-xs text-text-dim uppercase font-bold tracking-widest">
-                          Git 推荐清单来源
-                          <span v-tooltip="'每行一个来源，格式：名称|URL。留空时使用默认推荐清单。'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</span>
-                        </label>
+                    <div class="flex items-center gap-1.5">
+                      <div class="w-full">
+                        <div class="flex justify-between items-center px-1 mb-1">
+                          <label class="text-xs text-text-dim uppercase font-bold tracking-widest">
+                            Git 推荐清单来源
+                            <span v-tooltip="'每行一个来源，格式：名称|URL。留空时使用默认推荐清单。'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</span>
+                          </label>
+                        </div>
+                        <textarea v-model="formData.git_provider_catalog_url" rows="3"
+                          class="input-glass w-full resize-y px-3 py-2 font-mono text-sm text-text-main focus:outline-none"
+                          placeholder="RJW|https://example.invalid/providers.json"></textarea>
                       </div>
-                      <textarea v-model="formData.git_provider_catalog_url" rows="3"
-                        class="input-glass w-full resize-y px-3 py-2 font-mono text-sm text-text-main focus:outline-none"
-                        placeholder="RJW|https://example.invalid/providers.json"></textarea>
+                      <button @click="updateExternalDB('git_provider_catalog')" :disabled="downloadState['git_provider_catalog']" v-tooltip="downloadState['git_provider_catalog'] ? '正在刷新 Git 推荐清单' : '刷新 Git 推荐清单'" :class="downloadState['git_provider_catalog'] ? 'rmm-action-disabled' : ''"
+                        class="shrink-0 mb-0.5 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
+                        <LoaderCircle v-if="downloadState['git_provider_catalog']" class="size-5 animate-spin" />
+                        <Download v-else class="size-5" />
+                      </button>
                     </div>
                     <div class="py-2 pt-2 place-self-center w-[90%] border-b border-border-base/10"></div>
                     <div class="flex items-end gap-1.5">
@@ -79,7 +86,9 @@
                     </div>
                     <CommonPathInput label="替代 Mod 数据库路径" v-model="formData.community_instead_db_path" @browse="handleBrowse('community_instead_db_path', ['JSON Files (*.json;*.gz)'])" :check="formData.check_info?.community_instead_db_path" />
                     <div class="grid grid-cols-2 gap-4 pt-1">
-                      <CommonSwitch class="col-span-1" label="自动检查外部库更新" v-model="formData.enable_auto_external_data_update_check" description="按设定间隔检查社区规则库、工坊数据库、替代 Mod 数据库是否有新版本。" />
+                      <CommonSwitch class="col-span-1" label="自动检查外部库更新" v-model="formData.enable_auto_external_data_update_check" description="按设定间隔检查社区规则库、工坊数据库、替代 Mod 数据库和 Git 推荐清单是否有更新。" />
+                      <CommonSwitch class="col-span-1" label="静默更新外部库" :disabled="!formData.enable_auto_external_data_update_check" :model-value="silentExternalDataUpdateEnabled" @update:modelValue="updateSilentExternalDataUpdate"
+                        :description="formData.enable_auto_external_data_update_check ? '开启后，自动检查发现外部库更新时会直接刷新，不再弹窗询问；手动检查仍会让你确认。' : '需要先开启自动检查外部库更新。'" />
                       <CommonNumber class="col-span-1" label="检查间隔（天）" v-model="formData.external_data_update_check_interval_days" :step="1" :min="1" :max="365" />
                     </div>
                   </div>
@@ -88,7 +97,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { Download, LoaderCircle } from 'lucide-vue-next'
 import CommonPathInput from '../../../shared/components/input/CommonPathInput.vue'
 import CommonSwitch from '../../../shared/components/input/CommonSwitch.vue'
@@ -109,8 +118,12 @@ const ruleStore = useRuleStore()
 const downloadState = ref({
   workshop_db: false,
   instead_db: false,
+  git_provider_catalog: false,
 })
 const pendingAction = ref('')
+const silentExternalDataUpdateEnabled = computed(() => (
+  !!props.formData.enable_auto_external_data_update_check && !!props.formData.enable_silent_external_data_update
+))
 
 const resetToDefaultExternalPaths = async () => {
   await runPendingAction('reset-default-paths', async () => {
@@ -152,6 +165,7 @@ const handleCheckExternalData = async () => {
       community_workshop_db_path: props.formData.community_workshop_db_path,
       community_instead_db_url: props.formData.community_instead_db_url,
       community_instead_db_path: props.formData.community_instead_db_path,
+      git_provider_catalog_url: props.formData.git_provider_catalog_url,
     },
   }))
 }
@@ -165,6 +179,9 @@ const updateExternalDB = async (dbType) => {
   } finally {
     downloadState.value[dbType] = false
   }
+}
+const updateSilentExternalDataUpdate = (value) => {
+  props.formData.enable_silent_external_data_update = !!props.formData.enable_auto_external_data_update_check && !!value
 }
 const isPending = (action) => pendingAction.value === action
 const runPendingAction = async (action, runner) => {
