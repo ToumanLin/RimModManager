@@ -1,5 +1,6 @@
 import html
 import json
+from backend.i18n.translation import t
 
 
 # backend/static_page.py
@@ -51,7 +52,7 @@ def build_idle_home_html() -> str:
     """
     静默主页保持接近原样，只增加一个查看日志按钮。
     """
-    return """
+    html_content = """
 <!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -132,6 +133,16 @@ def build_idle_home_html() -> str:
 </body>
 </html>
 """
+    return (html_content
+        .replace('<html lang="zh">', f'<html lang="{t("lang_code")}">')
+        .replace("RimModManager - 挂起中", t("static_page.idle_home.title"))
+        .replace("RimWorld 正在运行", t("static_page.idle_home.running"))
+        .replace("管理器已释放内存并进入静默休眠状态。", t("static_page.idle_home.desc"))
+        .replace("查看游戏日志", t("static_page.idle_home.view_logs"))
+        .replace("退出静默", t("static_page.idle_home.exit_silent"))
+        .replace("正在建立连接...", t("static_page.idle_home.connecting"))
+        .replace("请稍后重试", t("static_page.idle_home.try_again"))
+    )
 
 
 def build_idle_logs_html(refresh_seconds: int = 2) -> str:
@@ -139,7 +150,7 @@ def build_idle_logs_html(refresh_seconds: int = 2) -> str:
     静默日志页使用紧凑布局，不引入无意义卡片和重装饰。
     """
     safe_refresh = max(1, int(refresh_seconds or 2))
-    return f"""
+    html_content = f"""
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -810,6 +821,40 @@ def build_idle_logs_html(refresh_seconds: int = 2) -> str:
 </body>
 </html>
 """
+    return (html_content
+        .replace('<html lang="zh-CN">', f'<html lang="{t("lang_code")}">')
+        .replace("RimModManager - 游戏日志", t("static_page.idle_logs.title"))
+        .replace("游戏日志", t("static_page.idle_logs.header"))
+        .replace('placeholder="搜索日志内容"', f'placeholder="{t("static_page.idle_logs.search_placeholder")}"')
+        .replace("刷新秒数", t("static_page.idle_logs.refresh_seconds"))
+        .replace("自动刷新", t("static_page.idle_logs.auto_refresh"))
+        .replace("复制选中", t("static_page.idle_logs.copy_selected"))
+        .replace("返回", t("static_page.idle_logs.back"))
+        .replace("退出静默", t("static_page.idle_logs.exit_silent"))
+        .replace("准备就绪", t("static_page.idle_logs.ready"))
+        .replace("接口尚未准备好", t("static_page.idle_logs.api_not_ready"))
+        .replace("已暂停", t("static_page.idle_logs.paused"))
+        .replace("当前没有可显示的日志。", t("static_page.idle_logs.no_logs"))
+        .replace("展开详情", t("static_page.idle_logs.expand_details"))
+        .replace("收起详情", t("static_page.idle_logs.collapse_details"))
+        .replace("复制", t("static_page.idle_logs.copy"))
+        .replace("已复制当前日志", t("static_page.idle_logs.copied_success"))
+        .replace("复制失败", t("static_page.idle_logs.copy_failed"))
+        .replace("获取日志文件失败", t("static_page.idle_logs.get_files_failed"))
+        .replace("当前未检测到游戏日志文件。", t("static_page.idle_logs.no_files_detected"))
+        .replace("正在读取日志...", t("static_page.idle_logs.reading_logs"))
+        .replace("读取日志失败", t("static_page.idle_logs.read_logs_failed"))
+        .replace("`已刷新 ${state.selectedFile}`", f"`{t('static_page.idle_logs.refreshed', file='${state.selectedFile}')}`")
+        .replace("返回失败", t("static_page.idle_logs.back_failed"))
+        .replace("唤醒失败", t("static_page.idle_logs.wake_failed"))
+        .replace("正在建立连接...", t("static_page.idle_logs.connecting"))
+        .replace("`刷新间隔已调整为 ${state.refreshSeconds} 秒`", f"`{t('static_page.idle_logs.refresh_interval_adjusted', seconds='${state.refreshSeconds}')}`")
+        .replace("已恢复自动刷新", t("static_page.idle_logs.auto_refresh_resumed"))
+        .replace("已暂停自动刷新", t("static_page.idle_logs.auto_refresh_paused"))
+        .replace("请先选择日志", t("static_page.idle_logs.select_log_first"))
+        .replace("`已复制 ${blocks.length} 条日志`", f"`{t('static_page.idle_logs.copied_n_logs', count='${blocks.length}')}`")
+        .replace("加载失败", t("static_page.idle_logs.load_failed"))
+    )
 
 
 IDLE_HTML = build_idle_home_html()
@@ -988,11 +1033,11 @@ def build_workshop_page_html(page_title: str, target_url: str, head_html: str, b
 
 
 def build_workshop_error_html(message: str, target_url: str) -> str:
-    safe_message = html.escape(message or "加载失败")
+    safe_message = html.escape(message or t("static_page.workshop_error.load_failed"))
     safe_url = html.escape(target_url or "")
     js_target_url = json.dumps(target_url or "", ensure_ascii=False)
-    return f"""<!doctype html>
-<html lang="zh-CN">
+    html_content = f"""<!doctype html>
+<html lang="{t("lang_code")}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1056,6 +1101,11 @@ def build_workshop_error_html(message: str, target_url: str) -> str:
   </script>
 </body>
 </html>"""
+    return (html_content
+        .replace("如果原网页能正常访问，可以直接打开原地址继续浏览。", t("static_page.workshop_error.tip"))
+        .replace("未提供目标地址", t("static_page.workshop_error.no_url"))
+        .replace("打开原网页", t("static_page.workshop_error.open_original"))
+    )
 
 
 def build_sub_browser_helper_html(target_url: str, title: str) -> str:
@@ -1063,8 +1113,8 @@ def build_sub_browser_helper_html(target_url: str, title: str) -> str:
     safe_url = html.escape(target_url or "")
     js_target_url = json.dumps(target_url or "", ensure_ascii=False)
     js_title = json.dumps(title or "RimModManager", ensure_ascii=False)
-    return f"""<!doctype html>
-<html lang="zh-CN">
+    html_content = f"""<!doctype html>
+<html lang="{t("lang_code")}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1281,3 +1331,21 @@ def build_sub_browser_helper_html(target_url: str, title: str) -> str:
   </script>
 </body>
 </html>"""
+    return (html_content
+        .replace("未提供目标 URL", t("static_page.sub_browser.no_url"))
+        .replace("打开原页面", t("static_page.sub_browser.open_original"))
+        .replace("在Steam打开", t("static_page.sub_browser.open_in_steam"))
+        .replace("订阅", t("static_page.sub_browser.subscribe"))
+        .replace("取消订阅", t("static_page.sub_browser.unsubscribe"))
+        .replace("SteamCMD 下载", t("static_page.sub_browser.download"))
+        .replace("如果目标站点禁止 iframe 预览，下面区域会空白，但操作按钮仍可正常工作。", t("static_page.sub_browser.footnote"))
+        .replace("操作已完成", t("static_page.sub_browser.op_completed"))
+        .replace("操作失败", t("static_page.sub_browser.op_failed"))
+        .replace("未提供可打开的页面", t("static_page.sub_browser.no_page"))
+        .replace("未识别到 Workshop ID，仅保留打开页面。", t("static_page.sub_browser.no_workshop_id"))
+        .replace("未识别到可操作内容。", t("static_page.sub_browser.no_content"))
+        .replace("正在尝试在 Steam 中打开当前页面...", t("static_page.sub_browser.opening_in_steam"))
+        .replace("正在发送订阅请求...", t("static_page.sub_browser.subscribing"))
+        .replace("正在发送取消订阅请求...", t("static_page.sub_browser.unsubscribing"))
+        .replace("正在启动 SteamCMD 下载...", t("static_page.sub_browser.downloading"))
+    )

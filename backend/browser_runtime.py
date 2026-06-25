@@ -21,6 +21,7 @@ from backend.static_page import (
 )
 from backend.utils.logger import logger
 from validate_environment import is_port_available
+from backend.i18n.translation import t
 
 
 SESSION_TTL_SECONDS = 30.0
@@ -74,9 +75,9 @@ class WorkshopPageRenderer:
     def render(self, target_url: str):
         normalized_url = str(target_url or "").strip()
         if not normalized_url:
-            return build_workshop_error_html("未提供目标工坊页面地址", "")
+            return build_workshop_error_html(t("workshop.error.missing_url"), "")
         if not self.is_steamcommunity_url(normalized_url):
-            return build_workshop_error_html("当前仅代理 Steam 创意工坊相关页面", normalized_url)
+            return build_workshop_error_html(t("workshop.error.steam_only"), normalized_url)
 
         try:
             response = requests.get(
@@ -87,7 +88,7 @@ class WorkshopPageRenderer:
             response.raise_for_status()
         except Exception as exc:
             logger.warning(f"Workshop proxy fetch failed: {normalized_url} -> {exc}")
-            return build_workshop_error_html(f"加载页面失败: {exc}", normalized_url)
+            return build_workshop_error_html(t("workshop.error.load_failed_reason", exc=str(exc)), normalized_url)
 
         final_url = response.url or normalized_url
         soup = BeautifulSoup(response.text, "html.parser")
@@ -182,7 +183,7 @@ class WorkshopPageRenderer:
         workshop_id = self.extract_workshop_id(target_url)
         safe_title = html.escape(page_title or "Steam Workshop")
         safe_url = html.escape(target_url or "")
-        safe_workshop_id = html.escape(workshop_id or "未识别")
+        safe_workshop_id = html.escape(workshop_id or t("workshop.id.unrecognized"))
         return f"""
 <section class="rmm-workshop-toolbar">
   <div class="rmm-toolbar-left">
@@ -193,11 +194,11 @@ class WorkshopPageRenderer:
   <div class="rmm-toolbar-right">
     <div class="rmm-toolbar-id">Workshop ID: <strong>{safe_workshop_id}</strong></div>
     <div class="rmm-toolbar-actions">
-      <button id="rmm-open-original" class="ghost">打开原网页</button>
-      <button id="rmm-open-in-steam" class="ghost">在Steam打开</button>
-      <button id="rmm-subscribe">订阅</button>
-      <button id="rmm-unsubscribe" class="warn">取消订阅</button>
-      <button id="rmm-download" class="secondary">SteamCMD 下载</button>
+      <button id="rmm-open-original" class="ghost">{t("static_page.sub_browser.open_original")}</button>
+      <button id="rmm-open-in-steam" class="ghost">{t("static_page.sub_browser.open_in_steam")}</button>
+      <button id="rmm-subscribe">{t("static_page.sub_browser.subscribe")}</button>
+      <button id="rmm-unsubscribe" class="warn">{t("static_page.sub_browser.unsubscribe")}</button>
+      <button id="rmm-download" class="secondary">{t("static_page.sub_browser.download")}</button>
     </div>
     <div id="rmm-toolbar-status" class="rmm-toolbar-status"></div>
   </div>
@@ -209,7 +210,7 @@ class WorkshopPageRenderer:
         js_workshop_id = json.dumps(workshop_id, ensure_ascii=False)
         js_navigation_mode = json.dumps(self.navigation_mode, ensure_ascii=False)
         js_proxy_base_url = json.dumps(self.browser_base_url, ensure_ascii=False)
-        return f"""<script>
+        script_content = f"""<script>
 (() => {{
   const targetUrl = {js_target_url};
   const workshopId = {js_workshop_id};
@@ -379,7 +380,18 @@ class WorkshopPageRenderer:
   }}, true);
 }})();
 </script>"""
-
+        return (script_content
+            .replace("'页面桥接尚未就绪，请稍后重试。'", f"'{t('workshop.bridge.not_ready')}'")
+            .replace("'操作已完成'", f"'{t('static_page.sub_browser.op_completed')}'")
+            .replace("'操作失败'", f"'{t('static_page.sub_browser.op_failed')}'")
+            .replace("'当前页面未识别到 Workshop ID，可继续浏览其它工坊页面。'", f"'{t('workshop.bridge.no_workshop_id')}'")
+            .replace("'正在尝试在 Steam 中打开当前页面...'", f"'{t('static_page.sub_browser.opening_in_steam')}'")
+            .replace("'正在发送订阅请求...'", f"'{t('static_page.sub_browser.subscribing')}'")
+            .replace("'正在发送取消订阅请求...'", f"'{t('static_page.sub_browser.unsubscribing')}'")
+            .replace("'正在启动 SteamCMD 下载...'", f"'{t('static_page.sub_browser.downloading')}'")
+            .replace("'页面跳转失败'", f"'{t('workshop.bridge.navigate_failed')}'")
+            .replace("'当前仅接管 GET 导航表单，已保留原页面行为。'", f"'{t('workshop.bridge.get_forms_only')}'")
+        )
 
 class BrowserSessionManager:
     def __init__(self, on_shutdown):

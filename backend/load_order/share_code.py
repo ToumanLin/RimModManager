@@ -4,6 +4,7 @@ import zlib
 
 from backend.utils.tools import normalize_package_id, normalize_workshop_id
 from .models import FORMAT_SHARE_CODE, ParsedLoadOrderData
+from backend.i18n.translation import t
 
 
 SHARE_CODE_PREFIX = "RMM1"
@@ -29,7 +30,7 @@ def _decode_mod_entry(item) -> tuple[str, str, str]:
         return normalize_package_id(item), "", ""
 
     if not isinstance(item, list) or not item:
-        raise ValueError("分享码里的模组条目格式无效")
+        raise ValueError(t("share_code.invalid_format"))
 
     package_id = normalize_package_id(item[0] if len(item) > 0 else "")
     workshop_id = normalize_workshop_id(item[1] if len(item) > 1 else "")
@@ -82,7 +83,7 @@ def build_share_code(
             mod_entries.append(encoded_item)
 
     if not mod_entries:
-        raise ValueError("当前没有可生成分享码的模组条目")
+        raise ValueError(t("share_code.no_entries"))
 
     # v1 payload 采用位置固定的数组，压缩率和解码稳定性都比冗长 key 更好。
     payload = [
@@ -100,28 +101,28 @@ def parse_share_code(share_code: str) -> ParsedLoadOrderData:
     normalized_code = "".join(str(share_code or "").split())
     prefix, separator, rest = normalized_code.partition("-")
     if prefix != SHARE_CODE_PREFIX or not separator:
-        raise ValueError("分享码前缀无效，当前只支持 RMM1 分享码")
+        raise ValueError(t("share_code.invalid_prefix"))
 
     checksum, separator, payload_text = rest.partition("-")
     if not checksum or not separator or not payload_text:
-        raise ValueError("分享码结构无效")
+        raise ValueError(t("share_code.invalid_structure"))
 
     compressed = _urlsafe_b64decode(payload_text)
     if _checksum_hex(compressed) != checksum.upper():
-        raise ValueError("分享码校验失败，可能已损坏或复制不完整")
+        raise ValueError(t("share_code.verification_failed"))
 
     payload = _decompress_payload(compressed)
     if not isinstance(payload, list) or len(payload) < 4:
-        raise ValueError("分享码载荷无效")
+        raise ValueError(t("share_code.invalid_payload"))
 
     payload_version = payload[0]
     if payload_version != 1:
-        raise ValueError(f"不支持的分享码版本: {payload_version}")
+        raise ValueError(t("share_code.unsupported_version", version=payload_version))
 
     list_name = str(payload[1] or "").strip() or "Shared Load Order"
     mod_items = payload[3]
     if not isinstance(mod_items, list):
-        raise ValueError("分享码模组列表无效")
+        raise ValueError(t("share_code.invalid_list"))
 
     package_ids: list[str] = []
     mod_names: list[str] = []
@@ -138,7 +139,7 @@ def parse_share_code(share_code: str) -> ParsedLoadOrderData:
         workshop_ids.append(workshop_id)
 
     if not package_ids:
-        raise ValueError("分享码中没有可用的模组条目")
+        raise ValueError(t("share_code.no_valid_entries"))
 
     return ParsedLoadOrderData(
         format=FORMAT_SHARE_CODE,

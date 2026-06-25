@@ -4,6 +4,7 @@ from typing import Any
 from backend.database.workshop_selection import build_install_source
 from backend.utils.tools import normalize_package_id, normalize_workshop_id
 from .models import ParsedLoadOrderData
+from backend.i18n.translation import t
 from backend.utils.versioning import score_version_support
 
 
@@ -72,7 +73,7 @@ def _build_workshop_url(workshop_id: str) -> str:
 
 def _fallback_package_label(package_id: str) -> str:
     normalized = normalize_package_id(package_id)
-    return f"<{normalized}>" if normalized else "<未知包名>"
+    return f"<{normalized}>" if normalized else t("import_check.unknown_package")
 
 
 def _replacement_rule_matches(rule: dict[str, Any] | None, game_version: str) -> bool:
@@ -90,7 +91,7 @@ def _build_installed_candidate(mod: dict[str, Any]) -> ImportCheckInstalledCandi
             or mod.get("display_name")
             or mod.get("name")
             or mod.get("package_id")
-            or "未知模组"
+            or t("import_check.unknown_mod")
         ).strip(),
         path=str(mod.get("path") or ""),
         store=str(mod.get("store") or "unknown"),
@@ -154,19 +155,19 @@ def _build_reason_text(
 ) -> str:
     lines: list[str] = []
     if status == "exact_match":
-        lines.append("已和当前环境中的安装项精确匹配。")
+        lines.append(t("import_check.status.exact_match"))
     elif status == "package_match":
-        lines.append("当前环境存在同包名模组，但导入项没有有效 Workshop ID，无法继续区分具体版本。")
+        lines.append(t("import_check.status.package_match"))
     elif status == "replacement":
-        lines.append("该导入项对应了已安装模组的替代版本。")
+        lines.append(t("import_check.status.replacement"))
         if installed_via_replacement:
-            lines.append("当前环境已经安装了替代版本。")
+            lines.append(t("import_check.status.replacement_installed"))
     elif status == "other_version":
-        lines.append("当前环境存在同包名模组，但对应的是另一个 Workshop 版本。")
+        lines.append(t("import_check.status.other_version"))
     elif status == "missing":
-        lines.append("当前环境未发现该导入项对应的可用安装项。")
+        lines.append(t("import_check.status.missing"))
     elif status == "unknown":
-        lines.append("无法从导入项、本地缓存或外置数据库补全有效的 Workshop 信息。")
+        lines.append(t("import_check.status.unknown"))
 
     if import_workshop_id:
         lines.append(f"导入项 Workshop ID：{import_workshop_id}")
@@ -406,7 +407,7 @@ def build_import_check_report(
                 if import_workshop_id in installed_workshop_ids:
                     status = "exact_match"
                     if normalized_package_id not in {candidate.package_id for candidate in installed_candidates if candidate.package_id}:
-                        warning = "已通过 Workshop ID 对应了已安装项，但包名与导入记录不一致"
+                        warning = t("import_check.report.wid_mismatch")
                 elif not installed_workshop_ids:
                     # 当前环境的这个包没有可用 workshop_id，无法证明是“其它版本”。
                     status = "package_match"
@@ -433,15 +434,15 @@ def build_import_check_report(
                     if replacement_match:
                         status = "replacement"
                         installed_via_replacement = True
-                        warning = "当前环境安装的是替代版本"
+                        warning = t("import_check.report.alt_installed")
                     else:
                         status = "other_version"
-                        warning = "当前环境存在同包名但不同工坊版本"
+                        warning = t("import_check.report.diff_version_installed")
             else:
                 if resolved_from == "replacement" and resolved_workshop_id and resolved_workshop_id in installed_workshop_ids:
                     status = "replacement"
                     installed_via_replacement = True
-                    warning = "当前环境安装的是替代版本"
+                    warning = t("import_check.report.alt_installed")
                 else:
                     status = "package_match"
         else:
@@ -451,19 +452,19 @@ def build_import_check_report(
                 if resolved_from == "replacement":
                     status = "replacement"
                     installed_via_replacement = True
-                    warning = "当前环境安装的是替代版本"
+                    warning = t("import_check.report.alt_installed")
                 else:
                     status = "exact_match"
-                    warning = "已通过补全后的 Workshop ID 对应到了安装项"
+                    warning = t("import_check.report.wid_match_installed")
             elif target_source:
                 status = "missing"
             else:
                 status = "unknown"
-                warning = "无法查找到对应 Workshop ID，无法进行订阅或下载"
+                warning = t("import_check.report.wid_not_found")
 
         if status == "missing" and "ludeon.rimworld" in normalized_package_id:
             status = "unknown"
-            warning = "官方核心包不参与缺失下载判定"
+            warning = t("import_check.report.core_skip")
 
         # 对“纯包名导入”优先保留技术标识的可读性，用尖括号提示这是包名而不是展示名。
         display_name = (
@@ -472,7 +473,7 @@ def build_import_check_report(
             or str(direct_detail.get("name") or replacement_detail.get("name") or "").strip()
             or (installed_candidates[0].name if installed_candidates else "")
             or (resolved_workshop_id and f"Workshop {resolved_workshop_id}")
-            or "未知导入项"
+            or t("import_check.report.unknown_item")
         )
 
         target_workshop_id = normalize_workshop_id((target_source or {}).get("workshop_id"))
@@ -547,7 +548,7 @@ def build_import_check_report(
             warning = ""
         else:
             status = "missing"
-            warning = "仅提供了 Workshop ID，当前环境未发现对应安装项"
+            warning = t("import_check.report.wid_only_missing")
             if replacement_rule and _replacement_rule_matches(replacement_rule, game_version):
                 new_workshop_id = normalize_workshop_id(replacement_rule.get("new_workshop_id"))
                 if new_workshop_id and new_workshop_id in installed_by_workshop_id:
@@ -561,7 +562,7 @@ def build_import_check_report(
                         "new_workshop_id": new_workshop_id,
                         "new_name": replacement_rule.get("new_name"),
                     }
-                    warning = "当前环境安装的是替代版本"
+                    warning = t("import_check.report.alt_installed")
                 elif new_workshop_id:
                     replacement_source = build_install_source(
                         {
@@ -581,7 +582,7 @@ def build_import_check_report(
                         "new_name": replacement_rule.get("new_name"),
                     }
                     status = "replacement"
-                    warning = "该工坊项目已有替代版本"
+                    warning = t("import_check.status.has_replacement")
 
         if status == "replacement" and replacement_source and not installed_via_replacement:
             target_source = replacement_source
