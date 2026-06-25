@@ -22,7 +22,7 @@
                     @blur="checkPath('user_data_path', formData.user_data_path)"/>
                   <!-- <CommonPathInput label="游戏配置目录" v-model="formData.game_config_path" @browse="handleBrowse('game_config_path')" 
                     :check="formData.check_info?.game_config_path"
-                    :description="'游戏配置目录即排序文件（ModsConfig.xml）所在的目录，默认配置目录一般位于：\nC:/Users/{用户名}/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config'" 
+                    :description="'游戏配置目录即排序文件（ModsConfig.xml）所在的目录。Windows 常见位置：\nC:/Users/{用户名}/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config\nmacOS 常见位置：\n~/Library/Application Support/RimWorld/Config'" 
                     @blur="checkPath('game_config_path', formData.game_config_path)"/> -->
                   <CommonPathInput :label="t('settings.paths.workshopModsPath')" v-model="formData.workshop_mods_path" @browse="handleBrowse('workshop_mods_path')" 
                     :check="formData.check_info?.workshop_mods_path"

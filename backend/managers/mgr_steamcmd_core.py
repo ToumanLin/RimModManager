@@ -54,11 +54,11 @@ class SteamCMDController:
         )
 
     def _clean_corrupted_init(self):
-        """清理失败的初始化残留文件 (仅保留 steamcmd.exe)"""
+        """清理失败的初始化残留文件 (仅保留 SteamCMD 启动脚本/可执行文件)"""
         if not Path(self.steamcmd_exe).exists(): return
-            
+        keep_names = {"steamcmd.exe", "steamcmd.sh"}
         for item in Path(self.steamcmd_dir).iterdir():
-            if item.name.lower() != 'steamcmd.exe':
+            if item.name.lower() not in keep_names:
                 try:
                     if item.is_file():
                         item.unlink()
@@ -97,7 +97,8 @@ class SteamCMDController:
                 creationflags=creationflags,
                 text=True,
                 encoding='utf-8',         # SteamCMD 有时会有乱码
-                errors='replace'
+                errors='replace',
+                start_new_session=(os.name != 'nt'),
             )
             
             logger.info(f"SteamCMD 进程已启动 PID: {self.current_process.pid}")

@@ -14,6 +14,7 @@ import importlib.util
 import uuid
 import struct
 import tempfile
+import tarfile
 from dateutil import parser
 from typing import Any, cast
 from json_repair import repair_json
@@ -368,7 +369,7 @@ class SteamManager:
         self._initialized = True
         # Steam 安装目录
         self.steam_dir = settings.config.steam_path or self.get_steam_path()
-        self.steam_exe = str(Path(self.steam_dir) / "steam.exe") if self.steam_dir else self.get_steam_path(True) 
+        self.steam_exe = self._resolve_steam_executable(self.steam_dir) if self.steam_dir else self.get_steam_path(True)
         # SteamCMD 路径
         self.steamcmd_dir = settings.config.steamcmd_path or str(TOOLS_DIR / "steamcmd")
         self.steamcmd_exe = self._get_steamcmd_exe_path()
@@ -413,17 +414,43 @@ class SteamManager:
         system = platform.system()
         if system == "Windows":
             return os.path.join(self.steamcmd_dir, "steamcmd.exe")
-        elif system == "Linux": # Linux/Mac 逻辑保持不变
-            return os.path.join(self.steamcmd_dir, "steamcmd.sh")
-        elif system == "Darwin":
+        elif system in {"Linux", "Darwin"}:
             return os.path.join(self.steamcmd_dir, "steamcmd.sh")
         return ""
+
+    @staticmethod
+    def _normalized_macos_arch() -> str:
+        machine = platform.machine().lower()
+        return "arm64" if "arm" in machine or "aarch64" in machine else "x86_64"
+
+    @classmethod
+    def _steamworks_binary_names(cls) -> tuple[str, str]:
+        system = platform.system()
+        if system == "Windows":
+            return "SteamworksPy64.dll", "steam_api64.dll"
+        if system == "Darwin":
+            return f"SteamworksPy_{cls._normalized_macos_arch()}.dylib", "libsteam_api.dylib"
+        return "libSteamworksPy.so", "libsteam_api.so"
+
+    @staticmethod
+    def _resolve_steam_executable(steam_root: str | None) -> str:
+        raw_root = str(steam_root or "").strip()
+        if not raw_root:
+            return ""
+        candidate = Path(raw_root)
+        if candidate.is_file():
+            return str(candidate)
+        if platform.system() == "Darwin":
+            executable = candidate / "Contents" / "MacOS" / "steam_osx"
+            return str(executable) if executable.exists() else ""
+        executable = candidate / "steam.exe"
+        return str(executable) if executable.exists() else ""
 
     def reload_paths_from_settings(self):
         """配置保存或目录迁移后刷新运行时缓存的 Steam/SteamCMD 路径。"""
         old_steamcmd_dir = getattr(self, "steamcmd_dir", "")
         self.steam_dir = settings.config.steam_path or self.get_steam_path()
-        self.steam_exe = str(Path(self.steam_dir) / "steam.exe") if self.steam_dir else self.get_steam_path(True)
+        self.steam_exe = self._resolve_steam_executable(self.steam_dir) if self.steam_dir else self.get_steam_path(True)
         self.steamcmd_dir = settings.config.steamcmd_path or str(TOOLS_DIR / "steamcmd")
         self.steamcmd_exe = self._get_steamcmd_exe_path()
         os.makedirs(self.steamcmd_dir, exist_ok=True)
@@ -461,9 +488,8 @@ class SteamManager:
             with open(appid_path, "w") as f:
                 f.write(RIMWORLD_APP_ID)
 
-        # 2. 检查并复制 DLL (逻辑同上一次修改，保持不变)
-        target_dll = "SteamworksPy64.dll" if platform.system() == "Windows" else "libSteamworksPy.so"
-        target_api = "steam_api64.dll" if platform.system() == "Windows" else "libsteam_api.so"
+        # 2. 检查并复制运行时库
+        target_dll, target_api = self._steamworks_binary_names()
         
         dst_dll = os.path.join(self.agent_dir, target_dll)
         dst_api = os.path.join(self.agent_dir, target_api)
@@ -525,7 +551,8 @@ class SteamManager:
             else:
                 url = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
             
-            tid = download_mgr.add_task(url, self.steamcmd_dir, "steamcmd_package.zip")
+            archive_name = "steamcmd.zip" if platform.system() == "Windows" else "steamcmd.tar.gz"
+            tid = download_mgr.add_task(url, self.steamcmd_dir, archive_name)
             tasks.append({"type": "steamcmd", "id": tid})
             
         is_initialized = (Path(settings.config.steamcmd_path) / "public").exists()
@@ -581,6 +608,12 @@ class SteamManager:
                     os.remove(file_path)
                     self.steamcmd_ready = True
                     logger.info("SteamCMD installed.")
+                elif file_path.endswith(('.tar.gz', '.tgz')):
+                    with tarfile.open(file_path, "r:gz") as archive:
+                        archive.extractall(self.steamcmd_dir)
+                    os.remove(file_path)
+                    self.steamcmd_ready = True
+                    logger.info("SteamCMD installed.")
             except Exception as e:
                 logger.error(f"Failed to extract SteamCMD: {e}")
 
@@ -600,7 +633,8 @@ class SteamManager:
                 return 'steam.exe' in res.stdout.lower()
             elif sys_name == "Darwin": # MacOS
                 res = subprocess.run(['ps', '-A'], capture_output=True, text=True)
-                return 'steam.app' in res.stdout.lower()
+                stdout = res.stdout.lower()
+                return 'steam.app' in stdout or 'steam_osx' in stdout
             else: # Linux
                 res = subprocess.run(['ps', '-A'], capture_output=True, text=True)
                 return 'steam' in res.stdout.lower()
@@ -825,7 +859,7 @@ class SteamManager:
         steam_exe = str(self.steam_exe) if self.steam_exe else None
         if steam_exe and os.path.exists(steam_exe):
             try:
-                subprocess.Popen([steam_exe])
+                subprocess.Popen([steam_exe], cwd=str(Path(steam_exe).parent) if platform.system() == "Darwin" else None)
                 return {
                     "ok": True,
                     "method": "steam_exe",
@@ -837,6 +871,16 @@ class SteamManager:
         if platform.system() == "Windows":
             try:
                 os.startfile("steam://open/main")
+                return {
+                    "ok": True,
+                    "method": "steam_url",
+                    "used_url_fallback": True,
+                }
+            except Exception as e:
+                logger.error(f"Failed to start Steam via URL protocol: {e}", exc_info=True)
+        elif platform.system() == "Darwin":
+            try:
+                subprocess.Popen(["open", "steam://open/main"])
                 return {
                     "ok": True,
                     "method": "steam_url",
@@ -1616,36 +1660,43 @@ class SteamManager:
     # =========================================================
     
     def get_steam_path(self, with_exe=False):
-        """从注册表获取 Steam 安装路径"""
-        if platform.system() != "Windows" or winreg is None:
+        """获取 Steam 安装路径。"""
+        system = platform.system()
+        if system == "Windows":
+            if winreg is None:
+                return None
+            key_paths = [
+                r"SOFTWARE\WOW6432Node\Valve\Steam",
+                r"SOFTWARE\Valve\Steam",
+            ]
+            for key_path in key_paths:
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
+                        path, _ = winreg.QueryValueEx(key, "InstallPath")
+                    return os.path.join(path, "steam.exe") if with_exe else path
+                except OSError:
+                    continue
+            logger.debug("Steam registry InstallPath not found.")
             return None
 
-        key_paths = [
-            r"SOFTWARE\WOW6432Node\Valve\Steam",
-            r"SOFTWARE\Valve\Steam",
-        ]
-
-        # 这里只查 Windows 注册表安装位；其它平台的 Steam 路径发现不应复用这个入口。
-        for key_path in key_paths:
-            try:
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
-                    path, _ = winreg.QueryValueEx(key, "InstallPath")
-                return os.path.join(path, "steam.exe") if with_exe else path
-            except OSError:
-                continue
-
-        logger.debug("Steam registry InstallPath not found.")
+        if system == "Darwin":
+            for bundle_path in (Path("/Applications/Steam.app"), Path.home() / "Applications" / "Steam.app"):
+                executable = bundle_path / "Contents" / "MacOS" / "steam_osx"
+                if bundle_path.exists() and executable.exists():
+                    return str(executable) if with_exe else str(bundle_path)
         return None
 
     def launch_via_steam_cmd(self, app_id=RIMWORLD_APP_ID, extra_args=None):
         steam_exe = str(self.steam_exe) if self.steam_exe else None
-        # 如果找不到 Steam.exe，回退到原来的 URL 方式
+        # 如果找不到 Steam 可执行文件，回退到 URL 方式
         if not steam_exe or not os.path.exists(steam_exe):
-            logger.warning("未找到 Steam.exe，回退到 URL 协议启动")
-            # os.startfile(f"steam://rungameid/{app_id}")
-            os.startfile(f"steam://run/{app_id}")
+            logger.warning("未找到 Steam 可执行文件，回退到 URL 协议启动")
+            if platform.system() == "Windows":
+                os.startfile(f"steam://run/{app_id}")
+            else:
+                subprocess.Popen(["open", f"steam://run/{app_id}"])
             return
-        # 构建命令: Steam.exe -applaunch <AppID> [Arguments]
+        # 构建命令: Steam -applaunch <AppID> [Arguments]
         cmd = [steam_exe, "-applaunch", str(app_id)]
         # 如果管理器本身也有需要注入的参数（例如隔离配置文件的参数）
         # 注意：这里传递的参数会追加在 Steam 内部设置的参数后面
@@ -1656,7 +1707,7 @@ class SteamManager:
             else:
                 cmd.append(extra_args)
         # 启动
-        subprocess.Popen(cmd)
+        subprocess.Popen(cmd, cwd=str(Path(steam_exe).parent) if platform.system() == "Darwin" else None)
         logger.debug(f"通过 Steam 命令启动 RimWorld: {cmd}")
 
     def _steam64_to_account_id(self, steam64_id: str | int | None) -> str:

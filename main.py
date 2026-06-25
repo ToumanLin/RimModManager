@@ -277,7 +277,8 @@ def main():
         additional_args.append('--allow-file-access-from-files') 
         
         # 设置环境变量传给 WebView2
-        os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = " ".join(additional_args)
+        if sys.platform == "win32":
+            os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = " ".join(additional_args)
         entrypoint = get_entrypoint()
         
         if launch_mode == "browser":

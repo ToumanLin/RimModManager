@@ -39,6 +39,8 @@ class RipgrepStatus:
             "current_version": self.current_version,
             "message": self.message,
         }
+
+
 def resolve_ripgrep_root(raw_path: str | None = None) -> Path:
     configured = str(raw_path or "").strip()
     if configured:
@@ -78,7 +80,8 @@ def resolve_ripgrep_executable_with_version(
         add_candidate(str(getattr(settings.config, "ripgrep_path", "") or "").strip())
     if include_fallback:
         add_candidate(RIPGREP_TOOL_DIR)
-        add_candidate(shutil.which("rg.exe") or shutil.which("rg"))
+        add_candidate(shutil.which("rg.exe"))
+        add_candidate(shutil.which("rg"))
 
     resolved_files: list[Path] = []
     resolved_seen: set[str] = set()
@@ -103,14 +106,15 @@ def resolve_ripgrep_executable_with_version(
                     resolved_files.append(direct_path.resolve())
 
         # ripgrep Release 压缩包自带一层版本目录，因此这里允许递归查找一次工具目录。
-        for nested_path in sorted(candidate.rglob("rg.exe"), key=lambda item: str(item).lower()):
-            if not nested_path.is_file():
-                continue
-            normalized = str(nested_path.resolve()).lower()
-            if normalized in resolved_seen:
-                continue
-            resolved_seen.add(normalized)
-            resolved_files.append(nested_path.resolve())
+        for executable_name in RIPGREP_EXECUTABLE_NAMES:
+            for nested_path in sorted(candidate.rglob(executable_name), key=lambda item: str(item).lower()):
+                if not nested_path.is_file():
+                    continue
+                normalized = str(nested_path.resolve()).lower()
+                if normalized in resolved_seen:
+                    continue
+                resolved_seen.add(normalized)
+                resolved_files.append(nested_path.resolve())
 
     if not resolved_files: return None, ""
 

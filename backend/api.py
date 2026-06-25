@@ -6,7 +6,9 @@ from enum import Enum
 import gc
 import json
 import os
+import platform
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -2646,7 +2648,10 @@ class API:
                                     data={"runtime_session": failed_session, "failure_reason": "launch_prepare_failed"},
                                 )
                             session = runtime_session_mgr.begin_launch(profile_id, "steam", message="已尝试通过 Steam URL 启动，等待游戏进程确认。")
-                            os.startfile(f"steam://run/{RIMWORLD_APP_ID}")
+                            if platform.system() == "Windows":
+                                os.startfile(f"steam://run/{RIMWORLD_APP_ID}")
+                            else:
+                                subprocess.Popen(["open", f"steam://run/{RIMWORLD_APP_ID}"])
                             return ApiResponse.warning(
                                 message="未检测到有效的 Steam 程序路径，已尝试通过 URL 协议启动 Steam 游戏；如果失败，请检查 Steam 客户端状态或关闭“优先 Steam 启动”选项。",
                                 data={"runtime_session": session},

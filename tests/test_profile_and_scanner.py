@@ -1549,9 +1549,10 @@ class TestApiGameLaunch(unittest.TestCase):
         })
 
         config = SimpleNamespace(steam_path="")
-        with patch("backend.api.settings.config", config), \
+        with patch("backend.api.platform.system", return_value="Windows"), \
+             patch("backend.api.settings.config", config), \
              patch("backend.api.PathChecker.check_steam_path", return_value={"pass": False}), \
-             patch("backend.api.os.startfile") as startfile:
+             patch("backend.api.os.startfile", create=True) as startfile:
             res = API.game_launch(api, "default")
 
         self.assertEqual(res["status"], "warning")

@@ -6,6 +6,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 from typing import List
+import importlib.util
+from PIL import Image
 
 # 尝试导入 pathspec 用于 gitignore 匹配
 try:
@@ -99,6 +101,68 @@ VSVersionInfo(
         print(f"生成版本文件失败: {e}")
         return None
 
+
+def _pyinstaller_data_arg(src: str, dest: str) -> str:
+    separator = ";" if os.name == "nt" else ":"
+    return f"{src}{separator}{dest}"
+
+
+def ensure_macos_icon(icon_path: str) -> str:
+    if os.name != "posix" or sys.platform != "darwin":
+        return icon_path
+    candidate = Path("icon.icns")
+    if candidate.exists():
+        return str(candidate)
+    source = Path(icon_path)
+    if not source.exists():
+        return ""
+    with Image.open(source) as image:
+        rgba = image.convert("RGBA")
+        sizes = [(16, 16), (32, 32), (64, 64), (128, 128), (256, 256), (512, 512), (1024, 1024)]
+        rgba.save(candidate, format="ICNS", sizes=sizes)
+    return str(candidate)
+
+
+def prepare_macos_steamworks_artifacts() -> list[tuple[str, str]]:
+    if sys.platform != "darwin":
+        return []
+
+    machine = "arm64" if "arm" in os.uname().machine.lower() else "x86_64"
+    output_dir = Path("build") / "steamworks-macos"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_lib = output_dir / f"SteamworksPy_{machine}.dylib"
+    sdk_root = Path(os.environ.get("STEAM_SDK_ROOT", "")).expanduser() if os.environ.get("STEAM_SDK_ROOT") else None
+    source_dir = Path(os.environ.get("STEAMWORKSPY_SOURCE_DIR", "")).expanduser() if os.environ.get("STEAMWORKSPY_SOURCE_DIR") else None
+    if not source_dir:
+        spec = importlib.util.find_spec("steamworks")
+        if spec and spec.origin:
+            source_dir = Path(spec.origin).resolve().parent
+
+    source_cpp = source_dir / "SteamworksPy.cpp" if source_dir else None
+    sdk_dylib = sdk_root / "redistributable_bin" / "osx" / "libsteam_api.dylib" if sdk_root else None
+    built: list[tuple[str, str]] = []
+    if source_cpp and source_cpp.exists() and sdk_dylib and sdk_dylib.exists():
+        shutil.copy2(sdk_dylib, output_dir / "libsteam_api.dylib")
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++11",
+                "-o",
+                str(output_lib),
+                "-shared",
+                "-fPIC",
+                str(source_cpp),
+                "-lsteam_api",
+                "-L.",
+            ],
+            cwd=str(output_dir),
+            check=True,
+            text=True,
+        )
+        built.append((str(output_lib), "steamworks"))
+        built.append((str(output_dir / "libsteam_api.dylib"), "steamworks"))
+    return built
+
 def packApplication(main_file="main.py", icon_path="", name="", splash_path="", version="1.0.0", company=""):
     """
     使用 PyInstaller 打包应用程序
@@ -112,17 +176,19 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
     try:
         if not os.path.exists(main_file): raise FileNotFoundError(f"主程序文件 '{main_file}' 不存在")
         
-        # 1. 生成版本信息文件
-        print("正在生成版本信息...")
-        version_file_path = create_version_file(
-            version=version,
-            company_name=company,
-            file_description=f"{name} 模组管理器",
-            internal_name=name,
-            legal_copyright=f"Copyright (C) {company}",
-            product_name=name
-        )
+        if os.name == "nt":
+            print("正在生成版本信息...")
+            version_file_path = create_version_file(
+                version=version,
+                company_name=company,
+                file_description=f"{name} 模组管理器",
+                internal_name=name,
+                legal_copyright=f"Copyright (C) {company}",
+                product_name=name
+            )
         hook_dir_path = create_pyinstaller_hook_dir()
+        icon_path = ensure_macos_icon(icon_path)
+        extra_binaries = prepare_macos_steamworks_artifacts()
 
         # 2. 构建命令
         # 这些模块在源码运行时可以被 Python 正常动态发现，
@@ -131,13 +197,12 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
         # Unknown encoding cl100k_base / Plugins found: []
         pyinstaller_args = [
             "uv", "run", "pyinstaller", # 使用uv运行pyinstaller
-            "-F",  # 打包成单个文件
-            # "-D",  # 打包成目录
+            "-F" if os.name == "nt" else "-D",
             "-w",  # 无控制台窗口
             "--noconfirm",  # 跳过确认提示
             "--contents-directory", "lib",
             "--additional-hooks-dir", hook_dir_path,
-            "--add-data", "frontend/dist;frontend/dist", # 注意：Windows下通常用分号; Linux用冒号:
+            "--add-data", _pyinstaller_data_arg("frontend/dist", "frontend/dist"),
             "--collect-binaries", "steamworks",
             "--collect-binaries", "tiktoken",
             "--collect-data", "tiktoken",
@@ -152,10 +217,13 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
             "--exclude-module", "pkg_resources", # 通常这两个是一起出现的，建议一并排除
             
             "--clean",  # 清理旧构建文件
-            "--upx-dir", r"D:\Environment\upx-5.0.0-win64",  # 指定 UPX 路径
             "-n", name,  # 指定名称
             main_file  # 主程序文件
         ]
+        if os.name == "nt":
+            pyinstaller_args.extend(["--upx-dir", r"D:\Environment\upx-5.0.0-win64"])
+        for source_path, dest_dir in extra_binaries:
+            pyinstaller_args.extend(["--add-binary", _pyinstaller_data_arg(source_path, dest_dir)])
         cmd = pyinstaller_args
         if icon_path and os.path.exists(icon_path):
             cmd.extend(["-i", icon_path])
@@ -168,9 +236,10 @@ def packApplication(main_file="main.py", icon_path="", name="", splash_path="", 
         # 3. 执行打包
         result = subprocess.run(cmd, text=True, encoding='utf-8') # 显式指定编码防止乱码
         if result.returncode == 0:
+            artifact_name = f"{name}.exe" if os.name == "nt" else f"{name}.app"
             print("\n" + "="*30)
             print("★ 打包成功！")
-            print(f"★ 输出文件: dist/{name}.exe")
+            print(f"★ 输出文件: dist/{artifact_name}")
             print("="*30 + "\n")
             return True
         else:
@@ -205,15 +274,16 @@ def _iter_toolmods_files(toolmods_dir: Path):
             yield file_path, Path("toolmods") / file_path.relative_to(toolmods_dir)
 
 def _iter_tools_files(tools_dir: Path):
-    """遍历 tools 发布文件，仅保留 steamcmd.exe，其它目录按现有内容发布。"""
+    """遍历 tools 发布文件，仅保留当前平台需要的 SteamCMD 入口，其它目录按现有内容发布。"""
     if not tools_dir.exists():
         return
+    allowed_steamcmd_names = {"steamcmd.exe"} if os.name == "nt" else {"steamcmd.sh"}
     for file_path in tools_dir.rglob("*"):
         if not file_path.is_file():
             continue
         relative_path = file_path.relative_to(tools_dir)
         normalized_parts = [part.lower() for part in relative_path.parts]
-        if normalized_parts and normalized_parts[0] == "steamcmd" and relative_path.name.lower() != "steamcmd.exe":
+        if normalized_parts and normalized_parts[0] == "steamcmd" and relative_path.name.lower() not in allowed_steamcmd_names:
             continue
         yield file_path, Path("tools") / relative_path
 
@@ -232,17 +302,17 @@ def _iter_data_files(data_dir: Path):
             print(f"警告: 发布数据文件缺失，已跳过 {file_path}")
 
 def create_release_zip(app_name: str, version: str):
-    """基于 dist 中的 exe 生成发布压缩包，并附带运行所需的外部资源。"""
+    """基于 dist 产物生成发布压缩包，并附带运行所需的外部资源。"""
     project_root = Path(__file__).resolve().parent
     dist_dir = project_root / "dist"
-    exe_path = dist_dir / f"{app_name}.exe"
+    app_path = dist_dir / (f"{app_name}.exe" if os.name == "nt" else f"{app_name}.app")
     zip_path = dist_dir / f"{app_name} v{version}.zip"
     archive_root = Path(app_name)
 
-    if not exe_path.exists():
-        raise FileNotFoundError(f"未找到打包产物: {exe_path}")
+    if not app_path.exists():
+        raise FileNotFoundError(f"未找到打包产物: {app_path}")
 
-    release_items = [(exe_path, Path(exe_path.name))]
+    release_items = [(app_path, Path(app_path.name))]
     release_items.extend(_iter_toolmods_files(project_root / "toolmods") or [])
     release_items.extend(_iter_tools_files(project_root / "tools") or [])
     release_items.extend(_iter_data_files(project_root / "data") or [])
@@ -252,7 +322,12 @@ def create_release_zip(app_name: str, version: str):
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for source_path, archive_path in release_items:
-            archive.write(source_path, arcname=(archive_root / archive_path).as_posix())
+            if source_path.is_dir():
+                for nested_path in source_path.rglob("*"):
+                    if nested_path.is_file():
+                        archive.write(nested_path, arcname=(archive_root / archive_path / nested_path.relative_to(source_path)).as_posix())
+            else:
+                archive.write(source_path, arcname=(archive_root / archive_path).as_posix())
 
     print("\n" + "="*30)
     print("★ 发布压缩包已生成！")

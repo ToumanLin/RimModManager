@@ -5,7 +5,7 @@ import sys
 import ctypes
 import webbrowser # 这个库用来打开浏览器
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 from backend.settings import HOME_DIR, BASE_RESOURCE_DIR
 
 if sys.platform == "win32":
@@ -178,8 +178,9 @@ def validate_environment(on_error=None, require_webview2=True):
     启动前的环境全校验
     """
     # 1. 检测组件
-    wv2_version = get_webview2_version()
-    if require_webview2 and not wv2_version:
+    needs_webview2 = bool(require_webview2 and sys.platform == "win32")
+    wv2_version = get_webview2_version() if needs_webview2 else None
+    if needs_webview2 and not wv2_version:
         if on_error:
             on_error()
         show_webview2_missing_dialog()
@@ -189,10 +190,12 @@ def validate_environment(on_error=None, require_webview2=True):
     # 这里假设之前的 get_entrypoint 逻辑
     entry = get_entrypoint()
     if not entry.startswith('http'):
-        # 先移除 URI scheme，然后使用 unquote 将所有百分号编码（包括中文和空格）解码为普通字符串
-        # 'file:///C:/...' -> 'C:/...'
-        path_str = unquote(entry.replace('file:///', '', 1))
-        # 将解码后的、操作系统可识别的路径字符串转换为 Path 对象
+        # 使用 urlparse 解析 URI 并提取 unquoted path
+        parsed = urlparse(entry)
+        path_str = unquote(parsed.path)
+        # 在 Windows 上，路径可能以 '/' 开头 (例如 /C:/Users/...)，需要去除 leading slash 才能被 Path 正确识别为绝对路径
+        if parsed.scheme == 'file' and path_str.startswith('/') and path_str[2:3] == ':':
+            path_str = path_str[1:]
         p = Path(path_str)
         if not p.exists():
             if on_error:

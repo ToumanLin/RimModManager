@@ -1649,7 +1649,17 @@ class PathChecker:
         }
         """
         if not path_str: return cls._format_res(False, msg="未指定 Steam 路径")
-        exe_path = Path(path_str) / "steam.exe"
+        path = Path(path_str)
+        system = platform.system()
+        if system == "Darwin":
+            if path.is_file() and path.name == "steam_osx":
+                return cls._format_res(True, data=str(path), msg=f"Steam 客户端：{path}")
+            exe_path = path / "Contents" / "MacOS" / "steam_osx"
+            if exe_path.exists():
+                return cls._format_res(True, data=str(path), msg=f"Steam 客户端：{exe_path}")
+            return cls._format_res(False, msg="路径下未找到 Steam.app/Contents/MacOS/steam_osx", msg_type="warn")
+
+        exe_path = path / "steam.exe"
         if exe_path.exists(): return cls._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
         return cls._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
     
@@ -1670,9 +1680,10 @@ class PathChecker:
         result = pattern.search(path_str)
         if result: return cls._format_res(False, msg="SteamCMD 路径不能包含中文")
         
-        exe_path = Path(path_str) / "steamcmd.exe"
+        executable_name = "steamcmd.exe" if platform.system() == "Windows" else "steamcmd.sh"
+        exe_path = Path(path_str) / executable_name
         if exe_path.exists(): return cls._format_res(True, data=path_str, msg=f"SteamCMD 客户端：{exe_path}")
-        return cls._format_res(False, msg="路径下未找到 steamcmd.exe", msg_type="warn")
+        return cls._format_res(False, msg=f"路径下未找到 {executable_name}", msg_type="warn")
 
     @classmethod
     def check_texture_tools_path(cls, path_str: str) -> Dict:
@@ -1688,17 +1699,18 @@ class PathChecker:
         if not path.is_dir():
             return cls._format_res(False, msg="贴图工具路径必须是目录")
 
-        exe_path = path / "todds.exe"
+        executable_name = "todds.exe" if platform.system() == "Windows" else "todds"
+        exe_path = path / executable_name
         if exe_path.exists():
             return cls._format_res(True, data=path_str, msg=f"贴图工具：{exe_path}")
-        return cls._format_res(False, msg="目录下未找到 todds.exe，可在外部工具检查中下载安装", msg_type="warn")
+        return cls._format_res(False, msg=f"目录下未找到 {executable_name}，可在外部工具检查中下载安装", msg_type="warn")
 
     @classmethod
     def check_ripgrep_path(cls, path_str: str) -> Dict:
         """
         检查 ripgrep 工具路径是否有效。
 
-        兼容“直接指向 rg.exe”与“指向包含 rg.exe 的目录”两种输入，
+        兼容“直接指向 rg/rg.exe”与“指向包含可执行文件的目录”两种输入，
         但前端仍建议用户选择目录，以便后续自动更新时保持一致。
         """
         if not path_str:
@@ -1720,8 +1732,10 @@ class PathChecker:
             )
 
         if path.is_file():
-            return cls._format_res(False, msg="请选择 rg.exe 或其所在目录", msg_type="warn")
-        return cls._format_res(False, msg="目录下未找到 rg.exe，可在外部工具检查中下载安装", msg_type="warn")
+            executable_name = "rg.exe" if platform.system() == "Windows" else "rg"
+            return cls._format_res(False, msg=f"请选择 {executable_name} 或其所在目录", msg_type="warn")
+        executable_name = "rg.exe" if platform.system() == "Windows" else "rg"
+        return cls._format_res(False, msg=f"目录下未找到 {executable_name}，可在外部工具检查中下载安装", msg_type="warn")
         
     @classmethod
     def paths_check(cls, paths_data: Dict[str, str]) -> Dict:
@@ -1763,6 +1777,5 @@ class PathChecker:
         
     
 file_mgr = FileManager()
-
 
 

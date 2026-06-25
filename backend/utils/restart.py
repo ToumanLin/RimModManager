@@ -24,7 +24,7 @@ PYINSTALLER_ENV_VARS_TO_CLEAR = (
 )
 
 # 重启后的新实例只需要尽量干净的系统环境，避免把当前进程的脏运行时状态继续传下去。
-RESTART_ENV_WHITELIST = (
+WINDOWS_RESTART_ENV_WHITELIST = (
     "ALLUSERSPROFILE",
     "APPDATA",
     "CommonProgramFiles",
@@ -63,9 +63,15 @@ def _build_restart_environment() -> Dict[str, str]:
     原因：更新重启和手动重启都可能发生在 PyInstaller onefile 运行时环境里，
     若直接继承当前环境，可能把失效的解包路径和内部状态一并带给新实例。
     """
-    clean_env: Dict[str, str] = {}
+    if os.name != "nt":
+        clean_env = dict(os.environ)
+        clean_env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        for key in PYINSTALLER_ENV_VARS_TO_CLEAR:
+            clean_env.pop(key, None)
+        return clean_env
 
-    for key in RESTART_ENV_WHITELIST:
+    clean_env: Dict[str, str] = {}
+    for key in WINDOWS_RESTART_ENV_WHITELIST:
         value = os.environ.get(key)
         if value:
             clean_env[key] = value
@@ -79,10 +85,8 @@ def _build_restart_environment() -> Dict[str, str]:
         clean_env["WINDIR"] = os.environ.get("WINDIR", clean_env["SYSTEMROOT"])
 
     clean_env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-
     for key in PYINSTALLER_ENV_VARS_TO_CLEAR:
         clean_env.pop(key, None)
-
     return clean_env
 
 
@@ -111,9 +115,10 @@ def _resolve_restart_command():
         return [os.path.abspath(sys.executable)]
 
     python_executable = Path(sys.executable).resolve()
-    pythonw_executable = python_executable.with_name("pythonw.exe")
-    if pythonw_executable.exists():
-        return [str(pythonw_executable), str(HOME_DIR / 'main.py')]
+    if os.name == "nt":
+        pythonw_executable = python_executable.with_name("pythonw.exe")
+        if pythonw_executable.exists():
+            return [str(pythonw_executable), str(HOME_DIR / 'main.py')]
 
     return [os.path.abspath(sys.executable), str(HOME_DIR / 'main.py')]
 
