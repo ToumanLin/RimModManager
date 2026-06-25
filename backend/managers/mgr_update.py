@@ -97,7 +97,7 @@ class LocalSource(UpdateSource):
                             local_file_path=local_path
                         )
             except Exception as e:
-                logger.warning(f"Error reading local cache {jf}: {e}")
+                logger.warning(f"读取本地更新缓存失败: {jf}, error={e}")
                 continue
         
         return best_candidate
@@ -175,7 +175,7 @@ class UpdateManager:
                     if best_remote is None or version.parse(info.version) > version.parse(best_remote.version):
                         best_remote = info
             except Exception as e:
-                logger.error(f"Update Source {src.__class__.__name__} failed: {e}")
+                logger.error(f"检查更新源失败: source={src.__class__.__name__}, error={e}")
                 continue
         
         if not best_remote: return UpdateInfo(False, __version__, "", "", "None")
@@ -185,7 +185,7 @@ class UpdateManager:
         if best_remote.source_name != "本地缓存":
             cached_path = self._find_cached_file(best_remote.version)
             if cached_path:
-                logger.info(f"Hit local cache for version {best_remote.version}")
+                logger.info(f"命中本地更新缓存: version={best_remote.version}, path={cached_path}")
                 best_remote.local_status = "ready"
                 best_remote.local_file_path = cached_path
                 best_remote.source_name += " (已缓存)"
@@ -262,7 +262,7 @@ class UpdateManager:
 
     def _on_download_complete(self, task: DownloadTask):
         """下载完成后的内部回调（由 DownloadManager 线程调用）"""
-        logger.info(f"Update package downloaded: {task.dest_path}")
+        logger.info(f"更新包下载完成: path={task.dest_path}")
         
         # 1. 再次确认文件存在
         if not os.path.exists(task.dest_path):
@@ -297,7 +297,7 @@ class UpdateManager:
         )
 
     def _on_download_error(self, task: DownloadTask):
-        logger.error(f"Update download error: {task.error_msg}")
+        logger.error(f"更新包下载失败: task_id={task.task_id}, error={task.error_msg}")
         EventBus.emit_progress(
             task.task_id,
             "update",
@@ -317,7 +317,7 @@ class UpdateManager:
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(info.to_dict(), f, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"Failed to save update metadata: {e}")
+            logger.error(f"保存更新元数据失败: version={info.version}, error={e}")
 
     def _clean_old_cache(self):
         """保留最近2个版本，删除其他的"""
@@ -359,7 +359,7 @@ class UpdateManager:
         os.makedirs(extract_path, exist_ok=True)
 
         try:
-            logger.info("Extracting update package...")
+            logger.info("正在解压更新包。")
             # 1. 解压 Zip
             with zipfile.ZipFile(zip_path, 'r') as zf:
                 for member in zf.infolist():
@@ -389,7 +389,7 @@ class UpdateManager:
                 else:
                     raise Exception("无法在更新包中找到主程序文件")
 
-            logger.info("Performing Pure Python Hot Swap...")
+            logger.info("正在执行 Python 热更新替换流程。")
             
             backup_config_for_update()
             
@@ -423,15 +423,15 @@ class UpdateManager:
             except:
                 pass
 
-            logger.info("Launching new version...")
+            logger.info("正在启动新版本。")
             launch_new_application()
 
             # 8. 当前旧进程功成身退，立即退出
-            logger.info("Exiting old application instance.")
+            logger.info("旧版本进程准备退出。")
             os._exit(0)
 
         except Exception as e:
-            logger.error(f"Failed to prepare update: {e}", exc_info=True)
+            logger.error(f"准备安装更新失败: zip_path={zip_path}, error={e}", exc_info=True)
             # 如果中途失败了（比如复制了一半），尽量把名字改回来防止软件损坏
             if os.path.exists(current_exe + ".old") and not os.path.exists(current_exe):
                 try: os.rename(current_exe + ".old", current_exe)

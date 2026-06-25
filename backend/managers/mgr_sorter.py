@@ -286,7 +286,7 @@ class OrderSorter:
             
             # 物理删除边
             del adj[u_min][v_min]
-            logger.warning(f"Cycle broken: removed edge {u_group_name} -> {v_group_name} (weight {min_w})")
+            logger.warning(f"已打破排序循环：移除边 {u_group_name} -> {v_group_name}（权重 {min_w}）")
 
         return warnings
 
@@ -714,7 +714,7 @@ class OrderSorter:
         strategy = str(strategy or getattr(settings.config, "auto_sort_strategy", self.DEFAULT_SORT_STRATEGY) or self.DEFAULT_SORT_STRATEGY).strip()
         if strategy not in self.SORT_STRATEGIES:
             strategy = self.DEFAULT_SORT_STRATEGY
-        logger.info(f"Starting sort for {len(active_ids)} mods with strategy={strategy}...")
+        logger.info(f"开始排序 {len(active_ids)} 个 MOD，策略：{strategy}...")
         all_mods_data = ModDAO.get_profile_mods(self.context)
         # all_mods_data = ModDAO.get_profile_mods(self.context or None)
         mod_map = {m['package_id'].lower(): m for m in all_mods_data}

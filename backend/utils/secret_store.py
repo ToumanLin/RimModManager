@@ -71,7 +71,7 @@ class SecretStore:
     def _fail(self, message: str, exc: Exception | None = None) -> SecretStoreError:
         self.last_error = message
         if exc:
-            logger.warning("SecretStore error: %s", message, exc_info=True)
+            logger.warning("SecretStore 处理失败：%s", message, exc_info=True)
         return SecretStoreError(message)
 
     def _is_missing_secret_error(self, exc: Exception) -> bool:

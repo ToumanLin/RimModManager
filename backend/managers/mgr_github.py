@@ -715,7 +715,7 @@ class GithubManager:
             return payload
         except (GithubApiError, requests.RequestException) as exc:
             primary_error = exc
-            logger.warning("GitHub repo info API failed, fallback to web/cache: repo=%s/%s error=%s", owner, repo, exc)
+            logger.warning("GitHub 仓库信息 API 请求失败，将回退到网页或缓存：repo=%s/%s error=%s", owner, repo, exc)
 
         web_payload = self._fetch_repo_info_via_web(owner, repo, source_branch=normalized_source_branch)
         if web_payload:
@@ -1164,7 +1164,7 @@ class GithubManager:
                 resolved = self._build_release_asset_from_payload(request, web_release)
                 if resolved:
                     logger.warning(
-                        "GitHub release resolved via web assets fallback: repo=%s/%s tag=%s error=%s",
+                        "已通过 GitHub 网页资源回退解析 release：repo=%s/%s tag=%s error=%s",
                         request.owner,
                         request.repo,
                         request.artifact.release_tag or "latest",
@@ -1173,7 +1173,7 @@ class GithubManager:
                     return resolved
             except Exception as web_exc:
                 logger.warning(
-                    "GitHub release web assets fallback failed: repo=%s/%s tag=%s error=%s",
+                    "GitHub release 网页资源回退失败：repo=%s/%s tag=%s error=%s",
                     request.owner,
                     request.repo,
                     request.artifact.release_tag or "latest",
@@ -1256,7 +1256,7 @@ class GithubManager:
                 source_commit = self.fetch_gitlab_commit(identity, ref=source_ref, missing_ok=True)
                 resolved_version = self._build_source_version(source_ref, self._extract_commit_timestamp(source_commit))
             except Exception as exc:
-                logger.warning("Resolve GitLab source commit failed: repo=%s/%s branch=%s error=%s", request.owner, request.repo, source_ref, exc)
+                logger.warning("解析 GitLab 源提交失败：repo=%s/%s branch=%s error=%s", request.owner, request.repo, source_ref, exc)
 
         return GithubResolvedArtifact(
             repo_url=request.repo_url,
@@ -1387,7 +1387,7 @@ class GithubManager:
             if request.success_toast:
                 EventBus.send_toast(request.success_toast, type="success", duration=4000)
         except Exception as exc:
-            logger.error("Git repo install failed: %s", exc, exc_info=True)
+            logger.error("Git 仓库安装失败：%s", exc, exc_info=True)
             if timeline_repo_url:
                 self.record_timeline(timeline_repo_url, "error", f"部署失败: {exc}")
             if request.failure_toast:
@@ -1473,7 +1473,7 @@ class GithubManager:
         if not fallback_url or not fallback_filename: return None
 
         logger.warning(
-            "GitHub release resolve failed, fallback to direct download: repo=%s/%s error=%s",
+            "GitHub release 解析失败，将回退到直接下载：repo=%s/%s error=%s",
             request.owner,
             request.repo,
             exc,
@@ -1561,7 +1561,7 @@ class GithubManager:
                 degraded=True,
             )
         except Exception as exc:
-            logger.warning("GitHub web fallback failed: repo=%s/%s error=%s", owner, repo, exc)
+            logger.warning("GitHub 网页回退失败：repo=%s/%s error=%s", owner, repo, exc)
             return None
 
     def _fetch_repo_info_from_record_cache(self, repo_url: str, owner: str, repo: str, *, source_branch: str = "") -> dict[str, Any] | None:
@@ -2093,7 +2093,7 @@ class GithubManager:
                 default_branch = str(repo_info.get("default_branch") or "").strip()
                 if default_branch: return default_branch
         except Exception as exc:
-            logger.warning("Resolve default branch via API failed: repo=%s/%s error=%s", owner, repo, exc)
+            logger.warning("通过 API 解析默认分支失败：repo=%s/%s error=%s", owner, repo, exc)
 
         web_info = self._fetch_repo_info_via_web(owner, repo)
         if web_info:
@@ -2117,13 +2117,13 @@ class GithubManager:
             source_commit = self.fetch_commit(owner, repo, ref=normalized_branch, missing_ok=True)
             return self._build_source_version(normalized_branch, self._extract_commit_timestamp(source_commit))
         except Exception as exc:
-            logger.warning("Resolve source commit via API failed, fallback to web/cache: repo=%s/%s branch=%s error=%s", owner, repo, normalized_branch, exc)
+            logger.warning("通过 API 解析源提交失败，将回退到网页或缓存：repo=%s/%s branch=%s error=%s", owner, repo, normalized_branch, exc)
 
         try:
             source_commit = self.fetch_commit_web(owner, repo, ref=normalized_branch, missing_ok=True)
             if source_commit: return self._build_source_version(normalized_branch, self._extract_commit_timestamp(source_commit))
         except Exception as exc:
-            logger.warning("Resolve source commit via web failed: repo=%s/%s branch=%s error=%s", owner, repo, normalized_branch, exc)
+            logger.warning("通过网页解析源提交失败：repo=%s/%s branch=%s error=%s", owner, repo, normalized_branch, exc)
 
         record_info = self._fetch_repo_info_from_record_cache(repo_url or f"{GITHUB_WEB_BASE}/{owner}/{repo}", owner, repo, source_branch=normalized_branch)
         if record_info:

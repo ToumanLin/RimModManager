@@ -137,7 +137,7 @@ import { useAiStore } from './aiStore'
 import { useAppStore } from '../../app/stores/appStore'
 import { useModStore } from '../mod/stores/modStore'
 import { useToast } from 'vue-toastification'
-import { normalizeText } from '../../shared/lib/common'
+import { normalizeText, toUserMessage } from '../../shared/lib/common'
 import CommonModalShell from '../../shared/components/modal/CommonModalShell.vue'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 
@@ -263,7 +263,8 @@ const regenerateItem = async (taskId, item) => {
       toast.error('重新生成失败')
     }
   } catch (error) {
-    toast.error(`重新生成失败: ${error?.message || error}`)
+    console.warn('重新生成模组别名失败:', error)
+    toast.error(toUserMessage(error?.message || error, '重新生成失败。请检查 AI 配置、网络连接和当前模组数据后重试。'))
   } finally {
     regeneratingIds.value.delete(item.package_id)
   }

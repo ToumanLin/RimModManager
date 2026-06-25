@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { deepClone, toast, checkResult } from '../../../../shared/lib/common'
+import { deepClone, toast, checkResult, toUserMessage } from '../../../../shared/lib/common'
 import { ISSUE_LEVEL, ISSUE_TYPE, ISSUE_TITLE_MAP } from '../../../../shared/lib/constants'
 import { useProfileStore } from '../../../profiles/profileStore'
 
@@ -523,7 +523,7 @@ export const useModIssues = ({
       }
     } catch (e) {
       console.error("批量忽略操作失败:", e);
-      toast.error(`操作失败: ${e.message}`);
+      toast.error(toUserMessage(e?.message || e, '批量更新问题忽略状态失败。已还原本地列表状态，请稍后重试。'));
       rollback.forEach((ignoredIssues, id) => {
         const mod = takeModById(id)
         if (mod) mod.ignored_issues = ignoredIssues

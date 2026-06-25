@@ -588,7 +588,7 @@ const getBgColor = (item) => {
   const color = getRenderColor(item)
   if (color === 'transparent') return 'transparent'
   if (!color.startsWith('#')) {
-    console.error(`Invalid color:`,item,color, COLOR_REMOVED)
+    console.error('加载顺序差异颜色无效:', item, color, COLOR_REMOVED)
   }
   return hexToRgba(color, 0.2) // 统一 10% 透明度
 }

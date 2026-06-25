@@ -1,4 +1,4 @@
-import { toast, checkResult } from '../../../shared/lib/common'
+import { toast, checkResult, toUserMessage } from '../../../shared/lib/common'
 import { useWorkspaceStore } from '../../../features/workspace/workspaceStore'
 import { normalizeInstallSource, normalizeInstallSources } from '../../../features/mod/lib/modIdentity'
 import { useConfirmStore } from '../../../shared/components/modal/confirmStore'
@@ -28,7 +28,7 @@ export const useSteamWorkshopActions = ({
   const downloadWorkshopItemsViaSteam = async (workshop_ids, options = {}) => {
     if (!window.pywebview) return false
     if (!workshop_ids || workshop_ids.length === 0) return false
-    toast.info('正在连接 Steam...', { timeout: 2500 })
+    toast.info('正在连接 Steam。', { timeout: 2500 })
     const res = await window.pywebview.api.steam_workshop_download(
       workshop_ids,
       options.highPriority !== false,
@@ -37,12 +37,12 @@ export const useSteamWorkshopActions = ({
     if (res?.status === 'success') {
       const taskId = String(res?.data?.task_id || '')
       let task = null
-      toast.info(`已向 Steam 提交 ${workshop_ids.length} 个创意工坊项目的下载请求，正在等待下载完成...`, { timeout: 3500 })
+      toast.info(`已向 Steam 提交 ${workshop_ids.length} 个创意工坊项目的下载请求，正在等待下载完成。`, { timeout: 3500 })
       if (taskId) {
         try {
           task = await useTaskStore().waitForTaskCompletion(taskId)
         } catch (e) {
-          toast.error(`Steam 下载未完成：${e.message}`)
+        toast.error(toUserMessage(e?.message || e, 'Steam 下载未完成。请确认 Steam 已登录并正常联网，或稍后在 Steam 下载队列中查看进度。'))
           return false
         }
       }
@@ -52,11 +52,11 @@ export const useSteamWorkshopActions = ({
       if (res?.data?.action === 'steam_not_ready') {
         showSteamNotReadyHint(res)
       } else {
-        toast.warning(res?.message || 'Steam 暂时无法处理工坊下载请求')
+        toast.warning(toUserMessage(res?.message, 'Steam 暂时无法处理工坊下载请求。请确认 Steam 已登录、网络可用，稍后重试。'))
       }
       return false
     }
-    toast.error(`Steam 工坊下载请求失败：${res?.message || '未知错误'}`)
+    toast.error(toUserMessage(res?.message, 'Steam 工坊下载请求失败。请确认 Steam 已登录、网络可用，且目标工坊项目仍可访问。'))
     return false
   }
 
@@ -70,7 +70,7 @@ export const useSteamWorkshopActions = ({
     if (res?.status === 'success') return res.data
     if (res?.status === 'warning') {
       if (res?.data?.action === 'steam_not_ready') showSteamNotReadyHint(res)
-      else toast.warning(res?.message || 'Steam 暂时无法查询工坊详情')
+      else toast.warning(toUserMessage(res?.message, 'Steam 暂时无法查询工坊详情。请确认 Steam 已登录、网络可用，稍后重试。'))
     }
     return null
   }
@@ -180,7 +180,7 @@ export const useSteamWorkshopActions = ({
       showSteamNotReadyHint(res)
       return false
     }
-    toast.error(`订阅失败: ${res?.message || '未知错误'}`)
+    toast.error(toUserMessage(res?.message, '订阅失败。请确认 Steam 已登录、网络可用，且目标工坊项目仍可访问。'))
     return false
   }
 
@@ -207,31 +207,31 @@ export const useSteamWorkshopActions = ({
       })
       if (!ok) return false
     }
-    toast.info('正在连接 Steam...', { timeout: 2500 })
+    toast.info('正在连接 Steam。', { timeout: 2500 })
     const res = await window.pywebview.api.steam_unsubscribe(workshop_ids)
     if (res?.status === 'success') {
       const taskId = String(res?.data?.task_id || '')
       let task = null
       toast.info(
         shouldDeleteFiles
-          ? '已向 Steam 提交取消订阅，正在删除本地文件...'
-          : '已向 Steam 提交取消订阅，正在等待 Steam 完成处理...',
+          ? '已向 Steam 提交取消订阅，正在删除本地文件。'
+          : '已向 Steam 提交取消订阅，正在等待 Steam 完成处理。',
         { timeout: 3500 }
       )
       if (shouldWaitForSteamTask && taskId) {
         try {
           task = await useTaskStore().waitForTaskCompletion(taskId)
         } catch (e) {
-          toast.error(`取消订阅未完成：${e.message}`)
+          toast.error(toUserMessage(e?.message || e, '取消订阅未完成。请确认 Steam 已登录并正常联网，稍后刷新订阅状态。'))
           return false
         }
-        toast.success('取消订阅成功，正在更新列表...', { timeout: 2500 })
+        toast.success('取消订阅成功，正在更新列表。', { timeout: 2500 })
       }
       if (shouldDeleteFiles || shouldCleanupRecordsOnly) {
         const deleteRes = await window.pywebview.api.mods_delete(normalizedDeleteHashes, !!options.force, shouldDeleteFiles)
         if (deleteRes?.status !== 'success') {
           const actionName = shouldDeleteFiles ? '本地文件删除' : '库存记录清理'
-          toast.error(`已向 Steam 提交取消订阅，但${actionName}失败：${deleteRes?.message || '未知错误'}`)
+          toast.error(toUserMessage(deleteRes?.message, `已向 Steam 提交取消订阅，但${actionName}失败。请检查本地文件权限、文件占用状态和目标路径是否可访问。`))
           return false
         }
         toast.info(
@@ -248,7 +248,7 @@ export const useSteamWorkshopActions = ({
       showSteamNotReadyHint(res)
       return false
     }
-    toast.error(`取消订阅失败：${res?.message || '未知错误'}`)
+    toast.error(toUserMessage(res?.message, '取消订阅失败。请确认 Steam 已登录、网络可用，稍后重试。'))
     return false
   }
 

@@ -1,4 +1,4 @@
-import { toast, checkResult } from '../../../shared/lib/common'
+import { toast, checkResult, toUserMessage } from '../../../shared/lib/common'
 import { useProfileStore } from '../../../features/profiles/profileStore'
 
 const SETTING_KEYS_REQUIRING_LIST_SCAN = [
@@ -54,7 +54,7 @@ export const useSettingsActions = ({
       }
     } catch (e) {
       console.error("保存单项设置异常:", e)
-      toast.error(`保存单项设置异常: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '保存设置失败。可能是后端服务暂时不可用、配置文件无法写入或当前路径权限不足，请稍后重试。'))
     } finally {
       isLoading.value = false
     }
@@ -140,7 +140,7 @@ export const useSettingsActions = ({
       }
     } catch (e) {
       console.error("应用设置异常:", e)
-      toast.error(`应用设置异常: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '应用设置失败。可能是配置校验未通过、路径无法访问或配置文件无法写入，详细原因已写入系统日志。'))
     } finally {
       isLoading.value = false
     }

@@ -518,7 +518,7 @@ function handleUpdate(changelog) {
 let resizeObserver = null
 let stopKeybindingRuntime = null
 onMounted(() => {
-  console.log("应用已启动，正在初始化存储……")
+  console.info("应用已启动，正在初始化存储……")
   stopKeybindingRuntime = startKeybindingRuntime({ commandStore })
   // 确保 API 存在
   if (window.pywebview) {

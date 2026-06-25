@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { useAppStore } from '../../app/stores/appStore'
-import { toast, checkResult } from '../../shared/lib/common'
+import { toast, checkResult, toUserMessage } from '../../shared/lib/common'
 import { useTaskStore } from '../../app/stores/taskStore'
 
 export const useTextureStore = defineStore('texture', () => {
@@ -505,7 +505,7 @@ export const useTextureStore = defineStore('texture', () => {
         toolStatus.value = res.data
       }
     } catch (e) {
-      console.error(e)
+      console.error('检查贴图工具状态失败:', e)
     }
   }
 
@@ -524,7 +524,7 @@ export const useTextureStore = defineStore('texture', () => {
           await checkToolStatus()
         }
       } else {
-        toast.error(res.message)
+        toast.error(toUserMessage(res?.message, '准备贴图工具失败。请检查网络连接、代理设置、工具目录权限和磁盘空间，详细原因已写入系统日志。'))
       }
     } finally {
       appStore.isLoading = false
@@ -599,7 +599,7 @@ export const useTextureStore = defineStore('texture', () => {
         markTaskCancelling()
       }
     } catch (e) {
-      console.error(e)
+      console.error('取消贴图任务失败:', e)
     }
   }
 
@@ -634,7 +634,7 @@ export const useTextureStore = defineStore('texture', () => {
         selectedResultPath.value = resultHistory.value[0]?.result_path || ''
       }
     } catch (e) {
-      console.error(e)
+      console.error('读取贴图结果历史失败:', e)
     }
   }
 
@@ -645,7 +645,7 @@ export const useTextureStore = defineStore('texture', () => {
       if (!checkResult(res, "读取贴图排除规则", false)) return
       applyExclusionsPayload(res.data)
     } catch (e) {
-      console.error(e)
+      console.error('读取贴图排除规则失败:', e)
     }
   }
 

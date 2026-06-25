@@ -469,7 +469,7 @@ class MaintenanceManager:
                 if rule_mgr and getattr(rule_mgr, "community_rules_update_time", 0):
                     return str(int(getattr(rule_mgr, "community_rules_update_time", 0)))
         except Exception:
-            logger.debug("Resolve local dataset version failed: %s", data_type, exc_info=True)
+            logger.debug("解析本地数据集版本失败：%s", data_type, exc_info=True)
         return ""
 
     def _compute_git_blob_sha(self, path: Path) -> str:
@@ -574,7 +574,7 @@ class MaintenanceManager:
         try:
             return Version(current_version) < Version(latest_version)
         except InvalidVersion:
-            logger.debug("Skip non-standard tool version compare: %s -> %s", current, latest)
+            logger.debug("跳过非标准工具版本比较：%s -> %s", current, latest)
             return False
 
     @staticmethod

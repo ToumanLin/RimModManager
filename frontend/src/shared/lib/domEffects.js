@@ -1,6 +1,6 @@
 import { Copy, Download, Link } from 'lucide-vue-next'
 import { useContextMenuStore } from '../components/context-menu/contextMenuStore'
-import { checkResult, toast } from './common'
+import { checkResult, toast, toUserMessage } from './common'
 
 /**
  * 给元素添加一次性的强调动画，用于提示用户关注某个控件。
@@ -238,7 +238,8 @@ const copyViewerImage = async (imagePayload) => {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': clipboardBlob })])
     toast.success('已复制图片')
   } catch (error) {
-    toast.error(`复制图片失败：${error?.message || error}`)
+    console.warn('复制图片失败:', error)
+    toast.error(toUserMessage(error?.message || error, '复制图片失败。请检查浏览器剪贴板权限，或改用另存为。'))
   }
 }
 
@@ -249,7 +250,8 @@ const copyViewerImageUrl = async (imagePayload) => {
     await navigator.clipboard.writeText(imagePayload.originalSrc)
     toast.success('已复制图片地址')
   } catch (error) {
-    toast.error(`复制图片地址失败：${error?.message || error}`)
+    console.warn('复制图片地址失败:', error)
+    toast.error(toUserMessage(error?.message || error, '复制图片地址失败。请检查浏览器剪贴板权限，或手动复制地址。'))
   }
 }
 
@@ -268,7 +270,8 @@ const saveViewerImageAs = async (imagePayload) => {
     if (res?.status === 'warning' && res?.message === '已取消') return
     checkResult(res, '图片另存为', true)
   } catch (error) {
-    toast.error(`图片另存为失败：${error?.message || error}`)
+    console.warn('图片另存为失败:', error)
+    toast.error(toUserMessage(error?.message || error, '图片另存为失败。请检查目标目录权限、磁盘空间或当前运行环境是否支持保存文件。'))
   }
 }
 

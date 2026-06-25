@@ -104,7 +104,7 @@ export function useModListQuery({
     filterIssueType.value = ''  // 整体筛选时，清空问题项类型筛选
   }
   const toggleIssueTypeFilter = (type) => {
-    console.log('toggleIssueTypeFilter', type)
+    console.debug('切换问题类型筛选:', type)
     // 检查类型是否符合ISSUE_TYPE
     if (!Object.values(ISSUE_TYPE).includes(type)) {
       isFilterByIssue.value = false
@@ -285,7 +285,7 @@ export function useModListQuery({
       if (!newVal || newVal === oldVal) return
       const resolvedTargetId = resolveTargetListId(newVal, props.modelValue)
       if (!resolvedTargetId) {
-        console.info(`Item ${newVal} not found in ${props.title} list model.`)
+        console.info(`目标项未出现在当前列表中: ${newVal}，列表=${props.title}`)
         return
       }
       // 1. 检查目标是否在当前所有的 modelValue 中（不仅是 displayList）
@@ -293,7 +293,7 @@ export function useModListQuery({
 
       // 2. 检查是否被当前的筛选器过滤掉了
       if (!displayList.value.includes(resolvedTargetId)) {
-        console.info(`Item ${resolvedTargetId} is filtered out by current ${props.title} filter.`)
+        console.info(`目标项被当前列表筛选器过滤: ${resolvedTargetId}，列表=${props.title}`)
         toast.warning(`搜索项 ${resolvedTargetId} 已被 ${props.title} 列表筛选器过滤，请清除筛选后重试。`)
       }
       await revealCollapsedSectionFor(resolvedTargetId)

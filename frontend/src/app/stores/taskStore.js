@@ -1,9 +1,15 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { toUserMessage } from '../../shared/lib/common'
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'cancelled'])
 const ACTIVE_STATUSES = new Set(['pending', 'running'])
 const TASK_RETENTION_MS = 3000
+
+const getTaskFailureMessage = (task = {}) => toUserMessage(
+  task.message || task.metrics?.error || task.metrics?.original_error,
+  '任务未成功完成。请检查网络连接、文件权限或稍后重试，详细原因已写入系统日志。',
+)
 
 export const useTaskStore = defineStore('tasks', () => {
   const taskMap = ref(new Map())
@@ -33,7 +39,7 @@ export const useTaskStore = defineStore('tasks', () => {
       if (task.status === 'success') {
         entry.resolve(task)
       } else {
-        entry.reject(new Error(task.message || task.metrics?.error || '任务未成功完成'))
+        entry.reject(new Error(getTaskFailureMessage(task)))
       }
     }
   }
@@ -117,7 +123,7 @@ export const useTaskStore = defineStore('tasks', () => {
     const currentTask = getTask(taskId)
     if (currentTask && TERMINAL_STATUSES.has(currentTask.status)) {
       if (currentTask.status === 'success') return Promise.resolve(currentTask)
-      return Promise.reject(new Error(currentTask.message || currentTask.metrics?.error || '任务未成功完成'))
+      return Promise.reject(new Error(getTaskFailureMessage(currentTask)))
     }
 
     return new Promise((resolve, reject) => {

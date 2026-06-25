@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, nextTick } from 'vue'
-import { deepClone, toast, checkResult } from '../../../shared/lib/common'
+import { deepClone, toast, checkResult, toUserMessage } from '../../../shared/lib/common'
 import { useAppStore } from '../../../app/stores/appStore'
 import { useGroupStore } from './groupStore'
 import { useTaskStore } from '../../../app/stores/taskStore'
@@ -766,7 +766,7 @@ export const useModStore = defineStore('mods', () => {
     if (!ids || ids.length === 0) return
     if (!window.pywebview) return
     if(typeof ids === 'string') ids = [ids]
-    console.log(ids)
+    console.debug('准备智能插入 Mod:', ids)
 
     const res = await window.pywebview.api.smart_insert_mod_in_actives(ids, activeIds.value)
     if(checkResult(res, '智能插入 Mod 到 Active 列表') && res.data){
@@ -782,12 +782,12 @@ export const useModStore = defineStore('mods', () => {
       // 调用 API，会立即返回 { status: 'started' }
       const res = await window.pywebview.api.scan_mods(path_list, forced_update, size_check_override, size_check_paths)
       if (res.status === 'warning') {
-        toast.info(res.message || '扫描已在进行中')
+        toast.info(res.message || '扫描任务已在进行中，请等待当前扫描完成。')
         return false
       }
       if (res.status !== 'success' && res.status !== 'started') {
         console.error("启动扫描失败:", res)
-        toast.error(`扫描启动失败: \n${res.message}`)
+        toast.error(toUserMessage(res.message, '扫描启动失败。可能是当前环境路径无效、扫描器未初始化或后台任务暂时不可用，详细原因已写入系统日志。'))
         return false
       }
       const taskDetail = res?.data?.details || {}
@@ -809,7 +809,7 @@ export const useModStore = defineStore('mods', () => {
       return true
     } catch (e) {
       console.error("扫描请求异常:", e)
-      toast.error(`扫描请求异常: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '扫描请求异常。可能是软件后端暂时不可用或当前环境路径配置异常，详细原因已写入系统日志。'))
       return false
     }
   }
@@ -824,12 +824,12 @@ export const useModStore = defineStore('mods', () => {
 
     if (detail?.status === 'cancelled') {
       toast.info(detail.message || '扫描已取消')
-      console.log("扫描已取消:", detail)
+      console.info("扫描已取消:", detail)
       return
     }
 
     if (detail?.status && detail.status !== 'success') {
-      toast.error(`扫描异常: \n${detail.message || '未知错误'}`)
+      toast.error(toUserMessage(detail.message, '扫描异常。可能是路径权限、文件占用或扫描器内部状态暂时不可用，详细原因已写入系统日志。'))
       console.error("扫描完成事件异常:", detail)
       return
     }
@@ -863,14 +863,14 @@ export const useModStore = defineStore('mods', () => {
     }
     if (totalCount > 0) {
       // 注意：有冲突时暂不提示 "扫描完成" 的 Toast，以免遮挡，或者提示 Warning
-      toast.warning(`扫描完成，发现 ${totalCount} 个包名重复冲突需要处理！${disabledStateText ? `\n${disabledStateText}` : ''}`, {timeout: 10000})
+      toast.warning(`扫描已完成，发现 ${totalCount} 个包名重复冲突需要处理。${disabledStateText ? `\n${disabledStateText}` : ''}`, {timeout: 10000})
     } else if (strictRestoreFailed > 0) {
-      toast.warning(`扫描完成，共计扫描${total}个模组，新增${added}个，\n更新${updated}个，删除${removed}个，已知${skipped}个。\n${disabledStateText}`, {position: "top-center", timeout: 8000})
+      toast.warning(`扫描已完成，共扫描 ${total} 个模组，新增 ${added} 个，更新 ${updated} 个，删除 ${removed} 个，已知 ${skipped} 个。\n${disabledStateText}`, {position: "top-center", timeout: 8000})
     } else {
-      toast.success(`扫描完成，共计扫描${total}个模组，新增${added}个，\n更新${updated}个，删除${removed}个，已知${skipped}个。${disabledStateText ? `\n${disabledStateText}` : ''}`,{position: "top-center",timeout: 5000})
+      toast.success(`扫描已完成，共扫描 ${total} 个模组，新增 ${added} 个，更新 ${updated} 个，删除 ${removed} 个，已知 ${skipped} 个。${disabledStateText ? `\n${disabledStateText}` : ''}`,{position: "top-center",timeout: 5000})
     }
     // 扫描结束后只回填模组主数据，避免把工作区、GitHub、合集等页面也一起重刷。
-    console.log("扫描统计:", {
+    console.debug("扫描统计:", {
       status: detail?.status,
       total,
       stats,
@@ -914,7 +914,7 @@ export const useModStore = defineStore('mods', () => {
           activeIds.value = res.data.sorted_ids || []
           updateInactiveIds()
         })
-        toast.success("自动排序完成")
+        toast.success("自动排序已完成")
         // 处理警告信息
         if(res.data.warnings?.length > 0) {
           let warningMessages = ''
@@ -927,7 +927,7 @@ export const useModStore = defineStore('mods', () => {
           })
           toast.warning(warningMessages,{position: "top-center",timeout: 5000})
           if (warnModRule.length > 0) {
-            console.log("自动排序警告:",warnModRule)
+            console.debug("自动排序警告:",warnModRule)
             let msg = '请检查以下Mod规则是否正确：\n'
             warnModRule.forEach(item => {
               msg += `${displayModName(item.mod_id)} 的 ${item.type.name} 规则 可能存在问题：（${displayModName(item.target_id)}）\n`
@@ -939,7 +939,7 @@ export const useModStore = defineStore('mods', () => {
       }
     } catch (e) {
       console.error("自动排序Mod异常:", e)
-      toast.error(`自动排序Mod异常: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '自动排序失败。可能是规则数据、缺失项处理或后端排序器暂时不可用，详细原因已写入系统日志。'))
     }
     return false
   }
@@ -1167,7 +1167,7 @@ export const useModStore = defineStore('mods', () => {
       return true
     } catch (e) {
       console.error("更新Mod用户数据异常:", e)
-      toast.error(`更新Mod用户数据异常: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '更新 Mod 用户数据失败，已还原本地状态。请稍后重试，详细原因已写入系统日志。'))
       restoreModSnapshots(rollback)
       return false
     }
@@ -1184,7 +1184,7 @@ export const useModStore = defineStore('mods', () => {
         last_active_time: mod.last_active_time,
         last_moved_time: mod.last_moved_time
       }));
-      console.log("更新Mod最后操作时间:", {all_mods_time:all_mods})
+      console.debug("准备更新 Mod 最后操作时间:", {all_mods_time:all_mods})
       const res = await window.pywebview.api.mod_time_update(all_mods)
       if (!checkResult(res, "更新Mod最后操作时间")) {
         await appStore.refreshModsData('Mod 时间更新失败后同步模组数据')
@@ -1193,7 +1193,7 @@ export const useModStore = defineStore('mods', () => {
       return true
     } catch (e) {
       console.error("更新Mod最后操作时间异常:", e)
-      toast.error(`更新Mod最后操作时间异常: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '更新 Mod 操作时间失败。正在重新同步模组数据，详细原因已写入系统日志。'))
       await appStore.refreshModsData('Mod 时间更新异常后同步模组数据')
       return false
     }
@@ -1218,7 +1218,7 @@ export const useModStore = defineStore('mods', () => {
       }
       return true
     } catch (e) {
-      toast.error(`批量设置颜色失败: ${e}`)
+      toast.error(toUserMessage(e?.message || e, '批量设置颜色失败，已还原本地状态。请稍后重试。'))
       restoreModSnapshots(rollback)
       return false
     }
@@ -1241,7 +1241,7 @@ export const useModStore = defineStore('mods', () => {
       }
       return true
     } catch (e) {
-      toast.error(`批量设置类型失败: ${e}`)
+      toast.error(toUserMessage(e?.message || e, '批量设置类型失败，已还原本地状态。请稍后重试。'))
       restoreModSnapshots(rollback)
       return false
     }
@@ -1264,7 +1264,7 @@ export const useModStore = defineStore('mods', () => {
       }
       return true
     } catch (e) {
-      toast.error(`批量添加标签失败: ${e}`)
+      toast.error(toUserMessage(e?.message || e, '批量添加标签失败，已还原本地状态。请稍后重试。'))
       restoreModSnapshots(rollback)
       return false
     }
@@ -1287,7 +1287,7 @@ export const useModStore = defineStore('mods', () => {
       }
       return true
     } catch (e) {
-      toast.error(`批量移除标签失败: ${e}`)
+      toast.error(toUserMessage(e?.message || e, '批量移除标签失败，已还原本地状态。请稍后重试。'))
       restoreModSnapshots(rollback)
       return false
     }
@@ -1332,7 +1332,7 @@ export const useModStore = defineStore('mods', () => {
       }
     } catch (e) {
       console.error("设置 Mod 联锁异常:", e)
-      toast.error(`设置 Mod 联锁异常: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '设置 Mod 联锁失败。请稍后重试，详细原因已写入系统日志。'))
       return false
     }
   }
@@ -1400,7 +1400,7 @@ export const useModStore = defineStore('mods', () => {
       return true
     } catch (e) {
       console.error("批量更新Mod数据异常:", e)
-      toast.error(`批量更新失败: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '批量更新 Mod 数据失败，已还原本地状态。请稍后重试，详细原因已写入系统日志。'))
       restoreModSnapshots(rollback)
       return false
     } finally {

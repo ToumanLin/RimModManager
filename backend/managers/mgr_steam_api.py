@@ -1008,11 +1008,11 @@ class SteamWebAPI:
         try:
             cached_details = ExtDAO.get_workshop_details_by_workshop_ids(normalized_ids) or {}
         except Exception as exc:
-            logger.debug("Workshop local detail lookup failed: %s", exc, exc_info=True)
+            logger.debug("查询本地创意工坊详情失败：%s", exc, exc_info=True)
         try:
             online_details, _ = cls.fetch_item_details(normalized_ids, trace_label=trace_label)
         except Exception as exc:
-            logger.debug("Workshop online detail lookup failed: %s", exc, exc_info=True)
+            logger.debug("查询在线创意工坊详情失败：%s", exc, exc_info=True)
 
         result: dict[str, dict[str, Any]] = {}
         for workshop_id in normalized_ids:
@@ -1668,7 +1668,7 @@ class SteamWebAPI:
             headers = {
                 "Accept-Language": f"{cls._resolve_steam_language()};q=0.9,en;q=0.8",
             }
-            logger.debug(f"Triggering Scraper Fallback for Mod: {workshop_id}")
+            logger.debug(f"正在触发网页抓取回退：MOD {workshop_id}")
             html_content = cls._request_text("GET", url, headers=headers)
             # 核心：正则匹配变量内容
             # 匹配 rgScreenshotURLs = { ... }; 
@@ -1684,9 +1684,9 @@ class SteamWebAPI:
                 for u in urls:
                     if u and u not in screenshots:
                         screenshots.append(u)
-            logger.info(f"Scraper found {len(screenshots)} screenshots for {workshop_id}")
+            logger.info(f"网页抓取找到 {len(screenshots)} 张截图：{workshop_id}")
         except Exception as e:
-            logger.error(f"Scraper Fallback failed for {workshop_id}: {e}")
+            logger.error(f"网页抓取回退失败：{workshop_id}，错误：{e}")
 
         return screenshots
     

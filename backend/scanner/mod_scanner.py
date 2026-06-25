@@ -70,10 +70,10 @@ class ModScanner:
         """外部调用：请求中断扫描"""
         if not self._is_scanning: return False
         if task_id and self._current_task_id and task_id != self._current_task_id:
-            logger.warning("Ignored scan interruption for stale task: requested=%s active=%s", task_id, self._current_task_id)
+            logger.warning("忽略过期扫描中断请求：requested=%s active=%s", task_id, self._current_task_id)
             return False
         self._stop_requested = True
-        logger.warning("Scan interruption requested by user. task_id=%s", self._current_task_id)
+        logger.warning("用户请求中断扫描：task_id=%s", self._current_task_id)
         return True
 
     def wait_until_idle(self, timeout: float = 10.0, poll_interval: float = 0.1) -> bool:
@@ -121,7 +121,7 @@ class ModScanner:
         """
         后台执行的扫描主逻辑
         """
-        logger.info(f"Scan started. Paths: {search_paths}")
+        logger.info(f"扫描已开始，路径：{search_paths}")
         start_time = time.time()
         db.connect(reuse_if_open=True) # 确保线程有连接
         stats = {
@@ -220,7 +220,7 @@ class ModScanner:
             for idx, (mod_path, is_dlc) in enumerate(mod_folders):
                 # 【关键检查点】：每一条 Mod 解析前检查中断标志
                 if self._stop_requested:
-                    logger.info("Scan stopped during parsing stage.")
+                    logger.info("扫描在解析阶段停止。")
                     self._handle_interruption(task_id)
                     return # 直接结束任务，不进入写库阶段
                 # 进度报告
@@ -257,7 +257,7 @@ class ModScanner:
                         
             # 【关键检查点】：解析完成后检查中断标志
             if self._stop_requested:
-                logger.info("Scan stopped during parsing stage.")
+                logger.info("扫描在解析阶段停止。")
                 self._handle_interruption(task_id, emit_events=emit_events)
                 return # 直接结束任务，不进入写库阶段
             # --- 3. 库存落库与运行态分析 ---
@@ -278,7 +278,7 @@ class ModScanner:
             for entries in temp_registry.values():
                 # 【关键检查点】：每一条 Mod 解析前检查中断标志
                 if self._stop_requested:
-                    logger.info("Scan stopped during parsing stage.")
+                    logger.info("扫描在解析阶段停止。")
                     self._handle_interruption(task_id, emit_events=emit_events)
                     return # 直接结束任务
 
@@ -342,7 +342,7 @@ class ModScanner:
                 try:
                     residue_cleanup = ModResidueManager.get_overview(valid_paths, self.context, residue_active_tokens or [])
                 except Exception as residue_error:
-                    logger.warning("Mod residue scan failed: %s", residue_error, exc_info=True)
+                    logger.warning("MOD 残留扫描失败：%s", residue_error, exc_info=True)
             
             if emit_events:
                 residue_count = int(((residue_cleanup or {}).get('summary') or {}).get('item_count') or 0)
@@ -381,9 +381,9 @@ class ModScanner:
 
             duration = time.time() - start_time
             logger.info(
-                "Scan finished in %.2fs. Added: %s, Updated: %s, Skipped: %s, Removed: %s, "
-                "ExternalEnabled: %s, StrictRestored: %s, StrictRestoreFailed: %s, AboutConflictsCleaned: %s, "
-                "ShadowPathsCleaned: %s, Conflicts: %s, Coexistences: %s, Residues: %s. %s",
+                "扫描完成，用时 %.2fs。新增：%s，更新：%s，跳过：%s，移除：%s，"
+                "外部启用：%s，严格恢复：%s，严格恢复失败：%s，About 冲突清理：%s，"
+                "影子路径清理：%s，冲突：%s，共存：%s，残留：%s。%s",
                 duration, stats['added'], stats['updated'], stats['skipped'], stats['removed'],
                 stats['external_enabled'], stats['strict_restored_disabled'], stats['strict_restore_failed'],
                 stats['about_conflict_cleaned'], stats['shadow_path_cleaned'], len(final_conflicts),
@@ -418,7 +418,7 @@ class ModScanner:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            logger.error("Scan task failed", exc_info=True)
+            logger.error("扫描任务失败", exc_info=True)
             if emit_events:
                 EventBus.emit_progress(task_id, "scan", status="failed", progress=0, message=f"扫描失败: {e}", metrics={'title': '模组扫描'})
             self._finish_scan({'status': 'error', 'message': str(e), 'task_id': task_id}, task_id, emit_events=emit_events)
@@ -438,7 +438,7 @@ class ModScanner:
             'status': 'cancelled',
             'message': '扫描已由用户中止，未对数据库进行任何修改。',
         }, task_id, emit_events=emit_events)
-        logger.info("Scan cancelled safely.")
+        logger.info("扫描已安全取消。")
 
     def _finish_scan(self, result, task_id: str | None = None, emit_events: bool = True):
         """扫描结束，通知前端并发送最终统计"""
@@ -470,7 +470,7 @@ class ModScanner:
         try:
             about_state = ModAnalyzer.resolve_mod_about_state(mod_path, cleanup_dual_files=True)
         except OSError as e:
-            logger.warning(f"Failed to clean duplicate About files for {mod_path}: {e}")
+            logger.warning(f"清理重复 About 文件失败：{mod_path}，错误：{e}")
             about_state = ModAnalyzer.resolve_mod_about_state(mod_path, cleanup_dual_files=False)
         about_file = about_state.resolved_path
         is_disabled = about_state.is_disabled

@@ -291,7 +291,7 @@ const autoDetect = async (checkAfterDetect = true) => {
 
 // 检查游戏路径是否有效
 const checkPath = async (type, path) => {
-  console.log('checkPath:', type, path)
+  console.debug('检查单项路径:', type, path)
   if (!formData.value['check_info']) {
     formData.value['check_info'] = {};
   }
@@ -393,7 +393,7 @@ const showSecretStorageWarning = (target) => {
 
 // 手动选择其他路径
 const handleBrowse = async (pathKey, fileTypes, checkTarget = undefined) => {
-  console.log('路径选择',pathKey, fileTypes)
+  console.debug('打开路径选择器:', pathKey, fileTypes)
   const currentValue = getNestedField(formData.value, pathKey) || ''
   let res
   if (fileTypes) {

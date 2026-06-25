@@ -354,7 +354,7 @@ class ProfileManager:
             try:
                 delete_fs_path(profile.user_data_path, force=force)
             except Exception as e:
-                logger.warning(f"Failed to clean up profile data: {e}")
+                logger.warning(f"清理配置数据失败：{e}")
         # 2. 删库
         profile.delete_instance()
         # 3. 如果删的是当前激活的，回退到 default
@@ -538,7 +538,7 @@ class ProfileManager:
             if os.path.exists(saves_dir):
                 shutil.copytree(saves_dir, os.path.join(target_root, "Saves"), dirs_exist_ok=True)
         except Exception as e:
-            logger.error(f"Clone data failed: {e}")
+            logger.error(f"克隆数据失败：{e}")
             
     def _sync_profile_to_disk(self, profile: GameProfile):
         """
@@ -549,7 +549,7 @@ class ProfileManager:
             # 统一把快照写到应用数据目录，避免污染真实用户数据根目录。
             self._write_profile_snapshot(profile)
         except Exception as e:
-            logger.error(f"Failed to sync profile to disk: {e}")
+            logger.error(f"同步配置到磁盘失败：{e}")
             
     def scan_orphaned_profiles(self):
         """
@@ -587,7 +587,7 @@ class ProfileManager:
                             orphans.append(data)
                             
                     except Exception as e:
-                        logger.error(f"Error reading profile {entry.name}: {e}")
+                        logger.error(f"读取配置失败：{entry.name}，错误：{e}")
         
         return orphans
 

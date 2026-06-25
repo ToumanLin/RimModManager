@@ -194,7 +194,7 @@ class TextureTargetResolver:
                             "requires_png_source": False,
                         })
             except OSError as exc:
-                logger.warning("Texture residue target scan failed: root=%s error=%s", root, exc)
+                logger.warning("扫描贴图残留目标失败：root=%s error=%s", root, exc)
         return targets
 
     def resolve_clean_targets(
@@ -1339,10 +1339,10 @@ class TextureOptimizationManager:
                 metrics=metrics,
             )
         except TextureOptCancelled as exc:
-            logger.warning("TextureOpt task cancelled: id=%s action=%s", task.id, task.action)
+            logger.warning("贴图优化任务已取消：id=%s action=%s", task.id, task.action)
             self._set_task_state(task, status="cancelled", message=str(exc), error="")
         except Exception as exc:
-            logger.error("Texture optimization task failed", exc_info=True)
+            logger.error("贴图优化任务失败", exc_info=True)
             self._set_task_state(task, status="failed", message="贴图优化失败", error=str(exc))
 
     def _optimize(self, task: TextureTask) -> dict[str, Any]:
@@ -1785,7 +1785,7 @@ class TextureOptimizationManager:
                 elif backup_path.exists():
                     backup_path.unlink()
             except OSError as exc:
-                logger.warning("Texture zstd DDS backup cleanup failed: dds=%s backup=%s error=%s", dds_path, backup_path, exc)
+                logger.warning("清理贴图 zstd DDS 备份失败：dds=%s backup=%s error=%s", dds_path, backup_path, exc)
 
     @staticmethod
     def _compress_dds_to_zstd(dds_path: Path, zstd_path: Path) -> int:
@@ -2127,7 +2127,7 @@ class TextureOptimizationManager:
                     mod_changed = True
                 except OSError as exc:
                     delete_failed += 1
-                    logger.warning("Texture clean delete failed: path=%s error=%s", output_path, exc)
+                    logger.warning("删除贴图清理输出失败：path=%s error=%s", output_path, exc)
                 emit_clean_progress(index, mod_name)
             if mod_changed:
                 changed_mod_paths.add(mod_path)

@@ -111,7 +111,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
             pass # 忽略前端快速滚动取消请求的错误
         except Exception as e:
-            logger.error(f"Asset Handler Error: {e}")
+            logger.error(f"资源请求处理失败：{e}")
             try: self.send_error(500)
             except: pass
 
@@ -239,7 +239,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
                 return target_path
             except Exception as e:
                 delete_fs_path(temp_path)
-                logger.warning(f"Thumbnail gen failed for {package_id}, serving original. Error: {e}")
+                logger.warning(f"缩略图生成失败，将返回原图：{package_id}，错误：{e}")
                 return None
 
     def _resolve_remote_cache_path(self, remote_url: str) -> str:
@@ -284,7 +284,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
         下载失败时不抛出异常，交给调用方决定是否回退到原始链接。
         """
         if not self._is_allowed_remote_url(remote_url):
-            logger.debug(f"Rejected remote image by safety policy: {remote_url}")
+            logger.debug(f"远程图片被安全策略拒绝：{remote_url}")
             return None
         if self._is_remote_failure_cooled_down(remote_url): return None
         lock = self._get_lock(self._remote_download_locks, self._remote_download_locks_lock, cache_path)
@@ -306,19 +306,19 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
 
                     response = session.get(remote_url, **request_kwargs)
                     if response.status_code != 200:
-                        logger.debug(f"Remote image download failed with status {response.status_code}: {remote_url}")
+                        logger.debug(f"远程图片下载失败，状态码 {response.status_code}：{remote_url}")
                         self._mark_remote_failure(remote_url)
                         return None
 
                     content_type = str(response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
                     if content_type and content_type not in self.REMOTE_IMAGE_CONTENT_TYPES:
-                        logger.debug(f"Remote image content-type rejected: {content_type} ({remote_url})")
+                        logger.debug(f"远程图片 Content-Type 不允许：{content_type}（{remote_url}）")
                         self._mark_remote_failure(remote_url)
                         return None
 
                     declared_length = int(response.headers.get("Content-Length") or 0)
                     if declared_length > self.REMOTE_MAX_FILE_SIZE:
-                        logger.debug(f"Remote image too large by content-length: {declared_length} ({remote_url})")
+                        logger.debug(f"远程图片 Content-Length 超过限制：{declared_length}（{remote_url}）")
                         self._mark_remote_failure(remote_url)
                         return None
 
@@ -338,7 +338,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
                             if total_bytes > self.REMOTE_MAX_FILE_SIZE:
                                 handle.close()
                                 delete_fs_path(temp_path)
-                                logger.debug(f"Remote image exceeded size limit while streaming: {remote_url}")
+                                logger.debug(f"远程图片流式下载时超过大小限制：{remote_url}")
                                 self._mark_remote_failure(remote_url)
                                 return None
                             handle.write(chunk)
@@ -353,7 +353,7 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 if temp_path:
                     delete_fs_path(temp_path)
-                logger.debug(f"Proxy download failed, fallback to original URL: {e}")
+                logger.debug(f"代理下载失败，将回退到原始地址：{e}")
                 self._mark_remote_failure(remote_url)
                 return None
 
@@ -441,9 +441,9 @@ class FileManager:
             
             self._server_thread = threading.Thread(target=server.serve_forever, daemon=True)
             self._server_thread.start()
-            logger.info(f"File Manager: Asset Server started on port {self._port}")
+            logger.info(f"文件管理资源服务已启动，端口：{self._port}")
         except Exception as e:
-            logger.error(f"File Manager: Failed to start asset server: {e}")
+            logger.error(f"文件管理资源服务启动失败：{e}")
 
     def get_port(self):
         """返回当前 HTTP 服务器端口"""
@@ -645,7 +645,7 @@ class FileManager:
             finally:
                 root.destroy()
         except Exception as e:
-            logger.warning(f"Fallback file dialog failed: {e}")
+            logger.warning(f"备用文件选择对话框打开失败：{e}")
             return None
 
     @staticmethod
@@ -673,7 +673,7 @@ class FileManager:
                 if result and len(result) > 0: return result[0]
                 return None
             except Exception as e:
-                logger.warning(f"Webview folder dialog failed: {e}")
+                logger.warning(f"Webview 文件夹选择对话框打开失败：{e}")
                 raise RuntimeError(f"打开文件夹选择框失败: {e}") from e
         return FileManager._run_tk_dialog(
             lambda filedialog: filedialog.askdirectory(initialdir=path or os.getcwd()) or None
@@ -716,7 +716,7 @@ class FileManager:
                 if result and len(result) > 0: return result[0]
                 return None
             except Exception as e:
-                logger.warning(f"Webview open dialog failed: {e}")
+                logger.warning(f"Webview 打开文件对话框失败：{e}")
                 raise RuntimeError(f"打开文件选择框失败: {e}") from e
         tk_file_types = FileManager._parse_dialog_file_types(file_types)
         return FileManager._run_tk_dialog(
@@ -757,7 +757,7 @@ class FileManager:
                 if result and len(result) > 0: return result[0]
                 return None
             except Exception as e:
-                logger.warning(f"Webview save dialog failed: {e}")
+                logger.warning(f"Webview 保存文件对话框失败：{e}")
                 raise RuntimeError(f"打开保存对话框失败: {e}") from e
 
         tk_file_types = FileManager._parse_dialog_file_types(file_types)
@@ -1042,7 +1042,7 @@ class FileManager:
                 final_status = "cancelled"
                 final_message = f"{action_title}已取消"
             except Exception as e:
-                logger.error(f"Localize task failed: {e}", exc_info=True)
+                logger.error(f"本地化任务失败：{e}", exc_info=True)
                 errors.append(str(e))
                 final_status = "failed"
                 final_message = f"{action_title}失败"
@@ -1150,21 +1150,21 @@ class FileManager:
                     try:
                         cleanup_internal_path(backup_dst)
                     except Exception as cleanup_error:
-                        logger.debug(f"Cleanup localize backup folder failed: {backup_dst} - {cleanup_error}")
+                        logger.debug(f"清理本地化备份文件夹失败：{backup_dst} - {cleanup_error}")
                 success_list.append(final_dst)
             except InterruptedError:
                 try:
                     cleanup_internal_path(tmp_dst)
                 except Exception as cleanup_error:
-                    logger.debug(f"Cleanup cancelled localize temp folder failed: {tmp_dst} - {cleanup_error}")
+                    logger.debug(f"清理已取消本地化临时文件夹失败：{tmp_dst} - {cleanup_error}")
                 raise
             except Exception as e:
                 for cleanup_path in (tmp_dst, backup_dst):
                     try:
                         cleanup_internal_path(cleanup_path)
                     except Exception as cleanup_error:
-                        logger.debug(f"Cleanup failed localize temp folder failed: {cleanup_path} - {cleanup_error}")
-                logger.error(f"Copy failed: {src} -> {dst}: {e}")
+                        logger.debug(f"清理失败本地化临时文件夹失败：{cleanup_path} - {cleanup_error}")
+                logger.error(f"复制文件失败：{src} -> {dst}，错误：{e}")
                 error_list.append(f"模组 {label} 处理失败: {str(e)}")
 
         return success_list, error_list, total
@@ -1195,7 +1195,7 @@ class FileManager:
         """
         # logger.debug(f"Sync links: local_mods_path={local_mods_path}, workshop_mod_paths={workshop_mod_paths}")
         if not local_mods_path or not os.path.exists(local_mods_path):
-            logger.error("Sync links failed: Local mods path does not exist.")
+            logger.error("同步链接失败：本地 MOD 目录不存在。")
             return False
 
         # --- 1. 准备目标清单 (使用小写 Key 解决 Windows 大小写不敏感问题) ---
@@ -1238,11 +1238,11 @@ class FileManager:
                     # 3. 这是一个断头链接 (指向的源已删)
                     to_delete_paths.append(full_path)
         except OSError as e:
-            logger.error(f"Scan directory failed: {e}")
+            logger.error(f"扫描目录失败：{e}")
 
         # --- 3. 执行物理删除 (针对 Windows Junction 的强力清除) ---
         if to_delete_paths:
-            logger.info(f"Cleaning {len(to_delete_paths)} stale links...")
+            logger.info(f"正在清理 {len(to_delete_paths)} 个失效链接...")
             # 关键优化点：不再循环调用 subprocess，而是批量处理
             FileManager._remove_entries_windows_batch(to_delete_paths)
 
@@ -1255,10 +1255,10 @@ class FileManager:
 
         # --- 5. 执行闪电创建 ---
         if links_to_create:
-            logger.info(f"Creating {len(links_to_create)} missing links...")
+            logger.info(f"正在创建 {len(links_to_create)} 个缺失链接...")
             FileManager._create_links_windows_batch(links_to_create)
 
-        logger.info(f"Sync Result -> Kept: {len(existing_valid_keys)}, Created: {len(links_to_create)}, Deleted: {len(to_delete_paths)}")
+        logger.info(f"同步结果：保留 {len(existing_valid_keys)} 个，创建 {len(links_to_create)} 个，删除 {len(to_delete_paths)} 个")
         return True
 
     @staticmethod
@@ -1287,7 +1287,7 @@ class FileManager:
                     if not entry.name.startswith(FileManager.LINK_PREFIX): continue
                     to_delete_paths.append(entry.path)
         except OSError as e:
-            logger.error(f"Scan links failed: {e}")
+            logger.error(f"扫描链接失败：{e}")
 
         # 3. 计算需要重建的全部链接
         for _, info in target_map.items():
@@ -1307,7 +1307,7 @@ class FileManager:
         if links_to_create:
             FileManager._create_links_fast(links_to_create)
 
-        logger.info(f"Sync Full Result -> Created: {len(links_to_create)}, Deleted: {len(to_delete_paths)}")
+        logger.info(f"完整同步结果：创建 {len(links_to_create)} 个，删除 {len(to_delete_paths)} 个")
         return True
 
     @staticmethod
@@ -1352,7 +1352,7 @@ class FileManager:
             # 只启动一个进程，执行成百上千条删除指令
             subprocess.run(temp_path, shell=True, capture_output=True, check=True)
         except Exception as e:
-            logger.error(f"Batch delete failed: {e}")
+            logger.error(f"批量删除失败：{e}")
             # 如果批处理失败，尝试最后的原生备份方案
             for p in paths:
                 try: os.rmdir(p)
@@ -1400,7 +1400,7 @@ class FileManager:
                 else:
                     os.symlink(src, dst)
             except Exception as e:
-                logger.error(f"Failed to link {dst} -> {src}: {e}")
+                logger.error(f"创建链接失败：{dst} -> {src}，错误：{e}")
     
     # =========================================================
     #  5. SteamCMD 根目录重定向 (Root Redirect)
@@ -1424,11 +1424,11 @@ class FileManager:
         os.makedirs(os.path.dirname(steamcmd_link_path), exist_ok=True)
         os.makedirs(real_storage_path, exist_ok=True)
 
-        logger.info(f"Redirecting SteamCMD: {steamcmd_link_path} -> {real_storage_path}")
+        logger.info(f"正在重定向 SteamCMD 目录：{steamcmd_link_path} -> {real_storage_path}")
 
         if same_path(steamcmd_link_path, real_storage_path):
             logger.warning(
-                "SteamCMD redirect skipped because source and target are the same path: %s",
+                "跳过 SteamCMD 重定向：源目录和目标目录相同：%s",
                 real_storage_path,
             )
             return True
@@ -1439,7 +1439,7 @@ class FileManager:
         if move_old_data and old_mods_path:
             old_mods_path = os.path.normpath(os.path.abspath(old_mods_path))
             if old_mods_path != real_storage_path and os.path.exists(old_mods_path):
-                logger.info(f"Moving data from OLD mods_path: {old_mods_path} -> {real_storage_path}")
+                logger.info(f"正在从旧 MOD 目录迁移数据：{old_mods_path} -> {real_storage_path}")
                 FileManager._merge_and_delete_folder(old_mods_path, real_storage_path)
 
         # 确保实际物理目录存在
@@ -1455,16 +1455,16 @@ class FileManager:
             if os.path.islink(steamcmd_link_path) or FileManager._is_junction_windows(steamcmd_link_path):
                 # 检查它指向的是不是我们现在的物理路径
                 if FileManager._is_link_correct(steamcmd_link_path, real_storage_path):
-                    logger.info("SteamCMD link is already correct. Skipping.")
+                    logger.info("SteamCMD 链接已正确，跳过处理。")
                     return True
                 else:
                     # 指向了错误的路径，或者是旧的路径，删掉这个链接（不会删掉源文件）
-                    logger.info("Removing stale or incorrect SteamCMD link.")
+                    logger.info("正在移除失效或错误的 SteamCMD 链接。")
                     FileManager._remove_link_safe(steamcmd_link_path)
             
             # 情况 2: 它是一个真实的文件夹 (里面可能有 SteamCMD 之前下的 Mod)
             elif os.path.isdir(steamcmd_link_path):
-                logger.info(f"Found real folder at SteamCMD path. Merging to {real_storage_path}...")
+                logger.info(f"发现 SteamCMD 位置存在真实文件夹，正在合并到 {real_storage_path}...")
                 # 把里面的 Mod 搬到物理路径
                 FileManager._merge_and_delete_folder(steamcmd_link_path, real_storage_path)
                 # 搬完后删掉这个空壳文件夹，为创建链接腾位置
@@ -1484,10 +1484,10 @@ class FileManager:
             else:
                 os.symlink(real_storage_path, steamcmd_link_path)
             
-            logger.info("Successfully created SteamCMD redirection link.")
+            logger.info("SteamCMD 重定向链接创建成功。")
             return True
         except Exception as e:
-            logger.error(f"Failed to create SteamCMD link: {e}")
+            logger.error(f"创建 SteamCMD 链接失败：{e}")
             return False
 
     # =========================================================
@@ -1515,7 +1515,7 @@ class FileManager:
             else:
                 os.unlink(path)
         except Exception as e:
-            logger.error(f"Failed to remove link {path}: {e}")
+            logger.error(f"移除链接失败：{path}，错误：{e}")
 
     @staticmethod
     def _merge_and_delete_folder(src, dst):
@@ -1551,7 +1551,7 @@ class FileManager:
             if os.path.exists(src):
                 shutil.rmtree(src, ignore_errors=True)
         except Exception as e:
-            logger.error(f"Merge folder failed: {e}")
+            logger.error(f"合并文件夹失败：{e}")
     
     
     
@@ -1832,7 +1832,7 @@ class PathChecker:
 
             return results
         except Exception as e:
-            logger.error(f"Check Paths Error: {e}", exc_info=True)
+            logger.error(f"检查路径失败：{e}", exc_info=True)
             return {}
         
     

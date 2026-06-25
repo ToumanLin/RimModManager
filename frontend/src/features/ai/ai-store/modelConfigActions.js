@@ -1,4 +1,4 @@
-import { checkResult, normalizeText, toast } from '../../../shared/lib/common'
+import { checkResult, getApiResponseMessage, normalizeText, toast, toUserMessage } from '../../../shared/lib/common'
 
 const PENDING_REASONING_CAPABILITIES = {
   supports_reasoning: false,
@@ -124,7 +124,7 @@ export const useModelConfigActions = ({
         if (warnOnEmpty && modelListCache[cacheKey].length === 0) {
           const provider = normalizeText(tempConfig?.provider, 'unknown')
           const baseUrl = resolveAiProviderBaseUrl(tempConfig?.provider, tempConfig?.base_url)
-          toast.warning(`未获取到 AI 模型列表，请确认 ${provider} 服务已启动且 Base URL 可访问：${baseUrl}`, { timeout: 8000 })
+          toast.warning(`未获取到 AI 模型列表。请确认 ${provider} 服务已启动、Base URL 可访问、API Key 有效，并检查代理设置：${baseUrl}`, { timeout: 8000 })
         }
         return getCachedAiModels(tempConfig)
       }
@@ -209,7 +209,7 @@ export const useModelConfigActions = ({
       return {
         ok: false,
         text: '',
-        error: String(res?.message || 'AI 请求失败'),
+        error: getApiResponseMessage(res, 'AI 测试请求失败。请检查模型名称、Base URL、API Key、代理设置和服务状态，详细原因已写入系统日志。'),
         isEmpty: false,
       }
     } catch (error) {
@@ -217,7 +217,7 @@ export const useModelConfigActions = ({
       return {
         ok: false,
         text: '',
-        error: error?.message || String(error),
+        error: toUserMessage(error?.message || String(error), 'AI 测试请求异常。可能是软件后端暂时不可用、网络连接失败或模型服务无响应，请稍后重试。'),
         isEmpty: false,
       }
     } finally {

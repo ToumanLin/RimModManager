@@ -2,7 +2,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
-import { checkResult, deepClone, toast } from '../../shared/lib/common'
+import { checkResult, deepClone, toast, toUserMessage } from '../../shared/lib/common'
 import { useModStore } from '../../features/mod/stores/modStore'
 import { useGroupStore } from '../../features/mod/stores/groupStore'
 import { useOrderStore } from '../../features/load-order/orderStore'
@@ -719,7 +719,7 @@ export const useAppStore = defineStore('app', () => {
       await refreshModsRelatedData(options)
       return true
     } catch (e) {
-      toast.error(`同步模组数据失败: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '同步模组数据失败。可能是数据库、扫描结果或运行环境暂时不可用，详细原因已写入系统日志。'))
       return false
     }
   }
@@ -810,7 +810,7 @@ export const useAppStore = defineStore('app', () => {
         await orderStore.presentRuntimeRefreshDiff(resumeSnapshot)
       } catch (e) {
         console.error("恢复挂起界面失败:", e)
-        toast.error(`恢复界面失败: \n${e.message || e}`)
+        toast.error(toUserMessage(e?.message || e, '恢复界面失败。请刷新界面或重启软件后重试，详细原因已写入系统日志。'))
       } finally {
         isLoading.value = false
         suspendRecoveryPromise = null
@@ -840,7 +840,7 @@ export const useAppStore = defineStore('app', () => {
       })
     } catch (e) {
       console.error("初始化失败:", e)
-      toast.error(`初始化失败：\n${e}`)
+      toast.error(toUserMessage(e?.message || e, '初始化失败。可能是配置、数据库或运行环境暂时不可用，详细原因已写入系统日志。'))
     } finally {
       isLoading.value = false
     }
@@ -863,7 +863,7 @@ export const useAppStore = defineStore('app', () => {
       orderStore.getBackups(orderStore.backupProfileId || settings.value.current_profile_id || 'default')
       return true
     } catch (e) {
-      toast.error(`刷新数据失败: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '刷新数据失败。可能是扫描器、数据库或当前环境暂时不可用，请稍后重试。'))
       return false
     } finally {
       isLoading.value = false
@@ -922,21 +922,21 @@ export const useAppStore = defineStore('app', () => {
     window.addEventListener('localize-complete', (e) => {
         const { success_count, error_count, errors, status, title } = e.detail;
         const taskTitle = title || '本地共存任务'
-        console.log(`${taskTitle}完成。成功: ${success_count}, 失败: ${error_count}`, errors)
+        console.info(`${taskTitle}完成。成功 ${success_count} 项，失败 ${error_count} 项。`, errors)
         if (status === 'cancelled') {
             toast.info(`${taskTitle}已取消`);
             return
         }
         if (error_count > 0) {
-            toast.warning(`${taskTitle}完成。成功: ${success_count}, 失败: ${error_count}`);
+            toast.warning(`${taskTitle}已完成，成功 ${success_count} 项，失败 ${error_count} 项。失败详情已写入系统日志。`);
         } else {
-            toast.success(`${taskTitle}完成：${success_count} 个模组`);
+            toast.success(`${taskTitle}已完成：${success_count} 个模组`);
         }
         void requestModScan({ preserveListState: true, sizeCheckOverride: true })
     });
     // 监听：游戏暂停
     window.addEventListener('app-suspending', () => {
-      console.log('检测到游戏启动，停止所有界面活动...');
+      console.info('检测到游戏启动，停止所有界面活动。');
       // 1. 设置全局加载状态，屏蔽用户操作
       isLoading.value = true;
       if (suspendRecoveryTimer) {
@@ -959,7 +959,7 @@ export const useAppStore = defineStore('app', () => {
         toast.info(detail.message, { timeout: 4000 })
       }
       if (detail.failure_reason && detail.message) {
-        toast.error(detail.message)
+        toast.error(toUserMessage(detail.message, '游戏启动状态异常。可能是游戏路径、启动参数或运行环境暂时不可用，详细原因已写入系统日志。'))
       }
     })
     window.addEventListener('app-suspending', () => {
@@ -988,15 +988,16 @@ export const useAppStore = defineStore('app', () => {
       }
       if (task.type === 'download' && task.status === 'success') {
         const filename = task.metrics?.filename || task.message
-        if (filename) toast.success(`下载完成: ${filename}`)
+        if (filename) toast.success(`下载已完成：${filename}`)
         const textureStore = useTextureStore()
         textureStore.handleDownloadEvent(task)
       }
       if (task.type === 'download' && task.status === 'failed') {
-        toast.error(`下载失败: ${task.metrics?.filename || task.message}\n${task.metrics?.error || ''}`)
+        const filename = task.metrics?.filename || task.message || '文件'
+        toast.error(`${filename} 下载失败。可能是网络连接、代理设置、下载源不可用或磁盘权限问题，详细原因已写入系统日志。`)
       }
       if (task.type === 'steamcmd-download' && task.status === 'failed') {
-        toast.error(`SteamCMD 下载失败: ${task.metrics?.error || task.message}`)
+        toast.error(toUserMessage(task.metrics?.error || task.message, 'SteamCMD 下载失败。请检查网络连接、代理设置、下载源可用性和目标目录权限，详细原因已写入系统日志。'))
       }
       if (task.type === 'steam-workshop-download' && task.status === 'success') {
         void (async () => {
@@ -1005,7 +1006,7 @@ export const useAppStore = defineStore('app', () => {
         })()
       }
       if (task.type === 'steam-workshop-download' && task.status === 'failed') {
-        toast.error(`Steam 下载失败: ${task.metrics?.error || task.message}`)
+        toast.error(toUserMessage(task.metrics?.error || task.message, 'Steam 下载失败。请确认 Steam 已登录并正常联网，或检查代理设置和工坊项目状态。'))
       }
       if (task.type === 'steam-subscribe' && task.status === 'success') {
         void (async () => {
@@ -1014,10 +1015,10 @@ export const useAppStore = defineStore('app', () => {
         })()
       }
       if (task.type === 'steam-subscribe' && task.status === 'failed') {
-        toast.error(`Steam 订阅失败: ${task.metrics?.error || task.message}`)
+        toast.error(toUserMessage(task.metrics?.error || task.message, 'Steam 订阅失败。请确认 Steam 已登录、网络可用，且目标工坊项目仍可访问。'))
       }
       if (task.type === 'steam-unsubscribe' && task.status === 'failed') {
-        toast.error(`取消订阅失败：${task.metrics?.error || task.message}`)
+        toast.error(toUserMessage(task.metrics?.error || task.message, '取消订阅失败。请确认 Steam 已登录、网络可用，稍后重试。'))
       }
       if (task.type === 'update' && task.status === 'success' && task.metrics?.ready_to_install) {
         if (updateState.info) updateState.info.local_status = 'ready'
@@ -1027,7 +1028,7 @@ export const useAppStore = defineStore('app', () => {
         }
       }
       if (task.type === 'update' && task.status === 'failed') {
-        toast.error(`更新出错: ${task.metrics?.error || task.message}`)
+        toast.error(toUserMessage(task.metrics?.error || task.message, '下载更新包失败。请检查网络连接、代理设置和磁盘空间，稍后重试。'))
       }
       if (task.type === 'mod-export' && task.status === 'success') {
         if (!task.id || !exportCompletePrompted.has(task.id)) {
@@ -1036,7 +1037,7 @@ export const useAppStore = defineStore('app', () => {
         }
       }
       if (task.type === 'mod-export' && task.status === 'failed') {
-        toast.error(task.metrics?.error || task.message || '模组包导出失败')
+        toast.error(toUserMessage(task.metrics?.error || task.message, '模组包导出失败。请检查导出目录权限、磁盘空间和待导出模组状态，详细原因已写入系统日志。'))
       }
       if (task.type === 'mod-export' && task.status === 'cancelled') {
         toast.warning('模组包导出已取消')
@@ -1052,7 +1053,7 @@ export const useAppStore = defineStore('app', () => {
         })()
       }
       if (task.type === 'mod-import' && task.status === 'failed') {
-        toast.error(task.metrics?.error || task.message || '模组包导入失败')
+        toast.error(toUserMessage(task.metrics?.error || task.message, '模组包导入失败。请检查文件是否完整、目标目录权限和磁盘空间，详细原因已写入系统日志。'))
       }
       if (task.type === 'mod-import' && task.status === 'cancelled') {
         toast.warning('模组包导入已取消')
@@ -1060,7 +1061,7 @@ export const useAppStore = defineStore('app', () => {
     });
     // 监听：后端弹窗
     window.addEventListener('backend-popup', (e) => {
-      console.log('收到后端弹窗:', e)
+      console.debug('收到后端弹窗:', e)
       _backendPopup(e)
     })
   }
@@ -1074,7 +1075,7 @@ export const useAppStore = defineStore('app', () => {
       if (checkResult(res, "重置数据库")) {
         closeSettingsPanel()
         // 提示成功
-        toast.success("数据库已重置！")
+        toast.success("数据库已重置。")
         // 清空本地状态
         const modStore = useModStore()
         modStore.reset()
@@ -1128,7 +1129,7 @@ export const useAppStore = defineStore('app', () => {
   const performDatabaseCleanup = async () => {
     const res = await window.pywebview.api.perform_database_cleanup()
     if (checkResult(res, '数据库深度清理')) {
-      toast.success('无效数据清理完成，正在刷新列表...')
+      toast.success('无效数据清理完成，正在刷新列表。')
       await refreshModsData('无效数据清理后同步模组数据')
     }
   }
@@ -1148,7 +1149,7 @@ export const useAppStore = defineStore('app', () => {
     } catch (e) {
       clearTaskCancelPending(task.id)
       console.error('取消任务异常:', e)
-      toast.error(`取消任务异常: \n${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '取消任务失败。可能是任务已经结束或后端暂时不可用，请稍后刷新状态。'))
       return false
     }
   }
@@ -1381,7 +1382,7 @@ export const useAppStore = defineStore('app', () => {
   const _backendPopup = (event) => {
     const confirmStore = useConfirmStore()
     const { mode, title, message, type, duration } = event.detail
-    console.log('后端弹窗:', event.detail)
+    console.debug('后端弹窗:', event.detail)
     // 模式1: 轻提示 (Toast)
     if (mode === 'toast') {
       const toastType = type || 'info' // success, error, warning, info

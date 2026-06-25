@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
 import { useAppStore } from '../../app/stores/appStore'
-import { checkResult, toast } from '../../shared/lib/common'
+import { checkResult, toast, toUserMessage } from '../../shared/lib/common'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 import { RIMWORLD_STEAM_APP_ID, SOURCE_TYPE_MAP } from '../../shared/lib/constants'
 import { matchesTranslationSourceDetection } from '../../shared/lib/translationDetection'
@@ -747,7 +747,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     applyState(librariesMods.workshop, 'workshop')
     applyState(librariesMods.self, 'self')
 
-    console.log('[Workspace] 生命周期更新状态已合并:', normalizedUpdates.length, '条记录')
+    console.debug('[Workspace] 生命周期更新状态已合并:', normalizedUpdates.length, '条记录')
   }
 
   const refreshLifecycleUpdateStates = async () => {
@@ -822,7 +822,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     // payload 格式: { "12345": { title: "...", time_updated: 17000000, preview_url: "..." }, ... }
     window.addEventListener('workspace-online-update', (e) => {
       const onlineMap = e.detail || {}
-      console.log("[Workspace] 收到 Steam 在线状态批量推送:", Object.keys(onlineMap).length, "条记录")
+      console.debug("工作区收到 Steam 在线状态批量推送:", Object.keys(onlineMap).length, "条记录")
       const mergeOnlineData = (modList) => {
         modList.forEach(mod => {
           const wid = String(mod.workshop_id)
@@ -873,7 +873,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     // payload 格式: { "https://host/group/repo": { latest_release_tag: "v1.2", ... }, ... }
     window.addEventListener('github-online-update', (e) => {
       const updatedReposMap = e.detail
-      console.log("[Workspace] 收到 Git 仓库在线状态推送:", Object.keys(updatedReposMap).length, "条记录")
+      console.debug("工作区收到 Git 仓库在线状态推送:", Object.keys(updatedReposMap).length, "条记录")
 
       github.subscribedRepos.forEach(repo => {
         if (updatedReposMap[repo.repo_url]) {
@@ -1149,10 +1149,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const logWorkshopSearchDebug = (payload = {}) => {
     if (!isWorkshopSearchDebugEnabled()) return
-    console.groupCollapsed(`[RMM Workshop Search] ${payload.isEnhancedMode ? 'enhanced' : 'normal'} ${payload.isAppend ? 'append' : 'search'}`)
-    console.info('request', payload.request)
-    console.info('response', payload.response)
-    console.info('items', payload.items)
+    console.groupCollapsed(`[RMM 工坊搜索] ${payload.isEnhancedMode ? '增强模式' : '普通模式'} ${payload.isAppend ? '追加结果' : '发起搜索'}`)
+    console.info('请求参数', payload.request)
+    console.info('响应数据', payload.response)
+    console.info('结果项目', payload.items)
     console.groupEnd()
   }
 
@@ -1623,11 +1623,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         if (checkResult(res, `获取${job.label}`, false, { silent: true })) {
           applyWorkshopRelatedItems(job.key, res.data || {})
         } else {
-          workshopSearch.relatedErrors[job.key] = res?.message || `${job.label}加载失败`
+          workshopSearch.relatedErrors[job.key] = toUserMessage(res?.message, `${job.label}加载失败。请检查网络连接、Steam 服务状态或稍后重试。`)
         }
       } catch (error) {
         if (workshopSearch.selectedId === workshopId) {
-          workshopSearch.relatedErrors[job.key] = String(error?.message || error || `${job.label}加载失败`)
+          console.warn(`获取${job.label}失败:`, error)
+          workshopSearch.relatedErrors[job.key] = toUserMessage(error?.message || error, `${job.label}加载失败。请检查网络连接、Steam 服务状态或稍后重试。`)
         }
       } finally {
         if (workshopSearch.selectedId === workshopId) {
@@ -2244,9 +2245,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         github.catalogLoaded = true
         return true
       }
-      github.catalogError = res?.message || '获取推荐列表失败'
+      github.catalogError = toUserMessage(res?.message, '获取推荐列表失败。请检查网络连接、代理设置和推荐源地址。')
     } catch (error) {
-      github.catalogError = String(error?.message || error || '获取推荐列表失败')
+      console.warn('获取 Git 推荐列表失败:', error)
+      github.catalogError = toUserMessage(error?.message || error, '获取推荐列表失败。请检查网络连接、代理设置和推荐源地址。')
       throw error
     } finally {
       github.isCatalogLoading = false
@@ -2280,15 +2282,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const match = inputUrl.match(/id=(\d+)/) || inputUrl.match(/(\d+)/)
     const collId = match ? match[1] : inputUrl.trim()
     if (!/^\d+$/.test(collId)) {
-      toast.error("无效的合集 ID 或链接，请输入纯数字或包含 id=xxx 的链接")
+      toast.error("合集 ID 或链接无效，请输入纯数字 ID，或粘贴包含 id=xxx 的 Steam 合集链接。")
       return false
     }
     if (collections.savedList.some(c => c.id === collId)) {
-      toast.warning("该合集已在你的记录中！")
+      toast.warning("该合集已在你的记录中。")
       return false
     }
     collections.isParsing = true
-    toast.info("正在解析并接入合集数据...")
+    toast.info("正在解析并接入合集数据。")
     try {
       // 调用专门的同步接口
       const res = await window.pywebview.api.collection_add(collId)
@@ -2319,7 +2321,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         toast.success("已从记录中移除该合集")
       }
     } catch (e) {
-      toast.error(`移除失败: ${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '移除合集失败。可能是后端服务暂时不可用或本地记录无法写入，详细原因已写入系统日志。'))
     }
   }
 
@@ -2348,7 +2350,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
     } catch (e) {
       collections.isChildrenLoading = false
-      toast.error(`加载合集失败: ${e.message}`)
+      toast.error(toUserMessage(e?.message || e, '加载合集失败。可能是网络连接、Steam 服务或本地缓存暂时不可用，请稍后重试。'))
     }
     // 如果没有缓存，loading 继续保持 true，等待 EventBus 触发
   }

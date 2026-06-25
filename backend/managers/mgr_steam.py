@@ -316,7 +316,7 @@ def run_steam_worker(action: str, payload: str):
         from steamworks import STEAMWORKS
         from steamworks.enums import EResult, EWorkshopFileType
     except ImportError:
-        logger.error("ERROR: SteamworksPy not found in submodules/SteamworksPy or bundle")
+        logger.error("SteamworksPy 运行库不可用: 未在 submodules/SteamworksPy 或打包目录中找到。")
         return
 
     if action == "probe_status":
@@ -637,17 +637,17 @@ def run_steam_worker(action: str, payload: str):
         steam = STEAMWORKS()
         steam.initialize()
     except Exception as e:
-        logger.error(f"ERROR: Steam init failed: {_format_steamworks_error(e)}")
+        logger.error(f"Steam API 初始化失败: error={_format_steamworks_error(e)}")
         return
 
     if not steam:
-        logger.error("ERROR: Steam API not loaded")
+        logger.error("Steam API 未加载，无法执行工坊操作。")
         return
 
     # 解析传入的 payload（支持单个 ID 整数或逗号分隔的字符串）
     mod_ids =[int(x.strip()) for x in str(payload).split(',') if x.strip().isdigit()]
     if not mod_ids:
-        logger.error("ERROR: No valid mod IDs provided")
+        logger.error("Steam 工坊操作缺少有效的 Mod ID。")
         return
 
     completed_callbacks = 0
@@ -657,7 +657,7 @@ def run_steam_worker(action: str, payload: str):
     def callback(res):
         nonlocal completed_callbacks
         completed_callbacks += 1
-        logger.info(f"Callback ({completed_callbacks}/{total_requests}): {res}")
+        logger.info(f"收到 Steam 工坊回调: completed={completed_callbacks}/{total_requests}, result={res}")
 
     success = False
     try:
@@ -667,14 +667,14 @@ def run_steam_worker(action: str, payload: str):
             elif action in ("unsubscribe", "unsubscribe_batch"):
                 steam.Workshop.UnsubscribeItem(mod_id, callback)
             else:
-                logger.error(f"ERROR: Unknown action {action}")
+                logger.error(f"未知 Steam 工坊操作: action={action}")
                 return
         success = True
-        logger.info(f"SUCCESS: {action} request sent for {total_requests} items")
+        logger.info(f"Steam 工坊请求已发送: action={action}, count={total_requests}")
         # 主进程通过 stdout 判断 Steamworks worker 是否成功接收请求，不能依赖日志输出通道。
         print(f"SUCCESS: {action} request sent for {total_requests} items")
     except Exception as e:
-        logger.error(f"ERROR: Action failed: {e}")
+        logger.error(f"Steam 工坊操作执行失败: action={action}, error={e}")
 
     # 智能等待机制：等待回调完成，而不是死等固定的时间
     if success:
@@ -684,12 +684,12 @@ def run_steam_worker(action: str, payload: str):
         
         while completed_callbacks < total_requests:
             if time.time() - start_time > timeout:
-                logger.warning(f"TIMEOUT: Only received {completed_callbacks}/{total_requests} callbacks.")
+                logger.warning(f"等待 Steam 工坊回调超时: received={completed_callbacks}/{total_requests}")
                 break
             try:
                 steam.run_callbacks()
             except Exception as e:
-                logger.debug(f"Steam callbacks pump failed: {_format_steamworks_error(e)}")
+                logger.debug(f"Steam 回调轮询失败：{_format_steamworks_error(e)}")
                 break
             time.sleep(0.1) # 短暂休眠，防止 CPU 空转
             
@@ -803,7 +803,7 @@ class SteamManager:
                 f.write(RIMWORLD_STEAM_APP_ID_STR)
 
         target_dll, target_api = _steamworks_library_names()
-        logger.info("Initializing Steam Agent runtime libraries...")
+        logger.info("正在初始化 Steam Agent 运行库...")
         self._copy_dlls_to_agent(target_dll, target_api)
 
     def _copy_dlls_to_agent(self, dll_name, api_name):
@@ -851,11 +851,11 @@ class SteamManager:
                     try:
                         if os.path.abspath(src) != os.path.abspath(dst):
                             shutil.copy2(src, dst)
-                        logger.info(f"Copied {name} from {directory}")
+                        logger.info(f"已从 {directory} 复制 {name}")
                         found = True
                         break
                     except Exception as e:
-                        logger.error(f"Copy Steam runtime error: {e}")
+                        logger.error(f"复制 Steam 运行库失败：{e}")
             if not found:
                 if os.path.exists(dst):
                     try:
@@ -864,13 +864,13 @@ class SteamManager:
                     except Exception as e:
                         logger.warning(f"未找到匹配的新 Steam 运行库 {name}，且旧 agent 残留文件移除失败: {dst}, {e}")
                 else:
-                    logger.warning(f"Could not find {name} in search paths: {deduped_dirs}")
+                    logger.warning(f"在搜索路径中找不到 {name}：{deduped_dirs}")
 
     def ensure_tools(self, download_mgr):
         """前端调用的检查接口 (只查 SteamCMD 即可，Agent DLL 自动处理)"""
         tasks = []
         if not os.path.exists(self.steamcmd_exe):
-            logger.info("SteamCMD not found, adding download task...")
+            logger.info("未找到 SteamCMD，正在添加下载任务...")
             url = ""
             if platform.system() == "Windows":
                 url = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
@@ -934,9 +934,9 @@ class SteamManager:
                     extract_zip(file_path, self.steamcmd_dir)
                     os.remove(file_path)
                     self.steamcmd_ready = True
-                    logger.info("SteamCMD installed.")
+                    logger.info("SteamCMD 已安装。")
             except Exception as e:
-                logger.error(f"Failed to extract SteamCMD: {e}")
+                logger.error(f"解压 SteamCMD 失败：{e}")
 
     def is_steam_running(self) -> bool:
         """跨平台检测 Steam 进程是否存活"""
@@ -959,7 +959,7 @@ class SteamManager:
                 res = subprocess.run(['ps', '-A'], capture_output=True, text=True)
                 return 'steam' in res.stdout.lower()
         except Exception as e:
-            logger.error(f"Check steam process failed: {e}")
+            logger.error(f"检查 Steam 进程失败：{e}")
             return False
 
     def _read_windows_active_process_status(self) -> dict:
@@ -987,7 +987,7 @@ class SteamManager:
         except FileNotFoundError:
             pass
         except Exception as e:
-            logger.debug(f"Read Steam ActiveProcess failed: {e}")
+            logger.debug(f"读取 Steam ActiveProcess 失败：{e}")
         return result
 
     def _probe_steamworks_status(self, timeout_seconds: float = 8.0) -> dict:
@@ -1295,7 +1295,7 @@ class SteamManager:
                     "used_url_fallback": False,
                 }
             except Exception as e:
-                logger.warning(f"Failed to start Steam via executable: {e}", exc_info=True)
+                logger.warning(f"通过可执行文件启动 Steam 失败：{e}", exc_info=True)
 
         if platform.system() == "Windows":
             try:
@@ -1306,7 +1306,7 @@ class SteamManager:
                     "used_url_fallback": True,
                 }
             except Exception as e:
-                logger.error(f"Failed to start Steam via URL protocol: {e}", exc_info=True)
+                logger.error(f"通过 URL 协议启动 Steam 失败：{e}", exc_info=True)
 
         return {
             "ok": False,
@@ -1366,12 +1366,12 @@ class SteamManager:
         if settings.config.network.use_proxy_on_steamcmd:
             proxy_env = network_mgr.get_proxy_env()
             current_env.update(proxy_env)
-            logger.info("SteamCMD will run WITH proxy.")
+            logger.info("SteamCMD 将使用代理运行。")
         else:
             current_env.pop("HTTP_PROXY", None)
             current_env.pop("HTTPS_PROXY", None)
             current_env.pop("ALL_PROXY", None)
-            logger.info("SteamCMD will run WITHOUT proxy.")
+            logger.info("SteamCMD 将不使用代理运行。")
 
         target_dir = settings.config.steamcmd_mods_path
         total_items = len(mod_ids)
@@ -1471,7 +1471,7 @@ class SteamManager:
                 )
 
         except Exception as e:
-            logger.error(f"SteamCMD execution failed: {e}")
+            logger.error(f"SteamCMD 执行失败：{e}")
             self._emit_progress_event(task_id, str(e), 0, TaskStatus.ERROR, target_dir, "SteamCMD", task_type="steamcmd-download")
         finally:
             with self._steamcmd_lock:
@@ -1555,7 +1555,7 @@ class SteamManager:
                     if last_active_item_id:
                         timeout_detail += f" (最后活跃项 {last_active_item_id})"
                     failed_ids.update(item_id for item_id in batch if item_id not in completed_ids)
-                    logger.warning(f"SteamCMD batch stalled: task_id={task_id} {timeout_detail}")
+                    logger.warning(f"SteamCMD 批量任务长时间无输出：task_id={task_id} {timeout_detail}")
                     self._terminate_steamcmd_process(task_id, process)
                     break
                 time.sleep(0.2)
@@ -1581,7 +1581,7 @@ class SteamManager:
                 batch_failed = True
 
             if process.returncode not in (0, None):
-                logger.warning(f"SteamCMD batch exited non-zero: task_id={task_id} returncode={process.returncode}")
+                logger.warning(f"SteamCMD 批量任务异常退出：task_id={task_id} returncode={process.returncode}")
                 failed_ids.update(item_id for item_id in batch if item_id not in completed_ids)
                 batch_failed = True
         finally:
@@ -1682,7 +1682,7 @@ class SteamManager:
                 chunk = f.read()
                 new_offset = f.tell()
         except Exception as e:
-            logger.debug(f"Read SteamCMD workshop log failed: {e}")
+            logger.debug(f"读取 SteamCMD 创意工坊日志失败：{e}")
             return start_offset, current_item_idx, None, None
 
         if not chunk: return new_offset, current_item_idx, None, None
@@ -1755,7 +1755,7 @@ class SteamManager:
         if isinstance(ids, (int, str)): id_list = [str(ids)]
         elif isinstance(ids, list): id_list = [str(i) for i in ids]
         else:
-            logger.error(f"Invalid ID type: {type(ids)}")
+            logger.error(f"无效的 ID 类型：{type(ids)}")
             return False
         if not id_list: return True
 
@@ -1768,10 +1768,10 @@ class SteamManager:
             try:
                 result = self._run_steam_worker(action, payload, timeout_seconds=20.0)
                 if "SUCCESS" not in result.stdout:
-                    logger.error(f"Steam Agent Error: {result.stdout}")
+                    logger.error(f"Steam Agent 返回错误：{result.stdout}")
                     all_success = False
             except Exception as e:
-                logger.error(f"Failed to run steam agent: {e}")
+                logger.error(f"运行 Steam Agent 失败：{e}")
                 all_success = False
 
         return all_success
@@ -2101,7 +2101,7 @@ class SteamManager:
             try:
                 self.cancel_steamcmd_task(task_id)
             except Exception as e:
-                logger.debug(f"Cleanup SteamCMD task failed: task_id={task_id} error={e}")
+                logger.debug(f"清理 SteamCMD 任务失败：task_id={task_id} error={e}")
 
     def _is_steamcmd_task_cancelled(self, task_id: str) -> bool:
         with self._steamcmd_lock: return task_id in self._steamcmd_cancelled
@@ -2123,7 +2123,7 @@ class SteamManager:
             else:
                 active_process.kill()
         except Exception as e:
-            logger.debug(f"Terminate SteamCMD task failed: task_id={task_id} error={e}")
+            logger.debug(f"终止 SteamCMD 任务失败：task_id={task_id} error={e}")
 
     def _register_steamcmd_controller(self, task_id: str, controller: SteamCMDController) -> None:
         with self._steamcmd_lock:
@@ -2167,7 +2167,7 @@ class SteamManager:
             if steam_exe.exists():
                 return str(steam_exe) if with_exe else str(Path(steam_dir))
 
-        logger.debug("Steam InstallPath not found.")
+        logger.debug("未找到 Steam InstallPath。")
         return None
 
     def launch_via_steam_cmd(self, app_id=RIMWORLD_STEAM_APP_ID_STR, extra_args=None):
@@ -2695,7 +2695,7 @@ class SteamManager:
             return {"updated": False, "removed_ids": [], "acf_path": str(acf_path)}
 
         if self._has_running_steamcmd_process():
-            logger.debug("Skip SteamCMD ACF reconcile because SteamCMD process is still running.")
+            logger.debug("跳过 SteamCMD ACF 对账：SteamCMD 进程仍在运行。")
             return {"updated": False, "removed_ids": [], "acf_path": str(acf_path), "skipped": "steamcmd_running"}
 
         try:
@@ -2772,7 +2772,7 @@ class SteamManager:
                 }
                 added_ids.add(workshop_id)
             except Exception as e:
-                logger.debug(f"Skip synthetic SteamCMD ACF entry for {workshop_id}: {e}")
+                logger.debug(f"跳过合成 SteamCMD ACF 条目：{workshop_id}，错误：{e}")
 
         if not removed_ids and not added_ids:
             return {"updated": False, "removed_ids": [], "added_ids": [], "acf_path": str(acf_path)}
@@ -2881,7 +2881,7 @@ class SteamManager:
             return json_data.get('AppWorkshop',{})
         
         except Exception as e:
-            logger.error(f"[get_acf_json] Failed to parse ACF for validation: {e}")
+            logger.error(f"[get_acf_json] 解析 ACF 用于校验时失败：{e}")
             
         return {}
 
@@ -2946,7 +2946,7 @@ class SteamManager:
             installed_ids = set()
             installed_ids.update(map(int,acf_json.get('WorkshopItemsInstalled',{}).keys()))
         except Exception as e:
-            logger.error(f"Failed to parse installed Workshop IDs from ACF: {e}")
+            logger.error(f"从 ACF 解析已安装创意工坊 ID 失败：{e}")
             
         return installed_ids
 
@@ -2980,7 +2980,7 @@ class SteamManager:
                 default_path = r"C:\Program Files (x86)\Steam\logs\workshop_log.txt"
                 if os.path.exists(default_path): return str(default_path)
         except Exception as e:
-            logger.error(f"Failed to parse Steam log path: {e}")
+            logger.error(f"解析 Steam 日志路径失败：{e}")
             
         return None
 

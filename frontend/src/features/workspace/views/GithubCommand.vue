@@ -395,7 +395,7 @@ import { useToast } from 'vue-toastification'
 import { useAppStore } from '../../../app/stores/appStore'
 import { useWorkspaceStore } from '../workspaceStore'
 import { useProfileStore } from '../../profiles/profileStore'
-import { checkResult } from '../../../shared/lib/common'
+import { checkResult, toUserMessage } from '../../../shared/lib/common'
 import { imageViewerOptions } from '../../../shared/lib/domEffects'
 import { renderMarkdownContent } from '../../../shared/lib/markdown'
 import { isOfficialPackageId } from '../../mod/lib/packageScope'
@@ -713,10 +713,11 @@ const loadRepoReadme = async (url, branch, targetRef) => {
       targetRef.value.content = String(res.data?.content || '')
       targetRef.value.error = ''
     } else {
-      targetRef.value.error = res?.message || '读取 README 失败'
+      targetRef.value.error = toUserMessage(res?.message, '读取 README 失败。请检查网络连接、仓库地址和分支名称后重试。')
     }
   } catch (error) {
-    targetRef.value.error = String(error?.message || error || '读取 README 失败')
+    console.warn('读取 Git 仓库 README 失败:', error)
+    targetRef.value.error = toUserMessage(error?.message || error, '读取 README 失败。请检查网络连接、仓库地址和分支名称后重试。')
   } finally {
     targetRef.value.isLoading = false
   }

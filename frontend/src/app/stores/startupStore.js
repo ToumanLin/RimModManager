@@ -40,7 +40,7 @@ export const useStartupStore = defineStore('startup', () => {
     let scanForce = false
     const context = upgradeContext?.value || {}
     if (context.version_changed) {
-      console.log('检测到版本升级:', context.old_version, '->', context.new_version)
+      console.info('检测到版本升级:', context.old_version, '->', context.new_version)
       if (context.pending_actions?.includes('recommend_scan')) {
         scanForce = true
       }

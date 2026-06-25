@@ -331,7 +331,7 @@ def _load_group_names_by_mod_id() -> dict[str, list[str]]:
                 continue
             group_map.setdefault(mod_id, []).append(row["name"])
     except Exception as exc:
-        logger.error(f"Failed to load group map: {exc}")
+        logger.error(f"加载分组映射失败：{exc}")
     return group_map
 
 
@@ -1252,7 +1252,7 @@ class ModMaintenanceDAO:
             with db.atomic():
                 ModAsset.delete().where(ModAsset.path_hash << valid_hashes).execute()  # type: ignore
         except Exception as exc:
-            logger.error(f"Database deletion failed: {exc}")
+            logger.error(f"数据库删除失败：{exc}")
             return {"success_count": 0, "errors": [f"数据库记录清理失败: {exc}"]}
 
         for path in target_paths:
@@ -1283,7 +1283,7 @@ class ModMaintenanceDAO:
             with db.atomic():
                 deleted_count = ModAsset.delete().where(ModAsset.path_hash << existing_hashes).execute()  # type: ignore
         except Exception as exc:
-            logger.error(f"Database record deletion failed: {exc}")
+            logger.error(f"数据库记录删除失败：{exc}")
             return {"success_count": 0, "errors": [f"数据库记录清理失败: {exc}"]}
 
         return {"success_count": int(deleted_count or 0), "errors": []}

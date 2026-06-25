@@ -261,6 +261,7 @@ import { useAppStore } from '../../app/stores/appStore'
 import { useModStore } from '../mod/stores/modStore'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore'
 import { buildModExternalMenuItem, buildModInfoCopyMenuItem, normalizeModMenuSource } from '../mod/lib/modContextMenuItems'
+import { toUserMessage } from '../../shared/lib/common'
 
 const appStore = useAppStore()
 const modStore = useModStore()
@@ -770,7 +771,7 @@ const submit = async () => {
       visible.value = false
 
       if (res.status === 'success') {
-        toast.success(`已处理 ${resultStats.success_count || operations.length} 项冲突副本，正在重新扫描...`)
+        toast.success(`已处理 ${resultStats.success_count || operations.length} 项冲突副本，正在重新扫描。`)
       } else {
         toast.warning(`已处理 ${resultStats.success_count || 0} 项，${resultStats.error_count || 0} 项失败；剩余问题会在重新扫描后重新提示。`, {
           timeout: 9000,
@@ -782,14 +783,15 @@ const submit = async () => {
     }
 
     const failedPaths = Array.isArray(res?.data?.failed_paths) ? res.data.failed_paths : []
+    const userMessage = toUserMessage(res?.message, '冲突处理失败。可能是目标文件已被占用、路径权限不足或列表状态已变化，请重新扫描后再试。')
     submitFeedback.value = {
       kind: 'error',
-      message: res?.message || '冲突处理失败',
+      message: userMessage,
       details: failedPaths.slice(0, 3),
     }
-    toast.error(`处理失败: ${res?.message || '未知错误'}`)
+    toast.error(userMessage)
   } catch (error) {
-    const message = error?.message || '冲突处理接口调用异常'
+    const message = toUserMessage(error?.message || error, '冲突处理请求失败。请确认后端服务仍在运行，并重新扫描后再试。')
     submitFeedback.value = { kind: 'error', message, details: [] }
     toast.error(message)
   } finally {

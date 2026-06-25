@@ -1,4 +1,4 @@
-import { toast, checkResult } from '../../../shared/lib/common'
+import { toast, checkResult, toUserMessage } from '../../../shared/lib/common'
 import { useConfirmStore } from '../../../shared/components/modal/confirmStore'
 import { usePromptQueueStore } from '../../../features/ai/promptQueueStore'
 
@@ -97,7 +97,7 @@ export const useUpdateActions = ({
       `压缩包已经下载到：${data.path}\n是否继续安装更新？安装后将重启应用程序。`,
       { confirmText: '确认安装', cancelText: '取消', type: 'warning' }
     )
-    if (!ok) return toast.info("用户取消安装")
+    if (!ok) return toast.info("已取消安装更新。")
     await _performUpdateAction()
   }
 
@@ -121,10 +121,10 @@ export const useUpdateActions = ({
     if (checkResult(res,'开始下载更新包')) {
       // 如果后端开始下载，这里不需要做什么，因为 EventListener 会接管进度条
       if (res.data && res.data.status === 'downloading') {
-        toast.info("开始下载更新包...")
+        toast.info("已开始下载更新包，请留意底部状态栏。")
       }
     } else {
-      toast.error(res.message)
+      toast.error(toUserMessage(res?.message, '启动更新失败。请检查网络连接、代理设置和安装目录权限，详细原因已写入系统日志。'))
     }
   }
 

@@ -49,7 +49,7 @@ export const usePathActions = ({ settings, requestModScan } = {}) => {
   const openPath = async (path) => {
     if(!window.pywebview) return
     if(!path) return
-    console.log("打开路径:", path)
+    console.debug("准备打开路径:", path)
     const res = await window.pywebview.api.path_open(path)
     checkResult(res, "打开路径")
   }
@@ -161,7 +161,7 @@ export const usePathActions = ({ settings, requestModScan } = {}) => {
 
   // 打开Url
   const openUrl = (url) => {
-    if(!url) { toast.warning("网址为空！"); return}
+    if(!url) { toast.warning("没有可打开的网址。请确认当前条目包含有效链接。"); return}
     if (isBrowserRuntime()) {
       openManagedSubBrowserUrl(url, 'RimModManager')
       return

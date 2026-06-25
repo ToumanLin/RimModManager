@@ -199,6 +199,7 @@ import { useToast } from 'vue-toastification'
 import { useAppStore } from '../../app/stores/appStore.js'
 import { useConfirmStore } from '../../shared/components/modal/confirmStore.js'
 import { formatFileSize } from '../../shared/lib/format.js'
+import { toUserMessage } from '../../shared/lib/common.js'
 import CommonModalShell from '../../shared/components/modal/CommonModalShell.vue'
 import CommonSelect from '../../shared/components/input/CommonSelect.vue'
 import FileSearchPreviewEditor from '../file-search/FileSearchPreviewEditor.vue'
@@ -386,7 +387,7 @@ const loadOverview = async () => {
   try {
     const res = await window.pywebview.api.mod_settings_get_overview()
     if (res?.status !== 'success') {
-      toast.error(res?.message || '读取模组设置文件失败')
+      toast.error(toUserMessage(res?.message, '读取模组设置文件失败。请确认游戏用户数据目录可访问，并检查当前环境路径配置。'))
       return
     }
     overview.value = res.data || null
@@ -441,7 +442,7 @@ const syncToActive = async (settingGroup, sourceItem) => {
   try {
     const res = await window.pywebview.api.mod_settings_sync(sourceItem.file_path, activeItem.file_path)
     if (res?.status !== 'success') {
-      toast.error(res?.message || '覆盖模组设置文件失败')
+      toast.error(toUserMessage(res?.message, '覆盖模组设置文件失败。请检查目标文件是否被游戏占用、路径权限是否允许写入。'))
       return
     }
     toast.success(res?.message || '已覆盖当前激活文件')
