@@ -203,12 +203,12 @@
           <div class="pointer-events-none absolute inset-0 z-1 bg-linear-to-r from-bg-deep/4 via-bg-deep/16 to-bg-deep/50"></div>
           <div class="pointer-events-none absolute inset-0 z-2 bg-linear-to-t from-bg-deep/40 via-bg-deep/14 to-transparent"></div>
           <!-- 封面图片 -->
-          <div v-if="selectedPreviewUrl" v-viewer.rebuild="imageViewerOptions" class="absolute left-0 top-0 z-3 h-full w-fit overflow-hidden pointer-events-auto" :style="headerPreviewWrapStyle" >
+          <SafeViewerBlock v-if="selectedPreviewUrl" :options="imageViewerOptions" rebuild class="absolute left-0 top-0 z-3 h-full w-fit overflow-hidden pointer-events-auto" :style="headerPreviewWrapStyle" >
             <div class="relative inline-block h-full">
               <img :src="selectedPreviewUrl" :alt="selectedDisplayTitle || t('workspace.workshop.coverAlt')" class="block h-full w-auto max-w-none cursor-zoom-in select-none" />
               <img :src="selectedPreviewUrl" aria-hidden="true" class="pointer-events-none absolute inset-0 block h-full w-auto max-w-none blur-[20px]" :style="headerPreviewBlurStyle" />
             </div>
-          </div>
+          </SafeViewerBlock>
           <div v-else class="absolute left-0 top-0 z-3 h-full aspect-4/3 bg-bg-inset/50"></div>
           <!-- 项目名称及数据 -->
           <div class="absolute inset-y-0 left-[25%] right-0 z-4 flex flex-col justify-center gap-2 px-5 py-4 text-text-main">
@@ -375,7 +375,7 @@
               <Image class="size-3" /> {{ t('workspace.workshop.screenshots') }}
             </h4>
             <!-- 使用 flex nowrap 和 overflow-x-auto 实现横向滚动 -->
-            <div v-viewer.rebuild="imageViewerOptions" class="flex gap-3 overflow-x-auto custom-scrollbar pb-2 snap-x">
+            <SafeViewerBlock :options="imageViewerOptions" rebuild class="flex gap-3 overflow-x-auto custom-scrollbar pb-2 snap-x">
               <div v-for="(img, idx) in selectedMod.screenshots" :key="idx"
                 class="relative h-36 w-64 shrink-0 snap-start overflow-hidden rounded-xl border border-border-base/10 bg-bg-inset/80" >
                 <div v-if="!loadedScreenshotMap[img]" class="absolute inset-0 flex items-center justify-center bg-bg-inset/90" >
@@ -388,7 +388,7 @@
                 <img class="h-full w-full object-cover transition-transform hover:scale-[1.02] cursor-zoom-in"
                   :src="appStore.getRemoteUrl(img)" :alt="t('workspace.workshop.screenshotAlt', { title: selectedDisplayTitle || t('workspace.workshop.unknownMod') })" @load="markScreenshotLoaded(img)" @error="markScreenshotLoaded(img)" />
               </div>
-            </div>
+            </SafeViewerBlock>
           </div>
           <!-- 描述内容 -->
           <div v-if="selectedMod" class="mb-2 flex justify-end">
@@ -429,10 +429,10 @@
               </FixedPopover>
             </div>
           </div>
-          <div v-viewer.rebuild="imageViewerOptions" class="prose prose-invert prose-sm md:prose-base max-w-none select-text px-2 prose-a:text-accent-primary prose-img:rounded-xl">
+          <SafeViewerBlock :options="imageViewerOptions" rebuild class="prose prose-invert prose-sm md:prose-base max-w-none select-text px-2 prose-a:text-accent-primary prose-img:rounded-xl">
             <div v-if="parsedDescription" v-html="parsedDescription"></div>
             <div v-else class="text-text-dim italic">{{ t('workspace.workshop.noModDescription') }}</div>
-          </div>
+          </SafeViewerBlock>
           <!-- Steam 详情数据 -->
           <div v-if="hasRichSteamDetails" class="mt-4 space-y-2 rounded-2xl border border-border-base/10 bg-bg-inset/45 p-4">
             <h4 class="flex items-center gap-1.5 text-[0.72rem] font-black text-accent-tip">
@@ -534,6 +534,7 @@ import { useAppStore } from '../../../app/stores/appStore'
 import { toast } from '../../../shared/lib/common'
 import { cleanRichText, parseUnityRichText } from '../../../shared/lib/text'
 import { imageViewerOptions } from '../../../shared/lib/domEffects'
+import SafeViewerBlock from '../../../shared/components/SafeViewerBlock.vue'
 import { useWorkspaceStore } from '../workspaceStore'
 import MiniModCard from '../components/MiniModCard.vue'
 import CommonSwitch from '../../../shared/components/input/CommonSwitch.vue'

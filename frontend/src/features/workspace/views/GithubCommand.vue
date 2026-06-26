@@ -201,7 +201,7 @@
         <div class="mt-4">
           <div v-if="previewReadme.isLoading" class="text-xs text-text-dim">{{ t('workspace.github.readingReadme') }}</div>
           <div v-else-if="previewReadme.error" class="text-xs text-accent-warn">{{ previewReadme.error }}</div>
-          <div v-else-if="previewReadme.content" v-viewer.rebuild="imageViewerOptions" class="prose prose-sm prose-invert max-w-none text-text-dim" v-html="renderMarkdown(previewReadme.content)"></div>
+          <SafeViewerBlock v-else-if="previewReadme.content" :options="imageViewerOptions" rebuild class="prose prose-sm prose-invert max-w-none text-text-dim" v-html="renderMarkdown(previewReadme.content)"></SafeViewerBlock>
         </div>
       </div>
 
@@ -300,7 +300,7 @@
           </div>
           <div v-if="catalogReadme.isLoading" class="text-xs text-text-dim">{{ t('workspace.github.readingReadme') }}</div>
           <div v-else-if="catalogReadme.error" class="text-xs text-accent-warn">{{ catalogReadme.error }}</div>
-          <div v-else-if="catalogReadme.content" v-viewer.rebuild="imageViewerOptions" class="prose prose-sm prose-invert max-w-none text-text-dim" v-html="renderMarkdown(catalogReadme.content)"></div>
+          <SafeViewerBlock v-else-if="catalogReadme.content" :options="imageViewerOptions" rebuild class="prose prose-sm prose-invert max-w-none text-text-dim" v-html="renderMarkdown(catalogReadme.content)"></SafeViewerBlock>
         </div>
       </div>
 
@@ -398,6 +398,7 @@ import { useWorkspaceStore } from '../workspaceStore'
 import { useProfileStore } from '../../profiles/profileStore'
 import { checkResult } from '../../../shared/lib/common'
 import { imageViewerOptions } from '../../../shared/lib/domEffects'
+import SafeViewerBlock from '../../../shared/components/SafeViewerBlock.vue'
 import { renderMarkdownContent } from '../../../shared/lib/markdown'
 import { isOfficialPackageId } from '../../mod/lib/packageScope'
 import CommonSelect from '../../../shared/components/input/CommonSelect.vue'

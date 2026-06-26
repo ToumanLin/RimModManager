@@ -453,7 +453,7 @@ const handleContextMenu = async (event) => {
   const selectedHasPathHash = modStore.selectedMods.some(m => !!m?.path_hash)
   const coexistSelectedIds = selectedIds.filter(id => modStore.canSwitchCoexistenceSource(id))
   const coexistSelectedCountStr = coexistSelectedIds.length>1?` (${coexistSelectedIds.length}项)`:''
-  modStore.lastSelectedMod=modStore.takeModById(props.item_id)  // 记录最后选中的模组
+  modStore.lastSelectedToken = props.item_id  // 记录最后选中的模组
   // 获取统计信息
   const stats = modStore.selectedStats
   const selectedColor = typeof stats.color === 'string' && stats.color !== 'mixed'

@@ -25,7 +25,7 @@ export function useModListViewport({
     const list = visibleList.value // 当前可见的 ID 数组
     if (!list.length) return
     // 确定当前选中的索引
-    const currentId = modStore.lastSelectedMod?.package_id
+    const currentId = modStore.lastSelectedToken || modStore.lastSelectedMod?.package_id
     const currentIndex = list.indexOf(currentId)
     // 计算下一个索引
     let nextIndex = currentIndex + direction

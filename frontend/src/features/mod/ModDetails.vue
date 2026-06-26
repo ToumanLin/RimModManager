@@ -1,12 +1,12 @@
 <template>
   <div v-if="selectedMod" class="flex flex-col h-full p-1 bg-bg-surface/50 select-text">
     <!-- 1. 顶部大图与标题区 (保持原有设计风格但优化) -->
-    <div v-viewer="imageViewerOptions" class="w-full aspect-video opacity-90 backdrop-blur-sm bg-bg-inset/80 rounded-xl overflow-hidden relative border border-border-base/10 shadow-lg group">
+    <SafeViewerBlock :options="imageViewerOptions" class="w-full aspect-video opacity-90 backdrop-blur-sm bg-bg-inset/80 rounded-xl overflow-hidden relative border border-border-base/10 shadow-lg group">
 
       <!-- 图片 (优先显示大图，没有大图时回退显示 store 中的缩略图，防止留白) -->
       <Transition :name="appStore.settings.ui.detail_delay ?'fade': ''">
         <!-- 这里的 key Mod ID，变动时触发动画 -->
-        <img v-if="selectedMod.preview_path" :key="selectedMod.package_id" :src="appStore.getLocalUrl(selectedMod.preview_path)"
+        <img v-if="previewMod?.preview_path" :key="previewMod.package_id" :src="appStore.getLocalUrl(previewMod.preview_path)"
           class="absolute inset-0 w-full h-full cursor-zoom-in object-cover" loading="lazy"/>
         <!-- 文字提示兜底 -->
         <div v-else class="absolute inset-0 flex items-center justify-center text-text-subtle/70 bg-bg-surface">
@@ -18,7 +18,7 @@
       </Transition>
       <!-- Mod版本 -->
       <div v-tooltip="t('modDetails.modVersion')" class="absolute top-1.5 left-2 px-1 py-0.5 rounded text-xs text-text-main font-bold text-shadow-lg bg-bg-surface/20 border border-border-base/5">
-        v {{ selectedMod.version ? selectedMod.version : t('modDetails.unknownVersion') }}
+        v {{ selectedModVersion }}
       </div>
       <!-- 支持版本标签 -->
       <div v-tooltip="t('modDetails.supportedGameVersion')" v-if="displayVersions.length" class="absolute p-0 top-1.5 right-2 z-10 pointer-events-none hover:opacity-20">
@@ -29,19 +29,17 @@
       </div>
       <!-- 标题 -->
       <div class="@container absolute bottom-0 inset-x-0 bg-linear-to-t from-bg-deep/90 to-transparent p-2 pt-12">
-        <!-- 大小：{{ computedFontSize }}
-        字数：{{ selectedMod.name.length }} -->
-        <h2 class="font-bold leading-tight line-clamp-2 text-shadow wrap-break-word adaptive-text"
-          :style="{ fontSize: computedFontSize }" v-tooltip="selectedMod.name">{{ selectedMod.name }}</h2>
+        <h2 class="font-bold leading-tight line-clamp-2 text-text-main text-shadow wrap-break-word adaptive-text"
+          :style="{ fontSize: computedFontSize }" v-tooltip="selectedModTitleTooltip">{{ selectedModDisplayName }}</h2>
       </div>
-    </div>
+    </SafeViewerBlock>
 
     <!-- 2. 内容滚动区 -->
     <div class="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pt-3 space-y-4">
       <!-- 包ID -->
       <div class="px-2 text-xs flex items-center gap-1 text-text-dim tracking-wider border-b border-border-base/5 pb-1" v-tooltip="selectedMod.package_id">
         <svg class="size-4" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M44 14L24 4L4 14V34L24 44L44 34V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M4 14L24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 44V24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 14L24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M34 9L14 19" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="truncate flex-1 min-w-0">{{ selectedMod.package_id_raw }}</span>
+        <span class="truncate flex-1 min-w-0">{{ selectedMod.package_id_raw || selectedMod.package_id }}</span>
       </div>
       <!-- 遍历布局配置 -->
       <template v-for="block in layoutConfig" :key="block.id">
@@ -190,15 +188,15 @@
               <div class="row-span-2 col-span-3 p-2 pr-3 space-y-1 flex flex-col justify-center text-xs text-text-dim bg-bg-overlay/5 rounded-lg border border-border-base/5">
                 <div class="flex justify-between items-center">
                   <span class="flex-1 font-bold truncate min-w-0">{{ t('modDetails.fileCreateTime') }}</span>
-                  {{ selectedMod.file_create_time ? new Date(selectedMod.file_create_time).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : t('modDetails.timeValNone') }}
+                  {{ formatDateTime(selectedMod.file_create_time) }}
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="flex-1 font-bold truncate min-w-0">{{ t('modDetails.fileModifyTime') }}</span>
-                  {{ selectedMod.file_modify_time ? new Date(selectedMod.file_modify_time).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : t('modDetails.timeValNone') }}
+                  {{ formatDateTime(selectedMod.file_modify_time) }}
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="flex-1 font-bold truncate min-w-0">{{ t('modDetails.lastActiveTime') }}</span>
-                  {{ selectedMod.last_active_time ? new Date(selectedMod.last_active_time).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : t('modDetails.timeValNone') }}
+                  {{ formatDateTime(selectedMod.last_active_time) }}
                 </div>
                 <!-- <div class="flex justify-between items-center">
                   <span class="flex-1 font-bold truncate min-w-0">最后移动时间：</span>
@@ -206,7 +204,7 @@
                 </div> -->
                 <div class="flex justify-between items-center">
                   <span class="flex-1 font-bold truncate min-w-0">{{ t('modDetails.workshopUpdateTime') }}</span>
-                  {{ selectedMod.mod_update_time ? new Date(selectedMod.mod_update_time).toLocaleString(globalThis.__RMM_UI_FORMAT_LOCALE__ || 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : t('modDetails.timeValNone') }}
+                  {{ formatDateTime(selectedMod.mod_update_time) }}
                 </div>
               </div>
             </div>
@@ -442,7 +440,7 @@
                   :style="{backgroundColor: c}" :v-tooltip="t('modDetails.colorSetTooltip', { color: MOD_SIGN_COLOR_MAP[c] })">
                 </button>
                 <div class="flex items-center" v-tooltip="t('modDetails.customColorTooltip')">
-                  <ColorPicker v-model:pureColor="customSignColor" @pureColorChange="handleCustomColorChange" shape="circle" format="hex" picker-type="fk" disable-alpha round-history />
+                  <ColorPicker v-if="allowInlineColorPicker" v-model:pureColor="customSignColor" @pureColorChange="handleCustomColorChange" shape="circle" format="hex" picker-type="fk" disable-alpha round-history />
                 </div>
                 <button @click="updateColor(null)" v-tooltip="t('modDetails.clearColorTooltip')"
                   class="text-text-subtle hover:text-accent-danger/80">
@@ -480,7 +478,7 @@
           <!-- 描述 (HTML) -->
           <div v-if="block.id === 'description'" class="p-1 space-y-2">
             <h3 class="text-xs font-bold text-text-dim uppercase tracking-wider border-b border-border-base/5 pb-1">{{ t('modDetails.descriptionLabel') }}</h3>
-            <div v-viewer.rebuild="imageViewerOptions" class="prose prose-invert prose-sm max-w-none text-text-soft leading-relaxed wrap-break-word" v-html="formattedDescription"></div>
+            <SafeViewerBlock :options="imageViewerOptions" rebuild class="prose prose-invert prose-sm max-w-none text-text-soft leading-relaxed wrap-break-word" v-html="formattedDescription"></SafeViewerBlock>
           </div>
 
         </template>
@@ -539,11 +537,13 @@ import ImageCloud from '../../shared/decorations/ImageCloud.vue';
 import LampEffect from '../../shared/decorations/LampEffect.vue';
 import LuxBreatheIcon from '../../shared/decorations/LuxBreatheIcon.vue'
 import StatItem from '../../shared/components/StatItem.vue'
+import SafeViewerBlock from '../../shared/components/SafeViewerBlock.vue'
 import { ChevronDown, ChevronUp, CircleX, Copy } from 'lucide-vue-next'
 import FixedPopover from '../../shared/components/popover/FixedPopover.vue'
 import { useProfileStore } from '../profiles/profileStore'
 import { ColorPicker } from 'vue3-colorpicker'
 import { imageViewerOptions } from '../../shared/lib/domEffects'
+import { supportsInlineColorPicker } from '../../shared/lib/platform'
 
 // 随机选30个Mod的图标URL
 const imageUrls = computed(() => Array.from(modStore.allModsMap.values())
@@ -557,6 +557,7 @@ const aiStore = useAiStore()
 const modStore = useModStore()
 const groupStore = useGroupStore()
 const profileStore = useProfileStore()
+const allowInlineColorPicker = supportsInlineColorPicker()
 const userTags = ref([])
 const userAliasName = ref('')
 const userNotes = ref('')
@@ -585,10 +586,11 @@ const expandTextarea = ref(false)
 // 1. 获取原始数据
 const rawSelectedMod = computed(() => modStore.lastSelectedMod)
 
-// 2. 创建一个防抖的引用
-// 含义：当 rawSelectedMod 变化时，debouncedMod 会等待 200ms 且无新变化后才更新
-const selectedMod = refDebounced(rawSelectedMod, appStore.settings.ui.detail_delay)
+// 文本详情应跟随当前选择即时更新；只给大图预览保留延迟切换，避免频繁闪烁。
+const selectedMod = rawSelectedMod
+const previewMod = refDebounced(rawSelectedMod, appStore.settings.ui.detail_delay)
 const modType = computed(() => modStore.displayModType(selectedMod.value))
+const uiFormatLocale = (typeof globalThis !== 'undefined' && globalThis.__RMM_UI_FORMAT_LOCALE__) || 'zh-CN'
 
 
 // 获取布局配置 (如果没有配置则使用默认兜底)
@@ -632,6 +634,23 @@ const formattedDescription = computed(() => {
   // 第二个参数 false 表示不移除图片，如果想移除则传 true
   return parseUnityRichText( selectedMod.value.description, false, (url) => appStore.getRemoteUrl(url))
 })
+const selectedModDisplayName = computed(() => (
+  selectedMod.value ? modStore.displayModName(selectedMod.value) : ''
+))
+const selectedModTitleTooltip = computed(() => {
+  if (!selectedMod.value) return ''
+  const displayName = selectedModDisplayName.value
+  const rawName = String(selectedMod.value.name || '').trim()
+  return rawName && rawName !== displayName ? `${displayName}\n${rawName}` : displayName
+})
+const selectedModVersion = computed(() => {
+  const explicitVersion = String(selectedMod.value?.version || '').trim()
+  if (explicitVersion) return explicitVersion
+  const latestSupportedVersion = Array.isArray(selectedMod.value?.supported_versions)
+    ? String(selectedMod.value.supported_versions.at(-1) || '').trim()
+    : ''
+  return latestSupportedVersion || t('modDetails.unknownVersion')
+})
 // 辅助计算：是否有依赖项或冲突项
 const hasDependencies = computed(() => {
   return (selectedMod.value?.dependencies_mods?.length > 0) || (selectedMod.value?.incompatible_mods?.length > 0) || (selectedMod.value?.load_before_mods?.length > 0) || (selectedMod.value?.load_after_mods?.length > 0)
@@ -639,7 +658,7 @@ const hasDependencies = computed(() => {
 // 根据 mod 名字长度动态调整字体大小
 const computedFontSize = computed(() => {
   if (!selectedMod.value) return '1.25vw';
-  const text = selectedMod.value.name;
+  const text = selectedModDisplayName.value;
   if (!text) return '1.25vw';
   const length = text.length;
 
@@ -672,7 +691,8 @@ const computedFontSize0 = computed(() => {
 })
 
 const displaySourceType = computed(() => {
-  return SOURCE_TYPE_MAP[selectedMod.value.source] || selectedMod.value.source
+  const source = selectedMod.value?.source
+  return SOURCE_TYPE_MAP[source] || source || ''
 })
 
 
@@ -695,12 +715,13 @@ const displayVersions = computed(() => {
   return [`${firstVersion} - ${thirdLastVersion}`, ...lastTwoVersions];
 })
 const tooltipSaveBreaking = computed((index) => {
-  if (selectedMod.value.save_breaking === true) return '危险：注意！中途启用或停用该Mod会破坏存档！'
-  if (selectedMod.value.save_breaking === false) return '安全：该Mod不会破坏存档，可放心加入或移除。'
+  if (selectedMod.value?.save_breaking === true) return '危险：注意！中途启用或停用该Mod会破坏存档！'
+  if (selectedMod.value?.save_breaking === false) return '安全：该Mod不会破坏存档，可放心加入或移除。'
   return '未知：暂时无法知道该Mod是否会破坏存档。'
 })
 const tooltipModType = computed(() => {
-  return '模组类型：'+MOD_TYPE_MAP[selectedMod.value.mod_type]+'\n__(粗略判断)__'
+  const type = selectedMod.value?.mod_type
+  return '模组类型：' + (MOD_TYPE_MAP[type] || type || 'Unknown') + '\n__(粗略判断)__'
 })
 
 const displayNameByMod = (mod) => {
@@ -737,14 +758,29 @@ const relationVersionTooltip = (relation) => {
   return `当前版本 ${currentVersion} 不生效\n仅在 ${versionText} 生效`
 }
 
+const formatDateTime = (value, fallback = t('modDetails.timeValNone')) => {
+  if (!value) return fallback
+  return new Date(value).toLocaleString(uiFormatLocale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
 // 检查版本是否兼容
 const versionIsCompatible = (version) => {
-  // 截取版本号（只保留主版本号，如 1.2.3 截取为 1.2）
-  const game_version = profileStore.activeContext.game_version.match(/^\d+\.\d+/)?.[0] || ''
+  const game_version = getCurrentGameShortVersion()
+  if (!game_version) return true
   // 转为浮点数比较版本号，返回 true 表示兼容，false 表示不兼容
   return parseFloat(version) >= parseFloat(game_version)
 }
-const userGroups = computed(() => {return groupStore.takeGroupsByModId(selectedMod.value?.package_id);})
+const userGroups = computed(() => {
+  const packageId = selectedMod.value?.package_id
+  return packageId ? groupStore.takeGroupsByModId(packageId) : []
+})
 const toggleGroupDrop = async () => {
   showGroupDrop.value = !showGroupDrop.value
   if (showGroupDrop.value) {

@@ -77,6 +77,96 @@ class GameManager:
         return candidates[0] if candidates else ""
 
     @classmethod
+    def resolve_game_data_path(cls, install_path: str) -> str:
+        """返回 RimWorld 数据目录；macOS 兼容 `.app` bundle 布局。"""
+        root = str(install_path or "").strip()
+        if not root:
+            return ""
+
+        normalized_candidates = cls.resolve_game_data_candidates(root)
+        for path in normalized_candidates:
+            if os.path.isdir(path):
+                return path
+        return normalized_candidates[0] if normalized_candidates else ""
+
+    @classmethod
+    def resolve_game_data_candidates(cls, install_path: str) -> list[str]:
+        """返回可能的 RimWorld 数据目录候选，按优先级排序。"""
+        root = str(install_path or "").strip()
+        if not root:
+            return []
+
+        candidates = [os.path.join(root, "Data")]
+        if platform.system() == 'Darwin':
+            if root.lower().endswith('.app'):
+                candidates = [
+                    os.path.join(root, "Data"),
+                    os.path.join(root, "Contents", "Resources", "Data"),
+                ]
+            else:
+                candidates = [
+                    os.path.join(root, "RimWorldMac.app", "Data"),
+                    os.path.join(root, "RimWorldMac.app", "Contents", "Resources", "Data"),
+                    os.path.join(root, "Data"),
+                ]
+        return cls._unique_paths(candidates)
+
+    @classmethod
+    def resolve_game_version_file(cls, install_path: str) -> str:
+        """返回 RimWorld Version.txt 路径；macOS 兼容 `.app` bundle 布局。"""
+        root = str(install_path or "").strip()
+        if not root:
+            return ""
+
+        candidates = [os.path.join(root, "Version.txt")]
+        if platform.system() == 'Darwin':
+            if root.lower().endswith('.app'):
+                candidates = [
+                    os.path.join(root, "Version.txt"),
+                    os.path.join(root, "Data", "Version.txt"),
+                    os.path.join(root, "Contents", "Resources", "Data", "Version.txt"),
+                ]
+            else:
+                candidates = [
+                    os.path.join(root, "RimWorldMac.app", "Version.txt"),
+                    os.path.join(root, "RimWorldMac.app", "Data", "Version.txt"),
+                    os.path.join(root, "RimWorldMac.app", "Contents", "Resources", "Data", "Version.txt"),
+                    os.path.join(root, "Version.txt"),
+                ]
+
+        normalized_candidates = cls._unique_paths(candidates)
+        for path in normalized_candidates:
+            if os.path.isfile(path):
+                return path
+        return normalized_candidates[0] if normalized_candidates else ""
+
+    @classmethod
+    def resolve_local_mods_path(cls, install_path: str) -> str:
+        """返回游戏安装目录内的本地 Mods 目录；macOS 兼容 `.app` bundle 布局。"""
+        root = str(install_path or "").strip()
+        if not root:
+            return ""
+
+        candidates = [os.path.join(root, "Mods")]
+        if platform.system() == 'Darwin':
+            if root.lower().endswith('.app'):
+                candidates = [
+                    os.path.join(root, "Mods"),
+                    os.path.join(root, "Contents", "Resources", "Mods"),
+                ] + candidates
+            else:
+                candidates = [
+                    os.path.join(root, "RimWorldMac.app", "Mods"),
+                    os.path.join(root, "RimWorldMac.app", "Contents", "Resources", "Mods"),
+                ] + candidates
+
+        normalized_candidates = cls._unique_paths(candidates)
+        for path in normalized_candidates:
+            if os.path.isdir(path):
+                return path
+        return normalized_candidates[0] if normalized_candidates else ""
+
+    @classmethod
     def auto_detect_paths(cls):
         """
         尝试自动检测 RimWorld 的关键路径。
@@ -113,7 +203,7 @@ class GameManager:
                 paths['game_install_path'] = install_loc
             
             # 推导 Local Mods
-            local_mods = os.path.join(install_loc, "Mods")
+            local_mods = cls.resolve_local_mods_path(install_loc)
             if os.path.exists(local_mods):
                 paths['local_mods_path'] = local_mods
             
@@ -188,7 +278,7 @@ class GameManager:
     @staticmethod
     def get_game_version(game_install_path):
         """获取游戏版本号"""
-        version_file = os.path.join(game_install_path, 'Version.txt')
+        version_file = GameManager.resolve_game_version_file(game_install_path)
         if os.path.exists(version_file):
             try:
                 with open(version_file, 'r', encoding='utf-8-sig') as f: 
@@ -250,6 +340,3 @@ class GameManager:
             if install_loc and os.path.exists(install_loc):
                 return install_loc
         return None
-
-
-

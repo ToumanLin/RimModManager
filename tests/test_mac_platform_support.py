@@ -8,6 +8,8 @@ from unittest.mock import patch
 import pack_pyinstaller
 import validate_environment
 from backend.managers.mgr_files import PathChecker
+from backend.managers.mgr_game import GameManager
+from backend.managers.mgr_profile import ProfileContext
 from backend.managers.mgr_steam import SteamManager
 from backend.managers.mgr_texture_opt import ToddsEncoder, TextureOptimizationManager
 
@@ -49,6 +51,42 @@ class TestMacPathChecks(unittest.TestCase):
 
         self.assertTrue(steamcmd_result["pass"])
         self.assertTrue(todds_result["pass"])
+
+    def test_game_manager_resolves_macos_bundle_paths(self):
+        data_dir = self.temp_root / "RimWorldMac.app" / "Data"
+        fallback_data_dir = self.temp_root / "RimWorldMac.app" / "Contents" / "Resources" / "Data"
+        mods_dir = self.temp_root / "RimWorldMac.app" / "Mods"
+        data_dir.mkdir(parents=True)
+        fallback_data_dir.mkdir(parents=True)
+        mods_dir.mkdir(parents=True)
+        (self.temp_root / "RimWorldMac.app" / "Version.txt").write_text("1.6.1234", encoding="utf-8")
+
+        with patch("backend.managers.mgr_game.platform.system", return_value="Darwin"):
+            self.assertEqual(GameManager.resolve_game_data_path(str(self.temp_root)), str(data_dir))
+            self.assertEqual(GameManager.resolve_local_mods_path(str(self.temp_root)), str(mods_dir))
+            self.assertEqual(GameManager.get_game_version(str(self.temp_root)), "1.6.1234")
+
+    def test_profile_context_uses_macos_bundle_paths(self):
+        data_dir = self.temp_root / "RimWorldMac.app" / "Data"
+        fallback_data_dir = self.temp_root / "RimWorldMac.app" / "Contents" / "Resources" / "Data"
+        mods_dir = self.temp_root / "RimWorldMac.app" / "Mods"
+        data_dir.mkdir(parents=True)
+        fallback_data_dir.mkdir(parents=True)
+        mods_dir.mkdir(parents=True)
+
+        context = ProfileContext(
+            profile_id="default",
+            game_version="1.6.1234",
+            game_install_path=str(self.temp_root),
+            user_data_path="",
+            prefer_steam_launch=False,
+            use_workshop_mods=False,
+            use_self_mods=False,
+        )
+
+        with patch("backend.managers.mgr_game.platform.system", return_value="Darwin"):
+            self.assertEqual(context.game_dlc_path, str(data_dir))
+            self.assertEqual(context.local_mods_path, str(mods_dir))
 
 
 class TestMacSteamManager(unittest.TestCase):

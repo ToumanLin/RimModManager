@@ -1008,6 +1008,66 @@ class TestModAnalyzer(unittest.TestCase):
 
 
 class TestModScanner(unittest.TestCase):
+    def test_collect_mod_folders_filters_non_official_entries_in_data_dir(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        data_root = temp_root / "RimWorldMac.app" / "Data"
+        (data_root / "Core").mkdir(parents=True)
+        (data_root / "Royalty").mkdir()
+        (data_root / "Managed").mkdir()
+        (data_root / "Resources").mkdir()
+
+        context = ProfileContext(
+            profile_id="profile-a",
+            game_version="1.6.4850",
+            game_install_path=str(temp_root),
+            user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
+            use_workshop_mods=False,
+            use_self_mods=False,
+        )
+
+        scanner = ModScanner(context)
+        collected = scanner._collect_mod_folders([str(data_root)])
+
+        self.assertEqual(
+            sorted((Path(path).name, is_dlc) for path, is_dlc in collected),
+            [("Core", True), ("Royalty", True)],
+        )
+
+    def test_find_stale_dlc_snapshot_hashes_drops_wrong_mac_data_root_entries(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        install_root = temp_root / "RimWorld"
+        current_data_root = install_root / "RimWorldMac.app" / "Data"
+        legacy_data_root = install_root / "RimWorldMac.app" / "Contents" / "Resources" / "Data"
+        current_data_root.mkdir(parents=True)
+        legacy_data_root.mkdir(parents=True)
+
+        context = ProfileContext(
+            profile_id="profile-a",
+            game_version="1.6.4850",
+            game_install_path=str(install_root),
+            user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
+            use_workshop_mods=False,
+            use_self_mods=False,
+        )
+        scanner = ModScanner(context)
+        snapshots = {
+            "core": {"path": str(current_data_root / "Core")},
+            "managed": {"path": str(legacy_data_root / "Managed")},
+            "resources": {"path": str(legacy_data_root / "Resources")},
+        }
+        mod_folders = [(str(current_data_root / "Core"), True)]
+
+        with patch("backend.managers.mgr_game.platform.system", return_value="Darwin"):
+            stale_hashes = scanner._find_stale_dlc_snapshot_hashes(snapshots, mod_folders)
+
+        self.assertEqual(set(stale_hashes), {"managed", "resources"})
+
     def test_dlc_without_package_id_uses_fallback_id(self):
         temp_root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)

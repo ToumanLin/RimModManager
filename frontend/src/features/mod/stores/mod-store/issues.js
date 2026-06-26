@@ -56,8 +56,8 @@ export const useModIssues = ({
       }
 
       // B. 版本支持检查
-      if (profileStore.activeContext.game_version) {
-        const gameVerMajor = profileStore.activeContext.game_version.substring(0, 3)
+      const gameVerMajor = String(profileStore.activeContext?.game_version || '').substring(0, 3)
+      if (gameVerMajor) {
         if (mod.supported_versions && mod.supported_versions.length > 0 && !mod.supported_versions.includes(gameVerMajor)) {
           _add(id, ISSUE_TYPE.WARN_VERSION_MISMATCH, ISSUE_LEVEL.WARN,
             t('modIssues.versionMismatch', {

@@ -298,6 +298,15 @@ const messages = {
       createShortcutMessage: '确定要为环境 "{name}" 创建桌面快捷方式吗？\n快捷方式会按当前环境的启动方式生成，并放到桌面。\n若当前环境优先使用 Steam 启动，且游戏本体路径不同于默认环境，管理器会改写 Steam 的非 Steam 游戏快捷方式配置并在桌面生成 Steam 协议入口；该流程需要 Steam 完全退出，并在写入后重启 Steam 才会生效。\n若多个环境共用同一个游戏目录，快捷方式只能保证启动目标和参数准确，不能保证目录中的链接状态始终与该环境完全一致。',
       create: '创建',
       cancel: '取消',
+      titlePrefix: '配置',
+      titleAccent: '环境',
+      unknownVersion: '未知版本',
+      steamVersion: 'Steam',
+      workshopMods: '创意工坊',
+      managerMods: '管理器',
+      defaultProfile: '默认',
+      running: '运行',
+      collapse: '收起'
     },
     workspace: {
       backToMain: '返回主界面 (Esc)',
@@ -2940,6 +2949,16 @@ const messages = {
       createShortcutMessage: 'Create a desktop shortcut for profile "{name}"?\nThe shortcut will use the current profile launch mode and be placed on the desktop.\nIf the current profile prefers Steam launch and the game executable path differs from the default profile, the manager will rewrite Steam non-Steam game shortcut config and create a Steam protocol desktop entry. Steam must be fully closed for this flow and restarted after writing.\nIf multiple profiles share the same game folder, the shortcut can only guarantee the launch target and arguments. It cannot guarantee that links in the folder always exactly match that profile.',
       create: 'Create',
       cancel: 'Cancel',
+      titlePrefix: 'Configuration',
+      titleAccent: 'Profiles',
+      unknownVersion: 'Unknown Version',
+      steamVersion: 'Steam',
+      workshopMods: 'WorkshopMod',
+      managerMods: 'ManagerMod',
+      defaultProfile: 'Default',
+      running: 'Running',
+      collapse: 'Collapse',
+
     },
     workspace: {
       backToMain: 'Back to main screen (Esc)',

@@ -7,7 +7,10 @@ export const useModSelection = ({
   takeModById,
 } = {}) => {
   const selectedIds = ref([])         // 已选中的 Mod ID
-  const lastSelectedMod = ref(null)   // 最后选中的 Mod 对象
+  const lastSelectedToken = ref('')   // 最后选中的 Mod Token
+  const lastSelectedMod = computed(() => (
+    lastSelectedToken.value ? takeModById(lastSelectedToken.value) : null
+  ))
   const currentTargetId = ref('')     // 当前目标 ID (查找定位用)
   const isDraggingMod = ref(false)    // 是否正在拖动模组项
 
@@ -72,6 +75,7 @@ export const useModSelection = ({
   // 清除选择
   const clearSelection = () => {
     selectedIds.value = []
+    lastSelectedToken.value = ''
   }
 
   // 选择 Mod（支持联锁自动多选 & 智能排序）
@@ -85,7 +89,7 @@ export const useModSelection = ({
     const inputIds = Array.isArray(ids) ? ids : [ids]
     if (inputIds.length === 0) {
       selectedIds.value = []
-      lastSelectedMod.value = null
+      lastSelectedToken.value = ''
       return
     }
 
@@ -136,14 +140,15 @@ export const useModSelection = ({
     if (lastId) {
       // 检查 lastId 是否在最终结果中。
       const target = result.find(id => normalizeListToken(id) === normalizeListToken(lastId))
-      lastSelectedMod.value = target ? takeModById(target) : takeModById(result[result.length - 1])
+      lastSelectedToken.value = target || result[result.length - 1] || ''
     } else {
-      lastSelectedMod.value = takeModById(result[result.length - 1])
+      lastSelectedToken.value = result[result.length - 1] || ''
     }
   }
 
   return {
     selectedIds,
+    lastSelectedToken,
     lastSelectedMod,
     currentTargetId,
     isDraggingMod,

@@ -141,6 +141,7 @@ export const useModStore = defineStore('mods', () => {
 
   const {
     selectedIds,
+    lastSelectedToken,
     lastSelectedMod,
     currentTargetId,
     isDraggingMod,
@@ -559,11 +560,10 @@ export const useModStore = defineStore('mods', () => {
     })
     allModsMap.value = tempMap
     disabledMods.value = Array.isArray(data.disabled_mods) ? data.disabled_mods.filter(mod => mod?.path_hash) : []
-    if (lastSelectedMod.value) {
-      const lastToken = lastSelectedMod.value.active_package_token || lastSelectedMod.value.package_id
-      lastSelectedMod.value = takeModById(lastToken) || (selectedIds.value.length > 0
-        ? takeModById(selectedIds.value[selectedIds.value.length - 1])
-        : null)
+    if (lastSelectedToken.value) {
+      lastSelectedToken.value = takeModById(lastSelectedToken.value)
+        ? lastSelectedToken.value
+        : (selectedIds.value[selectedIds.value.length - 1] || '')
     }
     if (!preserveListState) {
       tempIds.value = persistTempList
@@ -589,6 +589,9 @@ export const useModStore = defineStore('mods', () => {
     savedTempIds.value = []
     activeLoadModifyTime.value = 0
     activeLoadVersionToken.value = {}
+    lastSelectedToken.value = ''
+    currentTargetId.value = ''
+    clearSelection()
     clearInstallSourceHints()
     dismissedUnavailableIds.clear()
     dataVersion.value++
@@ -621,10 +624,8 @@ export const useModStore = defineStore('mods', () => {
       currentTargetId.value = ''
       changed = true
     }
-    if (normalizedIdSet.has(normalizeCanonicalId(lastSelectedMod.value?.active_package_token || lastSelectedMod.value?.package_id))) {
-      lastSelectedMod.value = selectedIds.value.length > 0
-        ? takeModById(selectedIds.value[selectedIds.value.length - 1])
-        : null
+    if (normalizedIdSet.has(normalizeCanonicalId(lastSelectedToken.value))) {
+      lastSelectedToken.value = selectedIds.value[selectedIds.value.length - 1] || ''
       changed = true
     }
 
@@ -657,10 +658,8 @@ export const useModStore = defineStore('mods', () => {
       currentTargetId.value = ''
       changed = true
     }
-    if (normalizedIdSet.has(normalizeCanonicalId(lastSelectedMod.value?.active_package_token || lastSelectedMod.value?.package_id))) {
-      lastSelectedMod.value = selectedIds.value.length > 0
-        ? takeModById(selectedIds.value[selectedIds.value.length - 1])
-        : null
+    if (normalizedIdSet.has(normalizeCanonicalId(lastSelectedToken.value))) {
+      lastSelectedToken.value = selectedIds.value[selectedIds.value.length - 1] || ''
       changed = true
     }
 
@@ -730,10 +729,9 @@ export const useModStore = defineStore('mods', () => {
       if (currentTargetId.value && switchableIds.has(normalizeCanonicalId(currentTargetId.value))) {
         currentTargetId.value = buildCoexistenceListToken(currentTargetId.value, targetSource)
       }
-      if (lastSelectedMod.value) {
-        const activeToken = lastSelectedMod.value.active_package_token || lastSelectedMod.value.package_id
-        if (switchableIds.has(normalizeCanonicalId(activeToken))) {
-          lastSelectedMod.value = takeModById(buildCoexistenceListToken(activeToken, targetSource))
+      if (lastSelectedToken.value) {
+        if (switchableIds.has(normalizeCanonicalId(lastSelectedToken.value))) {
+          lastSelectedToken.value = buildCoexistenceListToken(lastSelectedToken.value, targetSource)
         }
       }
     })
@@ -1405,7 +1403,7 @@ export const useModStore = defineStore('mods', () => {
     // 状态
     allModsMap, dataVersion, inactiveIds, tempIds, activeIds, disabledMods, disabledPathHashes, interlocksMap, savedInactiveIds, savedTempIds, interlockDetailsMap,
     savedActiveIds, activeLoadModifyTime, activeLoadVersionToken, conflictList, coexistenceList,
-    selectedIds, lastSelectedMod, currentTargetId, isDraggingMod,
+    selectedIds, lastSelectedToken, lastSelectedMod, currentTargetId, isDraggingMod,
     listHistoryUndoStack, listHistoryRedoStack, isApplyingListHistory,
 
     // 派生状态

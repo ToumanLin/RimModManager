@@ -32,15 +32,17 @@ from backend.scanner.parser_xml import ModXMLParser
 from backend.scanner.analyzer import ModAnalyzer
 from backend.scanner.parser_dlc import DLCParser
 from backend.managers.mgr_files import FileManager
+from backend.managers.mgr_game import GameManager
 from backend.managers.mgr_mod_residue import ModResidueManager
 from backend.utils.profile_runtime import resolve_profile_runtime_capabilities
 from backend.managers.mgr_steam import SteamManager
 from backend.settings import TOOL_MODS_DIR, settings
-from backend.utils.constants import normalize_language_codes
+from backend.utils.constants import RIMWORLD_DLC_OPTIONS, normalize_language_codes
 from backend.utils.logger import logger # 引入日志
 from backend.utils.event_bus import EventBus # 引入事件总线
 
 GIT_REPO_SOURCE_HOSTS = {"github.com", "gitlab.com", "gitgud.io"}
+OFFICIAL_DLC_DIR_NAMES = {str(item.get("label", "")).strip().lower() for item in RIMWORLD_DLC_OPTIONS}
 
 def _is_git_repo_source_url(value: str) -> bool:
     try:
@@ -153,19 +155,12 @@ class ModScanner:
                     message=t("scanner.indexing_files"),
                     metrics={'stage': 'indexing', 'current': 0, 'total': 0, 'title': t("scanner.title")},
                 )
-            mod_folders = [] # [(folder_path, is_dlc), ...]
-            for base_path in valid_paths:
-                try:
-                    # 判断是否是 DLC 目录 (Data)
-                    is_data_dir = (os.path.basename(base_path).lower() == 'data')
-                    with os.scandir(base_path) as it:
-                        for entry in it:
-                            if entry.is_dir():
-                                # 遇到链接生成目录直接跳过，防止无限递归和重复
-                                if entry.name.startswith(FileManager.LINK_PREFIX): continue
-                                mod_folders.append((entry.path, is_data_dir))
-                except OSError as e:
-                    logger.warning(f"无法访问路径 {base_path}: {e}")
+            mod_folders = self._collect_mod_folders(valid_paths) # [(folder_path, is_dlc), ...]
+            stale_dlc_hashes = self._find_stale_dlc_snapshot_hashes(existing_snapshots, mod_folders)
+            if stale_dlc_hashes:
+                ModMaintenanceDAO.delete_mod_records(stale_dlc_hashes)
+                for path_hash in stale_dlc_hashes:
+                    existing_snapshots.pop(path_hash, None)
             total_count = len(mod_folders)
             # 优化：根据总数动态决定发送频率
             report_interval = max(1, total_count // 50) 
@@ -350,6 +345,58 @@ class ModScanner:
             self._current_task_id = None
             # 释放线程绑定的数据库连接
             if not db.is_closed(): db.close()
+
+    def _collect_mod_folders(self, valid_paths: list[str]) -> list[tuple[str, bool]]:
+        mod_folders: list[tuple[str, bool]] = []
+        for base_path in valid_paths:
+            try:
+                is_data_dir = (os.path.basename(base_path).lower() == 'data')
+                with os.scandir(base_path) as it:
+                    for entry in it:
+                        if not entry.is_dir():
+                            continue
+                        if entry.name.startswith(FileManager.LINK_PREFIX):
+                            continue
+                        if is_data_dir and entry.name.lower() not in OFFICIAL_DLC_DIR_NAMES:
+                            continue
+                        mod_folders.append((entry.path, is_data_dir))
+            except OSError as e:
+                logger.warning(f"无法访问路径 {base_path}: {e}")
+        return mod_folders
+
+    def _find_stale_dlc_snapshot_hashes(self, snapshots: dict[str, dict[str, Any]], mod_folders: list[tuple[str, bool]]) -> list[str]:
+        current_dlc_root = os.path.normpath(str(self.context.game_dlc_path or "")).lower()
+        if not current_dlc_root:
+            return []
+
+        candidate_roots = {
+            os.path.normpath(path).lower()
+            for path in GameManager.resolve_game_data_candidates(self.context.game_install_path)
+            if path
+        }
+        if not candidate_roots:
+            return []
+
+        valid_dlc_paths = {
+            os.path.normpath(path).lower()
+            for path, is_dlc in mod_folders
+            if is_dlc
+        }
+        stale_hashes: list[str] = []
+        for path_hash, snapshot in snapshots.items():
+            raw_path = str(snapshot.get("path") or "").strip()
+            if not raw_path:
+                continue
+            normalized_path = os.path.normpath(raw_path).lower()
+            parent_root = os.path.normpath(os.path.dirname(raw_path)).lower()
+            folder_name = os.path.basename(raw_path).strip().lower()
+            if parent_root not in candidate_roots:
+                continue
+            if normalized_path in valid_dlc_paths:
+                continue
+            if parent_root != current_dlc_root or folder_name not in OFFICIAL_DLC_DIR_NAMES:
+                stale_hashes.append(path_hash)
+        return stale_hashes
 
     def _handle_interruption(self, task_id: str, emit_events: bool = True):
         """处理中断后的清理和通知"""

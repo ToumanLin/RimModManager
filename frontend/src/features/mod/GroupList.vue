@@ -598,7 +598,7 @@ const openGroupModContextMenu = async (event, row) => {
   const clickedId = normalizeGroupModId(row?.id)
   const ids = await selectContextIds(resolveContextModIds(clickedId, row?.group_id), row?.group_id)
   const groupIds = getNormalizedGroupModIds(row?.group)
-  modStore.lastSelectedMod = modStore.takeModById(clickedId)
+  modStore.lastSelectedToken = clickedId
   menuStore.open(event, buildGroupModMenuItems({
     ids,
     clickedId,

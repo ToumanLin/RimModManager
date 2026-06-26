@@ -151,16 +151,16 @@
                     <span class="text-text-dim">思考过程</span>
                   </template>
                 </summary>
-                <div v-viewer.rebuild="imageViewerOptions" class="prose prose-sm prose-invert max-w-none select-text text-text-dim mt-2" v-html="renderMarkdown(msg.reasoning)"></div>
+                <SafeViewerBlock :options="imageViewerOptions" rebuild class="prose prose-sm prose-invert max-w-none select-text text-text-dim mt-2" v-html="renderMarkdown(msg.reasoning)"></SafeViewerBlock>
               </details>
 
-              <div v-viewer.rebuild="imageViewerOptions" class="prose prose-sm prose-invert prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5 max-w-none select-text text-wrap break-all relative">
+              <SafeViewerBlock :options="imageViewerOptions" rebuild class="prose prose-sm prose-invert prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5 max-w-none select-text text-wrap break-all relative">
                 <div v-if="shouldShowAssistantLoading(msg)" class="flex items-center gap-2 py-1 text-text-dim">
                   <LoaderCircle class="w-4 h-4 animate-spin text-accent-special shrink-0"></LoaderCircle>
                   <span class="text-xs font-mono">正在生成回答...</span>
                 </div>
                 <div v-else-if="hasAssistantText(msg)" v-html="renderMarkdown(msg.content)"></div>
-              </div>
+              </SafeViewerBlock>
 
               <div v-if="shouldShowAssistantUsage(msg)" class="mt-3 pt-3 border-t border-border-base/10 text-[0.7rem] font-mono text-text-dim space-y-2">
                 <div class="flex flex-wrap gap-5">
@@ -277,6 +277,7 @@ import CommonSelect from '../../shared/components/input/CommonSelect.vue'
 import CommonNumber from '../../shared/components/input/CommonNumber.vue'
 import AiActionCard from './AiActionCard.vue'
 import { imageViewerOptions } from '../../shared/lib/domEffects'
+import SafeViewerBlock from '../../shared/components/SafeViewerBlock.vue'
 import { renderMarkdownContent } from '../../shared/lib/markdown'
 import { createActionExecutorRegistry, createActionPresentationRuntime } from './ai-store/runtime/aiActionRuntime.js'
 import {

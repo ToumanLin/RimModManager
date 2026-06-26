@@ -53,10 +53,10 @@
         <FixedPopover :is-open="collectionDescriptionPopoverOpen" :trigger-ref="collectionDescriptionButtonRef" width="50vw"
           :min-width="320" max-width="50vw" max-height="70vh" :offset="8" @request-close="closeCollectionDescription" >
           <div class="flex max-h-[70vh] w-full min-w-80 overflow-hidden rounded-xl border border-border-base/18 bg-bg-surface/98 text-text-main">
-            <div v-viewer.rebuild="imageViewerOptions" class="custom-scrollbar overflow-y-auto p-3.5 cursor-text text-[0.78rem] leading-[1.65] text-text-soft prose prose-invert prose-sm max-w-none select-text prose-img:rounded-xl prose-a:text-accent-primary">
+            <SafeViewerBlock :options="imageViewerOptions" rebuild class="custom-scrollbar overflow-y-auto p-3.5 cursor-text text-[0.78rem] leading-[1.65] text-text-soft prose prose-invert prose-sm max-w-none select-text prose-img:rounded-xl prose-a:text-accent-primary">
               <div v-if="collectionDescriptionHtml" v-html="collectionDescriptionHtml"></div>
               <div v-else class="text-text-dim italic">{{ t('workspace.collection.noDescription') }}</div>
-            </div>
+            </SafeViewerBlock>
           </div>
         </FixedPopover>
         <!-- 内容列表 -->
@@ -298,6 +298,7 @@ import { isOfficialPackageId } from '../../mod/lib/packageScope'
 import { formatDate } from '../../../shared/lib/format'
 import { cleanRichText, parseUnityRichText } from '../../../shared/lib/text'
 import { imageViewerOptions } from '../../../shared/lib/domEffects'
+import SafeViewerBlock from '../../../shared/components/SafeViewerBlock.vue'
 import FixedPopover from '../../../shared/components/popover/FixedPopover.vue'
 import TagSearchInput from '../../../shared/components/tag-search/TagSearchInput.vue'
 import { createTagSearchController, TAG_FIELD_TYPES } from '../../../shared/components/tag-search/tagSearchEngine'

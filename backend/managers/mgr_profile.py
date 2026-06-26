@@ -46,11 +46,11 @@ class ProfileContext:
     @property
     def local_mods_path(self):
         install_path = str(self.game_install_path or "").strip()
-        return str(Path(install_path) / "Mods") if install_path else ""
+        return GameManager.resolve_local_mods_path(install_path) if install_path else ""
     @property
     def game_dlc_path(self):
         install_path = str(self.game_install_path or "").strip()
-        return str(Path(install_path) / "Data") if install_path else ""
+        return GameManager.resolve_game_data_path(install_path) if install_path else ""
     @property
     def _user_data_root(self):
         user_data_path = str(self.user_data_path or "").strip()
@@ -641,4 +641,3 @@ class ProfileManager:
             return True, "导入成功"
         except Exception as e: return False, str(e)
             
-
