@@ -57,6 +57,8 @@ COMMUNITY_RULES_PATH = RULES_DIR / "communityRules.json"    # 社区库规则路
 # 外置数据库路径
 COMMUNITY_WORKSHOP_DB_PATH = DATA_DIR / "steamDB.json"         # 社区库数据库路径
 COMMUNITY_INSTEAD_DB_PATH = DATA_DIR / "replacements.json.gz"  # 替代Mod数据库路径
+MULTIPLAYER_COMPAT_DB_PATH = DATA_DIR / "multiplayerCompatibility.json"  # Multiplayer 官方兼容表
+MP_COMPAT_PACKAGE_IDS_PATH = DATA_DIR / "mpCompatPackageIds.json"         # Multiplayer Compatibility 适配包名表
 GIT_PROVIDER_CATALOG_DIR = DATA_DIR / "git_catalogs"  # Git 推荐清单缓存目录
 
 
@@ -291,7 +293,8 @@ class AppConfig:
     skip_language_pack_alias_generation: bool = True  # 批量生成别名备注时是否跳过语言包
     regular_mods_follow_dependencies: bool = False # 是否让普通模组贴紧其最后一个依赖目标
     language_packs_follow_targets: bool = False # 是否让语言包贴紧其最后一个前置/依赖目标
-    
+    enable_multiplayer_compatibility_check: bool = False # 是否显示 Multiplayer 联机兼容性
+
     # --- 社区设置 ---
     community_workshop_db_url: str = "https://github.com/RimSort/Steam-Workshop-Database/blob/main/steamDB.json"
     community_workshop_db_path: str = str(COMMUNITY_WORKSHOP_DB_PATH)
@@ -299,6 +302,10 @@ class AppConfig:
     community_instead_db_path: str = str(COMMUNITY_INSTEAD_DB_PATH)
     community_rules_url: str = "https://github.com/RimSort/Community-Rules-Database/blob/main/communityRules.json"
     community_rules_path: str = str(COMMUNITY_RULES_PATH)
+    multiplayer_compatibility_url: str = "https://bot.rimworldmultiplayer.com/mod-compatibility?version=1.1&format=metadata"
+    multiplayer_compatibility_path: str = str(MULTIPLAYER_COMPAT_DB_PATH)
+    mp_compat_package_ids_url: str = "https://github.com/rwmt/Multiplayer-Compatibility/archive/refs/heads/master.zip"
+    mp_compat_package_ids_path: str = str(MP_COMPAT_PACKAGE_IDS_PATH)
     git_provider_catalog_url: str = "RJW|https://gitgud.io/api/v4/projects/AblativeAbsolute%2Flibidinous_loader_providers/packages/generic/provider_nopin/latest/providers.json"
     user_rules_path: str = str(USER_RULES_PATH)
     enable_steam_enhanced_api: bool = False  # 是否启用 Steam Web API 增强工坊搜索
@@ -664,6 +671,8 @@ class SettingsManager:
             "community_workshop_db_path": str(COMMUNITY_WORKSHOP_DB_PATH),
             "community_instead_db_path": str(COMMUNITY_INSTEAD_DB_PATH),
             "community_rules_path": str(COMMUNITY_RULES_PATH),
+            "multiplayer_compatibility_path": str(MULTIPLAYER_COMPAT_DB_PATH),
+            "mp_compat_package_ids_path": str(MP_COMPAT_PACKAGE_IDS_PATH),
             "user_rules_path": str(USER_RULES_PATH),
         }
         

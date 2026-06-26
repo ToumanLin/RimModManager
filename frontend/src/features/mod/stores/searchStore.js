@@ -53,6 +53,13 @@ export const useSearchStore = defineStore('search', () => {
     // 支持信息
     supported_versions: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: '支持版本' },
     supported_languages: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: '支持语言' },
+    multiplayer_compat: {
+      type: TAG_FIELD_TYPES.LIST,
+      suggest: true,
+      label: '联机模组兼容性',
+      alias: ['联机模组兼容性', '联机兼容', 'mp兼容'],
+      getter: (mod) => mod?.multiplayer_compat?.search_values || [],
+    },
     ignored_issues: { type: TAG_FIELD_TYPES.LIST, suggest: true, label: '忽略问题' },
 
     // 状态判断

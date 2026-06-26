@@ -107,6 +107,8 @@ export const useModIssues = ({
         activeIndexMap.set(canonicalId, i)
         activeTokenMap.set(canonicalId, tokenId)
     }
+    const multiplayerActive = activeIndexMap.has('rwmt.multiplayer')
+    const mpCompatActive = activeIndexMap.has('rwmt.multiplayercompatibility')
     // 快速判定任意两个 Mod 之间的合法顺序
     // isMustBefore.get(A)?.has(B) 为 true，表示规则要求 A 必须在 B 之前
     const isMustBefore = new Map()
@@ -138,6 +140,21 @@ export const useModIssues = ({
       const currentId = normalizeCanonicalId(activeIds.value[i])
       const mod = takeModById(activeIds.value[i])
       if (!mod || mod.isMissing) continue // X. 文件缺失已在全局检查中处理，这里简单跳过
+      const mpCompat = mod.multiplayer_compat || {}
+      if (multiplayerActive && mpCompat.enabled && mpCompat.effective_status > 0 && mpCompat.effective_status < 4) {
+        const hasPatch = !!mpCompat.has_mp_compat_patch
+        const patchEffective = !!mpCompat.mp_compat_effective || (hasPatch && mpCompatActive)
+        if (!patchEffective) {
+          const label = mpCompat.effective_label || '未知'
+          const level = mpCompat.effective_status === 1 ? ISSUE_LEVEL.ERROR : ISSUE_LEVEL.WARN
+          const fixText = hasPatch ? '；可启用 Multiplayer Compatibility 辅助修正' : ''
+          _add(currentToken, ISSUE_TYPE.WARN_MULTIPLAYER_COMPATIBILITY, level,
+            `^^联机兼容性^^：Multiplayer 官方兼容等级为 [[${label}]]${fixText}`)
+        }
+      } else if (multiplayerActive && mpCompat.enabled && mpCompat.has_mp_compat_patch && !mpCompatActive) {
+        _add(currentToken, ISSUE_TYPE.WARN_MULTIPLAYER_COMPATIBILITY, ISSUE_LEVEL.INFO,
+          '联机兼容性：该模组存在 Multiplayer Compatibility 对应修正，启用辅助模组后可生效')
+      }
       if(!mod.rules) continue // 如果没有 rules 数据（可能未初始化），跳过
 
       // const rules = mod.rules ，这是后端计算好的 { dependencies, load_after, incompatible ... }

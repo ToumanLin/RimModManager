@@ -455,6 +455,8 @@ export const useMaintenanceActions = ({
         community_rules: '更新社区规则库',
         workshop_db: '更新社区工坊数据库',
         instead_db: '更新替代 Mod 数据库',
+        multiplayer_compatibility: '更新 Multiplayer 兼容表',
+        mp_compat_package_ids: '生成 Multiplayer Compatibility 适配缓存',
         git_provider_catalog: '刷新 Git 推荐清单',
       }
       if (type === 'git_provider_catalog') {
@@ -464,7 +466,7 @@ export const useMaintenanceActions = ({
       const res = await window.pywebview.api.update_external_db(type)
       if (checkResult(res, workNameMap[type] || `更新外置数据库 ${type}`, false, { silent })) {
         const task_id = res.data.task_id
-        await waitForDownload(task_id)
+        if (task_id) await waitForDownload(task_id)
         // 重新获取数据
         const historyLabel = `${workNameMap[type] || '外置数据库更新'}后同步模组数据`
         if (refreshModsData) await refreshModsData(historyLabel)

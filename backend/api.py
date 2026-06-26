@@ -139,6 +139,7 @@ from backend.managers.mgr_data_bundle import DataBundleManager
 from backend.managers.mgr_mod_package import ModPackageManager
 from backend.managers.mgr_texture_opt import TextureOptimizationManager
 from backend.managers.mgr_recommendation_export import RecommendationExportManager
+from backend.managers.mgr_multiplayer_compat import MultiplayerCompatibilityManager
 from backend.load_order.language_pack_ownership import resolve_language_pack_ownership_for_mods
 from backend.load_order.package_tokens import parse_package_token
 from backend.browser_runtime import build_sub_browser_target_url
@@ -430,6 +431,7 @@ class API:
         )
         # 推荐导出只负责生成分享内容，和模组包导出保持独立，避免两类导出互相影响。
         self.recommendation_export_mgr = RecommendationExportManager()
+        self.multiplayer_compat_mgr = MultiplayerCompatibilityManager()
         self.browser_window = SubBrowserManager(self)
         self.update_mgr = UpdateManager()
         self.texture_mgr = TextureOptimizationManager()
@@ -1218,6 +1220,7 @@ class API:
             "upgrade_context": self._upgrade_context.copy(),
             "runtime_session": self._get_runtime_session_data(),
             "user_themes": user_themes,
+            "multiplayer_compatibility_state": {},
         }
         if not self.active_context or not self.active_context.is_healthy: return ApiResponse.success(result)
         
@@ -1285,6 +1288,12 @@ class API:
                 mod['replacement'] = replacements_map[mod['workshop_id']]
             else:
                 mod['replacement'] = None
+
+        active_ids_for_compat = active_load_order.get("active_mods", []) if isinstance(active_load_order, dict) else []
+        result["multiplayer_compatibility_state"] = self.multiplayer_compat_mgr.enrich_mods(
+            [*context_mods, *disabled_mods],
+            active_ids_for_compat,
+        )
         
         
         result.update({
@@ -5482,6 +5491,22 @@ class API:
                     "start_message": "替代 Mod 数据库开始更新",
                     "reload": self._reload_instead_database,
                 },
+                "multiplayer_compatibility": {
+                    "path": settings.config.multiplayer_compatibility_path,
+                    "url": settings.config.multiplayer_compatibility_url,
+                    "success_message": "Multiplayer 兼容表更新完毕！",
+                    "error_message": "Multiplayer 兼容表更新失败！",
+                    "start_message": "Multiplayer 兼容表开始更新",
+                    "reload": self.multiplayer_compat_mgr.format_official_compatibility_file,
+                },
+                "mp_compat_package_ids": {
+                    "path": settings.config.mp_compat_package_ids_path,
+                    "url": settings.config.mp_compat_package_ids_url,
+                    "success_message": "Multiplayer Compatibility 适配缓存生成完毕！",
+                    "error_message": "Multiplayer Compatibility 适配缓存生成失败！",
+                    "start_message": "Multiplayer Compatibility 适配缓存开始生成",
+                    "generator": self.multiplayer_compat_mgr.update_mp_compat_package_ids,
+                },
             }
             spec = dataset_specs.get(data_type)
             if not spec:
@@ -5503,6 +5528,15 @@ class API:
                 os.makedirs(file_folder, exist_ok=True)
 
             logger.info("开始更新外部数据。type=%s url=%s target=%s", data_type, url, full_path)
+
+            generator = spec.get("generator")
+            if callable(generator):
+                result = generator(source_url=url, target_path=full_path)
+                EventBus.send_toast(str(spec["success_message"]), type="success")
+                return ApiResponse.success(
+                    data={"completed": True, **(result if isinstance(result, dict) else {})},
+                    message=str(spec["success_message"]),
+                )
 
             def on_db_ready(task):
                 try:

@@ -61,6 +61,7 @@ export const ISSUE_TYPE = {
   WARN_INACTIVE_LANGUAGE_PACK: 'warn_inactive_language_pack', // 语言包未启用
   WARN_UNKNOWN_TARGET: 'warn_unknown_target',       // 未知指向对象
   WARN_INACTIVE_TARGET: 'warn_inactive_target',     // 指向对象未启用
+  WARN_MULTIPLAYER_COMPATIBILITY: 'warn_multiplayer_compatibility', // Multiplayer 联机兼容性
 
   INFO_ALTERNATIVE_USED: 'info_alternative_used',   // 依赖替代
 
@@ -82,6 +83,7 @@ export const ISSUE_TITLE_MAP = {
   'warn_inactive_language_pack': '语言包未启用',
   'warn_unknown_target': '语言包指向未知',
   'warn_inactive_target': '语言包指向未启用',
+  'warn_multiplayer_compatibility': '联机兼容性',
 
   'default': '其他问题'
 

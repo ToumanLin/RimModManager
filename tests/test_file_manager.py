@@ -11,6 +11,7 @@ from unittest.mock import patch
 from PIL import Image
 
 from backend.managers.mgr_files import FileManager, LocalAssetHandler
+from backend.utils.tools import normalize_path_for_storage
 
 
 class TestFileManager(unittest.TestCase):
@@ -113,6 +114,47 @@ class TestFileManager(unittest.TestCase):
             self.assertTrue((dst / "old.txt").is_file())
             self.assertFalse((dst / "About" / "About.xml").exists())
             self.assertFalse(list(temp_path.glob("dst.__sync_*")))
+
+    def test_localize_complete_reports_size_check_paths(self):
+        class ImmediateThread:
+            def __init__(self, target, *args, **kwargs):
+                self.target = target
+
+            def start(self):
+                self.target()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            src = temp_path / "src"
+            local_root = temp_path / "local"
+            src.mkdir()
+            local_root.mkdir()
+            (src / "About").mkdir()
+            (src / "About" / "About.xml").write_text("<ModMetaData />", encoding="utf-8")
+
+            events = []
+            with patch("backend.managers.mgr_files.threading.Thread", ImmediateThread), \
+                 patch("backend.managers.mgr_files.EventBus.emit", side_effect=lambda name, data=None: events.append((name, data))), \
+                 patch("backend.managers.mgr_files.EventBus.emit_progress"), \
+                 patch("backend.managers.mgr_files.EventBus.resume"):
+                FileManager.localize_workshop_mods([
+                    {
+                        "path": str(src),
+                        "workshop_id": "123456",
+                        "name": "Test Mod",
+                        "package_id": "test.mod",
+                    }
+                ], str(local_root))
+
+            complete_payloads = [payload for name, payload in events if name == "localize-complete"]
+            self.assertEqual(len(complete_payloads), 1)
+            payload = complete_payloads[0]
+            expected_dst = local_root / "_123456_"
+            expected_source = normalize_path_for_storage(str(src))
+            expected_success = normalize_path_for_storage(str(expected_dst))
+            self.assertEqual(payload["source_paths"], [expected_source])
+            self.assertEqual(payload["success_paths"], [expected_success])
+            self.assertEqual(payload["size_check_paths"], [expected_source, expected_success])
 
 
 if __name__ == "__main__":

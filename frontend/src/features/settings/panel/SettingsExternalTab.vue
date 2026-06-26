@@ -36,16 +36,37 @@
                       </button>
                     </div>
 
-                    <CommonPathInput label="用户规则路径" v-model="formData.user_rules_path" @browse="handleBrowse('user_rules_path', ['JSON Files (*.json)'])" :check="formData.check_info?.user_rules_path" />
+                    <CommonPathInput label="用户规则路径" v-model="formData.user_rules_path" @browse="handleBrowse('user_rules_path', ['JSON Files (*.json)'])" :check="formData.check_info?.user_rules_path" description="本地用户规则文件，用来保存自定义排序、依赖和冲突规则。" />
                     <div class="flex items-end gap-1.5">
-                        <CommonInput label="社区规则库 URL" v-model="formData.community_rules_url" />
+                        <CommonInput label="社区规则库 URL" v-model="formData.community_rules_url" description="RimSort 维护的规则库文件，用来补充排序、依赖和冲突规则。" />
                       <button @click="ruleStore.updateCommunity()" :disabled="ruleStore.isLoading" v-tooltip="ruleStore.isLoading ? '正在下载更新社区规则' : '下载更新 社区规则'" :class="ruleStore.isLoading ? 'rmm-action-disabled' : ''"
                         class="shrink-0 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
                         <LoaderCircle v-if="ruleStore.isLoading" class="size-5 animate-spin" />
                         <Download v-else class="size-5" />
                       </button>
                     </div>
-                    <CommonPathInput label="社区规则库路径" v-model="formData.community_rules_path" @browse="handleBrowse('community_rules_path', ['JSON Files (*.json)'])" :check="formData.check_info?.community_rules_path" />
+                    <CommonPathInput label="社区规则库路径" v-model="formData.community_rules_path" @browse="handleBrowse('community_rules_path', ['JSON Files (*.json)'])" :check="formData.check_info?.community_rules_path" description="社区规则库的本地缓存文件。" />
+                    
+                    <div class="py-2 pt-2 place-self-center w-[90%] border-b border-border-base/10"></div>
+                    <div class="flex items-end gap-1.5">
+                      <CommonInput label="工坊数据库 URL" v-model="formData.community_workshop_db_url" description="工坊信息数据库，用来补充模组名称、作者和简介。来源：社区缓存文件。" />
+                      <button @click="updateExternalDB('workshop_db')" :disabled="downloadState['workshop_db']" v-tooltip="downloadState['workshop_db'] ? '正在下载更新社区工坊数据库' : '下载更新 社区工坊数据库'" :class="downloadState['workshop_db'] ? 'rmm-action-disabled' : ''"
+                        class="shrink-0 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
+                        <LoaderCircle v-if="downloadState['workshop_db']" class="size-5 animate-spin" />
+                        <Download v-else class="size-5" />
+                      </button>
+                    </div>
+                    <CommonPathInput label="工坊数据库路径" v-model="formData.community_workshop_db_path" @browse="handleBrowse('community_workshop_db_path', ['JSON Files (*.json)'])" :check="formData.check_info?.community_workshop_db_path" description="工坊信息数据库的本地缓存文件。" />
+                    <div class="py-2 pt-2 place-self-center w-[90%] border-b border-border-base/10"></div>
+                    <div class="flex items-end gap-1.5">
+                      <CommonInput label="替代 Mod 数据库 URL" v-model="formData.community_instead_db_url" description="替代 Mod 数据库，用来提示失效、重制或推荐替代项。来源：社区缓存文件。" />
+                      <button @click="updateExternalDB('instead_db')" :disabled="downloadState['instead_db']" v-tooltip="downloadState['instead_db'] ? '正在下载更新社区替代 Mod 数据库' : '下载更新 社区替代 Mod 数据库'" :class="downloadState['instead_db'] ? 'rmm-action-disabled' : ''"
+                        class="shrink-0 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
+                        <LoaderCircle v-if="downloadState['instead_db']" class="size-5 animate-spin" />
+                        <Download v-else class="size-5" />
+                      </button>
+                    </div>
+                    <CommonPathInput label="替代 Mod 数据库路径" v-model="formData.community_instead_db_path" @browse="handleBrowse('community_instead_db_path', ['JSON Files (*.json;*.gz)'])" :check="formData.check_info?.community_instead_db_path" description="替代 Mod 数据库的本地缓存文件。" />
                     <div class="py-2 pt-2 place-self-center w-[90%] border-b border-border-base/10"></div>
                     <div class="flex items-center gap-1.5">
                       <div class="w-full">
@@ -58,6 +79,7 @@
                         <textarea v-model="formData.git_provider_catalog_url" rows="3"
                           class="input-glass w-full resize-y px-3 py-2 font-mono text-sm text-text-main focus:outline-none"
                           placeholder="RJW|https://example.invalid/providers.json"></textarea>
+                        <p class="text-xs text-text-dim mt-1 px-1">Git 模组推荐清单，用来提供可订阅的仓库来源。</p>
                       </div>
                       <button @click="updateExternalDB('git_provider_catalog')" :disabled="downloadState['git_provider_catalog']" v-tooltip="downloadState['git_provider_catalog'] ? '正在刷新 Git 推荐清单' : '刷新 Git 推荐清单'" :class="downloadState['git_provider_catalog'] ? 'rmm-action-disabled' : ''"
                         class="shrink-0 mb-0.5 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
@@ -67,26 +89,25 @@
                     </div>
                     <div class="py-2 pt-2 place-self-center w-[90%] border-b border-border-base/10"></div>
                     <div class="flex items-end gap-1.5">
-                      <CommonInput label="工坊数据库 URL" v-model="formData.community_workshop_db_url" />
-                      <button @click="updateExternalDB('workshop_db')" :disabled="downloadState['workshop_db']" v-tooltip="downloadState['workshop_db'] ? '正在下载更新社区工坊数据库' : '下载更新 社区工坊数据库'" :class="downloadState['workshop_db'] ? 'rmm-action-disabled' : ''"
+                      <CommonInput label="联机模组兼容表 URL" v-model="formData.multiplayer_compatibility_url" description="Multiplayer 的兼容等级表，用来显示联机兼容状态。来源：官方接口。" />
+                      <button @click="updateExternalDB('multiplayer_compatibility')" :disabled="downloadState['multiplayer_compatibility']" v-tooltip="downloadState['multiplayer_compatibility'] ? '正在刷新 Multiplayer 兼容表' : '刷新 Multiplayer 兼容表'" :class="downloadState['multiplayer_compatibility'] ? 'rmm-action-disabled' : ''"
                         class="shrink-0 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
-                        <LoaderCircle v-if="downloadState['workshop_db']" class="size-5 animate-spin" />
+                        <LoaderCircle v-if="downloadState['multiplayer_compatibility']" class="size-5 animate-spin" />
                         <Download v-else class="size-5" />
                       </button>
                     </div>
-                    <CommonPathInput label="工坊数据库路径" v-model="formData.community_workshop_db_path" @browse="handleBrowse('community_workshop_db_path', ['JSON Files (*.json)'])" :check="formData.check_info?.community_workshop_db_path" />
-                    <div class="py-2 pt-2 place-self-center w-[90%] border-b border-border-base/10"></div>
+                    <CommonPathInput label="联机模组兼容表路径" v-model="formData.multiplayer_compatibility_path" @browse="handleBrowse('multiplayer_compatibility_path', ['JSON Files (*.json)'])" :check="formData.check_info?.multiplayer_compatibility_path" description="联机模组兼容表的本地缓存文件。" />
                     <div class="flex items-end gap-1.5">
-                      <CommonInput label="替代 Mod 数据库 URL" v-model="formData.community_instead_db_url" />
-                      <button @click="updateExternalDB('instead_db')" :disabled="downloadState['instead_db']" v-tooltip="downloadState['instead_db'] ? '正在下载更新社区替代 Mod 数据库' : '下载更新 社区替代 Mod 数据库'" :class="downloadState['instead_db'] ? 'rmm-action-disabled' : ''"
+                      <CommonInput label="联机兼容修正模组支持表 URL" v-model="formData.mp_compat_package_ids_url" description="Multiplayer Compatibility 的修正支持表，用来标记可由辅助模组修正的模组。来源：源码解析。" />
+                      <button @click="updateExternalDB('mp_compat_package_ids')" :disabled="downloadState['mp_compat_package_ids']" v-tooltip="downloadState['mp_compat_package_ids'] ? '正在刷新 Multiplayer Compatibility 支持表' : '刷新 Multiplayer Compatibility 支持表'" :class="downloadState['mp_compat_package_ids'] ? 'rmm-action-disabled' : ''"
                         class="shrink-0 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
-                        <LoaderCircle v-if="downloadState['instead_db']" class="size-5 animate-spin" />
+                        <LoaderCircle v-if="downloadState['mp_compat_package_ids']" class="size-5 animate-spin" />
                         <Download v-else class="size-5" />
                       </button>
                     </div>
-                    <CommonPathInput label="替代 Mod 数据库路径" v-model="formData.community_instead_db_path" @browse="handleBrowse('community_instead_db_path', ['JSON Files (*.json;*.gz)'])" :check="formData.check_info?.community_instead_db_path" />
+                    <CommonPathInput label="联机兼容修正模组支持表路径" v-model="formData.mp_compat_package_ids_path" @browse="handleBrowse('mp_compat_package_ids_path', ['JSON Files (*.json)'])" :check="formData.check_info?.mp_compat_package_ids_path" description="联机兼容修正模组支持表的本地缓存文件。" />
                     <div class="grid grid-cols-2 gap-4 pt-1">
-                      <CommonSwitch class="col-span-1" label="自动检查外部库更新" v-model="formData.enable_auto_external_data_update_check" description="按设定间隔检查社区规则库、工坊数据库、替代 Mod 数据库和 Git 推荐清单是否有更新。" />
+                      <CommonSwitch class="col-span-1" label="自动检查外部库更新" v-model="formData.enable_auto_external_data_update_check" description="按设定间隔检查规则库、工坊数据库、替代库、联机兼容数据和 Git 推荐清单是否有更新。" />
                       <CommonSwitch class="col-span-1" label="静默更新外部库" :disabled="!formData.enable_auto_external_data_update_check" :model-value="silentExternalDataUpdateEnabled" @update:modelValue="updateSilentExternalDataUpdate"
                         :description="formData.enable_auto_external_data_update_check ? '开启后，自动检查发现外部库更新时会直接刷新，不再弹窗询问；手动检查仍会让你确认。' : '需要先开启自动检查外部库更新。'" />
                       <CommonNumber class="col-span-1" label="检查间隔（天）" v-model="formData.external_data_update_check_interval_days" :step="1" :min="1" :max="365" />
@@ -118,6 +139,8 @@ const ruleStore = useRuleStore()
 const downloadState = ref({
   workshop_db: false,
   instead_db: false,
+  multiplayer_compatibility: false,
+  mp_compat_package_ids: false,
   git_provider_catalog: false,
 })
 const pendingAction = ref('')
@@ -165,6 +188,10 @@ const handleCheckExternalData = async () => {
       community_workshop_db_path: props.formData.community_workshop_db_path,
       community_instead_db_url: props.formData.community_instead_db_url,
       community_instead_db_path: props.formData.community_instead_db_path,
+      multiplayer_compatibility_url: props.formData.multiplayer_compatibility_url,
+      multiplayer_compatibility_path: props.formData.multiplayer_compatibility_path,
+      mp_compat_package_ids_url: props.formData.mp_compat_package_ids_url,
+      mp_compat_package_ids_path: props.formData.mp_compat_package_ids_path,
       git_provider_catalog_url: props.formData.git_provider_catalog_url,
     },
   }))

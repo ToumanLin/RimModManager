@@ -25,7 +25,7 @@ from backend.utils.event_bus import EventBus
 from backend.utils.constants import RIMWORLD_STEAM_APP_ID_STR, RIMWORLD_WORKSHOP_CONTENT_PARTS
 from backend.utils.logger import logger
 from backend.utils.text_decode import decode_text_bytes
-from backend.utils.tools import delete_fs_path, same_path
+from backend.utils.tools import delete_fs_path, normalize_path_for_storage, same_path
 from backend.utils.shortcuts import (
     create_shortcut,
     format_shortcut_arguments,
@@ -1052,6 +1052,26 @@ class FileManager:
 
             success_count = len(success)
             error_count = len(errors)
+            success_path_keys = {os.path.normcase(os.path.abspath(path)) for path in success}
+            success_tasks = [
+                task for task in tasks
+                if os.path.normcase(os.path.abspath(task.get('dst', ''))) in success_path_keys
+            ]
+
+            def normalize_event_paths(paths):
+                normalized_paths = []
+                seen = set()
+                for path in paths:
+                    normalized = normalize_path_for_storage(path)
+                    if not normalized or normalized in seen:
+                        continue
+                    seen.add(normalized)
+                    normalized_paths.append(normalized)
+                return normalized_paths
+
+            source_paths = normalize_event_paths(task.get('src', '') for task in success_tasks)
+            success_paths = normalize_event_paths(success)
+            size_check_paths = normalize_event_paths([*source_paths, *success_paths])
             EventBus.emit_progress(
                 task_id,
                 "localize",
@@ -1075,6 +1095,9 @@ class FileManager:
                 'errors': errors,
                 'status': final_status,
                 'title': action_title,
+                'source_paths': source_paths,
+                'success_paths': success_paths,
+                'size_check_paths': size_check_paths,
             })
         threading.Thread(target=run_task, daemon=True).start()
         return task_id

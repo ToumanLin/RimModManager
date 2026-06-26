@@ -90,6 +90,46 @@ def test_external_dataset_size_fallback_ignores_generic_etag(tmp_path):
     assert result["remote_etag"] == "not-the-local-git-blob-sha"
 
 
+def test_mp_compat_generated_cache_uses_source_etag(tmp_path):
+    path = tmp_path / "mpCompatPackageIds.json"
+    path.write_text(
+        '{"package_ids": ["example.mod"], "source": {"etag": "source-etag", "updated_at": 1777950016000}}',
+        encoding="utf-8",
+    )
+
+    manager = MaintenanceManager.__new__(MaintenanceManager)
+    manager._probe_remote_file = lambda url: {
+        "supported": True,
+        "available": True,
+        "etag": "source-etag",
+        "size": path.stat().st_size + 1000,
+        "updated_at": 1777950026000,
+    }
+
+    result = manager._check_external_dataset(
+        {
+            "data_type": "mp_compat_package_ids",
+            "name": "Multiplayer Compatibility 适配缓存",
+            "path_key": "mp_compat_package_ids_path",
+            "url_key": "mp_compat_package_ids_url",
+        },
+        {
+            "mp_compat_package_ids_path": str(path),
+            "mp_compat_package_ids_url": "https://example.invalid/source.zip",
+        },
+    )
+
+    assert result["needs_update"] is False
+    assert result["comparison_mode"] == "source_etag"
+
+
+def test_external_dataset_list_includes_multiplayer_sources():
+    data_types = {spec["data_type"] for spec in MaintenanceManager.EXTERNAL_DATASETS}
+
+    assert "multiplayer_compatibility" in data_types
+    assert "mp_compat_package_ids" in data_types
+
+
 def test_external_data_check_includes_git_provider_catalog():
     manager = MaintenanceManager.__new__(MaintenanceManager)
     manager.EXTERNAL_DATASETS = ()

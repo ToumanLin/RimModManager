@@ -54,7 +54,14 @@
               <svg v-else class="fill-current -m-0.5 size-4.5" viewBox="100 -20 420 640" xmlns="http://www.w3.org/2000/svg"><path d="M512 512L128 512C92.7 512 64 483.3 64 448L64 160C64 124.7 92.7 96 128 96L266.7 96C280.5 96 294 100.5 305.1 108.8L343.5 137.6C349 141.8 355.8 144 362.7 144L512 144C547.3 144 576 172.7 576 208L576 448C576 483.3 547.3 512 512 512zM248 304C234.7 304 224 314.7 224 328C224 341.3 234.7 352 248 352L392 352C405.3 352 416 341.3 416 328C416 314.7 405.3 304 392 304L248 304z"/></svg>
               <span v-if="canToggleCoexistSource" class="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-accent-primary shadow-sm shadow-accent-primary/60"></span>
             </button>
+            <!-- Multiplayer 联机兼容性 -->
+            <div v-if="!sectionHeader && showMultiplayerCompatBadge" :class="[`w-4 h-4 mr-0.5 shrink-0 rounded border cursor-help text-[0.65rem] leading-none font-mono tabular-nums font-black flex items-center justify-center
+              hover:scale-110 text-shadow-2xs text-shadow-black hover:shadow-bg-deep/50 transition-all`, multiplayerCompatBadgeClass]"
+              v-tooltip="multiplayerCompatTooltip">
+              {{ multiplayerCompatBadgeText }}
             </div>
+            
+          </div>
         </div>
         <!-- 缩略图 -->
         <div v-else class="relative">
@@ -81,12 +88,18 @@
               <svg v-else class="fill-current -m-0.5 size-4.5" viewBox="100 -20 420 640" xmlns="http://www.w3.org/2000/svg"><path d="M512 512L128 512C92.7 512 64 483.3 64 448L64 160C64 124.7 92.7 96 128 96L266.7 96C280.5 96 294 100.5 305.1 108.8L343.5 137.6C349 141.8 355.8 144 362.7 144L512 144C547.3 144 576 172.7 576 208L576 448C576 483.3 547.3 512 512 512zM248 304C234.7 304 224 314.7 224 328C224 341.3 234.7 352 248 352L392 352C405.3 352 416 341.3 416 328C416 314.7 405.3 304 392 304L248 304z"/></svg>
               <span v-if="canToggleCoexistSource" class="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-accent-primary shadow-sm shadow-accent-primary/60"></span>
             </button>
-            <Copy v-if="modData.is_coexistence" class="size-3.5 ml-1 text-accent-primary  hover:scale-120 transition-transform duration-200" v-tooltip="'该Mod为共存状态，在创意工坊目录同样存在'" />
+            <!-- Multiplayer 联机兼容性 -->
+            <div v-if="!sectionHeader && showMultiplayerCompatBadge" :class="[`w-4 h-4 m-0.5 shrink-0 rounded border cursor-help text-[0.65rem] leading-none font-mono tabular-nums font-black flex items-center justify-center
+              hover:scale-110 text-shadow-2xs text-shadow-black hover:shadow-bg-deep/50 transition-all`, multiplayerCompatBadgeClass]"
+              v-tooltip="multiplayerCompatTooltip">
+              {{ multiplayerCompatBadgeText }}
+            </div>
+            <!-- <Copy v-if="modData.is_coexistence" class="size-3.5 ml-1 text-accent-primary  hover:scale-120 transition-transform duration-200" v-tooltip="'该Mod为共存状态，在创意工坊目录同样存在'" /> -->
           </div>
 
-          <div class="absolute -bottom-2 -left-0.5 flex items-center justify-center ">
+          <div v-if="latestSupportedVersion" class="absolute -bottom-2 -left-0.5 flex items-center justify-center ">
             <span class="text-xs text-text-dim truncate font-mono bg-glass-medium/70 rounded-sm">
-              {{ modData.supported_versions.at(-1) }}
+              {{ latestSupportedVersion }}
             </span>
           </div>
         </div>
@@ -240,6 +253,10 @@ const modData = computed(() => modStore.takeModById(props.item_id))
 const modGroups = computed(() => groupStore.takeGroupsByModId(props.item_id))
 // const modIcon = computed(() => modStore.getIconUrl(props.id))
 const displayName = computed(() => modData.value?.alias_name ? modData.value.alias_name : (modData.value?.name ? modData.value.name : props.item_id))
+const latestSupportedVersion = computed(() => {
+  const versions = Array.isArray(modData.value?.supported_versions) ? modData.value.supported_versions : []
+  return versions.length > 0 ? String(versions[versions.length - 1] || '').trim() : ''
+})
 const sectionHeaderDisplayName = computed(() => extractSectionHeaderTitle(displayName.value) || displayName.value)
 const normalizePackageKey = (value = '') => String(value || '').trim().toLowerCase().replace(/_(steam|local)$/, '')
 const currentCanonicalId = computed(() => normalizePackageKey(modData.value?.canonical_package_id || modData.value?.package_id || props.item_id))
@@ -263,6 +280,43 @@ const focusGroupPanel = (group = {}) => {
 
 // 是否启用
 const isActive = computed(() => modStore.activeIds.some(id => normalizePackageId(id) === currentCanonicalId.value))
+const mpCompatActive = computed(() => modStore.activeIds.some(id => normalizePackageId(id) === 'rwmt.multiplayercompatibility'))
+const multiplayerCompat = computed(() => modData.value?.multiplayer_compat || null)
+const showMultiplayerCompatBadge = computed(() => !!multiplayerCompat.value?.enabled)
+const multiplayerCompatEffective = computed(() => (
+  !!multiplayerCompat.value?.has_mp_compat_patch && isActive.value && mpCompatActive.value
+))
+const multiplayerCompatBadgeText = computed(() => {
+  const info = multiplayerCompat.value || {}
+  const status = Number(info.effective_status || 0)
+  return status > 0 ? String(status) : '?'
+})
+const multiplayerCompatBadgeClass = computed(() => {
+  const info = multiplayerCompat.value || {}
+  if (multiplayerCompatEffective.value) return 'text-on-accent-success bg-accent-success/50 border-accent-success/10'
+  if (info.has_mp_compat_patch) return 'text-on-accent-warn bg-accent-warn/50 border-accent-warn/10'
+  const status = Number(info.effective_status || 0)
+  if (status === 1) return 'text-accent-danger bg-accent-danger/30 border-accent-danger/10'
+  if (status === 2) return 'text-accent-warn bg-accent-warn/30 border-accent-warn/10'
+  if (status === 3) return 'text-accent-tip bg-accent-tip/30 border-accent-tip/10'
+  if (status === 4) return 'text-accent-success bg-accent-success/30 border-accent-success/10'
+  return 'text-text-dim bg-bg-inset/70 border-border-base/15'
+})
+const multiplayerCompatTooltip = computed(() => {
+  const info = multiplayerCompat.value || {}
+  if (!info.enabled) return ''
+  const parts = [`联机兼容性：${info.effective_label || '未知'}`]
+  if (info.status_source === 'official') parts.push(info.status_description || '来自 Multiplayer 官方兼容表。')
+  else if (info.status_source === 'xml_only') parts.push('未检测到程序集，按 Multiplayer 的 XML-only 规则视为完全可用。')
+  else parts.push('官方兼容表暂无明确结论。')
+  if (info.has_mp_compat_patch) {
+    parts.push(multiplayerCompatEffective.value
+      ? 'Multiplayer Compatibility 中存在对应修正，当前已随该模组启用生效。'
+      : 'Multiplayer Compatibility 中存在对应修正，启用该模组后可生效。')
+  }
+  if (info.notes) parts.push(`备注：${info.notes}`)
+  return parts.join('\n')
+})
 
 const modType = computed(() => modStore.displayModType(modData.value))
 

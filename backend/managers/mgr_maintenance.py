@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -50,6 +51,19 @@ class MaintenanceManager:
             "name": "替代 Mod 数据库",
             "path_key": "community_instead_db_path",
             "url_key": "community_instead_db_url",
+        },
+        {
+            "data_type": "multiplayer_compatibility",
+            "name": "Multiplayer 兼容表",
+            "path_key": "multiplayer_compatibility_path",
+            "url_key": "multiplayer_compatibility_url",
+        },
+        {
+            "data_type": "mp_compat_package_ids",
+            "name": "Multiplayer Compatibility 适配缓存",
+            "path_key": "mp_compat_package_ids_path",
+            "url_key": "mp_compat_package_ids_url",
+            "optional": True,
         },
     )
 
@@ -347,11 +361,37 @@ class MaintenanceManager:
         )
         path = Path(path_text) if path_text else None
         exists = bool(path and path.exists())
+        if spec.get("optional") and not url and not exists:
+            return {
+                "data_type": data_type,
+                "name": name,
+                "path": path_text,
+                "url": url,
+                "exists": False,
+                "needs_update": False,
+                "message": "未配置远端地址，已跳过自动检查。",
+                "local_size": 0,
+                "local_mtime": 0,
+                "local_signature": "",
+                "local_signature_short": "",
+                "local_version": "",
+                "remote_available": False,
+                "remote_supported": False,
+                "remote_signature": "",
+                "remote_signature_short": "",
+                "remote_size": 0,
+                "remote_updated_at": 0,
+                "remote_version": "",
+                "remote_etag": "",
+                "comparison_mode": "skipped",
+                "download_url": "",
+            }
 
         local_size = path.stat().st_size if exists and path else 0
         local_mtime = int(path.stat().st_mtime * 1000) if exists and path else 0
         local_signature = self._compute_git_blob_sha(path) if exists and path else ""
         local_version = self._resolve_local_dataset_version(data_type)
+        local_source_info = self._read_local_source_info(path) if data_type == "mp_compat_package_ids" and exists and path else {}
 
         remote_info = self._probe_remote_file(url)
         remote_signature = str(remote_info.get("signature") or "")
@@ -363,6 +403,18 @@ class MaintenanceManager:
         if not exists:
             needs_update = True
             comparison_mode = "missing"
+        elif data_type == "mp_compat_package_ids":
+            local_source_etag = str(local_source_info.get("etag") or "").strip()
+            local_source_updated_at = int(local_source_info.get("updated_at") or 0)
+            remote_etag = str(remote_info.get("etag") or "").strip()
+            if remote_info.get("available") and remote_etag and local_source_etag:
+                comparison_mode = "source_etag"
+                needs_update = remote_etag != local_source_etag
+            elif remote_info.get("available") and remote_updated_at > 0:
+                comparison_mode = "source_mtime"
+                needs_update = not local_source_updated_at or remote_updated_at > local_source_updated_at + 1000
+            elif remote_info.get("available"):
+                comparison_mode = "source_available"
         elif remote_info.get("available") and remote_signature:
             comparison_mode = "signature"
             needs_update = local_signature != remote_signature
@@ -371,6 +423,9 @@ class MaintenanceManager:
             needs_update = True
         elif remote_info.get("available") and remote_size > 0:
             comparison_mode = "size"
+        elif remote_info.get("available") and remote_updated_at > 0:
+            comparison_mode = "mtime"
+            needs_update = not local_mtime or remote_updated_at > local_mtime + 1000
 
         message = ""
         if not exists:
@@ -464,6 +519,9 @@ class MaintenanceManager:
                 return str(self.workshop_db_mgr.get_workshopdb_version() or "")
             if data_type == "instead_db":
                 return str(self.workshop_db_mgr.get_insteaddb_version() or "")
+            if data_type == "mp_compat_package_ids":
+                source = self._read_local_source_info(Path(settings.config.mp_compat_package_ids_path))
+                return str(source.get("etag") or source.get("updated_at") or source.get("signature") or "")
             if data_type == "community_rules" and callable(self.rule_mgr_provider):
                 rule_mgr = self.rule_mgr_provider()
                 if rule_mgr and getattr(rule_mgr, "community_rules_update_time", 0):
@@ -471,6 +529,16 @@ class MaintenanceManager:
         except Exception:
             logger.debug("解析本地数据集版本失败：%s", data_type, exc_info=True)
         return ""
+
+    def _read_local_source_info(self, path: Path) -> dict[str, Any]:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        source = payload.get("source")
+        return source if isinstance(source, dict) else {}
 
     def _compute_git_blob_sha(self, path: Path) -> str:
         try:

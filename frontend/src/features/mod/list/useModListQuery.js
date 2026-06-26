@@ -11,6 +11,7 @@ const SORT_MODE_MAP = {
   'file_create_time': '创建时间',
   'file_modify_time': '修改时间',
   'file_size': '文件大小',
+  'multiplayer_compat': '联机兼容性',
 }
 
 export function useModListQuery({
@@ -227,6 +228,7 @@ export function useModListQuery({
         if (sortMode.value === 'file_create_time') return (mA?.file_create_time || 0) - (mB?.file_create_time || 0)
         if (sortMode.value === 'file_modify_time') return (mA?.file_modify_time || 0) - (mB?.file_modify_time || 0)
         if (sortMode.value === 'file_size') return (mA?.file_size || 0) - (mB?.file_size || 0)
+        if (sortMode.value === 'multiplayer_compat') return (mA?.multiplayer_compat?.sort_rank || 0) - (mB?.multiplayer_compat?.sort_rank || 0)
 
         return 0
       })

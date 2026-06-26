@@ -920,7 +920,8 @@ export const useAppStore = defineStore('app', () => {
 
     // 监听：本地共存任务完成
     window.addEventListener('localize-complete', (e) => {
-        const { success_count, error_count, errors, status, title } = e.detail;
+        const detail = e?.detail || {}
+        const { success_count, error_count, errors, status, title } = detail;
         const taskTitle = title || '本地共存任务'
         console.info(`${taskTitle}完成。成功 ${success_count} 项，失败 ${error_count} 项。`, errors)
         if (status === 'cancelled') {
@@ -932,7 +933,10 @@ export const useAppStore = defineStore('app', () => {
         } else {
             toast.success(`${taskTitle}已完成：${success_count} 个模组`);
         }
-        void requestModScan({ preserveListState: true, sizeCheckOverride: true })
+        const sizeCheckPaths = Array.isArray(detail.size_check_paths)
+          ? detail.size_check_paths.map(path => String(path || '').trim()).filter(Boolean)
+          : []
+        void requestModScan({ preserveListState: true, sizeCheckPaths })
     });
     // 监听：游戏暂停
     window.addEventListener('app-suspending', () => {
