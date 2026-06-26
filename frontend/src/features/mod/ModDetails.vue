@@ -28,7 +28,7 @@
         </span>
       </div>
       <!-- 标题 -->
-      <div class="@container absolute bottom-0 inset-x-0 bg-linear-to-t from-bg-deep/90 to-transparent p-2 pt-12">
+      <div :key="selectedModTitleKey" class="@container absolute bottom-0 inset-x-0 bg-linear-to-t from-bg-deep/90 to-transparent p-2 pt-12">
         <h2 class="font-bold leading-tight line-clamp-2 text-text-main text-shadow wrap-break-word adaptive-text"
           :style="{ fontSize: computedFontSize }" v-tooltip="selectedModTitleTooltip">{{ selectedModDisplayName }}</h2>
       </div>
@@ -634,9 +634,16 @@ const formattedDescription = computed(() => {
   // 第二个参数 false 表示不移除图片，如果想移除则传 true
   return parseUnityRichText( selectedMod.value.description, false, (url) => appStore.getRemoteUrl(url))
 })
-const selectedModDisplayName = computed(() => (
-  selectedMod.value ? modStore.displayModName(selectedMod.value) : ''
-))
+const selectedModDisplayName = computed(() => {
+  const mod = selectedMod.value
+  if (!mod) return ''
+  return String(mod.alias_name || mod.display_name || mod.name || mod.package_id || '').trim()
+})
+const selectedModTitleKey = computed(() => {
+  const mod = selectedMod.value
+  if (!mod) return 'no-selection'
+  return String(mod.path_hash || mod.package_id || mod.name || mod.display_name || '')
+})
 const selectedModTitleTooltip = computed(() => {
   if (!selectedMod.value) return ''
   const displayName = selectedModDisplayName.value

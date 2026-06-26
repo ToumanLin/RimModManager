@@ -1,366 +1,458 @@
-·[RimModManager]
-├── ·[.claude]
-├── ·[.codegraph]
-├── ·[.cursor]
-├── ·[.history]
-├── ·[.pytest_cache]
-├── ·[.ruff_cache]
-├── ·[backend]
-│   ├── ·[ai]
-│   │   ├──  __init__.py
-│   │   ├──  ai_contracts.py
-│   │   ├──  ai_definitions.py
-│   │   ├──  ai_gateway.py
-│   │   ├──  ai_service.py
-│   │   ├──  ai_tools.py
-│   │   ├──  assistant_runtime.py
-│   │   ├──  assistant_trace.py
-│   │   ├──  attachment_resolver.py
-│   │   ├──  def_actions.py
-│   │   ├──  def_attachments.py
-│   │   ├──  def_entries.py
-│   │   ├──  def_model_capabilities.py
-│   │   └──  def_output_contracts.py
-│   │   
-│   ├── ·[database]
-│   │   ├──  __init__.py
-│   │   ├──  dao.py
-│   │   ├──  dao_ext.py
-│   │   ├──  migrator.py
-│   │   ├──  models.py
-│   │   ├──  models_ext.py
-│   │   ├──  repair.py
-│   │   ├──  runtime.py
-│   │   └──  workshop_selection.py
-│   │   
-│   ├── ·[environment]
-│   ├── ·[load_order]
-│   │   ├──  __init__.py
-│   │   ├──  detector.py
-│   │   ├──  import_check.py
-│   │   ├──  language_pack_ownership.py
-│   │   ├──  models.py
-│   │   ├──  package_tokens.py
-│   │   ├──  parsers.py
-│   │   └──  share_code.py
-│   │   
-│   ├── ·[managers]
-│   │   ├──  __init__.py
-│   │   ├──  mgr_data_bundle.py
-│   │   ├──  mgr_download.py
-│   │   ├──  mgr_files.py
-│   │   ├──  mgr_game.py
-│   │   ├──  mgr_game_install.py
-│   │   ├──  mgr_game_logs.py
-│   │   ├──  mgr_game_monitor.py
-│   │   ├──  mgr_github.py
-│   │   ├──  mgr_load_order.py
-│   │   ├──  mgr_maintenance.py
-│   │   ├──  mgr_mod_settings.py
-│   │   ├──  mgr_mod_package.py
-│   │   ├──  mgr_mod_residue.py
-│   │   ├──  mgr_network.py
-│   │   ├──  mgr_profile.py
-│   │   ├──  mgr_recommendation_export.py
-│   │   ├──  mgr_rules.py
-│   │   ├──  mgr_sorter.py
-│   │   ├──  mgr_steam.py
-│   │   ├──  mgr_steam_api.py
-│   │   ├──  mgr_steamcmd_core.py
-│   │   ├──  mgr_sub_browser.py
-│   │   ├──  mgr_texture_opt.py
-│   │   ├──  mgr_update.py
-│   │   └──  mgr_workshop_db.py
-│   │   
-│   ├── ·[migrations]
-│   │   ├──  app_relocation.py
-│   │   └──  app_upgrade.py
-│   │   
-│   ├── ·[profile]
-│   │   ├──  __init__.py
-│   │   └──  user_data_root.py
-│   │   
-│   ├── ·[scanner]
-│   │   ├──  __init__.py
-│   │   ├──  analyzer.py
-│   │   ├──  mod_scanner.py
-│   │   ├──  parser_dlc.py
-│   │   └──  parser_xml.py
-│   │   
-│   ├── ·[startup]
-│   │   ├──  __init__.py
-│   │   └──  coordinator.py
-│   │   
-│   ├── ·[text_search]
-│   │   ├──  __init__.py
-│   │   ├──  backends.py
-│   │   ├──  effective_files.py
-│   │   ├──  manager.py
-│   │   ├──  models.py
-│   │   └──  tooling.py
-│   │   
-│   ├── ·[utils]
-│   │   ├──  __init__.py
-│   │   ├──  bundle_io.py
-│   │   ├──  constants.py
-│   │   ├──  event_bus.py
-│   │   ├──  lanzou_parser.py
-│   │   ├──  logger.py
-│   │   ├──  profile_runtime.py
-│   │   ├──  restart.py
-│   │   ├──  shortcuts.py
-│   │   ├──  text_decode.py
-│   │   ├──  tools.py
-│   │   └──  versioning.py
-│   │   
-│   ├──  _version.py
-│   ├──  api.py
-│   ├──  browser_runtime.py
-│   ├──  settings.py
-│   ├──  static_page.py
-│   └──  theme_store.py
-│   
-├── ·[data]
-├── ·[frontend]
-│   ├── ·[public]
-│   │   ├──  icon.svg
-│   │   └──  vite.svg
-│   │   
-│   ├── ·[src]
-│   │   ├── ·[app]
-│   │   │   ├── ·[bridge]
-│   │   │   │   ├──  pywebviewBridge.js
-│   │   │   │   └──  runtimeBridge.js
-│   │   │   │   
-│   │   │   ├── ·[commands]
-│   │   │   │   ├──  builtinCommands.js
-│   │   │   │   └──  modListActions.js
-│   │   │   │   
-│   │   │   ├── ·[shell]
-│   │   │   │   ├──  RimHeader.vue
-│   │   │   │   └──  StatusBar.vue
-│   │   │   │   
-│   │   │   ├── ·[stores]
-│   │   │   │   ├── ·[app]
-│   │   │   │   ├──  appStore.js
-│   │   │   │   ├──  startupStore.js
-│   │   │   │   └──  taskStore.js
-│   │   │   │   
-│   │   │   ├── ·[styles]
-│   │   │   │   ├──  builtinThemes.json
-│   │   │   │   ├──  style.css
-│   │   │   │   └──  toast.scss
-│   │   │   │   
-│   │   │   ├──  App.vue
-│   │   │   └──  main.js
-│   │   │   
-│   │   ├── ·[dev]
-│   │   │   └──  DebugPanel.vue
-│   │   │   
-│   │   ├── ·[features]
-│   │   │   ├── ·[ai]
-│   │   │   │   ├── ·[ai-store]
-│   │   │   │   ├──  AiActionCard.vue
-│   │   │   │   ├──  AiAssistantPanel.vue
-│   │   │   │   ├──  AIDefinitionManager.vue
-│   │   │   │   ├──  AiDiagnosticSidebar.vue
-│   │   │   │   ├──  AiSessionTraceModal.vue
-│   │   │   │   ├──  aiStore.js
-│   │   │   │   ├──  aiUsageTooltips.js
-│   │   │   │   ├──  ModAliasReviewModal.vue
-│   │   │   │   └──  promptQueueStore.js
-│   │   │   │   
-│   │   │   ├── ·[app-log]
-│   │   │   │   ├──  logStore.js
-│   │   │   │   ├──  LogViewer.vue
-│   │   │   │   └──  UnifiedLogPanel.vue
-│   │   │   │   
-│   │   │   ├── ·[dialogs]
-│   │   │   │   ├──  ConflictResolver.vue
-│   │   │   │   └──  UpdateModal.vue
-│   │   │   │   
-│   │   │   ├── ·[file-search]
-│   │   │   │   ├──  FileSearchPreviewEditor.vue
-│   │   │   │   ├──  fileSearchStore.js
-│   │   │   │   └──  FileSearchWorkbench.vue
-│   │   │   │   
-│   │   │   ├── ·[guide]
-│   │   │   │   ├──  GuideCenter.vue
-│   │   │   │   ├──  guideConfig.js
-│   │   │   │   └──  guideStore.js
-│   │   │   │   
-│   │   │   ├── ·[load-order]
-│   │   │   │   ├──  BackupItem.vue
-│   │   │   │   ├──  BackupList.vue
-│   │   │   │   ├──  ListDiffView.vue
-│   │   │   │   └──  orderStore.js
-│   │   │   │   
-│   │   │   ├── ·[mod]
-│   │   │   │   ├── ·[lib]
-│   │   │   │   ├── ·[list]
-│   │   │   │   ├── ·[search]
-│   │   │   │   ├── ·[stores]
-│   │   │   │   ├──  DependencyGraph.vue
-│   │   │   │   ├──  DisabledModList.vue
-│   │   │   │   ├──  GroupItem.vue
-│   │   │   │   ├──  GroupList.vue
-│   │   │   │   ├──  GroupModRow.vue
-│   │   │   │   ├──  ModDetails.vue
-│   │   │   │   ├──  ModItem.vue
-│   │   │   │   ├──  ModSettingsManagerModal.vue
-│   │   │   │   └──  RecommendationExportModal.vue
-│   │   │   │   
-│   │   │   ├── ·[mod-residue]
-│   │   │   │   ├──  ModResidueCleanupModal.vue
-│   │   │   │   └──  modResidueStore.js
-│   │   │   │   
-│   │   │   ├── ·[package-transfer]
-│   │   │   │   ├──  ModConflictPlanEditor.vue
-│   │   │   │   ├──  PackageTransferDialog.vue
-│   │   │   │   └──  ProfileConflictPlanEditor.vue
-│   │   │   │   
-│   │   │   ├── ·[profiles]
-│   │   │   │   ├──  ProfileDrawer.vue
-│   │   │   │   ├──  profileStore.js
-│   │   │   │   └──  ProfileSwitcher.vue
-│   │   │   │   
-│   │   │   ├── ·[rules]
-│   │   │   │   ├──  ModRuleEditor.vue
-│   │   │   │   ├──  RulePanel.vue
-│   │   │   │   ├──  RuleRelationSection.vue
-│   │   │   │   └──  ruleStore.js
-│   │   │   │   
-│   │   │   ├── ·[settings]
-│   │   │   │   ├── ·[panel]
-│   │   │   │   ├── ·[theme]
-│   │   │   │   └──  SettingsPanel.vue
-│   │   │   │   
-│   │   │   ├── ·[supplement]
-│   │   │   │   ├──  MissingInstallDialog.vue
-│   │   │   │   ├──  missingInstallStore.js
-│   │   │   │   ├──  SupplementSelectionDialog.vue
-│   │   │   │   └──  supplementStore.js
-│   │   │   │   
-│   │   │   ├── ·[texture-opt]
-│   │   │   │   ├──  TextureModCard.vue
-│   │   │   │   ├──  TextureOptModal.vue
-│   │   │   │   └──  textureStore.js
-│   │   │   │   
-│   │   │   └── ·[workspace]
-│   │   │   
-│   │   │       ├── ·[components]
-│   │   │       ├── ·[lib]
-│   │   │       ├── ·[views]
-│   │   │       ├──  WorkspaceOverlay.vue
-│   │   │       └──  workspaceStore.js
-│   │   │       
-│   │   └── ·[shared]
-│   │   
-│   │       ├── ·[assets]
-│   │       │   └──  vue.svg
-│   │       │   
-│   │       ├── ·[commands]
-│   │       │   ├──  commandRegistry.js
-│   │       │   ├──  commandStore.js
-│   │       │   ├──  keybindingConflicts.js
-│   │       │   ├──  keybindingParser.js
-│   │       │   ├──  keybindingRuntime.js
-│   │       │   └──  keyScopeStore.js
-│   │       │   
-│   │       ├── ·[components]
-│   │       │   ├── ·[context-menu]
-│   │       │   ├── ·[input]
-│   │       │   ├── ·[list]
-│   │       │   ├── ·[modal]
-│   │       │   ├── ·[popover]
-│   │       │   ├── ·[tabs]
-│   │       │   ├──  GlobalColorPicker.vue
-│   │       │   └──  StatItem.vue
-│   │       │   
-│   │       ├── ·[decorations]
-│   │       │   ├──  ImageCloud.vue
-│   │       │   ├──  LampEffect.vue
-│   │       │   └──  LuxBreatheIcon.vue
-│   │       │   
-│   │       ├── ·[directives]
-│   │       │   ├──  dragScroll.js
-│   │       │   ├──  vPreview.js
-│   │       │   ├──  vSelection.js
-│   │       │   └──  vTooltip.js
-│   │       │   
-│   │       └── ·[lib]
-│   │       
-│   │           ├──  color.js
-│   │           ├──  common.js
-│   │           ├──  constants.js
-│   │           ├──  domEffects.js
-│   │           ├──  format.js
-│   │           ├──  markdown.js
-│   │           └──  text.js
-│   │           
-│   ├──  .gitignore
-│   ├──  index.html
-│   ├──  package-lock.json
-│   ├──  package.json
-│   ├──  README.md
-│   └──  vite.config.js
-│   
-├── ·[mods]
-├── ·[test]
-├── ·[tests]
-│   ├──  __init__.py
-│   ├──  analyze_language_packs.py
-│   ├──  test_ai_assistant_runtime.py
-│   ├──  test_ai_attachment_resolver.py
-│   ├──  test_ai_gateway_request_compat.py
-│   ├──  test_ai_service_helpers.py
-│   ├──  test_app_relocation.py
-│   ├──  test_bundle_managers.py
-│   ├──  test_download_manager.py
-│   ├──  test_environment_runtime.py
-│   ├──  test_file_search.py
-│   ├──  test_game_log_paths.py
-│   ├──  test_github_manager.py
-│   ├──  test_group_dao.py
-│   ├──  test_import_check.py
-│   ├──  test_keybinding_settings.py
-│   ├──  test_language_pack_ownership.py
-│   ├──  test_load_order_manager_import_check.py
-│   ├──  test_load_order_manager_save.py
-│   ├──  test_load_order_parsers.py
-│   ├──  test_load_order_share_code.py
-│   ├──  test_maintenance_manager.py
-│   ├──  test_mod_asset_missing_state.py
-│   ├──  test_mod_settings_manager.py
-│   ├──  test_mod_residue_manager.py
-│   ├──  test_profile_and_scanner.py
-│   ├──  test_recommendation_export_manager.py
-│   ├──  test_rule_manager_dynamic_weights.py
-│   ├──  test_shortcuts.py
-│   ├──  test_sorter_strategies.py
-│   ├──  test_startup_coordinator.py
-│   ├──  test_steam_actions.py
-│   ├──  test_texture_opt_api.py
-│   ├──  test_texture_opt_batch_recovery.py
-│   ├──  test_texture_opt_manager.py
-│   ├──  test_user_data_root.py
-│   ├──  test_workshop_db_manager.py
-│   ├──  test_workshop_selection.py
-│   └──  test_workspace_matrix_times.py
-│   
-├── ·[toolmods]
-├── ·[tools]
-├──  .gitignore
-├──  .python-version
-├──  files_tree.txt
-├──  icon.ico
-├──  icon.svg
-├──  main.py
-├──  pack_gitignore_zip.py
-├──  pack_nuitka.py
-├──  pack_pyinstaller.py
-├──  pyproject.toml
-├──  README.md
-├──  splash.png
-├──  uv.lock
-└──  validate_environment.py
+·[.]
+├──·[backend]
+│  ├──·[ai]
+│  │  ├── ai_contracts.py
+│  │  ├── ai_definitions.py
+│  │  ├── ai_gateway.py
+│  │  ├── ai_service.py
+│  │  ├── ai_tools.py
+│  │  ├── assistant_runtime.py
+│  │  ├── assistant_trace.py
+│  │  ├── attachment_resolver.py
+│  │  ├── def_actions.py
+│  │  ├── def_attachments.py
+│  │  ├── def_entries.py
+│  │  ├── def_model_capabilities.py
+│  │  └── def_output_contracts.py
+│  │     
+│  ├──·[database]
+│  │  ├── dao.py
+│  │  ├── dao_ext.py
+│  │  ├── migrator.py
+│  │  ├── models.py
+│  │  ├── models_ext.py
+│  │  ├── repair.py
+│  │  ├── runtime.py
+│  │  └── workshop_selection.py
+│  │     
+│  ├──·[i18n]
+│  │  ├── language_registry.py
+│  │  └── translation.py
+│  │     
+│  ├──·[load_order]
+│  │  ├── detector.py
+│  │  ├── import_check.py
+│  │  ├── language_pack_ownership.py
+│  │  ├── models.py
+│  │  ├── package_tokens.py
+│  │  ├── parsers.py
+│  │  └── share_code.py
+│  │     
+│  ├──·[managers]
+│  │  ├── mgr_data_bundle.py
+│  │  ├── mgr_download.py
+│  │  ├── mgr_files.py
+│  │  ├── mgr_game.py
+│  │  ├── mgr_game_install.py
+│  │  ├── mgr_game_logs.py
+│  │  ├── mgr_game_monitor.py
+│  │  ├── mgr_github.py
+│  │  ├── mgr_load_order.py
+│  │  ├── mgr_maintenance.py
+│  │  ├── mgr_mod_package.py
+│  │  ├── mgr_mod_residue.py
+│  │  ├── mgr_mod_settings.py
+│  │  ├── mgr_network.py
+│  │  ├── mgr_profile.py
+│  │  ├── mgr_recommendation_export.py
+│  │  ├── mgr_rules.py
+│  │  ├── mgr_sorter.py
+│  │  ├── mgr_steam.py
+│  │  ├── mgr_steam_api.py
+│  │  ├── mgr_steamcmd_core.py
+│  │  ├── mgr_sub_browser.py
+│  │  ├── mgr_texture_opt.py
+│  │  ├── mgr_update.py
+│  │  └── mgr_workshop_db.py
+│  │     
+│  ├──·[migrations]
+│  │  ├── app_relocation.py
+│  │  └── app_upgrade.py
+│  │     
+│  ├──·[profile]
+│  │  └── user_data_root.py
+│  │     
+│  ├──·[scanner]
+│  │  ├── analyzer.py
+│  │  ├── mod_scanner.py
+│  │  ├── parser_dlc.py
+│  │  └── parser_xml.py
+│  │     
+│  ├──·[startup]
+│  │  └── coordinator.py
+│  │     
+│  ├──·[text_search]
+│  │  ├── backends.py
+│  │  ├── effective_files.py
+│  │  ├── manager.py
+│  │  ├── models.py
+│  │  └── tooling.py
+│  │     
+│  ├──·[translation]
+│  │  ├── contracts.py
+│  │  └── service.py
+│  │     
+│  ├──·[utils]
+│  │  ├── bundle_io.py
+│  │  ├── constants.py
+│  │  ├── event_bus.py
+│  │  ├── lanzou_parser.py
+│  │  ├── logger.py
+│  │  ├── profile_runtime.py
+│  │  ├── restart.py
+│  │  ├── shortcuts.py
+│  │  ├── text_decode.py
+│  │  ├── tools.py
+│  │  └── versioning.py
+│  │     
+│  ├── _version.py
+│  ├── api.py
+│  ├── browser_runtime.py
+│  ├── settings.py
+│  ├── static_page.py
+│  └── theme_store.py
+│     
+├──·[frontend]
+│  ├──·[src]
+│  │  ├──·[app]
+│  │  │  ├──·[bridge]
+│  │  │  │  ├── pywebviewBridge.js
+│  │  │  │  └── runtimeBridge.js
+│  │  │  │     
+│  │  │  ├──·[commands]
+│  │  │  │  ├── builtinCommands.js
+│  │  │  │  └── modListActions.js
+│  │  │  │     
+│  │  │  ├──·[i18n]
+│  │  │  │  ├──·[locales]
+│  │  │  │  │  └── settings.js
+│  │  │  │  │     
+│  │  │  │  └── index.js
+│  │  │  │     
+│  │  │  ├──·[shell]
+│  │  │  │  ├── RimHeader.vue
+│  │  │  │  └── StatusBar.vue
+│  │  │  │     
+│  │  │  ├──·[stores]
+│  │  │  │  ├──·[app]
+│  │  │  │  │  ├── maintenanceActions.js
+│  │  │  │  │  ├── packageTransferActions.js
+│  │  │  │  │  ├── pathActions.js
+│  │  │  │  │  ├── settingsActions.js
+│  │  │  │  │  ├── steamWorkshopActions.js
+│  │  │  │  │  └── updateActions.js
+│  │  │  │  │     
+│  │  │  │  ├── appStore.js
+│  │  │  │  ├── startupStore.js
+│  │  │  │  └── taskStore.js
+│  │  │  │     
+│  │  │  ├──·[styles]
+│  │  │  │  ├── style.css
+│  │  │  │  ├── builtinThemes.json
+│  │  │  │  └── toast.scss
+│  │  │  │     
+│  │  │  ├── main.js
+│  │  │  └── App.vue
+│  │  │     
+│  │  ├──·[features]
+│  │  │  ├──·[ai]
+│  │  │  │  ├──·[ai-store]
+│  │  │  │  │  ├──·[runtime]
+│  │  │  │  │  │  ├── aiActionRuntime.js
+│  │  │  │  │  │  └── aiAttachmentRuntime.js
+│  │  │  │  │  │     
+│  │  │  │  │  ├── attachmentActions.js
+│  │  │  │  │  ├── factories.js
+│  │  │  │  │  ├── modAliasActions.js
+│  │  │  │  │  └── modelConfigActions.js
+│  │  │  │  │     
+│  │  │  │  ├── aiStore.js
+│  │  │  │  ├── aiUsageTooltips.js
+│  │  │  │  ├── promptQueueStore.js
+│  │  │  │  ├── AIDefinitionManager.vue
+│  │  │  │  ├── AiActionCard.vue
+│  │  │  │  ├── AiAssistantPanel.vue
+│  │  │  │  ├── AiDiagnosticSidebar.vue
+│  │  │  │  ├── AiSessionTraceModal.vue
+│  │  │  │  └── ModAliasReviewModal.vue
+│  │  │  │     
+│  │  │  ├──·[app-log]
+│  │  │  │  ├── logStore.js
+│  │  │  │  ├── LogViewer.vue
+│  │  │  │  └── UnifiedLogPanel.vue
+│  │  │  │     
+│  │  │  ├──·[dialogs]
+│  │  │  │  ├── ConflictResolver.vue
+│  │  │  │  └── UpdateModal.vue
+│  │  │  │     
+│  │  │  ├──·[file-search]
+│  │  │  │  ├── fileSearchStore.js
+│  │  │  │  ├── FileSearchPreviewEditor.vue
+│  │  │  │  └── FileSearchWorkbench.vue
+│  │  │  │     
+│  │  │  ├──·[guide]
+│  │  │  │  ├── guideConfig.js
+│  │  │  │  ├── guideStore.js
+│  │  │  │  └── GuideCenter.vue
+│  │  │  │     
+│  │  │  ├──·[load-order]
+│  │  │  │  ├── orderStore.js
+│  │  │  │  ├── BackupItem.vue
+│  │  │  │  ├── BackupList.vue
+│  │  │  │  └── ListDiffView.vue
+│  │  │  │     
+│  │  │  ├──·[mod]
+│  │  │  │  ├──·[lib]
+│  │  │  │  │  ├── modIdentity.js
+│  │  │  │  │  ├── packageScope.js
+│  │  │  │  │  └── versioning.js
+│  │  │  │  │     
+│  │  │  │  ├──·[list]
+│  │  │  │  │  ├── useModListDrag.js
+│  │  │  │  │  ├── useModListIssues.js
+│  │  │  │  │  ├── useModListQuery.js
+│  │  │  │  │  ├── useModListQuickActions.js
+│  │  │  │  │  ├── useModListSections.js
+│  │  │  │  │  ├── useModListViewport.js
+│  │  │  │  │  ├── ModList.vue
+│  │  │  │  │  └── ModListQuickActions.vue
+│  │  │  │  │     
+│  │  │  │  ├──·[stores]
+│  │  │  │  │  ├──·[mod-store]
+│  │  │  │  │  │  ├── exportPlan.js
+│  │  │  │  │  │  ├── installSourceHints.js
+│  │  │  │  │  │  ├── issues.js
+│  │  │  │  │  │  ├── listHistory.js
+│  │  │  │  │  │  └── selection.js
+│  │  │  │  │  │     
+│  │  │  │  │  ├── groupStore.js
+│  │  │  │  │  ├── modStore.js
+│  │  │  │  │  └── searchStore.js
+│  │  │  │  │     
+│  │  │  │  ├── DependencyGraph.vue
+│  │  │  │  ├── DisabledModList.vue
+│  │  │  │  ├── GroupItem.vue
+│  │  │  │  ├── GroupList.vue
+│  │  │  │  ├── GroupModRow.vue
+│  │  │  │  ├── ModDetails.vue
+│  │  │  │  ├── ModItem.vue
+│  │  │  │  ├── ModSettingsManagerModal.vue
+│  │  │  │  └── RecommendationExportModal.vue
+│  │  │  │     
+│  │  │  ├──·[mod-residue]
+│  │  │  │  ├── modResidueStore.js
+│  │  │  │  └── ModResidueCleanupModal.vue
+│  │  │  │     
+│  │  │  ├──·[package-transfer]
+│  │  │  │  ├── ModConflictPlanEditor.vue
+│  │  │  │  ├── PackageTransferDialog.vue
+│  │  │  │  └── ProfileConflictPlanEditor.vue
+│  │  │  │     
+│  │  │  ├──·[profiles]
+│  │  │  │  ├── profileStore.js
+│  │  │  │  ├── ProfileDrawer.vue
+│  │  │  │  └── ProfileSwitcher.vue
+│  │  │  │     
+│  │  │  ├──·[rules]
+│  │  │  │  ├── ruleStore.js
+│  │  │  │  ├── ModRuleEditor.vue
+│  │  │  │  ├── RulePanel.vue
+│  │  │  │  └── RuleRelationSection.vue
+│  │  │  │     
+│  │  │  ├──·[settings]
+│  │  │  │  ├──·[panel]
+│  │  │  │  │  ├── DataBundleExportModal.vue
+│  │  │  │  │  ├── SettingsAiTab.vue
+│  │  │  │  │  ├── SettingsDevTab.vue
+│  │  │  │  │  ├── SettingsExternalTab.vue
+│  │  │  │  │  ├── SettingsFeaturesTab.vue
+│  │  │  │  │  ├── SettingsGeneralTab.vue
+│  │  │  │  │  ├── SettingsKeybindingsTab.vue
+│  │  │  │  │  ├── SettingsNetworkTab.vue
+│  │  │  │  │  └── SettingsPathsTab.vue
+│  │  │  │  │     
+│  │  │  │  ├──·[theme]
+│  │  │  │  │  ├── themeManager.js
+│  │  │  │  │  ├── ThemeEditorModal.vue
+│  │  │  │  │  ├── ThemeSelect.vue
+│  │  │  │  │  └── ThemeSwatches.vue
+│  │  │  │  │     
+│  │  │  │  └── SettingsPanel.vue
+│  │  │  │     
+│  │  │  ├──·[supplement]
+│  │  │  │  ├── missingInstallStore.js
+│  │  │  │  ├── supplementStore.js
+│  │  │  │  ├── MissingInstallDialog.vue
+│  │  │  │  └── SupplementSelectionDialog.vue
+│  │  │  │     
+│  │  │  ├──·[texture-opt]
+│  │  │  │  ├── textureStore.js
+│  │  │  │  ├── TextureModCard.vue
+│  │  │  │  └── TextureOptModal.vue
+│  │  │  │     
+│  │  │  └──·[workspace]
+│  │  │     
+│  │  │     ├──·[components]
+│  │  │     │  ├── MatrixItem.vue
+│  │  │     │  ├── MiniModCard.vue
+│  │  │     │  └── TimelineDrawer.vue
+│  │  │     │     
+│  │  │     ├──·[lib]
+│  │  │     │  └── matrixItemState.js
+│  │  │     │     
+│  │  │     ├──·[views]
+│  │  │     │  ├── CollectionCommand.vue
+│  │  │     │  ├── GithubCommand.vue
+│  │  │     │  ├── LibraryMatrix.vue
+│  │  │     │  ├── MatrixColumn.vue
+│  │  │     │  └── WorkshopBrowser.vue
+│  │  │     │     
+│  │  │     ├── workshopSearchOptions.js
+│  │  │     ├── workspaceStore.js
+│  │  │     └── WorkspaceOverlay.vue
+│  │  │        
+│  │  └──·[shared]
+│  │     
+│  │     ├──·[commands]
+│  │     │  ├── commandRegistry.js
+│  │     │  ├── commandStore.js
+│  │     │  ├── keyScopeStore.js
+│  │     │  ├── keybindingConflicts.js
+│  │     │  ├── keybindingParser.js
+│  │     │  └── keybindingRuntime.js
+│  │     │     
+│  │     ├──·[components]
+│  │     │  ├──·[context-menu]
+│  │     │  │  ├── contextMenuStore.js
+│  │     │  │  ├── ContextMenu.vue
+│  │     │  │  ├── ContextMenuColorPickerItem.vue
+│  │     │  │  └── ContextMenuItem.vue
+│  │     │  │     
+│  │     │  ├──·[input]
+│  │     │  │  ├── CommonInput.vue
+│  │     │  │  ├── CommonKVEditor.vue
+│  │     │  │  ├── CommonNumber.vue
+│  │     │  │  ├── CommonPathInput.vue
+│  │     │  │  ├── CommonSelect.vue
+│  │     │  │  ├── CommonSwitch.vue
+│  │     │  │  └── CommonTagInput.vue
+│  │     │  │     
+│  │     │  ├──·[list]
+│  │     │  │  ├── SimpleDropList.vue
+│  │     │  │  └── VirtualDragList.vue
+│  │     │  │     
+│  │     │  ├──·[modal]
+│  │     │  │  ├── confirmStore.js
+│  │     │  │  ├── CommonModalShell.vue
+│  │     │  │  └── Confirm.vue
+│  │     │  │     
+│  │     │  ├──·[popover]
+│  │     │  │  ├── hoverStore.js
+│  │     │  │  ├── FixedPopover.vue
+│  │     │  │  └── HoverPanel.vue
+│  │     │  │     
+│  │     │  ├──·[tabs]
+│  │     │  │  ├── FocusTabs.vue
+│  │     │  │  └── SegmentedTabs.vue
+│  │     │  │     
+│  │     │  ├──·[tag-search]
+│  │     │  │  ├── tagSearchEngine.js
+│  │     │  │  ├── TagSearchInput.vue
+│  │     │  │  └── TagToken.vue
+│  │     │  │     
+│  │     │  ├── GlobalColorPicker.vue
+│  │     │  ├── SafeViewerBlock.vue
+│  │     │  ├── StatItem.vue
+│  │     │  └── WorkshopItemActions.vue
+│  │     │     
+│  │     ├──·[decorations]
+│  │     │  ├── ImageCloud.vue
+│  │     │  ├── LampEffect.vue
+│  │     │  └── LuxBreatheIcon.vue
+│  │     │     
+│  │     ├──·[directives]
+│  │     │  ├── dragScroll.js
+│  │     │  ├── vPreview.js
+│  │     │  ├── vSelection.js
+│  │     │  └── vTooltip.js
+│  │     │     
+│  │     └──·[lib]
+│  │        
+│  │        ├── color.js
+│  │        ├── common.js
+│  │        ├── constants.js
+│  │        ├── domEffects.js
+│  │        ├── format.js
+│  │        ├── markdown.js
+│  │        ├── platform.js
+│  │        └── text.js
+│  │           
+│  ├── index.html
+│  ├── vite.config.js
+│  ├── package-lock.json
+│  ├── package.json
+│  └── README.md
+│     
+├──·[mods]
+├──·[tests]
+│  ├── analyze_language_packs.py
+│  ├── test_ai_assistant_runtime.py
+│  ├── test_ai_attachment_resolver.py
+│  ├── test_ai_gateway_request_compat.py
+│  ├── test_ai_service_helpers.py
+│  ├── test_app_relocation.py
+│  ├── test_bundle_managers.py
+│  ├── test_download_manager.py
+│  ├── test_environment_runtime.py
+│  ├── test_file_manager.py
+│  ├── test_file_search.py
+│  ├── test_game_log_paths.py
+│  ├── test_github_manager.py
+│  ├── test_group_dao.py
+│  ├── test_import_check.py
+│  ├── test_keybinding_settings.py
+│  ├── test_language_pack_ownership.py
+│  ├── test_language_registry.py
+│  ├── test_load_order_manager_import_check.py
+│  ├── test_load_order_manager_save.py
+│  ├── test_load_order_parsers.py
+│  ├── test_load_order_share_code.py
+│  ├── test_mac_platform_support.py
+│  ├── test_maintenance_manager.py
+│  ├── test_mod_asset_missing_state.py
+│  ├── test_mod_residue_manager.py
+│  ├── test_mod_settings_manager.py
+│  ├── test_profile_and_scanner.py
+│  ├── test_recommendation_export_manager.py
+│  ├── test_rule_manager_dynamic_weights.py
+│  ├── test_shortcuts.py
+│  ├── test_sorter_strategies.py
+│  ├── test_startup_coordinator.py
+│  ├── test_steam_actions.py
+│  ├── test_texture_opt_api.py
+│  ├── test_texture_opt_batch_recovery.py
+│  ├── test_texture_opt_manager.py
+│  ├── test_user_data_root.py
+│  ├── test_workshop_db_manager.py
+│  ├── test_workshop_search.py
+│  ├── test_workshop_selection.py
+│  └── test_workspace_matrix_times.py
+│     
+├──·[toolmods]
+├──·[updates]
+├── LICENSE
+├── icon.ico
+├── uv.lock
+├── README.md
+├── splash.png
+├── main.py
+├── pack_gitignore_zip.py
+├── pack_nuitka.py
+├── pack_pyinstaller.py
+├── validate_environment.py
+├── RimModManager.spec
+├── icon.svg
+├── pyproject.toml
+├── files_tree.txt
+└── nuitka-crash-report.xml
+   

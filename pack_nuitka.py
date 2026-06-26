@@ -22,16 +22,28 @@ def packApplication(main_file="main.py", icon_path="", name=""):
         if not os.path.exists(icon_path):
             raise FileNotFoundError(f"图标文件 '{icon_path}' 不存在")
             
+        # 检查 UPX 可用性
+        import shutil
+        upx_path = r'D:\Environment\upx-5.0.0-win64'
+        upx_args = []
+        if os.path.exists(upx_path):
+            upx_args = ["--plugin-enable=upx", f"--upx-binary={upx_path}"]
+        elif shutil.which("upx"):
+            upx_args = ["--plugin-enable=upx"]
+        else:
+            print("提示: 未检测到 UPX，将跳过 UPX 压缩步骤。")
+
         # 构建 Nuitka 命令
         cmd = [
-            "uv","run",     # 使用uv运行pyinstaller
+            "uv", "run",
             "nuitka",
             "--standalone", # 独立环境
             # "--onefile",    # 打包成单个文件
             "--mingw64",    # 强制 mingw64 编译
             # "--msvc=latest",  # 使用最新的 MSVC 编译
-            "--plugin-enable=upx",  # 启用 upx 插件
-            r'--upx-binary=D:\Environment\upx-5.0.0-win64',    # 指定 UPX 路径
+        ]
+        cmd.extend(upx_args)
+        cmd.extend([
             "--assume-yes-for-downloads",  # 自动同意下载
             "--windows-console-mode=force",  # 强制控制台模式
             # "--windows-console-mode=disable",  # 禁用控制台模式
@@ -45,20 +57,18 @@ def packApplication(main_file="main.py", icon_path="", name=""):
             '--output-dir=dist',  # 指定输出目录
             f'--output-filename={name}',   # 指定名称
             f'--main={main_file}' # 主程序文件
-        ]
+        ])
         
         # F:/programe/Python/RimModManager/.venv/Scripts/python.exe -m nuitka --standalone --show-progress --remove-output --mingw64 --lto=no --assume-yes-for-downloads --jobs=16 --output-dir=F:/programe/Python/RimModManager/output --main=F:/programe/Python/RimModManager/main.py --plugin-enable=pywebview --include-data-dir=F:/programe/Python/RimModManager/frontend/dist=frontend/dist
         
         # 执行打包命令
-        result = subprocess.run(cmd, shell=True, text=True, encoding='utf-8')
+        result = subprocess.run(cmd, text=True, encoding='utf-8')
         
         if result.returncode == 0:
             print("打包成功！")
             print(f"输出目录: {os.path.abspath('dist')}")
         else:
-            print("打包失败！")
-            print("错误信息：")
-            print(result.stderr)
+            print("打包失败！请检查上方输出的错误信息。")
             
     except Exception as e:
         print(f"打包过程中出错: {str(e)}")
