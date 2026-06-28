@@ -111,13 +111,9 @@
       </div>
     </div>
     
-    <!-- 如果正在加载中，不渲染虚拟列表，防止 DOM 引擎崩溃 -->
-    <div v-if="appStore.isLoading" class="w-full h-full flex items-center justify-center bg-bg-deep/50 z-50">
-      <div class="animate-spin size-8 border-4 border-accent-primary border-t-transparent rounded-full"></div>
-    </div>
     <!-- (tabindex="0" @keydown.ctrl.a.prevent="selectAll") 非焦点容器需要 tabindex 才能响应键盘事件 -->
     <!-- 列表区（底部渐变隐藏） -->
-    <div v-else ref="listContainerRef" class="flex-1 flex pb-0.5 overflow-y-auto after:pointer-events-none 
+    <div ref="listContainerRef" class="flex-1 flex pb-0.5 overflow-y-auto after:pointer-events-none 
       after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10 
       after:bg-linear-to-t after:from-bg-deep/80 after:to-transparent focus:outline-none"
       @click.self="modStore.clearSelection()">
@@ -143,7 +139,7 @@
         <!-- 列表 -->
           <!-- :size="isSimpleView ? 34 : 54" -->
         <VirtualList v-model="internalListProxy" ref="vListRef" :key="listKey" dataKey="id" :keeps="50" class="h-full p-1 pb-10" placeholderClass="ghost" wrapClass="" 
-          :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{x:0, y:10}" handle=".drag-handle" :sortable="allowSort" :delay="appStore.settings.ui.drag_delay"
+          :fallbackOnBody="true" :appendToBody="true" :scrollSpeed="{x:0, y:10}" handle=".drag-handle" :sortable="allowSort && !appStore.isLoading" :disabled="appStore.isLoading" :delay="appStore.settings.ui.drag_delay"
           :group="{ name: 'mods', pull:'clone', put: allowSort ? ['mods','groups']:false, revertDrag: true }" :animation="150" 
           :size="itemHeight"
           @drop="updateChildren" @drag="startDrag"
@@ -234,6 +230,10 @@
 
     </div>
 
+    <div v-if="appStore.isLoading" class="absolute inset-0 flex items-center justify-center bg-bg-deep/50 z-50">
+      <div class="animate-spin size-8 border-4 border-accent-primary border-t-transparent rounded-full"></div>
+    </div>
+
   </div>
 </template>
 
@@ -265,7 +265,6 @@ const props = defineProps({
   listColor: { type: String, default: 'primary' } // danger/highlight/special/cool/primary/success/tip/warn/secondary/warning
 })
 
-const emit = defineEmits(['update:modelValue'])
 const appStore = useAppStore()
 const modStore = useModStore()
 const searchStore = useSearchStore()
@@ -274,6 +273,8 @@ const profileStore = useProfileStore()
 const toast = useToast();
 const vListRef = ref(null)  // 虚拟列表引用, 用于滚动到选中项
 const listKey = ref(0)
+const isDragging = ref(false)
+const suppressNextDrop = ref(false)
 
 const searchTagsRef = ref(null)
 const listContainerRef = ref(null)
@@ -910,12 +911,42 @@ const executeSearch = (next = true) => {
   }
 }
 
+const finishDragSession = ({ suppressDrop = false } = {}) => {
+  if (suppressDrop) {
+    suppressNextDrop.value = true
+  }
+  isDragging.value = false
+}
+const dispatchSyntheticDragEnd = () => {
+  if (typeof document === 'undefined') return
+  document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+  document.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }))
+  document.dispatchEvent(new Event('touchcancel', { bubbles: true, cancelable: true }))
+}
+const resetVirtualListInstance = async () => {
+  await nextTick()
+  listKey.value += 1
+}
+const cancelActiveDrag = async () => {
+  if (!isDragging.value) return
+  finishDragSession({ suppressDrop: true })
+  dispatchSyntheticDragEnd()
+  await resetVirtualListInstance()
+}
+
 // 开始拖拽时，清空反选集合
 const startDrag = (e) => {
+  isDragging.value = true
   console.log("开始拖拽:", e)
 }
 // 更新子项的排序
 const updateChildren = async (e) => {
+  if (suppressNextDrop.value || appStore.isLoading) {
+    suppressNextDrop.value = false
+    finishDragSession()
+    return
+  }
+  finishDragSession()
   // 排序状态下禁止拖拽
   if (!allowSort.value) {
     // toast.warning("排序状态下禁止拖拽排序")
@@ -1003,25 +1034,24 @@ const updateChildren = async (e) => {
 
   // 4. 检查是否有变化
   if (JSON.stringify(finalList) !== JSON.stringify(oldIds)) {
-    // 同步 Store（移除旧位置的引用等，虽然这里逻辑上已经是新的了）
-    modStore.removeIdsOnAllList(movingIds)
-    // 发出更新
-    emit('update:modelValue', finalList)
-    // 更新移动时间
-    modStore.takeModListByIds(movingIds).forEach(mod => {
-      mod.last_moved_time = Date.now()
-      if(e.event.target !== e.event.from) {
-        mod.last_active_time = Date.now()
-      }
+    const isCrossListMove = e.event.target !== e.event.from
+    await modStore.runListHistoryTransaction({
+      type: isCrossListMove ? 'move-between-lists' : 'reorder-list',
+      label: isCrossListMove ? `移动 ${movingIds.length} 项到 ${props.title}` : `调整 ${props.title} 列表顺序`,
+      trackedModIds: movingIds
+    }, async () => {
+      // 同步 Store（移除旧位置的引用等，虽然这里逻辑上已经是新的了）
+      modStore.removeIdsOnAllList(movingIds)
+      modStore.setListIds(props.listId, finalList)
+      // 更新移动时间
+      modStore.takeModListByIds(movingIds).forEach(mod => {
+        mod.last_moved_time = Date.now()
+        if (isCrossListMove) {
+          mod.last_active_time = Date.now()
+        }
+      })
     })
-    // 强制重绘（连选拖拽第一项向下2倍选中范围内会导致排序异常，需要重绘）
     await nextTick()
-    // 但直接通过key更新会导致列表重新渲染，导致滚动位置丢失，使用原版滚动定位不准
-    // const offset = vListRef.value?.getOffset()
-    // listKey.value++ // 触发列表重新渲染
-    // nextTick(() => {
-    //   vListRef.value?.scrollToOffset(offset)
-    // })
   }
   // 通过翻转排序两次，实现软重绘
   isSortAsc.value=!isSortAsc.value
@@ -1032,17 +1062,19 @@ const updateChildren = async (e) => {
 // 添加缺失的依赖项
 const addInactiveMods = async (missingIds) => {
   if (missingIds.length === 0) return
-  // console.log('添加缺失的依赖项:', uniqueInactiveDependencies)
-  const oldIds = [...props.modelValue]
-  modStore.removeIdsOnAllList(missingIds)
-  oldIds.push(...missingIds)
-  emit('update:modelValue', oldIds)
-  // 更新移动时间
-  modStore.takeModListByIds(missingIds).forEach(mod => {
-    mod.last_moved_time = Date.now()
-    mod.last_active_time = Date.now()
+  const nextIds = [...props.modelValue, ...missingIds]
+  await modStore.runListHistoryTransaction({
+    type: 'batch-add-list-items',
+    label: `向 ${props.title} 添加 ${missingIds.length} 项`,
+    trackedModIds: missingIds
+  }, async () => {
+    modStore.removeIdsOnAllList(missingIds)
+    modStore.setListIds(props.listId, nextIds)
+    modStore.takeModListByIds(missingIds).forEach(mod => {
+      mod.last_moved_time = Date.now()
+      mod.last_active_time = Date.now()
+    })
   })
-  // 强制重绘（连选拖拽第一项向下2倍选中范围内会导致排序异常，需要重绘）
   await nextTick()
   // 通过翻转排序两次，实现软重绘
   isSortAsc.value=!isSortAsc.value
@@ -1053,9 +1085,13 @@ const addInactiveMods = async (missingIds) => {
 const removeInvalidMod = async () => {
   const invalidMods = invalidModsToRemove.value
   if (invalidMods.length === 0) return
-  // console.log('移除无效的Mod:', invalidMods)
-  modStore.removeIdsOnAllList(invalidMods)
-  // 强制重绘（连选拖拽第一项向下2倍选中范围内会导致排序异常，需要重绘）
+  await modStore.runListHistoryTransaction({
+    type: 'batch-remove-list-items',
+    label: `移除 ${invalidMods.length} 个无效 Mod`,
+    trackedModIds: invalidMods
+  }, async () => {
+    modStore.removeIdsOnAllList(invalidMods)
+  })
   await nextTick()
   // 通过翻转排序两次，实现软重绘
   isSortAsc.value=!isSortAsc.value
@@ -1208,6 +1244,10 @@ const handleDirectiveNavigate = (nextId, nextIndex, direction) => {
 // v-if 切换到 loading 时，该组件内部的 v-else 块会触发卸载
 // 这是抓取当前滚动位置的最后机会
 onBeforeUnmount(() => {
+  if (isDragging.value) {
+    finishDragSession({ suppressDrop: true })
+    dispatchSyntheticDragEnd()
+  }
   savePosition();
 });
 const savePosition = () => {
@@ -1231,6 +1271,7 @@ onMounted(() => {
 watch(() => appStore.isLoading, async (loading) => {
   // console.log(`[Scroll] Loading state changed to ${loading}`);
   if (loading) {
+    await cancelActiveDrag()
     // 刚开始加载：如果在外面手动触发加载，这里也是一个记录点
     // 但注意：如果是 v-if 切换，组件可能已经开始销毁流程了
     savePosition();

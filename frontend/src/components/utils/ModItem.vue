@@ -222,7 +222,7 @@ const confirmStore = useConfirmStore()
 const modData = computed(() => modStore.takeModById(props.item_id))
 const modGroups = computed(() => groupStore.takeGroupsByModId(props.item_id))
 // const modIcon = computed(() => modStore.getIconUrl(props.id))
-const displayName = computed(() => modData.value.alias_name ? modData.value.alias_name : (modData.value.name ? modData.value.name : props.item_id))
+const displayName = computed(() => modData.value?.alias_name ? modData.value.alias_name : (modData.value?.name ? modData.value.name : props.item_id))
 // ModItem 自己也需要识别“哪些选中项属于标题分组”，这样右键菜单才能按批量分组操作显示。
 const isSectionHeaderName = (value) => {
   const name = String(value ?? '').trim()
@@ -245,12 +245,12 @@ const modType = computed(() => modStore.displayModType(modData.value))
 
 // 可替换版本是否已经安装
 const replacementInstalled = computed(() => {
-    if (!modData.value.replacement) return false
+    if (!modData.value?.replacement) return false
     return modStore.allModWorkshopIds.has(modData.value.replacement.new_workshop_id)
 })
 // 可替换版本提示
 const replacementTooltip = computed(() => {
-    if (!modData.value.replacement) return null
+    if (!modData.value?.replacement) return null
     if (replacementInstalled.value) {
       return `已安装可替换版本：##${modData.value.replacement.new_name}##（${modData.value.replacement.new_workshop_id}）`
     }
@@ -281,17 +281,17 @@ const issueTooltip = computed(() => {
     return issues.value.map(i => i.message).join('\n')
 })
 
-const linkIssueDetails = computed(() => modStore.interlockDetailsMap[modData.value.interlock_id] || [])
+const linkIssueDetails = computed(() => modStore.interlockDetailsMap[modData.value?.interlock_id] || [])
 // 联锁标识
 const hasLockPrevious = computed(() => {
-  if (!modData.value.interlock_id) return false
+  if (!modData.value?.interlock_id) return false
   const chain = modStore.interlocksMap[modData.value.interlock_id]
   if (!chain) return false
   const myIdx = chain.findIndex(id => id.toLowerCase() === props.item_id.toLowerCase())
   return myIdx > 0 // 只要不是第一个，就应该有向上的链接头
 })
 const hasLockNext = computed(() => {
-  if (!modData.value.interlock_id) return false
+  if (!modData.value?.interlock_id) return false
   const chain = modStore.interlocksMap[modData.value.interlock_id]
   if (!chain) return false
   const myIdx = chain.findIndex(id => id.toLowerCase() === props.item_id.toLowerCase())
@@ -327,7 +327,7 @@ const linkWarn = computed(() => {
 })
 // 监听：只有当警告触发，且缓存里没有时，才“点火”触发 Store 去后台静默请求
 watch(linkWarn, (newVal) => {
-  if ((newVal[0] || newVal[1]) && modData.value.interlock_id) {
+  if ((newVal[0] || newVal[1]) && modData.value?.interlock_id) {
     modStore.loadInterlockDetails(modData.value.interlock_id)
   }
 }, { immediate: true })
@@ -336,7 +336,7 @@ const getCardStyle = (id) => {
   const base = { height: (props.simple ? appStore.scalePx(30) : appStore.scalePx(50))+'px' }
   // 标题项保持固定高度，不参与普通模组的签名色着色逻辑。
   if (props.sectionHeader) return base
-  const color = modStore.takeModById(id).sign_color
+  const color = modStore.takeModById(id)?.sign_color
   // console.log(color)
   if (!color) return base
   if(!issueState.value) { // 防止覆盖错误样式
@@ -492,7 +492,7 @@ const handleContextMenu = async (event) => {
     const _selectedCountStr2 = workshop_ids.length>1?` (${workshop_ids.length}项)`:''
     singleMenuItems.push(
       { label: '缺失处理', icon: CircleFadingPlus, children:[
-        { label: '移除缺失项'+ _selectedCountStr, icon: Eraser, action: () => modStore.removeIdsOnAllList(package_ids) },
+        { label: '移除缺失项'+ _selectedCountStr, icon: Eraser, action: () => modStore.runListHistoryTransaction({ type: 'remove-missing-items', label: `移除 ${package_ids.length} 个缺失项`, trackedModIds: package_ids }, async () => modStore.removeIdsOnAllList(package_ids)) },
         { label: '订阅缺失项'+ _selectedCountStr2, disabled: workshop_ids.length === 0, icon: Flag, action: () => appStore.subscribeWorkshopIds(workshop_ids) },
         { label: '下载缺失项'+ _selectedCountStr2, disabled: workshop_ids.length === 0, icon: Download, action: () => appStore.downloadWorkshopItems(workshop_ids) },
       ]}

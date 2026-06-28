@@ -20,14 +20,16 @@
 │   │   ├──  dao_ext.py
 │   │   ├──  migrator.py
 │   │   ├──  models.py
-│   │   └──  models_ext.py
+│   │   ├──  models_ext.py
+│   │   └──  workshop_selection.py
 │   │   
 │   ├── ·[load_order]
 │   │   ├──  __init__.py
 │   │   ├──  detector.py
 │   │   ├──  import_check.py
 │   │   ├──  models.py
-│   │   └──  parsers.py
+│   │   ├──  parsers.py
+│   │   └──  share_code.py
 │   │   
 │   ├── ·[managers]
 │   │   ├──  __init__.py
@@ -46,6 +48,7 @@
 │   │   ├──  mgr_steam_api.py
 │   │   ├──  mgr_steamcmd_core.py
 │   │   ├──  mgr_sub_browser.py
+│   │   ├──  mgr_texture_opt.py
 │   │   ├──  mgr_update.py
 │   │   └──  mgr_workshop_db.py
 │   │   
@@ -63,8 +66,7 @@
 │   │   ├──  lanzou_parser.py
 │   │   ├──  logger.py
 │   │   ├──  tools.py
-│   │   ├──  versioning.py
-│   │   └──  workshop_selection.py
+│   │   └──  versioning.py
 │   │   
 │   ├──  _version.py
 │   ├──  api.py
@@ -103,6 +105,7 @@
 │   │   │   │   ├──  ModItem.vue
 │   │   │   │   ├──  ProfileSwitcher.vue
 │   │   │   │   ├──  SegmentedTabs.vue
+│   │   │   │   ├──  TextureModCard.vue
 │   │   │   │   └──  UnifiedLogPanel.vue
 │   │   │   │   
 │   │   │   ├── ·[workspace]
@@ -128,6 +131,7 @@
 │   │   │   ├──  RulePanel.vue
 │   │   │   ├──  SettingsPanel.vue
 │   │   │   ├──  StatusBar.vue
+│   │   │   ├──  TextureOptModal.vue
 │   │   │   └──  UpdateModal.vue
 │   │   │   
 │   │   ├── ·[directives]
@@ -159,6 +163,8 @@
 │   │   │   ├──  profileStore.js
 │   │   │   ├──  ruleStore.js
 │   │   │   ├──  searchStore.js
+│   │   │   ├──  taskStore.js
+│   │   │   ├──  textureStore.js
 │   │   │   └──  workspaceStore.js
 │   │   │   
 │   │   ├── ·[utils]
@@ -186,18 +192,25 @@
 ├── ·[test]
 ├── ·[tests]
 │   ├──  __init__.py
+│   ├──  test_download_manager.py
+│   ├──  test_github_manager.py
 │   ├──  test_import_check.py
 │   ├──  test_load_order_parsers.py
+│   ├──  test_load_order_share_code.py
 │   ├──  test_profile_and_scanner.py
 │   ├──  test_rule_manager_dynamic_weights.py
 │   ├──  test_sorter_strategies.py
+│   ├──  test_texture_opt_manager.py
 │   └──  test_workshop_selection.py
 │   
 ├── ·[toolmods]
 ├── ·[tools]
 │   ├── ·[steam_agent]
-│   └── ·[steamcmd]
+│   ├── ·[steamcmd]
+│   └── ·[texture_tools]
 │   
+│       └──  todds.exe
+│       
 ├──  .gitignore
 ├──  .python-version
 ├──  files_tree.txt

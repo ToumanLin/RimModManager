@@ -7,6 +7,13 @@ export const useGroupStore = defineStore('groups', () => {
   const toast = createToastInterface()
   const appStore = useAppStore()
   const checkResult = appStore.checkResult
+  const normalizeGroup = (group = {}) => ({
+    ...group,
+    mod_ids: Array.isArray(group?.mod_ids) ? [...group.mod_ids] : []
+  })
+  const normalizeGroups = (groups) => (
+    Array.isArray(groups) ? groups.map(group => normalizeGroup(group)) : []
+  )
 
   // === State ===
   const groupList = ref([]) // 分组列表
@@ -15,7 +22,7 @@ export const useGroupStore = defineStore('groups', () => {
   // === Actions ===
   // 设置分组数据
   const setGroups = (groups) => {
-    groupList.value = groups || []
+    groupList.value = normalizeGroups(groups)
   }
   // 重置分组数据
   const reset = () => {
@@ -23,14 +30,16 @@ export const useGroupStore = defineStore('groups', () => {
   }
   // 根据 Mod ID 获取所属分组列表
   const takeGroupsByModId = (modId) => {
-    return groupList.value.filter(g => g.mod_ids.includes(modId))
+    const normalizedModId = String(modId ?? '').trim()
+    if (!normalizedModId) return []
+    return groupList.value.filter(g => Array.isArray(g?.mod_ids) && g.mod_ids.includes(normalizedModId))
   }
   // 根据分组 ID 获取分组数据
   const takeGroupById = (groupId) => {
     return groupList.value.find(g => g.group_id === groupId) || null
   }
   const allGroupNames = computed(() => {
-    return groupList.value.map(g => g.name)
+    return groupList.value.map(g => g?.name).filter(Boolean)
   })
   // --- 数据操作 ---
   // 获取分组
@@ -40,7 +49,7 @@ export const useGroupStore = defineStore('groups', () => {
     try {
       const res = await window.pywebview.api.groups_get()
       if (checkResult(res, "获取分组")) {
-        groupList.value = res.data.groups || []
+        groupList.value = normalizeGroups(res.data.groups)
       }
     } catch (e) {
       console.error("获取分组异常:", e)
@@ -65,7 +74,7 @@ export const useGroupStore = defineStore('groups', () => {
       const res = await window.pywebview.api.group_create(name, color)
       // console.log("创建分组:", res)
       if (checkResult(res, "创建分组")) {
-        groupList.value.push(res.data.group)
+        groupList.value.push(normalizeGroup(res.data.group))
         // 排序
         groupList.value.sort((a, b) => a.sort_index - b.sort_index)
       } else {
@@ -127,7 +136,8 @@ export const useGroupStore = defineStore('groups', () => {
       // 更新本地分组
       const group = groupList.value.find(g => g.group_id === groupId)
       if (group) { // 确保分组存在, 并去重
-        group.mod_ids = [...new Set([...group.mod_ids, ...modIds])]
+        const currentIds = Array.isArray(group.mod_ids) ? group.mod_ids : []
+        group.mod_ids = [...new Set([...currentIds, ...modIds])]
       }
       else return false
       const res = await window.pywebview.api.group_add_mods(groupId, modIds)
@@ -156,7 +166,8 @@ export const useGroupStore = defineStore('groups', () => {
         // 更新本地分组
         const group = groupList.value.find(g => g.group_id === groupId)
         if (group) {
-          group.mod_ids = group.mod_ids.filter(id => !modIds.includes(id))
+          const currentIds = Array.isArray(group.mod_ids) ? group.mod_ids : []
+          group.mod_ids = currentIds.filter(id => !modIds.includes(id))
         }
         return true
       }
@@ -219,7 +230,7 @@ export const useGroupStore = defineStore('groups', () => {
     try {
       // 更新本地分组
       const group = groupList.value.find(g => g.group_id === groupId)
-      if (group) group.mod_ids = modIds
+      if (group) group.mod_ids = [...modIds]
       else return false
       const res = await window.pywebview.api.group_content_reorder(groupId, modIds)
       // console.log("分组内排序:", res)
