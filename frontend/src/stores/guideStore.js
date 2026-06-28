@@ -18,6 +18,7 @@ import {
   githubGuideSteps,
   ruleCenterGuideSteps,
   conflictGuideSteps,
+  textureOptGuideSteps,
   aiConfigGuideSteps,
   aiReviewGuideSteps,
   logAnalysisGuideSteps,
@@ -73,6 +74,12 @@ export const allGuides = [
     }
   },
   {
+    key: 'textureOpt',
+    title: '贴图优化快速上手',
+    description: '了解贴图优化中心的统计含义、生成/清理规则，以及 todds 的基本使用方式。',
+    steps: textureOptGuideSteps,
+  },
+  {
     key: 'aiConfig',
     title: 'AI 配置快速上手',
     description: '了解如何启用 AI、配置接口并完成连通性测试。',
@@ -89,7 +96,7 @@ export const allGuides = [
     steps: aiReviewGuideSteps,
     beforeStart: () => {
       const appStore = useAppStore();
-      const hasResults = Array.isArray(appStore.aiBatchResults) && appStore.aiBatchResults.length > 0;
+      const hasResults = appStore.aiBatchResultCount > 0;
       if (!hasResults) return false;
       appStore.uiState.showAiReviewModal = false;
       return true;

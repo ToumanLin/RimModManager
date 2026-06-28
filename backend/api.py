@@ -34,13 +34,14 @@ from backend.managers.mgr_steamcmd_core import SteamCMDController
 from backend.settings import COMMUNITY_INSTEAD_DB_PATH, COMMUNITY_WORKSHOP_DB_PATH, DATA_DIR, HOME_DIR, TOOL_MODS_DIR, settings, RULES_DIR
 from backend.utils.event_bus import EventBus
 from backend._version import __version__, __build__, get_all_changelogs
+from backend.utils.tools import normalize_package_id
 from backend.utils.tools import current_ms, generate_path_hash
 from backend.utils.logger import logger, app_log_reader
 from backend.managers.mgr_network import network_mgr
 
 # 2. 引入数据库层
 from backend.database.models import ModAsset, ModInterlock, UserModData, GithubModRecord, GithubTimeline, init_db, db
-from backend.database.dao import CollectionDAO, ModDAO, GroupDAO
+from backend.database.dao import CollectionDAO, GroupDAO, ModDAO, ModInterlockDAO, ModMaintenanceDAO
 from backend.database.models_ext import WorkshopMeta
 from backend.database.dao_ext import ExtDAO
 
@@ -63,7 +64,10 @@ from backend.managers.mgr_game_monitor import GameMonitor
 from backend.managers.mgr_profile import ProfileContext, ProfileManager
 from backend.managers.mgr_steam_api import SteamWebAPI
 from backend.managers.mgr_github import GithubManager
+from backend.managers.mgr_texture_opt import TextureOptCancelled, TextureOptimizationManager
 from playhouse.shortcuts import model_to_dict
+
+GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS = 3 * 60 * 1000
 
 
 def log_api_call(func):
@@ -190,6 +194,9 @@ class API:
         self._native_drop_selector = '#backup-drop-zone'
         self._native_drop_element = None
         self._native_drop_handler = None
+        self._github_subs_refresh_lock = threading.Lock()
+        self._github_subs_refresh_running = False
+        self._github_subs_refresh_started_at = 0
         # 2. 实例化各个管理器
         self.workshop_db_mgr = WorkshopDBManager()
         self.game_mgr = GameManager()
@@ -203,13 +210,14 @@ class API:
         self._bootstrap_context(settings.config.current_profile_id)
         self.game_monitor = GameMonitor(self)
         self.download_mgr = DownloadManager()
-        self.github_mgr = GithubManager(self.download_mgr)
+        self.github_mgr = GithubManager()
         self.file_mgr = file_mgr
         self.steam_mgr = SteamManager()
         self.steamcmd_controller = SteamCMDController(self.steam_mgr.steamcmd_exe)
         self.ai_mgr = AIManager()
         self.browser_window = SubBrowserManager(self)
         self.update_mgr = UpdateManager()
+        self.texture_mgr = TextureOptimizationManager()
         
         # 每次启动 API 时，强制检查并修复 SteamCMD 的软链接！
         if settings.config.self_mods_path and settings.config.steamcmd_mods_path:
@@ -378,15 +386,16 @@ class API:
 
             if self._native_drop_element and self._native_drop_handler:
                 try:
-                    self._native_drop_element.events.drop -= self._native_drop_handler
+                    self._native_drop_element.off('drop', self._native_drop_handler)
                 except Exception:
                     # 旧节点已被 Vue 重建时，这里直接忽略即可。
                     pass
 
-            handler = DOMEventHandler(self._on_native_drop_event, True, True)
-            element.events.drop += handler
+            callback = self._on_native_drop_event
+            handler = DOMEventHandler(callback, True, True)
+            element.on('drop', handler)
             self._native_drop_element = element
-            self._native_drop_handler = handler
+            self._native_drop_handler = callback
             self._native_drop_selector = normalized_selector
             self._native_drop_bound = True
             logger.info(f"已绑定 pywebview 原生 drop 事件: {normalized_selector}")
@@ -625,9 +634,9 @@ class API:
         """手动触发：清理无效的 UserModData、GroupMod 和 ModAsset"""
         try:
             # 1. 清理文件已不存在的 ModAsset
-            missing = ModDAO.find_missing_mods(delete=True)
+            missing = ModMaintenanceDAO.find_missing_mods(delete=True)
             # 2. 清理孤立的用户数据和分组关联
-            ModDAO.clean_orphaned_data()
+            ModMaintenanceDAO.clean_orphaned_data()
             return ApiResponse.success(message="数据库清理完成")
         except Exception as e:
             return ApiResponse.error(str(e))
@@ -746,7 +755,7 @@ class API:
         """
         触发后台模组扫描。
         扫描完成后，Scanner 会自动根据当前 Profile 配置执行链接部署。
-        立即返回状态，前端通过监听 'scan-progress' 和 'scan-complete' 事件获取更新。
+        立即返回状态，前端通过统一任务流和 `scan-complete` 事件获取更新。
         :param specific_paths: 可选，指定要扫描的路径列表。如果为空，则使用设置中的默认路径。
         :param forced_update: 可选，是否强制更新所有 Mod 的数据。默认 False。
         """
@@ -819,15 +828,15 @@ class API:
                 try:
                     if action == 'disable':
                         # 1. 执行物理与数据库禁用
-                        success, msg = ModDAO.set_mod_disabled_status(path, disable=True)
+                        success, msg = ModMaintenanceDAO.set_mod_disabled_status(path, disable=True)
                         # 2. 如果提供了保留项的 Hash，记录阴影路径
                         if success and keep_hash:
-                            ModDAO.add_shadow_path(keep_hash, path)
+                            ModMaintenanceDAO.add_shadow_path(keep_hash, path)
                     elif action == 'delete':
                         if not path_hash:
                             msg = "缺少 target_path_hash，无法删除该副本"
                         else:
-                            res = ModDAO.delete_mods_physically([path_hash])
+                            res = ModMaintenanceDAO.delete_mods_physically([path_hash])
                             success = res['success_count'] > 0
                             if not success:
                                 msg = res['errors'][0] if res['errors'] else "未找到可删除的模组记录"
@@ -876,7 +885,7 @@ class API:
                 normalized_hashes = [path_hashes.strip()] if path_hashes.strip() else []
             else:
                 normalized_hashes = [str(item or '').strip() for item in path_hashes if str(item or '').strip()]
-            res = ModDAO.delete_mods_physically(normalized_hashes)
+            res = ModMaintenanceDAO.delete_mods_physically(normalized_hashes)
             if res['success_count'] != len(normalized_hashes):
                 return ApiResponse.warning(f"部分Mod删除失败：{len(normalized_hashes)-res['success_count']} 项未成功删除", data=res)
             if res['errors']:
@@ -900,7 +909,7 @@ class API:
                 mod = ModAsset.get_or_none(ModAsset.path_hash == path_hash)
                 if not mod: continue
                 # 2. 执行禁用/启用操作
-                ModDAO.set_mod_disabled_status(mod.path, disabled)
+                ModMaintenanceDAO.set_mod_disabled_status(mod.path, disabled)
             return ApiResponse.success(message=f"Mod {'已禁用' if disabled else '已启用'}")
         except Exception as e:
             return ApiResponse.error(str(e))
@@ -982,7 +991,7 @@ class API:
     def mods_link(self, mod_ids: List[str]):
         """批量设置 Mod 联锁"""
         try:
-            result = ModDAO.link_mods(mod_ids)
+            result = ModInterlockDAO.link_mods(mod_ids)
             return ApiResponse.success(data=result)
         except Exception as e:
             return ApiResponse.error(str(e))
@@ -991,7 +1000,7 @@ class API:
     def mods_unlink(self, mod_ids: List[str]):
         """批量解除 Mod 联锁"""
         try:
-            result = ModDAO.unlink_mods(mod_ids)
+            result = ModInterlockDAO.unlink_mods(mod_ids)
             return ApiResponse.success(data=result)
         except Exception as e:
             return ApiResponse.error(str(e))
@@ -1000,7 +1009,7 @@ class API:
     def mods_interlock_heal(self, interlock_id: str):
         """修复断裂的联锁组（剔除本地缺失项）"""
         try:
-            result = ModDAO.heal_interlock(interlock_id)
+            result = ModInterlockDAO.heal_interlock(interlock_id)
             return ApiResponse.success(data=result, message="联锁修复完成")
         except Exception as e:
             return ApiResponse.error(str(e))
@@ -1009,7 +1018,7 @@ class API:
     def mods_interlock_missing_get(self, interlock_id: str):
         """获取联锁组中缺失的项，供前端引导订阅"""
         try:
-            missing_mods = ModDAO.get_interlock_missing_mods(interlock_id)
+            missing_mods = ModInterlockDAO.get_interlock_missing_mods(interlock_id)
             return ApiResponse.success(data=missing_mods)
         except Exception as e:
             return ApiResponse.error(str(e))
@@ -1938,6 +1947,38 @@ class API:
         return ApiResponse.success(message="尝试取消任务")
 
     @log_api_call
+    def cancel_progress_task(self, task_id: str, task_type: str):
+        """统一取消入口，供前端全局任务栏按任务类型路由控制。"""
+        normalized_task_id = str(task_id or "").strip()
+        normalized_type = str(task_type or "").strip().lower()
+
+        if normalized_type in {"download", "update", "localize", "steamcmd-init"}:
+            if not normalized_task_id:
+                return ApiResponse.error("缺少任务 ID")
+            self.download_mgr.cancel_task(normalized_task_id)
+            return ApiResponse.success(message="已请求取消下载任务")
+
+        if normalized_type == "scan":
+            if not self.scanner:
+                return ApiResponse.error("扫描器未初始化")
+            ok = self.scanner.stop_scan(normalized_task_id or None)
+            return ApiResponse.success(message="已请求取消扫描任务") if ok else ApiResponse.error("当前没有可取消的扫描任务")
+
+        if normalized_type in {"texture-opt", "texture-opt-analyze"}:
+            if not normalized_task_id:
+                return ApiResponse.error("缺少任务 ID")
+            try:
+                res = self.texture_mgr.cancel_task(normalized_task_id)
+                return ApiResponse.success(res, message="已请求取消贴图任务")
+            except Exception as e:
+                return ApiResponse.error(str(e))
+
+        if normalized_type == "ai-batch":
+            return ApiResponse.warning("AI 批量任务暂不支持取消")
+
+        return ApiResponse.error(f"该任务类型暂不支持取消: {normalized_type or 'unknown'}")
+
+    @log_api_call
     def get_active_downloads(self):
         """获取所有任务状态 (用于 UI 恢复)"""
         return ApiResponse.success(self.download_mgr.get_tasks_info())
@@ -2060,13 +2101,32 @@ class API:
         is_initialized = (Path(settings.config.steamcmd_path) / "public").exists()
         if os.path.exists(self.steamcmd_controller.steamcmd_exe) and not is_initialized:
             controller = SteamCMDController(self.steamcmd_controller.steamcmd_exe)
+            steamcmd_task_id = str(uuid.uuid4())
+            EventBus.emit_progress(
+                steamcmd_task_id,
+                "steamcmd-init",
+                status="pending",
+                progress=0,
+                message="准备初始化 SteamCMD...",
+                metrics={"title": "SteamCMD 初始化"},
+            )
             def on_progress(percent, msg):
                 # 将进度推给前端
                 from backend.utils.event_bus import EventBus
-                EventBus.emit('steamcmd-init-progress', {'percent': percent, 'msg': msg})
+                EventBus.emit_progress(
+                    steamcmd_task_id,
+                    "steamcmd-init",
+                    status="running",
+                    progress=percent,
+                    message=msg,
+                    metrics={"title": "SteamCMD 初始化"},
+                )
             success, msg = controller.initialize_steamcmd(on_progress)
             if not success:
                 logger.error(f"SteamCMD 初始化彻底失败: {msg}", exc_info=True)
+                EventBus.emit_progress(steamcmd_task_id, "steamcmd-init", status="failed", progress=0, message=msg, metrics={"title": "SteamCMD 初始化"})
+            else:
+                EventBus.emit_progress(steamcmd_task_id, "steamcmd-init", status="success", progress=100, message="SteamCMD 初始化完成", metrics={"title": "SteamCMD 初始化"})
 
     @log_api_call
     def steam_subscribe(self, workshop_ids: str):
@@ -2282,7 +2342,7 @@ class API:
             try:
                 # 运行写好的批量调度引擎
                 results = loop.run_until_complete(
-                    self.ai_mgr.execute_batch_task_async(task_key, items, variables)
+                    self.ai_mgr.execute_batch_task_async(task_key, items, variables, task_event_id)
                 )
                 # 任务彻底完成后，发送 complete 事件
                 EventBus.emit(f'ai-batch-complete', {
@@ -2295,6 +2355,14 @@ class API:
                 #     self._save_ai_results_to_db(results)
             except Exception as e:
                 logger.error(f"Background AI task failed: {e}", exc_info=True)
+                EventBus.emit_progress(
+                    task_event_id,
+                    "ai-batch",
+                    status="failed",
+                    progress=0,
+                    message=f"AI 任务异常: {e}",
+                    metrics={"task_key": task_key, "total": len(items), "title": "AI 批量处理"},
+                )
                 EventBus.emit(f'ai-batch-complete', {
                     'task_event_id': task_event_id,
                     'status': 'error', 
@@ -2304,6 +2372,14 @@ class API:
                 loop.close()
 
         # 3. 启动守护线程（不阻塞当前 pywebview 的请求）
+        EventBus.emit_progress(
+            task_event_id,
+            "ai-batch",
+            status="pending",
+            progress=0,
+            message="任务已加入后台队列",
+            metrics={"task_key": task_key, "total": len(items), "title": "AI 批量处理"},
+        )
         threading.Thread(target=background_worker, daemon=True).start()
 
         # 4. 立即返回响应给前端，让前端开始监听
@@ -2948,7 +3024,6 @@ class API:
         return ApiResponse.error("未找到模组详情")
 
     
-    
     # ==========================================
     # 收藏合集相关接口
     # ==========================================
@@ -3146,9 +3221,9 @@ class API:
     # GitHub 相关接口
     # ==========================================
     @log_api_call
-    def github_fetch_info(self, url: str):
+    def github_fetch_info(self, url: str, source_branch: str = ""):
         """解析并获取远程仓库信息"""
-        res = self.github_mgr.fetch_repo_info(url)
+        res = self.github_mgr.fetch_repo_info(url, source_branch=source_branch)
         if "error" in res: return ApiResponse.error(res["error"])
         return ApiResponse.success(res)
 
@@ -3157,23 +3232,37 @@ class API:
         """添加订阅到数据库"""
         url = payload.get("url")
         if not url: return ApiResponse.error("URL 不能为空")
-        
+        installed_version = str(payload.get("installed_version") or "").strip()
+        info = payload.get("info") or {}
+        install_type = str(payload.get("install_type") or "source").strip() or "source"
+        target_branch = str(payload.get("default_branch") or "").strip() or "main"
+
         with db.atomic():
             record, created = GithubModRecord.get_or_create(
                 repo_url=url,
                 defaults={
                     "owner": payload.get("owner"),
                     "repo_name": payload.get("repo"),
-                    "target_branch": payload.get("default_branch"),
-                    "install_type": payload.get("install_type", "source"),
-                    "installed_version": payload.get("installed_version"),
-                    "online_info_cache": payload.get("info"),
+                    "target_branch": target_branch,
+                    "install_type": install_type,
+                    "installed_version": installed_version,
+                    "online_info_cache": info,
                     "last_sync_time": current_ms(),
                 }
             )
-            # 如果是新建的，写入初始日志
             if created:
                 self.github_mgr.record_timeline(url, "subscribe", "已添加 GitHub 仓库监听记录")
+            else:
+                # 再次订阅同一仓库时，更新监听策略和最新在线缓存，但不擅自覆盖已部署版本。
+                record.owner = payload.get("owner") or record.owner
+                record.repo_name = payload.get("repo") or record.repo_name
+                record.target_branch = target_branch
+                record.install_type = install_type
+                record.online_info_cache = info
+                record.last_sync_time = current_ms()
+                if installed_version:
+                    record.installed_version = installed_version
+                record.save()
         return self.github_get_subscribed() # 返回最新列表
 
     @log_api_call
@@ -3183,56 +3272,83 @@ class API:
         for r in records:
             # 将缓存的字典暴露给前端的 online_info 字段
             r["online_info"] = r.get("online_info_cache", {})
-        # 2. 启动后台静默更新线程 (不阻塞当前请求)
-        threading.Thread(target=self._bg_refresh_github_subs, args=(records,), daemon=True).start()
+        self._schedule_github_subs_refresh(records)
 
         return ApiResponse.success(records)
+
+    def _schedule_github_subs_refresh(self, records: list) -> bool:
+        """给 GitHub 订阅刷新加最短触发间隔，避免页面频繁打开时重复打满 API。"""
+        if not records:
+            return False
+
+        now = current_ms()
+        with self._github_subs_refresh_lock:
+            if self._github_subs_refresh_running:
+                logger.debug("GitHub 订阅后台刷新已在执行，跳过重复触发")
+                return False
+            if now - self._github_subs_refresh_started_at < GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS:
+                logger.debug("GitHub 订阅后台刷新距离上次启动过近，跳过本轮触发")
+                return False
+            self._github_subs_refresh_running = True
+            self._github_subs_refresh_started_at = now
+
+        threading.Thread(target=self._bg_refresh_github_subs, args=(records,), daemon=True).start()
+        return True
 
     def _bg_refresh_github_subs(self, records: list):
         """
         后台多线程并发刷新 GitHub 数据
         """
-        if not records: return
-        
-        updated_records = {}
-        # 使用线程池并发请求 GitHub API，避免串行卡顿
-        # 假设有 5 个订阅，5 个线程同时发请求，耗时取决于最慢的一个 (通常 < 500ms)
-        def fetch_single(record):
-            repo_url = record["repo_url"]
-            info = self.github_mgr.fetch_repo_info(repo_url)
-            return repo_url, info
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            # 提交所有任务
-            futures = [executor.submit(fetch_single, r) for r in records]
-            for future in futures:
-                try:
-                    repo_url, info = future.result()
-                    if "error" not in info:
-                        updated_records[repo_url] = info
-                except Exception as e:
-                    logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
+        try:
+            if not records:
+                return
+            
+            updated_records = {}
+            # 使用线程池并发请求 GitHub API，避免串行卡顿
+            # 假设有 5 个订阅，5 个线程同时发请求，耗时取决于最慢的一个 (通常 < 500ms)
+            def fetch_single(record):
+                repo_url = record["repo_url"]
+                source_branch = ""
+                if str(record.get("install_type") or "").strip() == "source":
+                    source_branch = str(record.get("target_branch") or "").strip()
+                info = self.github_mgr.fetch_repo_info(repo_url, source_branch=source_branch)
+                return repo_url, info
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # 提交所有任务
+                futures = [executor.submit(fetch_single, r) for r in records]
+                for future in futures:
+                    try:
+                        repo_url, info = future.result()
+                        if "error" not in info:
+                            updated_records[repo_url] = info
+                    except Exception as e:
+                        logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
 
-        # 如果没有成功获取到任何数据，直接结束
-        if not updated_records: return
-        # 批量更新数据库的缓存
-        from backend.database.models import db, GithubModRecord
-        import time
-        current_time = int(time.time() * 1000)
-        with db.atomic():
-            for repo_url, info in updated_records.items():
-                GithubModRecord.update(
-                    online_info_cache=info,
-                    last_sync_time=current_time
-                ).where(GithubModRecord.repo_url == repo_url).execute()
-        # 【核心】通过 EventBus 将最新数据推给前端 Vue
-        EventBus.emit('github-online-update', updated_records)
-        logger.info(f"后台 GitHub 数据刷新完成，已推送 {len(updated_records)} 条更新")
+            # 如果没有成功获取到任何数据，直接结束
+            if not updated_records:
+                return
+            # 批量更新数据库的缓存
+            from backend.database.models import db, GithubModRecord
+            import time
+            current_time = int(time.time() * 1000)
+            with db.atomic():
+                for repo_url, info in updated_records.items():
+                    GithubModRecord.update(
+                        online_info_cache=info,
+                        last_sync_time=current_time
+                    ).where(GithubModRecord.repo_url == repo_url).execute()
+            # 【核心】通过 EventBus 将最新数据推给前端 Vue
+            EventBus.emit('github-online-update', updated_records)
+            logger.info(f"后台 GitHub 数据刷新完成，已推送 {len(updated_records)} 条更新")
+        finally:
+            with self._github_subs_refresh_lock:
+                self._github_subs_refresh_running = False
 
     @log_api_call
     def github_trigger_download(self, url: str, install_type: str, version: str):
         """触发下载与安装流程"""
-        task_id = self.github_mgr.trigger_download(url, install_type, version)
+        task_id = self.github_mgr.install_repo_mod(self.download_mgr, url, install_type, version)
         return ApiResponse.success({"task_id": task_id}, message="GitHub 部署任务已启动")
 
     @log_api_call
@@ -3260,7 +3376,119 @@ class API:
         return ApiResponse.success(message="已移除订阅记录")
     
     
+    # =========================================================================
+    #  15. 贴图优化管理 (Texture Optimization)
+    # =========================================================================
     
+    def _resolve_mod_paths(self, package_ids: List[str]) -> List[str]:
+        """内部辅助方法：将前端传来的 package_id 列表转换为当前环境下绝对物理路径列表"""
+        target_ids = {normalize_package_id(pid) for pid in package_ids if pid}
+        if not target_ids:
+            return []
+        
+        # 使用当前 Profile 上下文，确保获取的是正在使用的正确 Mod 路径 (解决软冲突路径)
+        context_mods = ModDAO.get_profile_mods(self.active_context)
+        paths =[]
+        for m in context_mods:
+            pid = normalize_package_id(m.get('package_id', ''))
+            if pid in target_ids and m.get('path'):
+                paths.append(m['path'])
+        return paths
+
+    @log_api_call
+    def texture_get_env_status(self, options: dict|None = None):
+        """获取贴图优化工具状态"""
+        try:
+            status = self.texture_mgr.get_backend_status(options)
+            return ApiResponse.success(status)
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_prepare_download(self, options: dict|None = None):
+        """触发自动下载 todds"""
+        try:
+            res = self.texture_mgr.prepare_tool_download(self.download_mgr, options)
+            if res.get("already_ready"):
+                return ApiResponse.success(res, message="工具已经就绪")
+            return ApiResponse.success(res, message="已启动工具下载任务")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_analyze_mods(self, package_ids: List[str], options: dict|None = None, force_refresh: bool = False):
+        """
+        开始分析选中模组的贴图（多线程异步预热）
+        """
+        if not package_ids:
+            return ApiResponse.error("未指定要分析的模组")
+        
+        paths = self._resolve_mod_paths(package_ids)
+        if not paths:
+            return ApiResponse.error("未能找到指定模组的有效物理路径")
+
+        try:
+            # 1. 直接先生成一个任务 ID 返回给前端，防止 pywebview Python主线程卡死
+            task_id = uuid.uuid4().hex
+            cancel_event = self.texture_mgr.register_analysis_task(task_id)
+            
+            def background_analyze():
+                db.connect(reuse_if_open=True)
+                try:
+                    self.texture_mgr.analyze_mods(
+                        paths,
+                        options,
+                        task_id=task_id,
+                        cancel_event=cancel_event,
+                        use_cache=not bool(force_refresh),
+                    )
+                except TextureOptCancelled:
+                    logger.info("后台贴图分析任务已取消")
+                except Exception as e:
+                    logger.error(f"后台贴图分析任务执行失败: {e}", exc_info=True)
+                finally:
+                    self.texture_mgr.finish_analysis_task(task_id)
+                    if not db.is_closed():
+                        db.close()
+
+            # 2. 扔到守护后台线程去默默跑
+            threading.Thread(target=background_analyze, daemon=True).start()
+
+            return ApiResponse.success({"task_id": task_id}, message="贴图分析任务已在后台启动")
+        except Exception as e:
+            logger.error("贴图分析启动失败", exc_info=True)
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_start_task(self, package_ids: List[str], action: str = "optimize", options: dict|None = None):
+        """
+        开始贴图优化或清理已生成 DDS
+        :param action: "optimize" / "clean_generated"
+        """
+        # if not package_ids:
+        #     return ApiResponse.error("未指定要处理的模组")
+            
+        paths = self._resolve_mod_paths(package_ids)
+        if not paths:
+            return ApiResponse.error("未能找到指定模组的有效物理路径")
+
+        try:
+            res = self.texture_mgr.start_task(paths, action=action, options=options)
+            msg = "清理已生成 DDS" if action == "clean_generated" else "贴图优化"
+            return ApiResponse.success(res, message=f"{msg}任务已加入队列")
+        except Exception as e:
+            logger.error("贴图优化任务启动失败", exc_info=True)
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def texture_cancel_task(self, task_id: str):
+        """取消正在执行的贴图任务"""
+        try:
+            res = self.texture_mgr.cancel_task(task_id)
+            return ApiResponse.success(res, message="正在尝试中止任务...")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
     
 if __name__ == "__main__":
     # valid_field_names = set(UserModData._meta.fields.keys()) # type: ignore
@@ -3276,7 +3504,7 @@ if __name__ == "__main__":
     
     # res = api.lifecycle_fetch_collection("3670074636")
     # print(res)
-    
+    # res= api.texture_start_task([])
     res = api.get_mod_workshop_detail("3671245310", force_refresh=True)
     print(res)
     
