@@ -4,10 +4,11 @@ import threading
 import psutil
 import ctypes
 from backend.settings import DATA_DIR
+from backend.settings import settings
 from backend.utils.logger import logger
 from backend.utils.event_bus import EventBus
 
-from backend.static_page import IDLE_HTML # 不再使用字符串注入，改用文件
+from backend.static_page import build_idle_home_html, build_idle_logs_html
 
 
 class GameMonitor:
@@ -23,17 +24,53 @@ class GameMonitor:
         self.psapi = ctypes.windll.psapi
         self.kernel32 = ctypes.windll.kernel32
 
-        # 准备静默页面的路径 (生成一个真实的 html 文件)
-        self.idle_page_path = str(DATA_DIR / 'idle.html')
-        self._create_idle_page()
+        # 准备静默页面的路径 (生成真实 html 文件，避免长字符串常驻内存)
+        self.idle_home_page_path = str(DATA_DIR / 'idle.html')
+        self.idle_logs_page_path = str(DATA_DIR / 'idle_logs.html')
+        self._create_idle_pages()
 
-    def _create_idle_page(self):
-        """生成一个极简的静态文件，比 load_html 字符串更节省内存且稳定"""
-        content = IDLE_HTML
+    def _write_page(self, filepath: str, content: str):
         try:
-            with open(self.idle_page_path, 'w', encoding='utf-8') as f:
+            with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
-        except: pass
+        except Exception:
+            pass
+
+    def _create_idle_pages(self):
+        """生成静默主页和静默日志页。"""
+        self._write_page(self.idle_home_page_path, build_idle_home_html())
+        self._write_page(
+            self.idle_logs_page_path,
+            build_idle_logs_html(),
+        )
+
+    def _get_default_idle_page_path(self) -> str:
+        if str(settings.config.silent_mode_default_view).strip().lower() == 'logs':
+            return self.idle_logs_page_path
+        return self.idle_home_page_path
+
+    def _is_idle_page_url(self, url: str | None) -> bool:
+        """统一识别静默主页和静默日志页，避免误判为主界面。"""
+        value = str(url or '').lower()
+        return 'idle.html' in value or 'idle_logs.html' in value
+
+    def _load_url_deferred(self, target_url: str, delay: float = 0.05):
+        """
+        轻微延后切页，让 pywebview 先把 API 返回值送回当前页面，
+        避免页面已切走时回调函数丢失。
+        """
+        window = self.api.get_window()
+        if not window or not target_url:
+            return
+
+        def _worker():
+            try:
+                time.sleep(max(0.0, delay))
+                window.load_url(target_url)
+            except Exception as e:
+                logger.error(f"[Monitor] 延迟切换页面失败: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def start(self):
         self.running = True
@@ -56,7 +93,7 @@ class GameMonitor:
                     self.is_game_running = True
                     # 通知前端游戏开始了（无论是否静默，前端都需要知道这个状态）
                     EventBus.emit('game-status-changed', {'running': True})
-                    if not self.manual_override_idle:
+                    if settings.config.auto_enter_silent_mode and not self.manual_override_idle:
                         self._enter_idle_mode()
                         
                 elif not game_found and self.is_game_running:
@@ -78,6 +115,8 @@ class GameMonitor:
     def _enter_idle_mode(self):
         """进入静默模式 (原 _on_game_start)"""
         logger.info("[Monitor] 游戏运行中，进入静默模式")
+        # 进入前重新生成静态页，确保最新设置立即生效。
+        self._create_idle_pages()
         if hasattr(self.api, 'is_browser_runtime') and self.api.is_browser_runtime():
             try:
                 EventBus.emit('app-suspending')
@@ -93,7 +132,7 @@ class GameMonitor:
         if not window: return
         try:
             curr = window.get_current_url()
-            if curr and 'idle.html' not in curr and 'data:text' not in curr:
+            if curr and not self._is_idle_page_url(curr) and 'data:text' not in curr:
                 self.resume_url = curr
             
             EventBus.emit('app-suspending')
@@ -101,7 +140,7 @@ class GameMonitor:
             
             if hasattr(self.api, 'scanner'): self.api.scanner.stop_scan() 
             
-            window.load_url(f"file://{self.idle_page_path}")
+            window.load_url(f"file://{self._get_default_idle_page_path()}")
             time.sleep(0.5) 
             self._trim_memory()
         except Exception as e:
@@ -125,16 +164,15 @@ class GameMonitor:
         if not window: return
         
         try:
-            # 【核心修复2】：防御性检查。如果当前不是 idle.html，说明已经在主界面了，绝对不要 load_url
             curr = window.get_current_url()
-            if curr and 'idle.html' not in curr:
+            if curr and not self._is_idle_page_url(curr):
                 logger.info("[Monitor] 当前已是主界面，无需重载 URL")
                 return
             
             from main import get_entrypoint
             target_url = self.resume_url if self.resume_url else get_entrypoint()
             logger.info(f"[Monitor] 正在重载主界面: {target_url}")
-            window.load_url(target_url)
+            self._load_url_deferred(target_url)
             # 让前端在 onMounted 时主动调用 API 恢复
             logger.info("[Monitor] 等待前端 UI 唤醒确认...")
         except Exception as e:
@@ -164,5 +202,15 @@ class GameMonitor:
             logger.info("[Monitor] 玩家手动返回静默模式")
             self.manual_override_idle = False
             self._enter_idle_mode()
+
+    def open_idle_home(self):
+        """静默模式下切回主页。"""
+        self._create_idle_pages()
+        self._load_url_deferred(f"file://{self.idle_home_page_path}")
+
+    def open_idle_logs(self):
+        """静默模式下打开日志页。"""
+        self._create_idle_pages()
+        self._load_url_deferred(f"file://{self.idle_logs_page_path}")
 
 
