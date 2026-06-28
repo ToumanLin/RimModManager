@@ -130,11 +130,11 @@ import VirtualList from 'vue-virtual-sortable';
 import ModItem from './ModItem.vue'
 import { useDebounceFn } from '@vueuse/core'
 import { ColorPicker } from "vue3-colorpicker";
-import "vue3-colorpicker/style.css";
 import { useModStore } from '../../stores/modStore';
 import { useGroupStore } from '../../stores/groupStore';
 import { useAppStore } from '../../stores/appStore';
-import { createToastInterface } from 'vue-toastification';
+import { toast } from '../../utils/common';
+import { hexToRgbComponents } from '../../utils/color'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -146,7 +146,6 @@ const props = defineProps({
   isDragging: { type: Boolean, default: false } // 用于外部控制样式
 })
 
-const toast = createToastInterface()
 const modStore = useModStore()
 const appStore = useAppStore()
 const groupStore = useGroupStore()
@@ -381,24 +380,8 @@ const handleInputBlur = () => {
   isEditingName.value = false
 }
 
-// 颜色格式转换
-const hexToRgb = (hex) => {
-  if (!hex || typeof hex !== 'string') return `0, 0, 0`; // 返回纯组件字符串
-  let cleanHex = hex.replace('#', '');
-  if (cleanHex.length === 3) {
-    cleanHex = cleanHex.split('').map(char => char + char).join('');
-  }
-  // 确保是六位
-  if (cleanHex.length !== 6) {
-    console.error(`Invalid hex color: ${hex}`);
-    return `0, 0, 0`;
-  }
-  // 提取 R, G, B 分量，并从十六进制转换为十进制
-  const r = parseInt(cleanHex.substring(0, 2), 16);
-  const g = parseInt(cleanHex.substring(2, 4), 16);
-  const b = parseInt(cleanHex.substring(4, 6), 16);
-  return `${r}, ${g}, ${b}`;
-};
+// 颜色格式转换统一复用公共 util，避免分组卡片和其它组件各维护一份。
+const hexToRgb = hexToRgbComponents
 
 </script>
 

@@ -453,15 +453,18 @@
             <!-- 颜色选择 (简单版) -->
             <div class="flex items-center">
               <label v-tooltip="'可自定义颜色标识'" class="flex-none text-xs uppercase text-text-dim font-bold tracking-wider">颜色标记*</label>
-              <div v-tooltip="'点击可选择合适的标记颜色'" class="flex-1 flex ml-2 min-w-20 gap-1.5 items-center justify-end">
-                <button v-for="(name, c, index) in presetColors" :key="c" @click="updateColor(c)" v-tooltip=""
+              <div class="flex-1 flex ml-2 min-w-20 gap-1.5 items-center justify-end">
+                <button v-for="(name, c) in presetColors" :key="c" @click="updateColor(c)"
                   :class="['w-4 h-4 min-w-1 rounded-full border border-text-main/10 transition-transform hover:scale-125', 
                           selectedMod.sign_color === c ? 'ring-2 ring-text-main scale-110' : '']"
-                  :style="{backgroundColor: c}">
+                  :style="{backgroundColor: c}" v-tooltip="'点击将'+MOD_SIGN_COLOR_MAP[c]+'颜色设为标记颜色'">
                 </button>
+                <div class="flex items-center" v-tooltip="'自定义其它颜色'">
+                  <ColorPicker v-model:pureColor="customSignColor" @pureColorChange="handleCustomColorChange" shape="circle" format="hex" picker-type="fk" disable-alpha round-history />
+                </div>
                 <button @click="updateColor(null)" v-tooltip="'清除颜色标记'" 
-                  class="w-4 h-4 rounded-full border border-text-main/10 bg-transparent text-xm flex items-center justify-center text-gray-500 hover:text-text-main">
-                  ×
+                  class="text-gray-500 hover:text-text-main">
+                  <CircleX class="size-4.5" />
                 </button>
               </div>
             </div>
@@ -523,20 +526,6 @@
       <template #bottom>
         <div class="relative">
           
-          <!-- <div class="absolute top-10 left-1/2 -translate-x-1/2">
-            <div class="loader">
-              <div class="box">
-                <div class="logo">
-                  
-                </div>
-              </div>
-              <div class="box"></div>
-              <div class="box"></div>
-              <div class="box"></div>
-              <div class="box"></div>
-            </div>
-          </div> -->
-          
           <div v-if="appStore.settings.ui.show_icons_cloud" class="z-999">
             <ImageCloud :images="imageUrls" :size="300" :imageSize="50"/>
           </div>
@@ -554,20 +543,21 @@
 
 <script setup >
 import { computed, ref, watch, nextTick } from 'vue'
-import { refDebounced, onClickOutside  } from '@vueuse/core' // 引入防抖函数
+import { refDebounced, onClickOutside, useDebounceFn } from '@vueuse/core' // 引入防抖函数
 import { MOD_SIGN_COLOR_MAP, MOD_TYPE_MAP, SOURCE_TYPE_MAP, MOD_TYPE_ICON_MAP } from '../utils/constants'
 import { useModStore } from '../stores/modStore'
 import { useAppStore } from '../stores/appStore'
 import { useGroupStore } from '../stores/groupStore'
-import { parseUnityRichText } from '../utils/unityTextParser'
-import { hexToRgba, hexToRgb } from '../utils/colorDeal'
-import { formatFileSize } from '../utils/uiHelper'
+import { parseUnityRichText } from '../utils/text'
+import { DEFAULT_ACCENT_HEX, hexToRgba, hexToRgb, normalizeHexColor } from '../utils/color'
+import { formatFileSize } from '../utils/format'
 import ImageCloud from './utils/ImageCloud.vue';
 import LampEffect from './utils/LampEffect.vue';
 import LuxBreatheIcon from './utils/LuxBreatheIcon.vue'
-import { ChevronDown, ChevronUp, Copy } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, CircleX, Copy } from 'lucide-vue-next'
 import FixedPopover from './common/FixedPopover.vue'
 import { useProfileStore } from '../stores/profileStore'
+import { ColorPicker } from 'vue3-colorpicker'
 
 // 随机选30个Mod的图标URL
 const imageUrls = computed(() => Array.from(modStore.allModsMap.values())
@@ -601,6 +591,7 @@ const userTags = ref([])
 const userAliasName = ref('')
 const userNotes = ref('')
 const newTagInput = ref('')
+const customSignColor = ref(DEFAULT_ACCENT_HEX)
 const presetColors = MOD_SIGN_COLOR_MAP
 const isUsingAI = ref(false)
 
@@ -641,6 +632,8 @@ watch(selectedMod, (newVal) => {
     userTags.value = [...(newVal.tags || [])]
     userAliasName.value = newVal.alias_name || ''
     userNotes.value = newVal.notes || ''
+    // 颜色选择器必须始终持有合法十六进制颜色，空标记时退回到中性色。
+    customSignColor.value = normalizeHexColor(newVal.sign_color, DEFAULT_ACCENT_HEX)
     newTagInput.value = ''
   }
 }, { immediate: true })
@@ -844,11 +837,28 @@ onClickOutside(tagInputRef, () => {
 })
 
 
+const persistSignColor = useDebounceFn((packageId, color) => {
+  // 自定义取色拖动时会连续触发事件，这里做轻量防抖，避免频繁写后端。
+  modStore.updateModUserData(packageId, { sign_color: color })
+}, 120)
+
 // 更新颜色
 const updateColor = (color) => {
-  if (selectedMod.value) {
-    modStore.updateModUserData(selectedMod.value.package_id, { sign_color: color })
+  if (!selectedMod.value) return
+  if (typeof color === 'string' && color) {
+    const normalizedColor = normalizeHexColor(color, DEFAULT_ACCENT_HEX)
+    customSignColor.value = normalizedColor
+    modStore.updateModUserData(selectedMod.value.package_id, { sign_color: normalizedColor })
+    return
   }
+  modStore.updateModUserData(selectedMod.value.package_id, { sign_color: null })
+}
+
+const handleCustomColorChange = (color) => {
+  if (!selectedMod.value) return
+  const normalizedColor = normalizeHexColor(color, DEFAULT_ACCENT_HEX)
+  customSignColor.value = normalizedColor
+  persistSignColor(selectedMod.value.package_id, normalizedColor)
 }
 // 保存用户数据（标签和备注）
 const saveUserData = () => {
@@ -1035,5 +1045,25 @@ const translateModInfo = async () => {
   width: 0;
   margin: 0;
   padding: 0;
+}
+
+
+/* 取色器样式优化 */
+:deep(.vc-color-wrap.round) {
+  width: 1rem !important;
+  height: 1rem !important;
+  border: 2px solid #ffffff !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transition: all 0.15s ease;
+}
+
+:deep(.vc-color-wrap.round:hover) {
+  transform: scale(1.3);
+  z-index: 10;
+}
+
+:deep(.vc-color-wrap.transparent) {
+  background-image: none !important;
 }
 </style>

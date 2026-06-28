@@ -27,8 +27,8 @@
       <div v-if="hoverStore.type === 'preview'" 
         class="relative flex flex-col h-full overflow-visible select-none"
         :style="{ 
-          '--accent-rgb': hexToRgb(hoverStore.data.sign_color || '#a1a1aa'),
-          '--accent': hoverStore.data.sign_color || '#a1a1aa'
+          '--accent-rgb': hexToRgb(hoverStore.data.sign_color || DEFAULT_ACCENT_HEX),
+          '--accent': hoverStore.data.sign_color || DEFAULT_ACCENT_HEX
         }">
         
         <!-- 悬浮装饰：分组标签 (破格设计，浮在卡片上方) -->
@@ -148,6 +148,7 @@ import { useHoverStore } from '../../stores/hoverStore'
 import { useAppStore } from '../../stores/appStore'
 import { useModStore } from '../../stores/modStore'
 import { useGroupStore } from '../../stores/groupStore';
+import { DEFAULT_ACCENT_HEX, hexToRgbComponents } from '../../utils/color'
 
 const appStore = useAppStore()
 const hoverStore = useHoverStore()
@@ -461,14 +462,8 @@ const getContrastColor = (hex) => {
   return (yiq >= 128) ? '#000' : '#fff'
 }
 
-// 颜色转换工具 (如果 script 里没有的话)
-const hexToRgb = (hex) => {
-  if (!hex || typeof hex !== 'string') return '100, 100, 100'
-  let c = hex.substring(1).split('')
-  if (c.length === 3) c = [c[0], c[0], c[1], c[1], c[2], c[2]]
-  c = '0x' + c.join('')
-  return `${(c >> 16) & 255}, ${(c >> 8) & 255}, ${c & 255}`
-}
+// 颜色转换逻辑已收编到公共 util，这里保留同名别名，模板层无需跟着改名。
+const hexToRgb = hexToRgbComponents
 </script>
 
 <style scoped>

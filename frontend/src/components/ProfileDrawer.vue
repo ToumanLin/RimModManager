@@ -155,12 +155,12 @@
           <CommonPathInput label="游戏执行目录" v-model="form.game_install_path" @browse="browsePath('game_install_path')" 
             :check="form.check_info?.game_install_path" @blur="checkPath('game_install_path', form.game_install_path)"
             description="游戏安装目录，即游戏主程序所在的目录" />
-          <CommonPathInput v-if="form.id!='default'" label="用户数据目录" v-model="form.user_data_path" @browse="browsePath('user_data_path')" 
+          <CommonPathInput label="用户数据目录" v-model="form.user_data_path" @browse="browsePath('user_data_path')" 
             :check="form.check_info?.user_data_path" @blur="checkPath('user_data_path', form.user_data_path)"
             description="游戏数据目录，可随意指定位置，或者留空自动生成，包含游戏配置及排序存档等用户信息。"
             :placeholder= '(!isEditing?"可空，默认在软件 data/profiles 目录下自动生成":"编辑模式下不可留空！")' />
           <CommonSwitch label="优先使用 Steam 启动" v-model="form.prefer_steam_launch" description="开启后，默认环境会使用 Steam 官方入口；其它环境会先确保 Steam 运行，再启动当前环境绑定的游戏本体。" />
-          <CommonSwitch v-if="form.id!='default' && appStore.settings.workshop_mods_path" label="使用创意工坊 Mod" v-model="form.use_workshop_mods" description="启用后将通过链接方式自动为游戏添加创意工坊 Mod，仅在非Steam启动时生效，Steam 运行时会自动加载创意工坊 Mod。" />
+          <CommonSwitch v-if="appStore.settings.workshop_mods_path" label="使用创意工坊 Mod" v-model="form.use_workshop_mods" description="启用后将通过链接方式自动为游戏添加创意工坊 Mod，仅在非Steam启动时生效，Steam 运行时会自动加载创意工坊 Mod。" />
           <CommonSwitch v-if="appStore.settings.self_mods_path" label="使用管理器 Mod" v-model="form.use_self_mods" description="启用后将通过链接方式自动为游戏添加管理器 Mod。" />
           <CommonSwitch v-if="!isEditing" label="继承当前配置" v-model="form.copy_current_data" description="自动复制当前的游戏配置到新环境" />
           <CommonTagInput label="游戏启动参数" v-model="form.run_commands" :allTags="RUN_COMMAND_TAGS" placeholder="请输入一个完整指令后回车确认……" description="注意不要使用 [[-savedatafolder]] 指令，多环境管理已经默认使用此指令，无需手动配置。" />
@@ -186,7 +186,7 @@
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
 import { Database, Plus, Trash2, Settings2, Link2, X, Play, AlertTriangle, SquareArrowOutUpRight } from 'lucide-vue-next'
-import { createToastInterface } from 'vue-toastification'
+import { toast } from '../utils/common'
 import { useProfileStore } from '../stores/profileStore'
 import { useAppStore } from '../stores/appStore'
 import { useConfirmStore } from '../stores/confirmStore'
@@ -195,9 +195,8 @@ import CommonPathInput from './common/input/CommonPathInput.vue'
 import CommonSwitch from './common/input/CommonSwitch.vue'
 import CommonTagInput from './common/input/CommonTagInput.vue'
 import { RUN_COMMAND_TAGS } from '../utils/constants'
-import { formatDate } from '../utils/uiHelper'
+import { formatDate } from '../utils/format'
 
-const toast = createToastInterface()
 const profileStore = useProfileStore()
 const appStore = useAppStore()
 const confirmStore = useConfirmStore()
@@ -229,10 +228,10 @@ const openCreate = () => {
   form.id = ''
   form.name = ''
   form.description = ''
-  form.game_install_path = appStore.settings.game_install_path
+  form.game_install_path = profileStore.activeContext.game_install_path
   form.user_data_path = ''
   form.prefer_steam_launch = true
-  form.use_workshop_mods = false
+  form.use_workshop_mods = true
   form.use_self_mods = false
   form.copy_current_data = false
   form.run_commands = []

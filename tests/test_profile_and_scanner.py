@@ -1,3 +1,4 @@
+import os
 import shutil
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ from unittest.mock import Mock, patch
 
 from backend.api import API
 from backend.database.dao import ModDAO
+from backend.managers.mgr_files import PathChecker
 from backend.managers.mgr_profile import ProfileContext, ProfileManager
 from backend.scanner.analyzer import ModAnalyzer
 from backend.scanner.mod_scanner import ModScanner
@@ -68,6 +70,41 @@ class TestProfileManager(unittest.TestCase):
             str(current_user_data / "Config"),
             str(target_user_data),
         )
+
+    def test_get_launch_args_includes_savedatafolder_for_default_profile(self):
+        manager = ProfileManager.__new__(ProfileManager)
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        profile = SimpleNamespace(
+            id="default",
+            game_install_path=str(temp_root),
+            user_data_path=str(temp_root / "userdata"),
+            run_commands=["-logfile=Player.log"],
+        )
+        manager.current_profile = profile
+
+        with patch("backend.managers.mgr_profile.GameProfile.get_or_none", return_value=profile), \
+             patch("backend.managers.mgr_profile.GameManager.detect_executable", return_value=str(temp_root / "RimWorldWin64.exe")):
+            args = manager.get_launch_args("default")
+
+        self.assertIn(f"-savedatafolder={os.path.abspath(profile.user_data_path)}", args)
+
+
+class TestPathChecker(unittest.TestCase):
+    def test_check_user_data_path_warns_when_mods_config_missing(self):
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+
+        target_root = temp_root / "userdata"
+        config_dir = target_root / "Config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+        result = PathChecker.check_user_data_path(str(target_root))
+
+        self.assertTrue(result["pass"])
+        self.assertEqual(result["type"], "warn")
+        self.assertIn("ModsConfig.xml", result["msg"])
 
 
 class TestModAnalyzer(unittest.TestCase):
@@ -180,6 +217,7 @@ class TestModScanner(unittest.TestCase):
             game_version="1.5.4100",
             game_install_path=str(install_dir),
             user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
             use_workshop_mods=False,
             use_self_mods=False,
         )
@@ -221,6 +259,7 @@ class TestProfileConflictAnalysis(unittest.TestCase):
             game_version="1.5.4100",
             game_install_path=str(install_dir),
             user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
             use_workshop_mods=True,
             use_self_mods=False,
         )
@@ -273,6 +312,7 @@ class TestProfileConflictAnalysis(unittest.TestCase):
             game_version="1.5.4100",
             game_install_path=str(install_dir),
             user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
             use_workshop_mods=True,
             use_self_mods=True,
         )
@@ -323,6 +363,7 @@ class TestProfileConflictAnalysis(unittest.TestCase):
             game_version="1.5.4100",
             game_install_path=str(install_dir),
             user_data_path=str(temp_root / "userdata"),
+            prefer_steam_launch=False,
             use_workshop_mods=False,
             use_self_mods=True,
         )
@@ -392,6 +433,70 @@ class TestApiScanMods(unittest.TestCase):
                 "D:/Steam/workshop/content/294100",
             ],
             forced_update=False,
+        )
+
+
+class TestApiGameLaunch(unittest.TestCase):
+    def test_game_launch_prefers_steam_command_and_syncs_runtime_links(self):
+        api = API.__new__(API)
+        profile = SimpleNamespace(
+            id="default",
+            game_install_path="C:/Games/RimWorld",
+            prefer_steam_launch=True,
+            is_steam=False,
+        )
+        api.profile_mgr = SimpleNamespace(
+            current_profile=profile,
+            get_profile=Mock(return_value=profile),
+            get_launch_args_only=Mock(return_value=["-savedatafolder=C:/Profiles/default"]),
+        )
+        api.steam_mgr = SimpleNamespace(
+            get_steam_client_status=Mock(return_value={"running": False, "ready": False}),
+            launch_via_steam_cmd=Mock(),
+        )
+        api._sync_runtime_links_for_profile = Mock()
+
+        config = SimpleNamespace(steam_path="C:/Program Files (x86)/Steam")
+        with patch("backend.api.settings.config", config), \
+             patch("backend.api.PathChecker.check_steam_path", return_value={"pass": True}):
+            res = API.game_launch(api, "default")
+
+        self.assertEqual(res["status"], "success")
+        api._sync_runtime_links_for_profile.assert_called_once_with("default", include_workshop=False)
+        api.steam_mgr.launch_via_steam_cmd.assert_called_once_with(
+            extra_args=["-savedatafolder=C:/Profiles/default"]
+        )
+
+    def test_game_launch_auto_falls_back_to_direct_launch_when_steam_path_invalid(self):
+        api = API.__new__(API)
+        profile = SimpleNamespace(
+            id="default",
+            game_install_path="C:/Games/RimWorld",
+            prefer_steam_launch=True,
+            is_steam=False,
+        )
+        api.profile_mgr = SimpleNamespace(
+            current_profile=profile,
+            get_profile=Mock(return_value=profile),
+            get_launch_args_only=Mock(return_value=[]),
+        )
+        api.steam_mgr = SimpleNamespace(
+            get_steam_client_status=Mock(return_value={"running": False, "ready": False}),
+        )
+        api._launch_profile_with_runtime_links = Mock()
+
+        config = SimpleNamespace(steam_path="")
+        with patch("backend.api.settings.config", config), \
+             patch("backend.api.PathChecker.check_steam_path", return_value={"pass": False}):
+            res = API.game_launch(api, "default")
+
+        self.assertEqual(res["status"], "success")
+        self.assertIn("自动改为游戏本体直接启动", res["message"])
+        api._launch_profile_with_runtime_links.assert_called_once_with(
+            "default",
+            "C:/Games/RimWorld",
+            [],
+            include_workshop=True,
         )
 
 

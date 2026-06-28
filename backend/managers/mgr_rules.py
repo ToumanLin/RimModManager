@@ -1,7 +1,10 @@
 import copy
 import json
 import re
+import os
 import datetime
+import tempfile
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 import uuid
@@ -57,7 +60,15 @@ class RuleManager:
         self.user_dynamic_rules: List[Dict[str, Any]] = []
         self.workshop_rules_cache: Dict[str, List[str]] = {} 
         self.context = context
-        self.settings = {
+        self.settings = self._build_default_settings()
+        self._save_lock = threading.Lock()
+        # 确保目录存在
+        RULES_DIR.mkdir(parents=True, exist_ok=True)
+        self.load_all()
+
+    def _build_default_settings(self) -> dict[str, Any]:
+        """构造规则系统默认设置，便于重载时回到干净基线。"""
+        return {
             "community_mod_rules_enabled": True,    # 全局社区规则总开关
             "user_mod_rules_enabled": True,         # 全局用户单项规则总开关
             "dynamic_rules_enabled": True,          # 全局动态规则总开关
@@ -69,65 +80,170 @@ class RuleManager:
             # 规则优先级配置：索引越小，优先级越高 (默认: 用户 > 原生 > 社区 > 动态)
             "rule_source_priority": RULE_SOURCES 
         }
-        # 确保目录存在
-        RULES_DIR.mkdir(parents=True, exist_ok=True)
-        self.load_all()
+
+    def _get_user_rules_path(self) -> Path:
+        """统一解析用户规则文件路径，避免读写目标漂移。"""
+        configured_path = str(getattr(settings.config, "user_rules_path", "") or "").strip()
+        return Path(configured_path) if configured_path else USER_RULES_PATH
+
+    def _parse_community_rules_timestamp(self, payload: dict[str, Any]) -> int:
+        """
+        兼容社区规则库的多种时间戳格式。
+        - 缺失时间戳时返回 0，不阻断用户规则加载。
+        - 秒级时间戳自动转毫秒；毫秒级原样保留。
+        """
+        raw_timestamp = payload.get("timestamp")
+        if raw_timestamp in (None, ""):
+            return 0
+        try:
+            parsed = int(raw_timestamp)
+        except (TypeError, ValueError):
+            logger.warning(f"Community rules timestamp is invalid: {raw_timestamp!r}")
+            return 0
+        return parsed if parsed >= 10**11 else parsed * 1000
+
+    def _load_community_rules(self):
+        """独立加载社区规则，避免其异常误伤用户规则。"""
+        self.community_rules = {}
+        self.community_rules_update_time = 0
+        community_file_path = Path(settings.config.community_rules_path)
+        if not community_file_path.exists():
+            return
+
+        with open(community_file_path, 'r', encoding='utf-8', errors='replace') as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError("Community rules root is not an object")
+
+        # 兼容不同格式：既支持 {\"rules\": {...}}，也支持直接以规则字典作为根对象。
+        rules_payload = data.get("rules")
+        self.community_rules = rules_payload if isinstance(rules_payload, dict) else data
+        self.community_rules_update_time = self._parse_community_rules_timestamp(data)
+
+    def _load_user_rules(self):
+        """独立加载用户规则，路径切换时先清空旧状态再按新文件重建。"""
+        self.user_mod_rules = {}
+        self.user_dynamic_rules = []
+        self.settings = self._build_default_settings()
+
+        user_file_path = self._get_user_rules_path()
+        if not user_file_path.exists():
+            return
+
+        with open(user_file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError("User rules root is not an object")
+
+        mod_rules = data.get("mod_rules", {})
+        if isinstance(mod_rules, dict):
+            self.user_mod_rules = mod_rules
+        else:
+            logger.warning("加载用户规则时发现 mod_rules 格式无效，已重置为空。")
+            self.user_mod_rules = {}
+
+        sanitized_dynamic_rules, sanitize_warnings, _ = self._sanitize_dynamic_rules(
+            data.get("dynamic_rules", []),
+            origin="加载动态规则"
+        )
+        self.user_dynamic_rules = sanitized_dynamic_rules
+        for warning in sanitize_warnings:
+            logger.warning(warning)
+
+        loaded_settings = data.get("settings", {})
+        if isinstance(loaded_settings, dict):
+            self.settings.update(loaded_settings)
+        else:
+            logger.warning("加载用户规则时发现 settings 格式无效，已忽略。")
+
+        if set(self.settings.get("rule_source_priority", [])) != set(RULE_SOURCES):
+            self.settings["rule_source_priority"] = RULE_SOURCES
+
+    def _write_json_atomic(self, target_path: Path, payload: dict[str, Any], purpose: str):
+        """
+        以“临时文件 + fsync + replace”方式原子写入 JSON。
+        这样可避免程序中断时把目标文件写成半截内容。
+        """
+        target_path = Path(target_path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = None
+        temp_path = None
+        try:
+            fd, temp_name = tempfile.mkstemp(
+                prefix=f".{target_path.stem}.",
+                suffix=".tmp",
+                dir=str(target_path.parent),
+            )
+            temp_path = Path(temp_name)
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                fd = None
+                json.dump(payload, f, indent=4, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, target_path)
+        except Exception as e:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            if temp_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+            raise RuntimeError(f"{purpose}失败: {e}") from e
 
     def load_all(self):
         """核心：从磁盘加载所有规则数据"""
         try:
-            # 加载社区规则
-            community_file_path = Path(settings.config.community_rules_path)
-            if community_file_path.exists():
-                with open(community_file_path, 'r', encoding='utf-8', errors='replace') as f:
-                    data = json.load(f)
-                    # 兼容不同格式，有些可能是 { "rules": {...} }，有些直接是 {...}
-                    self.community_rules = data.get("rules", data)
-                    self.community_rules_update_time = int(data.get("timestamp", data))*1000
-                    
-            # 加载用户规则
-            user_file_path = Path(settings.config.user_rules_path)
-            if user_file_path.exists():
-                with open(user_file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self.user_mod_rules = data.get("mod_rules", {})
-                    sanitized_dynamic_rules, sanitize_warnings, _ = self._sanitize_dynamic_rules(
-                        data.get("dynamic_rules", []),
-                        origin="加载动态规则"
-                    )
-                    self.user_dynamic_rules = sanitized_dynamic_rules
-                    for warning in sanitize_warnings:
-                        logger.warning(warning)
-                    # 加载设置
-                    self.settings.update(data.get("settings", {}))
-                    if set(self.settings["rule_source_priority"]) != set(RULE_SOURCES):
-                        self.settings["rule_source_priority"] = RULE_SOURCES
-            
-            # 加载工坊规则缓存
+            self._load_community_rules()
+        except Exception as e:
+            logger.error(f"Failed to load community rules: {e}", exc_info=True)
+
+        try:
+            self._load_user_rules()
+        except Exception as e:
+            logger.error(f"Failed to load user rules: {e}", exc_info=True)
+            # 用户规则损坏时回到空白基线，避免残留旧内存数据继续污染 UI。
+            self.user_mod_rules = {}
+            self.user_dynamic_rules = []
+            self.settings = self._build_default_settings()
+
+        try:
             self.build_workshop_rules()
         except Exception as e:
-            logger.error(f"Failed to load rules: {e}")
-            # 出错时保持空状态，不中断启动
+            logger.error(f"Failed to rebuild workshop rules cache: {e}", exc_info=True)
 
     def save_user_rules(self):
         """持久化用户规则"""
         try:
-            sanitized_dynamic_rules, sanitize_warnings, _ = self._sanitize_dynamic_rules(
-                self.user_dynamic_rules,
-                origin="保存动态规则"
-            )
-            self.user_dynamic_rules = sanitized_dynamic_rules
-            for warning in sanitize_warnings:
-                logger.warning(warning)
-            data = {
-                "settings": self.settings, # 保存设置
-                "mod_rules": self.user_mod_rules,
-                "dynamic_rules": self.user_dynamic_rules
-            }
-            with open(USER_RULES_PATH, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
+            with self._save_lock:
+                sanitized_dynamic_rules, sanitize_warnings, _ = self._sanitize_dynamic_rules(
+                    self.user_dynamic_rules,
+                    origin="保存动态规则"
+                )
+                self.user_dynamic_rules = sanitized_dynamic_rules
+                for warning in sanitize_warnings:
+                    logger.warning(warning)
+                data = {
+                    "meta": {
+                        # 仅记录文件元信息，便于排查“哪份规则文件更新得更晚”。
+                        "schema_version": 1,
+                        "updated_at": current_ms(),
+                        "written_by": __version__,
+                    },
+                    "settings": self.settings, # 保存设置
+                    "mod_rules": self.user_mod_rules,
+                    "dynamic_rules": self.user_dynamic_rules
+                }
+                self._write_json_atomic(self._get_user_rules_path(), data, "保存用户规则")
+            return True
         except Exception as e:
-            logger.error(f"Failed to save user rules: {e}")
+            logger.error(f"Failed to save user rules: {e}", exc_info=True)
+            raise
     
     def build_workshop_rules(self):
         """
@@ -529,8 +645,7 @@ class RuleManager:
         try:
             # 尝试解析，确保格式正确
             data = json.loads(raw_json)
-            with open(settings.config.community_rules_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
+            self._write_json_atomic(Path(settings.config.community_rules_path), data, "覆盖社区规则库")
             self.load_all()
             return True
         except Exception as e:

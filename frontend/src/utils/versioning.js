@@ -13,6 +13,7 @@ const VERSION_META = {
   },
 }
 
+// 版本号统一截断到 `主版本.次版本`，避免比较时掺入补丁号噪音。
 export const normalizeVersion = (value = '') => String(value || '').trim().slice(0, 3).toLowerCase()
 
 export const normalizeVersions = (values = []) => [...new Set(
@@ -21,6 +22,7 @@ export const normalizeVersions = (values = []) => [...new Set(
     .filter(Boolean)
 )]
 
+// 转成数字元组后，排序和比较都能复用同一套逻辑。
 export const parseVersionTuple = (value = '') => {
   const normalized = normalizeVersion(value)
   if (!normalized) return [-1, -1]
@@ -39,6 +41,7 @@ export const compareVersionTuple = (left = [-1, -1], right = [-1, -1]) => {
   return leftMinor - rightMinor
 }
 
+// 排序元信息用于缺失安装候选的优先级选择。
 export const getVersionSortMeta = (currentVersion = '', versions = []) => {
   const normalizedVersions = normalizeVersions(versions)
   const currentTuple = parseVersionTuple(currentVersion)
@@ -63,6 +66,7 @@ export const getVersionSortMeta = (currentVersion = '', versions = []) => {
   }
 }
 
+// 面向 UI 的简化状态，直接告诉调用方是否支持当前版本。
 export const getVersionInfo = (currentVersion = '', versions = []) => {
   const normalizedVersions = normalizeVersions(versions)
   if (!normalizeVersion(currentVersion) || normalizedVersions.length === 0) {

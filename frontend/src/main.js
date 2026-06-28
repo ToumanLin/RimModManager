@@ -5,6 +5,7 @@ import Toast from "vue-toastification";
 import './toast.scss'
 import VueVirtualScroller from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
+import 'vue3-colorpicker/style.css'
 import './style.css'
 import App from './App.vue'
 import {vPreview} from './directives/vPreview.js'

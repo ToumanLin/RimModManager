@@ -251,7 +251,7 @@ import { useModStore } from '../stores/modStore'
 import CommonSwitch from './common/input/CommonSwitch.vue'
 import CommonSelect from './common/input/CommonSelect.vue'
 import TextureModCard from './utils/TextureModCard.vue'
-import { formatFileSize } from '../utils/uiHelper'
+import { formatFileSize } from '../utils/format'
 
 const appStore = useAppStore()
 const textureStore = useTextureStore()

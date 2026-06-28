@@ -701,7 +701,7 @@ class DataBundleManager:
                 game_install_path=resolved_install_path,
                 game_version=game_version,
                 prefer_steam_launch=bool(profile_meta.get("prefer_steam_launch", True)),
-                use_workshop_mods=bool(profile_meta.get("use_workshop_mods", False)),
+                use_workshop_mods=bool(profile_meta.get("use_workshop_mods", True)),
                 use_self_mods=bool(profile_meta.get("use_self_mods", False)),
                 is_steam=bool(resolved_install_path and os.path.normpath(resolved_install_path).lower().find(os.path.join("steamapps", "common")) != -1),
                 run_commands=list(profile_meta.get("run_commands") or []),

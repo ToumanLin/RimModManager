@@ -1,4 +1,33 @@
 /**
+ * 对纯文本做 HTML 转义，避免直接插入 DOM 时破坏结构。
+ */
+export const escapeHtml = (value = '') => String(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+/**
+ * 根据搜索配置构造正则；当正则无效时返回 null。
+ */
+export function buildSearchRegExp(query, { useRegex = false, caseSensitive = false } = {}) {
+  const source = String(query || '')
+  if (!source) return null
+
+  const flags = caseSensitive ? 'g' : 'gi'
+  if (useRegex) {
+    try {
+      return new RegExp(source, flags)
+    } catch {
+      return null
+    }
+  }
+
+  return new RegExp(source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags)
+}
+
+/**
  * 将 Unity Rich Text (BBCode 变体) 转换为 HTML
  * 
  * @param {string} unityText - 原始文本
@@ -9,11 +38,10 @@ export const parseUnityRichText = (unityText, removeImg = true) => {
   // 严谨空值判断，过滤纯空白文本
   if (!unityText || unityText.trim() === '') return ''
 
-  // 先把所有换行符统一为 \n，方便正则处理
+  // 1. 先统一换行格式，后面的正则处理都按 `\n` 进行。
   let htmlText = unityText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\\n/g, '\n')
-  let whiteSpace = 'pre-wrap'
 
-  // 1. 定义基础标签映射 (Type 1)
+  // 2. 基础标签映射，优先处理结构性最强的一批标签。
   const simpleTags = [
     { regex: /\[b\]/gi, replace: '<strong>' },
     { regex: /\[\/b\]/gi, replace: '</strong>' },
@@ -47,26 +75,22 @@ export const parseUnityRichText = (unityText, removeImg = true) => {
     { regex: /\[\/strike\]/gi, replace: '</del>' },
   ]
 
-  // 3. 执行 Type 1 替换
   for (const tag of simpleTags) {
     htmlText = htmlText.replace(tag.regex, tag.replace)
   }
 
-
-  // 4. 处理标题 [h1]-[h6]
+  // 3. 标题标签单独处理，避免和普通标签规则混在一起难维护。
   for (let i = 1; i <= 6; i++) {
     const startRegex = new RegExp(`\\[h${i}\\]`, 'gi')
     const endRegex = new RegExp(`\\[\\/h${i}\\][\n]*`, 'gi')
-    // 添加了字体大小和粗细样式
     htmlText = htmlText
       .replace(startRegex, `<h${i} class="font-bold text-lg">`)
       .replace(endRegex, `</h${i}>`)
   }
 
-  // 5. 处理 Unity 特有标签：尖括号+方括号双版本 <color>/[color]、<size>/[size]
+  // 4. 处理 Unity 特有的 `<color>` / `[color]`、`<size>` / `[size]` 双写法。
   // 支持带引号 <color="#fff"> 和不带引号 <color=#fff>
   htmlText = htmlText
-    // 颜色 (Hex6/Hex8/英文名) 尖括号+方括号双版本
     .replace(/\[color="?(\#[0-9a-fA-F]{6}|\#[0-9a-fA-F]{8}|[a-zA-Z]+)"?\]/gi, '<span style="color:$1">')
     .replace(/<color="?(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|[a-zA-Z]+)"?>/gi, '<span style="color:$1">')
     .replace(/\[\/color\]/gi, '</span>')
@@ -77,16 +101,14 @@ export const parseUnityRichText = (unityText, removeImg = true) => {
     .replace(/\[\/size\]/gi, '</span>')
     .replace(/<\/size>/gi, '</span>')
 
-  // 6. URL 标签
+  // 5. 显式 URL 标签转成链接。
   // [url=xxx]text[/url] -> <a href="xxx">text</a>
-  // 添加了 text-accent-primary 颜色和 target="_blank"
   htmlText = htmlText.replace(
     /\[url=(.*?)\](.*?)\[\/url\]/gi,
-    (_, href, text) => `<a href="${encodeURI(href)}" target="_blank" class="text-accent-primary hover:underline cursor-pointer">${text}</a>`
+    (_, href, text) => `<a href="${encodeURI(href)}" target="_blank" class="text-accent-primary hover:underline cursor-pointer">${text}</a>`,
   )
 
-
-  // 2. 定义文本分割线正则 (Type 2)
+  // 6. 文本分隔线语法转成可视化分隔块。
   // 匹配格式：
   // - 可选的【或[开头
   // - 3个以上的分隔符（星号、减号、等号、下划线、破折号）
@@ -106,7 +128,8 @@ export const parseUnityRichText = (unityText, removeImg = true) => {
       return '<div class="w-3/4 mx-auto border-t border-text-main/10 my-4"></div>'
     }
   })
-  // 8. 图片标签
+
+  // 7. 图片标签按调用方决定保留还是清理。
   if (removeImg) {
     htmlText = htmlText.replace(/\[img\](.*?)\[\/img\]\n*/gi, '')
   } else {
@@ -116,38 +139,22 @@ export const parseUnityRichText = (unityText, removeImg = true) => {
     )
   }
 
-  
-  // 纯文本链接自动转换，先把已有的 HTML 标签保护起来
+  // 8. 自动识别纯文本里的裸链接，但要先保护已生成的 HTML。
   const placeholders = []
   htmlText = htmlText.replace(/<[^>]+?>/g, (match) => {
     placeholders.push(match)
     return `__HTML_${placeholders.length - 1}__`
   })
-  // 现在 htmlText 里只有纯文本和占位符了，可以放心替换 URL
   // 匹配 URL: 以 http/https 开头，直到遇到空格或特殊符号
-  htmlText = htmlText.replace(/(https?:\/\/[^\s<]+)/gi, (match) => {
-    return `<a href="${encodeURI(match)}" target="_blank" class="text-accent-primary hover:underline break-all">${match}</a>`
-  })
+  htmlText = htmlText.replace(/(https?:\/\/[^\s<]+)/gi, match => (
+    `<a href="${encodeURI(match)}" target="_blank" class="text-accent-primary hover:underline break-all">${match}</a>`
+  ))
   // 还原 HTML 标签
-  htmlText = htmlText.replace(/__HTML_(\d+)__/g, (_, index) => {
-    return placeholders[Number(index)]
-  })
-  
-
-  // 9. 换行处理 核心修复：white-space判断逻辑+换行转换逻辑重构
-  // 修复9：提前判断原始文本是否有格式化标签，而非替换后；双换行转段落，单换行转空格
-  // let hasFormatting = simpleTags.some(tag => tag.regex.test(unityText))
-  // if (hasFormatting) {
-  //   whiteSpace = 'normal'
-  //   htmlText = htmlText.replace(/\n\n+/g, '<br><br>') // 双换行转双br，保留分段间距
-  //   htmlText = htmlText.replace(/\n/g, ' ') // 单换行转空格，保留行内间隔
-  // } else {
-  //   htmlText = htmlText.replace(/\n/g, '<br>') // 无格式化时保留所有换行
-  // }
+  htmlText = htmlText.replace(/__HTML_(\d+)__/g, (_, index) => placeholders[Number(index)])
+  // 9. 保留旧逻辑里的 `\n` 转 `<br>` 行为，避免描述展示回退。
   htmlText = htmlText.replace(/\\n/g, '<br>')
 
-  // 10. 清理空标签 + 收尾处理
-  // 修复10：补全所有空标签清理、延后trim执行时机，解决空白缝隙+丢失有效空格问题
+  // 10. 清理替换后残留的空标签，减少无意义包裹层。补全所有空标签清理、延后trim执行时机，解决空白缝隙+丢失有效空格问题
   htmlText = htmlText
     .replace(/<table>\s*<\/table>/gi, '')
     .replace(/<ul>\s*<\/ul>/gi, '')
@@ -155,38 +162,41 @@ export const parseUnityRichText = (unityText, removeImg = true) => {
     .replace(/<div>\s*<\/div>/gi, '')
     .replace(/<code>\s*<\/code>/gi, '')
     .replace(/<strong>\s*<\/strong>/gi, '')
-    .trim() // 最后执行trim，只清理首尾无效空白
+    .trim()
 
-  // 10. 最终包裹
-  // 如果内容包含 html 标签，或者是纯文本，统一包裹
-  return `<div class="unity-content text-sm leading-relaxed" style="white-space: ${whiteSpace};">${htmlText}</div>`
+  // 11. 统一包裹展示容器，保持现有样式和 white-space 行为不变。
+  return `<div class="unity-content text-sm leading-relaxed" style="white-space: pre-wrap;">${htmlText}</div>`
 }
 
+/**
+ * 将富文本描述压缩成适合提示词或摘要展示的纯文本。
+ */
+export const cleanRichText = (text, maxLength = 500) => {
+  if (!text) return ''
 
-export const cleanRichText = (text, max_length=500) => {
-    if (!text) return "";
-    let clean = text;
-    // 1. 移除 Unity 标签 (如 <color=#ff0000>...</color>, <b>...</b>)
-    // 采用非贪婪匹配移除所有 <...> 格式的标签
-    clean = clean.replace(/<[^>]+>/g, '');
-    // 2. 移除 Steam/BBCode 链接标签，但保留中间的文字内容
-    // 匹配 [url=xxxx]显示文字[/url] -> 替换为 "显示文字"
-    clean = clean.replace(/\[url=[^\]]*\]([^\[]+)\[\/url\]/gi, '$1');
-    // 3. 移除其它 BBCode 标签 (如 [list], [img], [b], [i] 等)
-    // 匹配所有 [...] 格式的标签
-    clean = clean.replace(/\[[^\]]+\]/g, '');
-    // 4. 移除 Markdown 格式的链接 (如果描述里有的话)
-    // 匹配 [显示文字](http://...) -> 替换为 "显示文字"
-    clean = clean.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-    // 5. 移除裸露的 URL (http/https/ftp)
-    // AI 不需要具体的网址来理解 Mod 的功能
-    clean = clean.replace(/(https?|ftp):\/\/[^\s/$.?#].[^\s]*/gi, '');
-    // 6. 极致压缩：去除多余换行、制表符
-    // 将 2 个及以上的换行/空格合并为 1 个，并去除首尾空格
-    clean = clean.replace(/\s{2,}/g, ' ').replace(/\n+/g, '\n').trim();
-    // 7. 长度兜底拦截 (AI 只需要前 300-500 字通常就足够理解功能了)
-    if (clean.length > max_length) {
-        clean = clean.substring(0, max_length) + "...";
-    }
-    return clean;
-};
+  let clean = text;
+  // 1. 移除 Unity 标签 (如 <color=#ff0000>...</color>, <b>...</b>)
+  // 采用非贪婪匹配移除所有 <...> 格式的标签
+  clean = clean.replace(/<[^>]+>/g, '');
+  // 2. 移除 Steam/BBCode 链接标签，但保留中间的文字内容
+  // 匹配 [url=xxxx]显示文字[/url] -> 替换为 "显示文字"
+  clean = clean.replace(/\[url=[^\]]*\]([^\[]+)\[\/url\]/gi, '$1');
+  // 3. 移除其它 BBCode 标签 (如 [list], [img], [b], [i] 等)
+  // 匹配所有 [...] 格式的标签
+  clean = clean.replace(/\[[^\]]+\]/g, '');
+  // 4. 移除 Markdown 格式的链接 (如果描述里有的话)
+  // 匹配 [显示文字](http://...) -> 替换为 "显示文字"
+  clean = clean.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+  // 5. 移除裸露的 URL (http/https/ftp)
+  // AI 不需要具体的网址来理解 Mod 的功能
+  clean = clean.replace(/(https?|ftp):\/\/[^\s/$.?#].[^\s]*/gi, '');
+  // 6. 极致压缩：去除多余换行、制表符
+  // 将 2 个及以上的换行/空格合并为 1 个，并去除首尾空格
+  clean = clean.replace(/\s{2,}/g, ' ').replace(/\n+/g, '\n').trim();
+  // 7. 长度兜底拦截 (AI 只需要前 300-500 字通常就足够理解功能了)
+  if (clean.length > maxLength) {
+    clean = clean.substring(0, maxLength) + "...";
+  }
+
+  return clean
+}

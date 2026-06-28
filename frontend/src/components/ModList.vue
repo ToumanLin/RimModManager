@@ -234,6 +234,7 @@ import { useGuideStore } from '../stores/guideStore';
 import { useProfileStore } from '../stores/profileStore';
 import { useSupplementStore } from '../stores/supplementStore';
 import { useMissingInstallStore } from '../stores/missingInstallStore';
+import { isSectionHeaderTitle } from '../utils/common';
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -288,10 +289,7 @@ const normalizeId = (value: string) => String(value ?? '').trim().toLowerCase()
 const allowSort = computed(() => sortMode.value === 'default' && !isFiltered.value && isSortAsc.value)
 // 标题分组功能只允许在 active 列表开启，避免影响其它列表原本的拖拽/显示语义。
 const sectionFeatureEnabled = computed(() => props.listId === 'active' && !!appStore.settings.ui.enable_active_section_collapse)
-const isSectionHeaderName = (value: string) => {
-  const name = String(value ?? '').trim()
-  return name.length >= 2 && name.startsWith('=') && name.endsWith('=')
-}
+const isSectionHeaderName = (value: string) => isSectionHeaderTitle(value)
 const isSectionHeaderModId = (id: string) => {
   const mod = modStore.takeModById(id)
   return isSectionHeaderName(mod?.alias_name) || isSectionHeaderName(mod?.name)

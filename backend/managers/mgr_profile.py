@@ -1,4 +1,5 @@
 
+from email.policy import default
 import os
 import json
 import uuid
@@ -129,6 +130,22 @@ class ProfileManager:
                 )
             self.activate_profile('default')  # 切换到默认环境
 
+    def _ensure_user_data_structure(self, user_data_path: str) -> str:
+        """
+        统一收敛 user_data_path 的目录策略。
+        允许目标目录不存在，只要其父目录可落盘，就在保存时自动补齐 Config / Saves 结构。
+        """
+        normalized_path = os.path.normpath(os.path.abspath(str(user_data_path or "").strip()))
+        if not normalized_path:
+            raise ValueError("用户数据路径不能为空")
+        parent_dir = os.path.dirname(normalized_path)
+        if parent_dir and not os.path.exists(parent_dir):
+            raise ValueError(f"Parent path not found: {parent_dir}")
+        os.makedirs(normalized_path, exist_ok=True)
+        os.makedirs(os.path.join(normalized_path, "Config"), exist_ok=True)
+        os.makedirs(os.path.join(normalized_path, "Saves"), exist_ok=True)
+        return normalized_path
+
     def create_profile(self, data: Dict[str, Any], copy_current_data: bool = False):
         """
         创建新版本环境
@@ -140,16 +157,9 @@ class ProfileManager:
         profile_id = uuid.uuid4().hex
         # 规划数据隔离目录 (例如存放在 data/profiles/<id>)
         # 注意：这里使用绝对路径
-        data_dir = data.get('user_data_path') or str(DATA_DIR / "profiles" / profile_id)
-        # 检测路径是否存在，然后初始化目录结构
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
-        game_config_path = os.path.join(data_dir, "Config")
-        if not os.path.exists(game_config_path):
-            os.makedirs(game_config_path)
-        game_saves_path = os.path.join(data_dir, "Saves")
-        if not os.path.exists(game_saves_path):
-            os.makedirs(game_saves_path)
+        data_dir = self._ensure_user_data_structure(
+            data.get('user_data_path') or str(DATA_DIR / "profiles" / profile_id)
+        )
         
         isSteam = os.path.normpath(data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
         
@@ -169,7 +179,7 @@ class ProfileManager:
                 game_install_path=data.get('game_install_path'),
                 game_version=GameManager.get_game_version(data.get('game_install_path')),
                 prefer_steam_launch=bool(data.get('prefer_steam_launch', isSteam)),
-                use_workshop_mods=data.get('use_workshop_mods', False),
+                use_workshop_mods=data.get('use_workshop_mods', True),
                 use_self_mods=data.get('use_self_mods', False), # 默认不加载 Self Mod
                 is_steam=isSteam,
                 run_commands=data.get('run_commands', [])
@@ -196,15 +206,14 @@ class ProfileManager:
             clean_data['game_version'] = GameManager.get_game_version(clean_data.get('game_install_path'))
             clean_data['is_steam'] = os.path.normpath(clean_data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
         if('use_workshop_mods' in clean_data):
-            clean_data['use_workshop_mods'] = True if profile_id =='default' else clean_data.get('use_workshop_mods', False)
+            clean_data['use_workshop_mods'] = True if profile_id =='default' else clean_data.get('use_workshop_mods', True)
         
-        path_fields = ['user_data_path', 'game_install_path']
-        # 验证路径有效性
-        for field in path_fields:
-            if field in clean_data:
-                if not os.path.exists(clean_data[field]):
-                    raise ValueError(f"Path not found: {clean_data[field]}")
-                clean_data[field] = os.path.normpath(clean_data[field])
+        if 'user_data_path' in clean_data:
+            clean_data['user_data_path'] = self._ensure_user_data_structure(clean_data['user_data_path'])
+        if 'game_install_path' in clean_data:
+            if not os.path.exists(clean_data['game_install_path']):
+                raise ValueError(f"Path not found: {clean_data['game_install_path']}")
+            clean_data['game_install_path'] = os.path.normpath(clean_data['game_install_path'])
                 
         query = GameProfile.update(**clean_data).where(GameProfile.id == profile_id)
         query.execute()
@@ -292,7 +301,7 @@ class ProfileManager:
             # 验证游戏安装路径是否有效
             check_install = PathChecker.check_install_path(profile.get('game_install_path',''))
             # 验证用户数据路径是否有效
-            check_data = PathChecker.check_normal_path(profile.get('user_data_path',''))
+            check_data = PathChecker.check_user_data_path(profile.get('user_data_path',''))
             if not check_install['pass'] or not check_data['pass']: 
                 self.activate_profile('default')
                 msg = (check_install['msg'] if not check_install['pass'] else "") + (check_data['msg'] if not check_data['pass'] else '') + " 环境路径可能被删除，请重新配置或删除环境。"
@@ -319,7 +328,7 @@ class ProfileManager:
         # 验证游戏安装路径是否有效
         check_install = PathChecker.check_install_path(profile.game_install_path)
         # 验证用户数据路径是否有效
-        check_data = PathChecker.check_normal_path(profile.user_data_path)
+        check_data = PathChecker.check_user_data_path(profile.user_data_path)
         if (not check_install['pass'] or not check_data['pass']) and profile_id != 'default': 
             self.activate_profile('default')
             msg = f"""{check_install['msg'] if not check_install['pass'] else ""}\n{check_data['msg'] if not check_data['pass'] else ''}"""
@@ -346,9 +355,9 @@ class ProfileManager:
         if not profile: return []
         # 获取当前 Profile 的 EXE 路径
         args = [GameManager.detect_executable(profile.game_install_path) or '']
-        # 核心：注入数据隔离参数（非默认环境）
-        if profile.user_data_path and profile_id != 'default':
-            # 必须使用绝对路径，并处理可能的空格（Popen 会自动处理列表项的空格）
+        # 只要环境显式绑定了用户数据根目录，就始终把 savedatafolder 注入启动参数。
+        default_user_data_path = GameManager.auto_detect_paths().get('user_data_path','')
+        if profile.user_data_path and profile.user_data_path != default_user_data_path:
             args.append(f"-savedatafolder={os.path.abspath(profile.user_data_path)}")
         # 合并自定义参数
         if profile.run_commands:
