@@ -14,7 +14,7 @@ from backend._version import __version__
 from backend.utils.lanzou_parser import LanzouParser
 from backend.utils.logger import logger
 from backend.utils.restart import PYINSTALLER_ENV_VARS_TO_CLEAR, launch_new_application
-from backend.settings import settings, UPDATE_DIR
+from backend.settings import settings, UPDATE_DIR, backup_config_for_update
 from backend.managers.mgr_download import DownloadManager, DownloadTask
 from backend.utils.event_bus import EventBus
 
@@ -397,7 +397,7 @@ class UpdateManager:
 
             logger.info("Performing Pure Python Hot Swap...")
             
-            # --- 核心黑科技开始 ---
+            backup_config_for_update()
             
             # 3. 处理旧的残余文件
             old_exe_path = current_exe + ".old"
@@ -407,7 +407,7 @@ class UpdateManager:
                 except:
                     pass
 
-            # 4. 【神之一手】将当前正在运行的 exe 重命名为 .old
+            # 4. 将当前正在运行的 exe 重命名为 .old
             # Windows 允许重命名正在运行的执行文件！这样就把原本的文件名空出来了
             try:
                 os.rename(current_exe, old_exe_path)
@@ -430,7 +430,6 @@ class UpdateManager:
                 pass
 
             logger.info("Launching new version...")
-            # 统一复用静默重启入口，避免在 Windows 下更新完成后闪出控制台窗口。
             launch_new_application()
 
             # 8. 当前旧进程功成身退，立即退出

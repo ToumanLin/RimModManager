@@ -1,8 +1,9 @@
 # backend/settings.py
 
 import json
-import math
 import os
+import shutil
+import threading
 from dataclasses import dataclass, asdict, field, fields, is_dataclass
 from pathlib import Path
 import sys
@@ -30,6 +31,7 @@ else:
 
 DATA_DIR = HOME_DIR / "data"                # 数据目录
 CONFIG_PATH = DATA_DIR / "config.json"      # 配置文件路径
+CONFIG_UPDATE_BACKUP_PATH = DATA_DIR / "config.json.update.bak"
 UPDATE_DIR = HOME_DIR / "updates"     # 更新目录
 TOOLS_DIR = HOME_DIR / "tools"                # 工具目录
 MODS_DIR = HOME_DIR / "mods"                # 模组目录
@@ -250,6 +252,7 @@ class SettingsManager:
     def __init__(self):
         if self._initialized: return
         self._ensure_config_dir()
+        self._save_lock = threading.Lock()
         self._legacy_prefer_steam_launch = None
         # self.config: AppConfig = self._load() # 加载配置
         
@@ -287,51 +290,106 @@ class SettingsManager:
             current_attr = getattr(target_obj, key)
             # 2. 判断是否需要递归
             # 如果当前属性是 dataclass 实例，且来源值是字典，则递归更新
-            if is_dataclass(current_attr) and isinstance(value, dict):
-                self._recursive_update(current_attr, value)
+            if is_dataclass(current_attr):
+                if isinstance(value, dict):
+                    self._recursive_update(current_attr, value)
+                continue
             # 3. 普通赋值
             else:
                 # 这里可以加一些简单的类型保护，比如防止把 str 赋给 int，但 Python 鸭子类型通常允许直接赋值，除非为了极高的健壮性
                 setattr(target_obj, key, value)
                 
+    def _load_raw_config(self, path: Path) -> Dict[str, Any]:
+        with open(path, 'r', encoding='utf-8-sig') as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError("Config root is not an object")
+        return data
+
+    def _is_raw_config_sane(self, data: Dict[str, Any]) -> bool:
+        expected_keys = {f.name for f in fields(AppConfig)}
+        present_keys = expected_keys.intersection(data.keys())
+        if len(present_keys) < 8:
+            return False
+        for nested_key in ("ui", "network", "ai", "texture_opt"):
+            if nested_key in data and not isinstance(data.get(nested_key), dict):
+                return False
+        return True
+
+    def _is_config_valid(self) -> bool:
+        return all([
+            str(self.config.home_path or "").strip(),
+            str(self.config.self_mods_path or "").strip(),
+            str(self.config.steamcmd_path or "").strip(),
+            str(self.config.current_profile_id or "").strip(),
+        ])
+
+    def _restore_update_backup(self) -> bool:
+        if not CONFIG_UPDATE_BACKUP_PATH.exists():
+            return False
+        try:
+            shutil.copy2(CONFIG_UPDATE_BACKUP_PATH, CONFIG_PATH)
+            return True
+        except Exception as e:
+            print(f"Restore config backup error: {e}")
+            return False
+
+    def _cleanup_update_backup(self):
+        if CONFIG_UPDATE_BACKUP_PATH.exists():
+            try:
+                CONFIG_UPDATE_BACKUP_PATH.unlink()
+            except Exception as e:
+                print(f"Cleanup config backup error: {e}")
+
+    def _load_config_from_file(self, path: Path) -> bool:
+        data = self._load_raw_config(path)
+        if not self._is_raw_config_sane(data):
+            raise ValueError("Config content failed sanity check")
+
+        self.config = AppConfig()
+        if 'prefer_steam_launch' in data:
+            self._legacy_prefer_steam_launch = bool(data.get('prefer_steam_launch'))
+
+        self._recursive_update(self.config, data)
+        self._normalize_config()
+        self._sync_derived_paths()
+        if not self._is_config_valid():
+            raise ValueError("Config validation failed after normalization")
+        return True
 
     def _load_to_config(self):
         """
         将磁盘配置加载到现有的 self.config 中
         """
-        if not CONFIG_PATH.exists(): return
+        if not CONFIG_PATH.exists() and CONFIG_UPDATE_BACKUP_PATH.exists():
+            self._restore_update_backup()
+        if not CONFIG_PATH.exists():
+            self._normalize_config()
+            self._sync_derived_paths()
+            return
         try:
-            # 使用 utf-8-sig 兼容带 BOM 的文件，使用 errors='replace' 防止崩溃
-            with open(CONFIG_PATH, 'r', encoding='utf-8-sig', errors='replace') as f:
-                content = f.read()
-                # 尝试修复损坏的 JSON (比如末尾被截断)
-                from json_repair import repair_json
-                data = repair_json(content, return_objects=True)
-                
-            if isinstance(data, dict):
-                legacy_interval_key_map = {
-                    "tool_check_interval_hours": "tool_check_interval_days",
-                    "external_data_update_check_interval_hours": "external_data_update_check_interval_days",
-                    "steamcmd_mod_update_check_interval_hours": "steamcmd_mod_update_check_interval_days",
-                }
-                for legacy_key, new_key in legacy_interval_key_map.items():
-                    if new_key not in data and legacy_key in data:
-                        try:
-                            data[new_key] = max(1, math.ceil(float(data.get(legacy_key) or 0) / 24))
-                        except Exception:
-                            data[new_key] = getattr(self.config, new_key)
-                if 'prefer_steam_launch' in data:
-                    self._legacy_prefer_steam_launch = bool(data.get('prefer_steam_launch'))
-                # 使用递归更新现有的 self.config
-                self._recursive_update(self.config, data)
-                self._normalize_config()
-                # 加载完成后，手动同步一次衍生路径
-                self._sync_derived_paths()
-            
+            self._load_config_from_file(CONFIG_PATH)
+            self._cleanup_update_backup()
         except Exception as e:
             print(f"Config load error: {e}")
+            if self._restore_update_backup():
+                try:
+                    self._load_config_from_file(CONFIG_PATH)
+                    self._cleanup_update_backup()
+                    return
+                except Exception as restore_error:
+                    print(f"Config restore error: {restore_error}")
+            self.config = AppConfig()
+            self._normalize_config()
+            self._sync_derived_paths()
 
     def _normalize_config(self):
+        self.config.home_path = str(HOME_DIR)
+        self.config.current_profile_id = str(self.config.current_profile_id or "").strip() or "default"
+        self.config.steam_path = str(self.config.steam_path or "").strip()
+        self.config.workshop_mods_path = str(self.config.workshop_mods_path or "").strip()
+        self.config.steamcmd_path = str(self.config.steamcmd_path or "").strip() or str(TOOLS_DIR / "steamcmd")
+        self.config.self_mods_path = str(self.config.self_mods_path or "").strip() or str(MODS_DIR)
         self.config.language = normalize_language_code(self.config.language, default="zh-cn") or "zh-cn"
         valid_modes = {"default", "remember", "custom"}
         if str(self.config.load_order_import_dir_mode or "").strip().lower() not in valid_modes:
@@ -385,55 +443,76 @@ class SettingsManager:
         if not hasattr(self.config, key):
             print(f"Warning: Unknown key {key}")
             return
-        # 记录关键路径的旧值用于比对
-        old_self_mods_path = self.config.self_mods_path
-        old_steamcmd_path = self.config.steamcmd_path
+        before_state = asdict(self.config)
         current_attr = getattr(self.config, key)
         if is_dataclass(current_attr) and isinstance(value, dict):
             self._recursive_update(current_attr, value)
         else:
             setattr(self.config, key, value)
         self._normalize_config()
+        self._sync_derived_paths()
+        after_state = asdict(self.config)
+        if after_state == before_state:
+            return
+        old_self_mods_path = before_state.get('self_mods_path', '')
+        old_steamcmd_path = before_state.get('steamcmd_path', '')
+        new_self_mods_path = after_state.get('self_mods_path', '')
+        new_steamcmd_path = after_state.get('steamcmd_path', '')
         # --- 逻辑触发区 ---
         # 1. 重新计算衍生路径
-        self._sync_derived_paths()
         # 2. 如果 self_mods_path 变了，触发同步
-        if key == 'self_mods_path' and old_self_mods_path != value:
+        if old_self_mods_path != new_self_mods_path:
             from backend.managers.mgr_files import FileManager
             FileManager.sync_steamcmd_root_link(
                 old_mods_path=old_self_mods_path,
                 move_old_data=self.config.move_old_self_mods
             )
         # 3. 如果 steamcmd_path 变了，也触发同步
-        if old_steamcmd_path != self.config.steamcmd_path:
+        if old_steamcmd_path != new_steamcmd_path:
             from backend.managers.mgr_files import FileManager
             FileManager.sync_steamcmd_root_link()
         self.save()
 
     def save(self):
         """保存当前配置到磁盘"""
+        temp_path = CONFIG_PATH.with_name(CONFIG_PATH.name + ".tmp")
         try:
-            self._normalize_config()
-            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-                # asdict 将 dataclass 转换为字典
-                json.dump(asdict(self.config), f, indent=4, ensure_ascii=False)
+            with self._save_lock:
+                self._normalize_config()
+                self._sync_derived_paths()
+                with open(temp_path, 'w', encoding='utf-8') as f:
+                    json.dump(asdict(self.config), f, indent=4, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, CONFIG_PATH)
             # print("Settings saved.")
         except Exception as e:
             print(f"Error saving settings: {e}")
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except Exception:
+                pass
 
     # 强烈建议新增这个方法供 api.save_all_settings 使用
     def update_from_dict(self, data_dict: Dict[str, Any]):
         """
         全量更新，同样需要处理逻辑触发
         """
-        old_self_mods_path = self.config.self_mods_path
-        old_steamcmd_path = self.config.steamcmd_path
+        before_state = asdict(self.config)
         self._recursive_update(self.config, data_dict)
         self._normalize_config()
         self._sync_derived_paths()
+        after_state = asdict(self.config)
+        if after_state == before_state:
+            return
+        old_self_mods_path = before_state.get('self_mods_path', '')
+        old_steamcmd_path = before_state.get('steamcmd_path', '')
+        new_self_mods_path = after_state.get('self_mods_path', '')
+        new_steamcmd_path = after_state.get('steamcmd_path', '')
         # 检查并同步
-        if old_self_mods_path != self.config.self_mods_path or \
-           old_steamcmd_path != self.config.steamcmd_path:
+        if old_self_mods_path != new_self_mods_path or \
+           old_steamcmd_path != new_steamcmd_path:
             from backend.managers.mgr_files import FileManager
             FileManager.sync_steamcmd_root_link(
                 old_mods_path=old_self_mods_path,
@@ -453,3 +532,14 @@ class SettingsManager:
 
 # 全局单例实例
 settings = SettingsManager()
+
+
+def backup_config_for_update() -> bool:
+    if not CONFIG_PATH.exists():
+        return False
+    try:
+        shutil.copy2(CONFIG_PATH, CONFIG_UPDATE_BACKUP_PATH)
+        return True
+    except Exception as e:
+        print(f"Backup config for update error: {e}")
+        return False

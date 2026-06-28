@@ -321,7 +321,11 @@ class API:
             return # 提早退出，阻止系统继续加载 Mod 数据
 
         # 确保 self_mods_path 目录存在
-        os.makedirs(settings.config.self_mods_path, exist_ok=True)
+        self_mods_path = str(settings.config.self_mods_path or "").strip()
+        if self_mods_path:
+            os.makedirs(self_mods_path, exist_ok=True)
+        else:
+            logger.warning("self_mods_path 为空，跳过管理器 Mod 目录创建。")
         
         # 依赖注入：将上下文发给所有的 Manager
         self.scanner = ModScanner(self.active_context)

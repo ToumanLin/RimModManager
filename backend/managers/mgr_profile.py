@@ -216,8 +216,12 @@ class ProfileManager:
     def update_version(self):
         """检查环境游戏版本是否与当前游戏版本匹配"""
         if not self.current_profile: return False
-        self.current_profile.game_version = GameManager.get_game_version(self.current_profile.game_install_path)
+        new_version = GameManager.get_game_version(self.current_profile.game_install_path)
+        if self.current_profile.game_version == new_version:
+            return False
+        self.current_profile.game_version = new_version
         self.current_profile.save()
+        return True
 
     def delete_profile(self, profile_id, force: bool = False):
         """删除环境 (及隔离区数据)。默认移入回收站，force=True 时彻底删除。"""
@@ -255,7 +259,7 @@ class ProfileManager:
         if not profile:
             # 兜底：获取第一个
             profile = GameProfile.select().first()
-            if profile:
+            if profile and settings.config.current_profile_id != profile.id:
                 settings.set('current_profile_id', profile.id)
         return profile
 
@@ -323,7 +327,8 @@ class ProfileManager:
         
         self.current_profile = profile
         self.update_version()
-        settings.set('current_profile_id', profile.id)
+        if settings.config.current_profile_id != profile.id:
+            settings.set('current_profile_id', profile.id)
 
         # 2. 实例化并校验沙盒上下文
         return self.build_profile_context(profile.id)
