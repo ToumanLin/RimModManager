@@ -1,10 +1,11 @@
 # 新数据库
 from datetime import datetime
 import json
+import os
 import time
 from typing import Optional, cast
 from playhouse.migrate import SqliteMigrator, migrate
-from peewee import Model, Field, SqliteDatabase, CharField, TextField, DateTimeField, ForeignKeyField, BooleanField, IntegerField, CompositeKey, BigIntegerField
+from peewee import DatabaseError, Model, Field, SqliteDatabase, CharField, TextField, DateTimeField, ForeignKeyField, BooleanField, IntegerField, CompositeKey, BigIntegerField
 from backend._version import __db_version__
 from backend.utils.logger import logger 
 from backend.utils.tools import current_ms
@@ -150,8 +151,8 @@ class GithubModRecord(BaseModel):
     owner = CharField()                       # 仓库作者
     repo_name = CharField()                   # 仓库名
     install_type = CharField(default="source")# 偏好类型: source(源码) 或 release(发行版)
-    installed_version = CharField(null=True)  # 当前安装的版本(Release的TagName 或 源码的CommitHash)
     target_branch = CharField(default="main") # 绑定的分支(通常是 main 或 master)
+    installed_version = CharField(null=True)  # 当前安装的版本(Release的TagName 或 源码的CommitHash)
     local_folder = CharField(null=True)       # 实际解压到的物理文件夹名称
     online_info_cache = cast(dict, UTF8JSONField(default=dict))
     last_sync_time = cast(int, BigIntegerField(default=0)) # 上次刷新时间
@@ -174,10 +175,10 @@ class SubscribedCollection(BaseModel):
     preview_url = cast(str, CharField(null=True))
     # 统计快照
     total = cast(int, IntegerField(default=0))
-    need_download = cast(int, IntegerField(default=0))
     # 时间戳
     time_updated = cast(int, BigIntegerField(default=0)) # 合集在 Steam 上的最后更新时间
     created_time = cast(int, BigIntegerField(default=current_ms))
+    last_sync_time = cast(int, BigIntegerField(default=0)) # 上次从 Steam 成功同步数据的本地时间
     # 存储子项数据的快照：JSON 数组格式
     # 结构: [{"workshop_id": "...", "package_id": "...", "title": "...", "preview_url": "...", "is_installed": bool}]
     children = cast(list, UTF8JSONField(default=list))
@@ -237,6 +238,31 @@ def init_db(db_path):
             db.create_tables(all_models, safe=True)
             
         return True
+    
+    except DatabaseError as e:
+        if "malformed" in str(e).lower():
+            logger.error(f"检测到数据库损坏: {e}。正在尝试自动修复...")
+            db.close()
+            
+            # --- 自愈策略：备份坏库并重建 ---
+            bak_path = db_path + ".malformed.bak"
+            try:
+                if os.path.exists(db_path):
+                    # 将坏掉的库重命名，不要直接删，给用户留一线生机
+                    shutil.move(db_path, bak_path)
+                    # 同时删除关联的临时文件
+                    if os.path.exists(db_path + "-wal"): os.remove(db_path + "-wal")
+                    if os.path.exists(db_path + "-shm"): os.remove(db_path + "-shm")
+                
+                # 递归调用自己，重新创建干净的库
+                return init_db(db_path)
+            except Exception as re_e:
+                logger.critical(f"严重错误：无法自动修复数据库损坏 {re_e}")
+                return False
+        else:
+            logger.error(f"数据库连接失败: {e}")
+            return False
+        
     except Exception as e:
         import traceback
         logger.error(f"初始化数据库时出错: {traceback.format_exc()}")

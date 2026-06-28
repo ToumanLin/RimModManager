@@ -96,7 +96,8 @@ class ProfileManager:
         'user_data_path', 
         'use_workshop_mods', 
         'use_self_mods', 
-        'run_commands'
+        'run_commands',
+        'last_played_time'
     }
     
     def __init__(self):
@@ -182,9 +183,11 @@ class ProfileManager:
         # valid_field_names = set(GameProfile._meta.fields.keys()) # type: ignore
         # clean_data = {k: v for k, v in data.items() if k in valid_field_names}
         # if 'id' in clean_data: del clean_data['id']
-        clean_data['game_version'] = GameManager.get_game_version(clean_data.get('game_install_path'))
-        clean_data['is_steam'] = os.path.normpath(clean_data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
-        clean_data['use_workshop_mods'] = True if profile_id =='default' else clean_data.get('use_workshop_mods', False)
+        if('game_install_path' in clean_data):
+            clean_data['game_version'] = GameManager.get_game_version(clean_data.get('game_install_path'))
+            clean_data['is_steam'] = os.path.normpath(clean_data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
+        if('use_workshop_mods' in clean_data):
+            clean_data['use_workshop_mods'] = True if profile_id =='default' else clean_data.get('use_workshop_mods', False)
         
         path_fields = ['user_data_path', 'game_install_path']
         # 验证路径有效性
@@ -247,6 +250,25 @@ class ProfileManager:
             if profile:
                 settings.set('current_profile_id', profile.id)
         return profile
+
+    def build_profile_context(self, profile_id: str) -> ProfileContext:
+        """
+        为指定环境构造只读 Context。
+        这个过程不会修改当前激活环境，也不会写回 settings。
+        """
+        if not profile_id:
+            profile_id = 'default'
+        profile = self.get_profile(profile_id)
+        context = ProfileContext(
+            profile_id=profile.id,
+            game_version=profile.game_version,
+            game_install_path=profile.game_install_path,
+            user_data_path=profile.user_data_path,
+            use_workshop_mods=profile.use_workshop_mods,
+            use_self_mods=profile.use_self_mods
+        )
+        context.validate_health()
+        return context
     
     def get_all_profiles(self):
         """获取所有 Profile 对象"""
@@ -292,20 +314,9 @@ class ProfileManager:
         self.current_profile = profile
         self.update_version()
         settings.set('current_profile_id', profile.id)
-        
-        # 2. 实例化沙盒上下文
-        context = ProfileContext(
-            profile_id=profile.id,
-            game_version=profile.game_version,
-            game_install_path=profile.game_install_path,
-            user_data_path=profile.user_data_path,
-            use_workshop_mods=profile.use_workshop_mods,
-            use_self_mods=profile.use_self_mods
-        )
-        # 3. 校验健康度，强制建立物理目录
-        context.validate_health()
-        
-        return context
+
+        # 2. 实例化并校验沙盒上下文
+        return self.build_profile_context(profile.id)
         
     
     def get_launch_args(self, profile_id: str = ''):

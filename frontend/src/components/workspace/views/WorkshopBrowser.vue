@@ -1,4 +1,4 @@
-<!-- src/components/workspace/views/NexusBrowser.vue -->
+<!-- src/components/workspace/views/WorkshopBrowser.vue -->
 <template>
   <div class="h-full flex gap-4 p-4 overflow-hidden">
     
@@ -9,7 +9,7 @@
           <h3 class="text-sm font-black tracking-widest text-accent-primary flex items-center gap-2 uppercase">
             <Globe class="size-4" /> 缓存工坊浏览
           </h3>
-          <span class="text-[10px] text-text-dim font-mono">共 {{ workspaceStore.nexusSearch.total }} 项</span>
+          <span class="text-[10px] text-text-dim font-mono">共 {{ workspaceStore.workshopSearch.total }} 项</span>
         </div>
         
         <div class="relative">
@@ -28,17 +28,17 @@
       <div class="flex-1 overflow-hidden relative bg-black/20">
         
         <!-- 首次加载大遮罩 -->
-        <div v-if="workspaceStore.nexusSearch.isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-accent-primary z-10 bg-bg-deep/50 backdrop-blur-sm">
+        <div v-if="workspaceStore.workshopSearch.isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-accent-primary z-10 bg-bg-deep/50 backdrop-blur-sm">
           <div class="size-8 border-2 border-current border-t-transparent rounded-full animate-spin mb-2"></div>
           <span class="text-xs font-bold tracking-widest">正在检索...</span>
         </div>
 
         <!-- 替换为 RecycleScroller -->
         <RecycleScroller
-          v-if="workspaceStore.nexusSearch.results.length > 0"
+          v-if="workspaceStore.workshopSearch.results.length > 0"
           ref="scrollerRef"
           class="h-full custom-scrollbar"
-          :items="workspaceStore.nexusSearch.results"
+          :items="workspaceStore.workshopSearch.results"
           :item-size="64" 
           key-field="workshop_id"
           @scroll="handleScroll"
@@ -46,10 +46,10 @@
           <template v-slot="{ item }">
             <div @click="selectMod(item)" 
               class="h-16 px-4 py-2 border-b border-text-main/5 cursor-pointer transition-all hover:bg-accent-primary/10 group flex flex-col justify-center"
-              :class="workspaceStore.nexusSearch.selectedId === item.workshop_id ? 'bg-accent-primary/20 border-r-4 border-r-accent-primary shadow-[inset_2px_0_10px_rgba(59,130,246,0.1)]' : ''">
+              :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'bg-accent-primary/20 border-r-4 border-r-accent-primary shadow-[inset_2px_0_10px_rgba(59,130,246,0.1)]' : ''">
               
               <div class="text-sm font-bold truncate transition-colors" 
-                :class="workspaceStore.nexusSearch.selectedId === item.workshop_id ? 'text-text-main' : 'text-text-main/80 group-hover:text-accent-primary'">
+                :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'text-text-main' : 'text-text-main/80 group-hover:text-accent-primary'">
                 {{ item.name || '未知模组' }}
               </div>
               <div class="flex justify-between items-center mt-1">
@@ -67,18 +67,18 @@
           <!-- 滚动到底部的 Loading 指示器 (插槽) -->
           <template #after>
             <!-- 修复：加入 isLocalFetching 判定，防止网络请求结束后 Loading 瞬间消失导致高度坍塌 -->
-            <div v-if="workspaceStore.nexusSearch.isLoadMore || isLocalFetching" class="py-3 flex justify-center items-center text-text-dim">
+            <div v-if="workspaceStore.workshopSearch.isLoadMore || isLocalFetching" class="py-3 flex justify-center items-center text-text-dim">
               <div class="size-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin mr-2"></div>
               <span class="text-xs">加载更多...</span>
             </div>
-            <div v-else-if="!workspaceStore.nexusSearch.hasMore && workspaceStore.nexusSearch.results.length > 0" class="py-3 text-center text-xs text-text-dim/50">
+            <div v-else-if="!workspaceStore.workshopSearch.hasMore && workspaceStore.workshopSearch.results.length > 0" class="py-3 text-center text-xs text-text-dim/50">
               - 已经到底啦 -
             </div>
           </template>
         </RecycleScroller>
 
         <!-- 空状态 -->
-        <div v-else-if="!workspaceStore.nexusSearch.isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-text-dim/30">
+        <div v-else-if="!workspaceStore.workshopSearch.isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-text-dim/30">
           <Cpu class="size-16 mb-4 opacity-50" />
           <span class="text-sm font-bold tracking-widest">暂无结果</span>
         </div>
@@ -89,11 +89,11 @@
     <!-- 右侧：详情展示 -->
     <div class="flex-1 bg-black/40 border border-text-main/10 rounded-2xl overflow-hidden flex flex-col relative shadow-2xl">
       
-      <template v-if="selectedMod && !workspaceStore.nexusSearch.isDetailLoading">
+      <template v-if="selectedMod && !workspaceStore.workshopSearch.isDetailLoading">
         <!-- 顶部导航面包屑/后退栏 -->
-        <div v-if="workspaceStore.nexusSearch.historyStack.length > 0" 
+        <div v-if="workspaceStore.workshopSearch.historyStack.length > 0" 
              class="absolute top-4 left-4 z-20 flex items-center">
-          <button @click="workspaceStore.goBackNexusDetail" 
+          <button @click="workspaceStore.goBackWorkshopDetail" 
                   class="flex items-center gap-1 px-3 py-1.5 bg-black/80 backdrop-blur-md rounded-lg text-xs font-bold text-text-main hover:text-accent-primary border border-text-main/20 hover:border-accent-primary/50 transition-all shadow-lg">
             <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
             返回上一层
@@ -263,7 +263,7 @@
       </template>
 
       <!-- 加载遮罩 -->
-      <div v-if="workspaceStore.nexusSearch.isDetailLoading" class="absolute inset-0 bg-bg-deep flex flex-col items-center justify-center z-50">
+      <div v-if="workspaceStore.workshopSearch.isDetailLoading" class="absolute inset-0 bg-bg-deep flex flex-col items-center justify-center z-50">
         <div class="relative flex items-center justify-center">
           <div class="size-16 border-2 border-text-main/10 rounded-full"></div>
           <div class="absolute size-16 border-2 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
@@ -293,15 +293,15 @@ const toast = useToast()
 const workspaceStore = useWorkspaceStore()
 
 // 本地搜索词绑定，用于防抖
-const localQuery = ref(workspaceStore.nexusSearch.query)
+const localQuery = ref(workspaceStore.workshopSearch.query)
 let searchTimeout = null
 const scrollerRef = ref(null)
 const isLocalFetching = ref(false)  // 局部硬锁，绝对同步，防穿透
 
 // 初始加载：如果没数据，默认加载第一页全部
 onMounted(() => {
-  if (workspaceStore.nexusSearch.results.length === 0) {
-    workspaceStore.doNexusSearch('')
+  if (workspaceStore.workshopSearch.results.length === 0) {
+    workspaceStore.doWorkshopSearch('')
   }
 })
 
@@ -310,18 +310,18 @@ onUnmounted(() => {
 })
 
 const selectedMod = computed(() => {
-  return workspaceStore.nexusSearch.detailData
+  return workspaceStore.workshopSearch.detailData
 })
 const selectedId = computed(() => {
-  return workspaceStore.nexusSearch.selectedId
+  return workspaceStore.workshopSearch.selectedId
 })
 const dependencies_ids = computed(() => {
-  return Object.keys(workspaceStore.nexusSearch.detailData?.dependencies_mods)
+  return Object.keys(workspaceStore.workshopSearch.detailData?.dependencies_mods)
 })
 // 解析富文本描述
 const parsedDescription = computed(() => {
-  if (!workspaceStore.nexusSearch.detailData?.description) return ''
-  return parseUnityRichText(workspaceStore.nexusSearch.detailData?.description, false)
+  if (!workspaceStore.workshopSearch.detailData?.description) return ''
+  return parseUnityRichText(workspaceStore.workshopSearch.detailData?.description, false)
 })
 
 const isSubscribed = (workshop_ids) => {
@@ -341,7 +341,7 @@ const debouncedSearch = () => {
     if (scrollerRef.value) {
       scrollerRef.value.$el.scrollTop = 0
     }
-    workspaceStore.doNexusSearch(localQuery.value.trim(), false)
+    workspaceStore.doWorkshopSearch(localQuery.value.trim(), false)
   }, 500)
 }
 
@@ -352,14 +352,14 @@ const clearSearch = () => {
 
 // 选中查看详情, 点击左侧主列表 (会清空历史栈)
 const selectMod = (item) => {
-  workspaceStore.fetchNexusDetails(item.workshop_id, false)
+  workspaceStore.fetchWorkshopDetails(item.workshop_id, false)
 }
 // 点击详情页内的推荐卡片 (会压入历史栈)
 const handleNavigateInside = (workshop_id) => {
   // 滚动条回到顶部 (可选，提升体验)
   const scrollContainer = document.querySelector('.custom-scrollbar.bg-text-main\\/2')
   if (scrollContainer) scrollContainer.scrollTop = 0
-  workspaceStore.fetchNexusDetails(workshop_id, true)
+  workspaceStore.fetchWorkshopDetails(workshop_id, true)
 }
 
 // 核心：处理无限滚动
@@ -371,8 +371,8 @@ const handleScroll = async (event) => {
   // 1. 拦截条件
   if (
     !isBottom || 
-    !workspaceStore.nexusSearch.hasMore || 
-    workspaceStore.nexusSearch.isLoadMore || 
+    !workspaceStore.workshopSearch.hasMore || 
+    workspaceStore.workshopSearch.isLoadMore || 
     isLocalFetching.value // 改为 .value
   ) {
     return;
@@ -381,7 +381,7 @@ const handleScroll = async (event) => {
   isLocalFetching.value = true;
   try {
     // 3. 等待后端请求完成
-    await workspaceStore.doNexusSearch(localQuery.value.trim(), true);
+    await workspaceStore.doWorkshopSearch(localQuery.value.trim(), true);
     // 4. 极其关键：nextTick 对 RecycleScroller 不够！
     // 虚拟列表依赖 ResizeObserver 或内置 watcher，需要给它一点物理时间去生成新 DOM 并撑开容器。
     // 使用 100ms 延时可以完美避免高度瞬间缩水引发的二次触发。

@@ -9,11 +9,9 @@ import threading
 import time
 import functools
 import uuid
-from regex import E
 import webview
 from dataclasses import dataclass, asdict, is_dataclass
 from typing import Any, Dict, List
-from send2trash import send2trash
 from datetime import datetime
 from peewee import Model, JOIN
 from playhouse.shortcuts import model_to_dict
@@ -188,17 +186,18 @@ class API:
         # 2. 实例化各个管理器
         self.workshop_db_mgr = WorkshopDBManager()
         self.game_mgr = GameManager()
-        self.game_monitor = GameMonitor(self)
         self.profile_mgr = ProfileManager()
         self.active_context = None
         self.load_order_mgr = None
+        self.game_log_mgr = None
         self.scanner = None
         self.sorter = None
         # 3. 启动时激活上下文
         self._bootstrap_context(settings.config.current_profile_id)
+        self.game_monitor = GameMonitor(self)
         self.download_mgr = DownloadManager()
         self.github_mgr = GithubManager(self.download_mgr)
-        self.file_mgr = FileManager()
+        self.file_mgr = file_mgr
         self.steam_mgr = SteamManager()
         self.steamcmd_controller = SteamCMDController(self.steam_mgr.steamcmd_exe)
         self.ai_mgr = AIManager()
@@ -216,6 +215,9 @@ class API:
     
     def _bootstrap_context(self, profile_id: str):
         """装载当前环境，并重建所有业务引擎"""
+        # 在重建前，先停止旧的监视器
+        if self.game_log_mgr: self.game_log_mgr.stop_realtime_monitor()
+        
         try:
             # 获取上下文
             self.active_context = self.profile_mgr.activate_profile(profile_id)
@@ -241,6 +243,25 @@ class API:
         self.load_order_mgr = LoadOrderManager(self.active_context)
         self.game_log_mgr = GameLogManager(self.active_context)
         self.sorter = OrderSorter(self.active_context)
+        # 启动新的实时监视器
+        if self.game_log_mgr: self.game_log_mgr.start_realtime_monitor()
+
+    def _resolve_load_order_scope(self, profile_id: str | None = None):
+        """
+        解析读取排序/备份时应使用的上下文。
+        仅当读取当前激活环境时复用现有 manager；查看其它环境备份时只构造临时只读 manager。
+        """
+        target_profile_id = str(profile_id or "").strip()
+        if not target_profile_id:
+            target_profile_id = self.active_context.profile_id if self.active_context else settings.config.current_profile_id
+
+        if self.active_context and self.load_order_mgr and target_profile_id == self.active_context.profile_id:
+            profile = self.profile_mgr.get_current_profile()
+            return self.load_order_mgr, self.active_context, profile
+
+        context = self.profile_mgr.build_profile_context(target_profile_id)
+        profile = self.profile_mgr.get_profile(target_profile_id)
+        return LoadOrderManager(context), context, profile
 
     def _handle_app_version_upgrade(self):
         """实例初始化时运行的升级逻辑"""
@@ -273,7 +294,7 @@ class API:
             logger.info(f"应用升级处理完成: {last_version} -> {current_version}")
 
         except Exception as e:
-            logger.error(f"Upgrade tasks failed: {e}")
+            logger.error(f"Upgrade tasks failed: {e}", exc_info=True)
     
     @log_api_call
     def get_changelog(self):
@@ -285,6 +306,8 @@ class API:
         """关闭数据库清理资源"""
         # 停止后台扫描任务 (如果有)
         if hasattr(self, 'scanner') and self.scanner: self.scanner.stop_scan() 
+        # 停止游戏日志监视器
+        if self.game_log_mgr: self.game_log_mgr.stop_realtime_monitor()
         # 停止游戏监控
         if self.game_monitor: self.game_monitor.running = False
         # 暂停所有事件发送
@@ -696,12 +719,34 @@ class API:
                     elif action == 'delete':
                         # 执行物理删除
                         success, msg = ModDAO.delete_mod_physically(path)
+                    else:
+                        msg = f"不支持的操作类型: {action}"
                     results.append({
                         'path': path,
+                        'action': action,
                         'status': 'success' if success else 'error',
                         'msg': msg if not success else ''
                     })
-            return ApiResponse.success(results, "冲突处理完成")
+
+            success_count = sum(1 for item in results if item['status'] == 'success')
+            error_items = [item for item in results if item['status'] != 'success']
+            stats = {
+                'total': len(results),
+                'success_count': success_count,
+                'error_count': len(error_items),
+            }
+            payload = {
+                'results': results,
+                'stats': stats,
+                'failed_paths': [item['path'] for item in error_items]
+            }
+
+            if success_count == len(results):
+                return ApiResponse.success(payload, "冲突处理完成")
+            if success_count == 0:
+                first_error = error_items[0]['msg'] if error_items else "没有可执行的操作"
+                return ApiResponse.error(first_error, payload)
+            return ApiResponse.warning(f"部分操作失败：{len(error_items)} 项未处理成功，其余操作已应用。", payload)
         except Exception as e:
             return ApiResponse.error(f"处理出错: {str(e)}")
     
@@ -923,32 +968,48 @@ class API:
         return ApiResponse.success({
             "file": self.active_context.mods_config_file if self.active_context else "",
             "active_ids": res.get('active_mods', []),
-            "modify_time": res.get('modify_time', 0)
+            "modify_time": res.get('modify_time', 0),
+            # 统一把格式和结构化模组明细一起返回，方便前端直接显示名称并处理订阅。
+            "format": res.get('format', 'modsconfig'),
+            "list_name": res.get('list_name', ''),
+            "mods": res.get('mods', []),
+            "mod_names": res.get('mod_names', []),
+            "mod_steam_workshop_ids": res.get('mod_steam_workshop_ids', [])
         })
     
     @log_api_call
-    def load_order_file_open(self, mods_config_file_path: str|None = None):
+    def load_order_file_open(self, mods_config_file_path: str|None = None, profile_id: str | None = None):
         """
         打开 ModsConfig.xml 文件
         """
+        load_order_mgr, context, profile = self._resolve_load_order_scope(profile_id)
+        source_profile_id = str(profile_id or "").strip()
         file = ''
         # 默认路径为 ModsConfig.xml 所在目录
         if not mods_config_file_path:
-            mods_config_file_path = self.active_context.mods_config_file if self.active_context else ""
+            mods_config_file_path = context.mods_config_file if context else ""
         # 检查路径是否合法，且是否为xml文件
         if os.path.isfile(mods_config_file_path) and (mods_config_file_path.endswith('.xml') or mods_config_file_path.endswith('.rws')):
             file = mods_config_file_path
         elif os.path.isdir(mods_config_file_path) :
             file = file_mgr.select_file_dialog(initial_dir=mods_config_file_path)
         else:
-            file = file_mgr.select_file_dialog(initial_dir=self.active_context.game_config_path if self.active_context else "")
+            file = file_mgr.select_file_dialog(initial_dir=context.game_config_path if context else "")
         if not file:
             return ApiResponse.warning("未选择文件")
-        res = self.load_order_mgr.read_active_mods(file) if self.load_order_mgr else {}
+        res = load_order_mgr.read_active_mods(file) if load_order_mgr else {}
         result = {
             "file": file,
             "active_ids": res.get('active_mods', []),
-            "modify_time": res.get('modify_time', 0)
+            "modify_time": res.get('modify_time', 0),
+            # 与 load_order_get 保持同一数据协议，避免前端区分“默认配置”和“外部导入文件”两条解析链。
+            "format": res.get('format', 'modsconfig'),
+            "list_name": res.get('list_name', ''),
+            "mods": res.get('mods', []),
+            "mod_names": res.get('mod_names', []),
+            "mod_steam_workshop_ids": res.get('mod_steam_workshop_ids', []),
+            "source_profile_id": source_profile_id,
+            "source_profile_name": profile.name if source_profile_id else '',
         }
         if not result["active_ids"]:
             return ApiResponse.error("解析文件出错!")
@@ -972,26 +1033,46 @@ class API:
             return ApiResponse.error(f"保存 ModsConfig.xml 时出错: {e}")
     
     @log_api_call
-    def load_order_export(self, active_ids: List[str], target_path: str|None = None, trigger_dialog: bool = True):
+    def load_order_export(self, active_ids: List[str], target_path: str|None = None, trigger_dialog: bool = True, export_format: str = 'modsconfig', list_name: str | None = None):
         """
-        导出当前加载顺序到 ModsConfig.xml
+        导出当前加载顺序到指定格式
         :param active_ids: 激活的 Mod 列表
         :param target_path: 导出路径
         """
         try:
             if not target_path and not trigger_dialog: trigger_dialog = True
-            success = self.load_order_mgr.save_active_mods(active_ids, target_path, trigger_dialog) if self.load_order_mgr else False
+            use_raw_ids = settings.config.use_raw_ids
+            # 导出格式和列表名都透传给 LoadOrderManager，
+            # 由底层统一决定生成 ModsConfig.xml 还是 ModList.xml。
+            success = self.load_order_mgr.save_active_mods(
+                active_ids,
+                target_path,
+                trigger_dialog,
+                use_raw_ids=use_raw_ids,
+                export_format=export_format,
+                list_name=list_name
+            ) if self.load_order_mgr else False
             if success: return ApiResponse.success()
             return ApiResponse.warning("取消保存")
         except Exception as e:
             return ApiResponse.error(f"导出加载顺序时出错: {e}")
 
     @log_api_call
-    def backups_get_all(self):
+    def backups_get_all(self, profile_id: str | None = None):
         """获取所有备份文件路径"""
         try:
-            backups = self.load_order_mgr.get_all_backups() if self.load_order_mgr else []
-            return ApiResponse.success(backups)
+            load_order_mgr, context, profile = self._resolve_load_order_scope(profile_id)
+            backups = load_order_mgr.get_all_backups() if load_order_mgr else {"today": [], "earlier": [], "other": []}
+            return ApiResponse.success({
+                **backups,
+                "profile": {
+                    "id": context.profile_id,
+                    "name": profile.name,
+                    "backup_dir": context.backup_dir,
+                    "is_current": bool(self.active_context and context.profile_id == self.active_context.profile_id),
+                    "is_healthy": context.is_healthy,
+                }
+            })
         except Exception as e:
             return ApiResponse.error(f"获取备份文件时出错: {e}")
     
@@ -1005,19 +1086,18 @@ class API:
             profile = self.profile_mgr.get_profile(profile_id)
             logger.debug(f"launch_game: profile_id={profile_id}, prefer_steam={settings.config.prefer_steam_launch}, steam_path={settings.config.steam_path}, is_steam={profile.is_steam}")
             # 检查 Steam 配置是否完整
+            
+            # 1. 获取当前 Profile 的启动参数（仅包含游戏相关参数）
+            extra_args = self.profile_mgr.get_launch_args_only(profile_id)
             if(settings.config.prefer_steam_launch and profile.is_steam):
-                # 1. 获取当前 Profile 的启动参数（仅包含游戏相关参数）
-                extra_args = self.profile_mgr.get_launch_args_only(profile_id)
                 logger.debug(f"launch_game_steam: extra_args={extra_args}")
                 # 2. 调用 Steam 管理器启动游戏
                 self.steam_mgr.launch_via_steam_cmd(extra_args=extra_args)
                 msg='通过 Steam 启动游戏'
             else:
-                # 1. 获取当前 Profile 的启动参数
-                launch_args = self.profile_mgr.get_launch_args_only(profile_id) 
-                logger.debug(f"launch_game: launch_args={launch_args}")
+                logger.debug(f"launch_game: launch_args={extra_args}")
                 # 2. 调用游戏管理器启动游戏
-                self.game_mgr.launch_game(game_install_path=profile.game_install_path, custom_args=launch_args)
+                self.game_mgr.launch_game(game_install_path=profile.game_install_path, custom_args=extra_args)
                 msg='直接启动游戏'
             
             # 3. 记录最后一次游玩时间到数据库
@@ -1026,7 +1106,7 @@ class API:
             })
             return ApiResponse.success(message=f"{msg}成功，祝你游玩愉快！")
         except Exception as e:
-            logger.error(f"Launch Game Error: {e}")
+            logger.error(f"Launch Game Error: {e}", exc_info=True)
             return ApiResponse.error(f"启动游戏时出错: {e}")
     
 
@@ -1077,7 +1157,7 @@ class API:
             info = PathChecker.paths_check(paths_data)
             return ApiResponse.success(info)
         except Exception as e:
-            logger.error(f"Check Paths Error: {e}")
+            logger.error(f"Check Paths Error: {e}", exc_info=True)
             return ApiResponse.error(f"检查路径时出错: {e}")
     
     @log_api_call
@@ -1087,7 +1167,7 @@ class API:
             logger.info(f"打开路径: {path}")
             return ApiResponse.success()
         except Exception as e:
-            logger.error(f"打开路径时出错: {e}")
+            logger.error(f"打开路径时出错: {e}", exc_info=True)
             return ApiResponse.error(f"打开路径时出错: {e}")
     
     @log_api_call
@@ -1186,19 +1266,21 @@ class API:
         if not self.active_context: 
             return ApiResponse.error("未指定环境")
         # 1. 拦截非法目标
-        if target_store == 'workshop':
-            return ApiResponse.error("为了保证 Steam 同步机制不被破坏，禁止手动向创意工坊目录导入文件。")
+        # if target_store == 'workshop':
+        #     return ApiResponse.error("为了保证 Steam 同步机制不被破坏，禁止手动向创意工坊目录导入文件。")
         # 2. 确定目标根目录
         target_root = ""
         if target_store == 'local':
             target_root = self.active_context.local_mods_path
         elif target_store == 'self':
             target_root = settings.config.self_mods_path
+        elif target_store == 'workshop':
+            target_root = settings.config.workshop_mods_path
         if not target_root or not os.path.exists(target_root):
             return ApiResponse.error(f"目标库 {target_store} 的目录未配置或不存在！")
         # 3. 查出源文件信息
         from backend.database.models import ModAsset
-        source_mods = ModAsset.select(ModAsset.path, ModAsset.package_id, ModAsset.store, ModAsset.name).where(ModAsset.path_hash.in_(path_hashes)).dicts() # type: ignore
+        source_mods = ModAsset.select(ModAsset.path_hash, ModAsset.path, ModAsset.package_id, ModAsset.store, ModAsset.name).where(ModAsset.path_hash.in_(path_hashes)).dicts() # type: ignore
         source_mods = list(source_mods)
         if not source_mods: return ApiResponse.error("未找到指定的源文件")
         # 4. 执行物理操作
@@ -1446,7 +1528,7 @@ class API:
                 return ApiResponse.success(message="导出成功")
             return ApiResponse.warning("已取消")
         except Exception as e:
-            logger.error(f"Export failed: {e}")
+            logger.error(f"Export failed: {e}", exc_info=True)
             return ApiResponse.error(str(e))
 
     @log_api_call
@@ -1464,7 +1546,7 @@ class API:
                 return ApiResponse.success(message="规则包导入成功")
             return ApiResponse.warning("已取消")
         except Exception as e:
-            logger.error(f"Import failed: {e}")
+            logger.error(f"Import failed: {e}", exc_info=True)
             return ApiResponse.error(f"导入失败: {e}")
     
     @log_api_call
@@ -1494,7 +1576,7 @@ class API:
                     EventBus.send_toast("社区规则库更新完毕！", type="success")
             
             def on_rules_error(task):
-                logger.error(f"Rules download failed: {task.error_msg}")
+                logger.error(f"Rules download failed: {task.error_msg}", exc_info=True)
                 EventBus.send_toast("社区规则库更新失败！", type="error")
 
             task_id = self.download_mgr.add_task(
@@ -1508,7 +1590,7 @@ class API:
             return ApiResponse.success(data={"task_id": task_id}, message="社区规则库开始更新")
             
         except Exception as e:
-            logger.error(f"Update community rules failed: {e}")
+            logger.error(f"Update community rules failed: {e}", exc_info=True)
             return ApiResponse.error(f"系统错误: {str(e)}")
 
     
@@ -1516,23 +1598,39 @@ class API:
     #  8. 日志管理 (Log Management)
     # =========================================================================
 
-    @log_api_call
-    def get_game_log_files(self):
-        """ 获取游戏日志文件列表 """
+    def get_log_files(self, log_type='game'):
+        """ 获取指定类型的日志文件列表 ('app' 或 'game') """
         try:
-            files = self.game_log_mgr.get_log_files() if self.game_log_mgr else []
+            if log_type == 'app':
+                from backend.utils.logger import app_log_reader
+                files = app_log_reader.get_log_files()
+            else:
+                if not self.game_log_mgr: 
+                    return ApiResponse.warning("游戏环境未就绪，无法获取游戏日志")
+                files = self.game_log_mgr.get_log_files()
+                
             return ApiResponse.success(files)
         except Exception as e:
+            logger.error(f"Get log files failed: {e}", exc_info=True)
             return ApiResponse.error(str(e))
 
-    @log_api_call
-    def read_game_log(self, filename: str):
-        """ 读取并解析指定的游戏日志 """
-        # 这是一个可能耗时的操作，@log_api_call 会帮记录耗时
-        result = self.game_log_mgr.read_and_parse_log(filename) if self.game_log_mgr else {'error': '游戏日志管理器未初始化'}
-        if 'error' in result:
-            return ApiResponse.error(result['error'])
-        return ApiResponse.success(result)
+    def read_log_page(self, log_type: str, filename: str, page: int = 1, page_size: int = 1000):
+        """ 分页读取日志 """
+        try:
+            if log_type == 'app':
+                from backend.utils.logger import app_log_reader
+                result = app_log_reader.read_log_page(filename, page, page_size)
+            else:
+                if not self.game_log_mgr: 
+                    return ApiResponse.warning("游戏环境未就绪，无法读取游戏日志")
+                result = self.game_log_mgr.read_log_page(filename, page, page_size)
+                
+            if 'error' in result:
+                return ApiResponse.error(result['error'])
+            return ApiResponse.success(result)
+        except Exception as e:
+            logger.error(f"Read log page failed: {e}", exc_info=True)
+            return ApiResponse.error(str(e))
     
     @log_api_call
     def open_log_folder(self):
@@ -1606,7 +1704,7 @@ class API:
             # info.to_dict() 包含了 local_status ('remote'|'downloading'|'ready')
             return ApiResponse.success(info.to_dict())
         except Exception as e:
-            logger.error(f"Check update failed: {e}")
+            logger.error(f"Check update failed: {e}", exc_info=True)
             return ApiResponse.error(f"检查更新失败: {str(e)}")
 
     @log_api_call
@@ -1631,7 +1729,7 @@ class API:
                 return ApiResponse.success(result, message="开始下载更新包")
                 
         except Exception as e:
-            logger.error(f"Update action failed: {e}")
+            logger.error(f"Update action failed: {e}", exc_info=True)
             return ApiResponse.error(str(e))
 
     @log_api_call
@@ -1686,7 +1784,7 @@ class API:
                     self.steam_mgr.post_download_setup(task_type, task.dest_path)
                     pending.remove(item)
                 elif task.status == TaskStatus.ERROR:
-                    logger.error(f"Setup task failed: {task_id}")
+                    logger.error(f"Setup task failed: {task_id}", exc_info=True)
                     pending.remove(item)
         # 初始化
         is_initialized = (Path(settings.config.steamcmd_path) / "public").exists()
@@ -1698,7 +1796,7 @@ class API:
                 EventBus.emit('steamcmd-init-progress', {'percent': percent, 'msg': msg})
             success, msg = controller.initialize_steamcmd(on_progress)
             if not success:
-                logger.error(f"SteamCMD 初始化彻底失败: {msg}")
+                logger.error(f"SteamCMD 初始化彻底失败: {msg}", exc_info=True)
 
     @log_api_call
     def steam_subscribe(self, workshop_ids: str):
@@ -2043,7 +2141,7 @@ class API:
                 # self.sorter.rule_mgr.load_all()
                 EventBus.send_toast(f"社区 {data_type} 数据库更新完毕！", type="success")
             def on_db_error(task):
-                logger.error(f"{data_type} download failed: {task.error_msg}")
+                logger.error(f"{data_type} download failed: {task.error_msg}", exc_info=True)
                 EventBus.send_toast(f"社区 {data_type} 数据库更新失败！", type="error")
             task_id = self.download_mgr.add_task(
                 url=url, 
@@ -2056,7 +2154,7 @@ class API:
             return ApiResponse.success(data={"task_id": task_id}, message=f"社区 {data_type} 数据库开始更新")
             
         except Exception as e:
-            logger.error(f"Update community {data_type} failed: {e}")
+            logger.error(f"Update community {data_type} failed: {e}", exc_info=True)
             return ApiResponse.error(f"系统错误: {str(e)}")
     
     @log_api_call
@@ -2161,43 +2259,6 @@ class API:
                 "preview_url": info.get("preview_url", "")
             })
         return ApiResponse.success({"missing": result})
-
-    @log_api_call
-    def lifecycle_fetch_collection_old(self, collection_id: str):
-        """
-        合集解析与下载预检：一键解析合集，对比本地，返回哪些需下载、哪些已存在
-        """
-        # 1. 抓取合集信息
-        coll_info, ids_to_fetch = SteamWebAPI.fetch_item_details([collection_id])
-        if not coll_info: return ApiResponse.error("无法获取合集信息")
-        # 2. 抓取子项列表
-        child_wids = SteamWebAPI.fetch_collection_children(collection_id)
-        if not child_wids: return ApiResponse.error("合集为空或解析失败")
-        # 3. 获取子项详情
-        children_details, ids_to_fetch = SteamWebAPI.fetch_item_details(child_wids)
-        
-        # print("合集信息:",coll_info)
-        # print("子项 ID:",child_wids)
-        # print("子项详情:",list(children_details.values())[:2])
-        
-        # 4. 对比本地 ACF 安装记录
-        installed_wids = self.steam_mgr.get_installed_workshop_ids()
-        installed_str_wids = set([str(w) for w in installed_wids])
-        result_children = []
-        for wid in child_wids:
-            info = children_details.get(wid, {})
-            result_children.append({
-                "workshop_id": wid,
-                "title": info.get("title", f"Mod {wid}"),
-                "preview_url": info.get("preview_url", ""),
-                "is_installed": wid in installed_str_wids
-            })
-        return ApiResponse.success({
-            "collection": coll_info[collection_id],
-            "children": result_children,
-            "total": len(child_wids),
-            "need_download": len([c for c in result_children if not c['is_installed']])
-        })
     
     @log_api_call
     def get_mod_workshop_detail(self, workshop_id: str, force_refresh: bool = False):
@@ -2245,6 +2306,19 @@ class API:
         )
     
     @log_api_call
+    def get_workshop_details_by_package_ids(self, package_ids: list):
+        """
+        批量获取包名对应的缓存信息（完全离线，无网络请求）
+        """
+        try:
+            from backend.database.dao_ext import ExtDAO
+            res = ExtDAO.get_workshop_details_by_package_ids(package_ids)
+            return ApiResponse.success(res)
+        except Exception as e:
+            logger.error(f"get_workshop_details_by_package_ids failed: {e}", exc_info=True)
+            return ApiResponse.error(str(e))
+    
+    @log_api_call
     def workspace_get_all_domains(self):
         """
         三域数据全量获取 (统合 DB、ACF、Log 数据)
@@ -2254,28 +2328,36 @@ class API:
         # 2. 获取 Steam 状态数据 (ACF/Log)
         ws_map = self.steam_mgr.workshop_merged_data()
         mg_map = self.steam_mgr.steamcmd_merged_data()
+        replacements_map = {
+            str(r['old_workshop_id']): r
+            for r in self.workshop_db_mgr.get_replacements()
+            if r.get('old_workshop_id')
+        }
         
         install_workshop_ids = set()
         # install_self_ids = set()
         
+        def inject_workspace_fields(mod: dict, steam_map: dict | None = None):
+            wid = str(mod.get('workshop_id') or '')
+            if steam_map and wid and wid in steam_map:
+                mod['steam_status'] = steam_map[wid]
+            mod['replacement'] = replacements_map.get(wid)
+            mod['is_missing'] = False
+            return wid
+
         # 3. 为已有的物理模组注入 Steam 状态
         for mod in matrix['workshop']:
-            wid = str(mod.get('workshop_id'))
-            if mod.get('path'): install_workshop_ids.add(wid)
-            # 将 Steam 状态（订阅时间、真实下载时间等）直接合并进 mod 字典
-            # 为了前端方便，把这些信息放在 'steam_info' 字段下，或者直接扁平化合并
-            if wid in ws_map: mod['steam_status'] = ws_map[wid]
-            mod['is_missing'] = False # 初始化标记
+            wid = inject_workspace_fields(mod, ws_map)
+            if mod.get('path') and wid:
+                install_workshop_ids.add(wid)
         
         # 为 self (管理器) 域注入数据
         for mod in matrix['self']:
-            wid = str(mod.get('workshop_id'))
+            inject_workspace_fields(mod, mg_map)
             # if mod.get('path'): install_self_ids.add(wid)
-            if wid in mg_map: mod['steam_status'] = mg_map[wid]
-            mod['is_missing'] = False
         
         for mod in matrix['local']:
-            mod['is_missing'] = False
+            inject_workspace_fields(mod)
         
         # 4. 核心逻辑：找出“已订阅但物理丢失”的模组 (Ghost Mods)
         # 找出 ACF 中标记已订阅，但物理文件没被扫描到的 ID
@@ -2303,7 +2385,8 @@ class API:
                 "store": store_type,
                 "source": "workshop",
                 "is_missing": True, 
-                "steam_status": steam_status
+                "steam_status": steam_status,
+                "replacement": replacements_map.get(wid)
             }
         for wid in ghost_ws_ids:
             matrix['workshop'].append(create_ghost(wid, 'workshop', ws_map.get(wid)))
@@ -2316,9 +2399,10 @@ class API:
         
         # 6. 后台触发在线比对，标记可更新状态
         # 获取所有涉及的 WID
-        all_wids = list(ws_map.keys()) + list(mg_map.keys())
-        import threading
-        threading.Thread(target=self._bg_check_online_updates, args=(all_wids,), daemon=True).start()
+        all_wids = list({str(wid) for wid in list(ws_map.keys()) + list(mg_map.keys()) if wid})
+        if all_wids:
+            import threading
+            threading.Thread(target=self._bg_check_online_updates, args=(all_wids,), daemon=True).start()
 
         return ApiResponse.success(res)
     
@@ -2372,10 +2456,10 @@ class API:
         return ApiResponse.success(self.steam_mgr.get_item_timeline(workshop_id, is_steamcmd))
     
     @log_api_call
-    def nexus_search(self, query: str, page: int = 1):
+    def workshop_search(self, query: str, page: int = 1):
         """离线库搜索 + 在线静默预热"""
         # 1. 从本地 SQLite 获取当前页的数据 (瞬间完成)
-        data = ExtDAO.search_nexus(query, page, page_size=100)
+        data = ExtDAO.search_workshop(query, page, page_size=100)
         items = data['items']
         if items:
             # 2. 提取 ID 列表，去 Steam 检查是否有更新 (利用你已有的缓存机制)
@@ -2394,7 +2478,7 @@ class API:
         return ApiResponse.success(data)
 
     @log_api_call
-    def nexus_get_details(self, workshop_id: str):
+    def workshop_get_details(self, workshop_id: str):
         """获取云端详细图文"""
         details = SteamWebAPI.get_or_fetch_details(workshop_id)
         if details:
@@ -2416,46 +2500,150 @@ class API:
         """从数据库移除合集"""
         CollectionDAO.delete(collection_id)
         return ApiResponse.success(message="合集已移出名录")
+    
+    @log_api_call
+    def collection_add(self, collection_id: str):
+        """
+        同步解析并接入新合集。
+        阻塞请求直到爬取完成，确保前端能立即得到数据。
+        """
+        coll_id = str(collection_id)
+        child_wids = SteamWebAPI.fetch_collection_children(coll_id)
+        if not child_wids: return ApiResponse.error("无效的合集或合集为空")
+
+        all_ids = list(set([coll_id] + child_wids))
+        online_results, _ = SteamWebAPI.fetch_item_details(all_ids, force_refresh=True)
+        if coll_id not in online_results: return ApiResponse.error("无法获取合集信息")
+        main_info = online_results[coll_id]
+        final_children = self._build_collection_children(child_wids, online_results)
+
+        total = len(final_children)
+        # 持久化
+        CollectionDAO.upsert_collection(coll_id, main_info, final_children, total)
+        # 重新取回完整结构返回给前端
+        new_coll = CollectionDAO.get_collection_by_id(coll_id)
+        return ApiResponse.success(model_to_dict(new_coll))
 
     @log_api_call
     def lifecycle_fetch_collection(self, collection_id: str):
         """
-        合集加载引擎 (分步模式)：
+        合集加载引擎 (分步模式，24小时缓存)：
         1. 立即从数据库返回缓存数据 (包含上一次的子项快照)
         2. 启动后台线程，执行：网络解析 -> 状态对比 -> 存库 -> EventBus 通知刷新
         """
         coll_id = str(collection_id)
-        
-        # --- 第一阶段：同步返回缓存 ---
-        cached_coll = CollectionDAO.get_collection_by_id(coll_id)
-        
-        # 即使有缓存，我们也需要根据当前本地文件实时修正 is_installed 状态
-        # 否则用户刚下完 Mod，点开合集显示的还是旧的“未安装”
+        cached_coll = CollectionDAO.get_collection_by_id(coll_id) # 获取缓存
+        is_fresh = False
         initial_data = None
         if cached_coll:
-            # 实时计算安装状态 (基于快照)
-            workshop_installed = self.steam_mgr.get_installed_workshop_ids()
-            manager_installed_ids = [int(m['workshop_id']) for m in self.steam_mgr.steamcmd_merged_data().values() if m.get('is_installed')]
-            all_installed_set = set([str(wid) for wid in (list(workshop_installed) + manager_installed_ids)])
-            
-            processed_children = []
-            for child in (cached_coll.children or []):
-                child['is_installed'] = child['workshop_id'] in all_installed_set
-                processed_children.append(child)
-            
+            # 检查缓存是否在 24 小时内
+            if current_ms() - cached_coll.last_sync_time < 24 * 3600 * 1000: is_fresh = True
             initial_data = {
                 "collection": model_to_dict(cached_coll),
-                "children": processed_children,
+                "children": cached_coll.children or [],
                 "total": cached_coll.total,
-                "need_download": len([c for c in processed_children if not c['is_installed']]),
                 "is_cache": True # 标记这是缓存
             }
-
-        # --- 第二阶段：启动异步更新任务 ---
-        # 无论是否有缓存，都在后台刷一遍最新的
-        threading.Thread(target=self._bg_refresh_collection, args=(coll_id,), daemon=True).start()
+        # 如果没有缓存，或者缓存已过期，启动后台刷新
+        if not is_fresh:
+            threading.Thread(target=self._bg_refresh_collection, args=(coll_id,), daemon=True).start()
 
         return ApiResponse.success(initial_data)
+
+    def _resolve_collection_package_map(self, child_wids: list[str]) -> dict[str, str]:
+        normalized_wids: list[str] = []
+        seen_wids: set[str] = set()
+        for wid in child_wids:
+            wid_str = str(wid or '').strip()
+            if wid_str and wid_str not in seen_wids:
+                seen_wids.add(wid_str)
+                normalized_wids.append(wid_str)
+
+        if not normalized_wids:
+            return {}
+
+        resolved_map: dict[str, str] = {}
+        meta_records = (
+            WorkshopMeta
+            .select(WorkshopMeta.workshop_id, WorkshopMeta.package_id)
+            .where(WorkshopMeta.workshop_id.in_(normalized_wids))
+            .dicts()
+        )
+        for meta in meta_records:
+            wid = str(meta.get('workshop_id') or '').strip()
+            pid = meta.get('package_id')
+            if wid and pid:
+                resolved_map[wid] = pid
+
+        store_priority = {'workshop': 0, 'self': 1, 'local': 2}
+        installed_candidates: dict[str, dict[str, dict[str, int]]] = {}
+        asset_records = (
+            ModAsset
+            .select(
+                ModAsset.workshop_id,
+                ModAsset.package_id,
+                ModAsset.store,
+                ModAsset.disabled,
+                ModAsset.path
+            )
+            .where(ModAsset.workshop_id.in_(normalized_wids)) # type: ignore
+            .dicts()
+        )
+        for asset in asset_records:
+            wid = str(asset.get('workshop_id') or '').strip()
+            pid = asset.get('package_id')
+            if not wid or not pid:
+                continue
+
+            candidates_by_pid = installed_candidates.setdefault(wid, {})
+            candidate = candidates_by_pid.setdefault(pid, {
+                'count': 0,
+                'disabled_rank': 1,
+                'store_rank': 99,
+                'path_len': 10 ** 9,
+            })
+            candidate['count'] += 1
+            candidate['disabled_rank'] = min(candidate['disabled_rank'], 1 if asset.get('disabled') else 0)
+            candidate['store_rank'] = min(candidate['store_rank'], store_priority.get(asset.get('store'), 99))
+            path_len = len(str(asset.get('path') or '').strip())
+            if path_len > 0:
+                candidate['path_len'] = min(candidate['path_len'], path_len)
+
+        for wid, candidates in installed_candidates.items():
+            best_pid = min(
+                candidates.items(),
+                key=lambda item: (
+                    -item[1]['count'],
+                    item[1]['disabled_rank'],
+                    item[1]['store_rank'],
+                    item[1]['path_len'],
+                    item[0]
+                )
+            )[0]
+            resolved_map[wid] = best_pid
+
+        return resolved_map
+
+    def _build_collection_children(self, child_wids: list[str], online_results: dict[str, dict]) -> list[dict]:
+        pid_map = self._resolve_collection_package_map(child_wids)
+        final_children: list[dict] = []
+        seen_wids: set[str] = set()
+
+        for raw_wid in child_wids:
+            wid = str(raw_wid or '').strip()
+            if not wid or wid in seen_wids:
+                continue
+            seen_wids.add(wid)
+
+            info = online_results.get(wid, {})
+            final_children.append({
+                "workshop_id": wid,
+                "package_id": pid_map.get(wid),
+                "title": info.get("title", f"Mod {wid}"),
+                "preview_url": info.get("preview_url", "")
+            })
+
+        return final_children
 
     def _bg_refresh_collection(self, coll_id: str):
         """后台刷新任务 (网络密集 + 数据库写入)"""
@@ -2463,42 +2651,18 @@ class API:
             logger.debug(f"开始后台刷新合集: {coll_id}")
             # 1. 抓取最新子项 ID 列表
             child_wids = SteamWebAPI.fetch_collection_children(coll_id)
-            
-            # 2. 抓取所有项（含合集本身）的最新详情 (利用你新改的 fetch_item_details)
-            # 这里的 batch_ids 包含合集 ID 自己
+            # 2. 抓取所有项（含合集本身）的最新详情，这里的 batch_ids 包含合集 ID 自己
             all_ids = list(set([coll_id] + child_wids))
             online_results, _ = SteamWebAPI.fetch_item_details(all_ids, force_refresh=True)
             
             if coll_id not in online_results: return
             main_info = online_results[coll_id]
 
-            # 3. 反查 PackageID
-            from backend.database.models_ext import WorkshopMeta
-            meta_records = WorkshopMeta.select(WorkshopMeta.workshop_id, WorkshopMeta.package_id).where(WorkshopMeta.workshop_id.in_(child_wids))
-            pid_map = {str(m.workshop_id): m.package_id for m in meta_records}
-
-            # 4. 计算安装状态
-            workshop_installed = self.steam_mgr.get_installed_workshop_ids()
-            manager_installed_ids = [int(m['workshop_id']) for m in self.steam_mgr.steamcmd_merged_data().values() if m.get('is_installed')]
-            all_installed_set = set([str(wid) for wid in (list(workshop_installed) + manager_installed_ids)])
-
-            # 5. 组装并准备持久化
-            final_children = []
-            for wid in child_wids:
-                info = online_results.get(wid, {})
-                final_children.append({
-                    "workshop_id": wid,
-                    "package_id": pid_map.get(wid),
-                    "title": info.get("title", f"Mod {wid}"),
-                    "preview_url": info.get("preview_url", ""),
-                    "is_installed": wid in all_installed_set
-                })
-
+            # 3. 组装并准备持久化
+            final_children = self._build_collection_children(child_wids, online_results)
             total = len(final_children)
-            missing = len([c for c in final_children if not c['is_installed']])
-
             # 6. 存入数据库
-            CollectionDAO.upsert_collection(coll_id, main_info, final_children, total, missing)
+            CollectionDAO.upsert_collection(coll_id, main_info, final_children, total)
 
             # 7. 通过 EventBus 通知前端：数据已就绪，请刷新
             EventBus.emit('workspace-collection-updated', {
@@ -2507,7 +2671,6 @@ class API:
                     "collection": main_info,
                     "children": final_children,
                     "total": total,
-                    "need_download": missing,
                     "is_cache": False
                 }
             })
@@ -2538,7 +2701,10 @@ class API:
                     "owner": payload.get("owner"),
                     "repo_name": payload.get("repo"),
                     "target_branch": payload.get("default_branch"),
-                    "install_type": payload.get("install_type", "source")
+                    "install_type": payload.get("install_type", "source"),
+                    "installed_version": payload.get("installed_version"),
+                    "online_info_cache": payload.get("info"),
+                    "last_sync_time": current_ms(),
                 }
             )
             # 如果是新建的，写入初始日志
@@ -2581,7 +2747,7 @@ class API:
                     if "error" not in info:
                         updated_records[repo_url] = info
                 except Exception as e:
-                    logger.error(f"后台刷新 GitHub Repo 失败: {e}")
+                    logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
 
         # 如果没有成功获取到任何数据，直接结束
         if not updated_records: return

@@ -5,17 +5,37 @@ import { useAppStore } from './appStore'
 import { checkResult } from '../utils/tools'
 import { createToastInterface } from 'vue-toastification'
 import { useConfirmStore } from './confirmStore'
+import { SOURCE_TYPE_MAP } from '../utils/constants'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const toast = createToastInterface()
   const appStore = useAppStore()
-const confirmStore = useConfirmStore()
+  const confirmStore = useConfirmStore()
+  const listenersReady = ref(false)
+
+  const normalizePackageId = (value) => String(value || '').trim().toLowerCase()
+  const normalizeWorkshopId = (value) => {
+    const wid = String(value || '').trim()
+    return wid && wid !== 'undefined' && wid !== 'null' && wid !== 'None' ? wid : ''
+  }
+  const storeSortOrder = {
+    workshop: 0,
+    self: 1,
+    local: 2
+  }
+  const sortMatrixTargets = (items = []) => {
+    return [...items].sort((a, b) => {
+      const storeDiff = (storeSortOrder[a.store] ?? 99) - (storeSortOrder[b.store] ?? 99)
+      if (storeDiff !== 0) return storeDiff
+      return String(a.name || a.package_id || '').localeCompare(String(b.name || b.package_id || ''))
+    })
+  }
   
   // 1. 已订阅的工坊 ID (仅统计创意工坊域)
   const subscribedWorkshopIds = computed(() => {
     return new Set(
       librariesMods.workshop
-        .filter(m => m.steam_status?.is_subscribed)
+        .filter(m => m.steam_status?.is_subscribed && normalizeWorkshopId(m.workshop_id))
         .map(m => String(m.workshop_id))
     )
   })
@@ -23,7 +43,7 @@ const confirmStore = useConfirmStore()
   const missingWorkshopIds = computed(() => {
     return new Set(
       librariesMods.workshop
-        .filter(m => m.is_missing)
+        .filter(m => m.is_missing && normalizeWorkshopId(m.workshop_id))
         .map(m => String(m.workshop_id))
     )
   })
@@ -36,12 +56,21 @@ const confirmStore = useConfirmStore()
       ...librariesMods.local
     ]
     return new Set(
-      all.filter(m => m.path && !m.is_missing).map(m => String(m.workshop_id))
+      all
+        .filter(m => m.path && !m.is_missing && normalizeWorkshopId(m.workshop_id))
+        .map(m => String(m.workshop_id))
     )
   })
-  // 4. 提供一个快捷判断函数供 NexusBrowser 使用
+  // 4. 提供一个快捷判断函数供 WorkshopBrowser 使用
   const getModStatus = (workshopId) => {
-    const wid = String(workshopId)
+    const wid = normalizeWorkshopId(workshopId)
+    if (!wid) {
+      return {
+        isSubscribed: false,
+        isInstalled: false,
+        isMissing: false
+      }
+    }
     return {
       isSubscribed: subscribedWorkshopIds.value.has(wid),
       isInstalled: installedAllIds.value.has(wid),
@@ -69,7 +98,7 @@ const confirmStore = useConfirmStore()
     return results
   })
   // 2. 缓存工坊数据库搜索状态
-  const nexusSearch = reactive({
+  const workshopSearch = reactive({
     query: '',
     page: 1,
     hasMore: true, // 是否还有下一页
@@ -86,7 +115,7 @@ const confirmStore = useConfirmStore()
   // 3. 时间线抽屉状态
   const timeline = reactive({
     isOpen: false,
-    modId: null, // workshop_id
+    workshopId: null, // workshop_id / repo_url
     modName: '',
     logs: [],
     isLoading: false
@@ -111,6 +140,119 @@ const confirmStore = useConfirmStore()
   })
 
   const isFetching = ref(false)
+  const matrixFocusTarget = ref(null)
+
+  const allLibraryMods = computed(() => [
+    ...librariesMods.workshop,
+    ...librariesMods.self,
+    ...librariesMods.local
+  ])
+  const matrixModsByPathHash = computed(() => {
+    const map = new Map()
+    allLibraryMods.value.forEach(mod => {
+      if (mod?.path_hash) {
+        map.set(mod.path_hash, mod)
+      }
+    })
+    return map
+  })
+  const matrixModsByPackageId = computed(() => {
+    const map = new Map()
+    allLibraryMods.value.forEach(mod => {
+      const pkgId = normalizePackageId(mod?.package_id)
+      if (!pkgId) return
+      if (!map.has(pkgId)) map.set(pkgId, [])
+      map.get(pkgId).push(mod)
+    })
+    return map
+  })
+  const matrixSameMap = computed(() => {
+    const sameMap = new Map()
+    const pushRelation = (targetMap, source, target) => {
+      if (!source?.path_hash || !target?.path_hash || source.path_hash === target.path_hash) return
+
+      const existing = targetMap.get(source.path_hash) || []
+      if (!existing.some(item => item.path_hash === target.path_hash)) {
+        targetMap.set(source.path_hash, [...existing, target])
+      }
+    }
+
+    matrixModsByPackageId.value.forEach(group => {
+      for (let i = 0; i < group.length; i++) {
+        for (let j = i + 1; j < group.length; j++) {
+          const source = group[i]
+          const target = group[j]
+          if (source.store !== target.store) {
+            pushRelation(sameMap, source, target)
+            pushRelation(sameMap, target, source)
+          }
+        }
+      }
+    })
+
+    sameMap.forEach((targets, pathHash) => sameMap.set(pathHash, sortMatrixTargets(targets)))
+    return sameMap
+  })
+  const matrixConflictMap = computed(() => {
+    const conflictMap = new Map()
+    const pushRelation = (targetMap, source, target) => {
+      if (!source?.path_hash || !target?.path_hash || source.path_hash === target.path_hash) return
+
+      const existing = targetMap.get(source.path_hash) || []
+      if (!existing.some(item => item.path_hash === target.path_hash)) {
+        targetMap.set(source.path_hash, [...existing, target])
+      }
+    }
+
+    matrixModsByPackageId.value.forEach(group => {
+      for (let i = 0; i < group.length; i++) {
+        for (let j = i + 1; j < group.length; j++) {
+          const source = group[i]
+          const target = group[j]
+          if (source.store === target.store) {
+            pushRelation(conflictMap, source, target)
+            pushRelation(conflictMap, target, source)
+          }
+        }
+      }
+    })
+
+    conflictMap.forEach((targets, pathHash) => conflictMap.set(pathHash, sortMatrixTargets(targets)))
+    return conflictMap
+  })
+  const getMatrixSameItems = (pathHash) => matrixSameMap.value.get(pathHash) || []
+  const getMatrixConflictItems = (pathHash) => matrixConflictMap.value.get(pathHash) || []
+  const jumpToMatrixItem = (pathHash) => {
+    const target = matrixModsByPathHash.value.get(pathHash)
+    if (!target) return false
+    matrixFocusTarget.value = {
+      pathHash,
+      store: target.store,
+      stamp: Date.now()
+    }
+    return true
+  }
+
+  // 响应式计算 Mod 状态
+  const activeChildrenWithStatus = computed(() => {
+    return collections.activeChildren.map(child => {
+      const wid = String(child.workshop_id)
+      const pid = child.package_id ? String(child.package_id).toLowerCase() : null
+      const is_workshop = librariesMods.workshop.some(m => !m.is_missing && String(m.workshop_id) === wid)
+      const is_self = librariesMods.self.some(m => !m.is_missing && String(m.workshop_id) === wid)
+      // 本地目录用包名比对最准，没有包名回退使用 wid
+      const is_local = librariesMods.local.some(m => !m.is_missing &&
+          ((pid && m.package_id?.toLowerCase() === pid) || (m.workshop_id && String(m.workshop_id) === wid))
+      )
+      return {
+        ...child,
+        is_workshop,
+        is_self,
+        is_local,
+        is_installed: is_workshop || is_self || is_local
+      }
+    })
+  })
 
   // --- Actions ---
   // 初始化数据
@@ -126,6 +268,9 @@ const confirmStore = useConfirmStore()
   }
   // 监听后端推送
   const setupListeners = () => {
+    if (listenersReady.value) return
+    listenersReady.value = true
+
     // 【监听 A】: 三域列表的在线状态静默更新
     // payload 格式: { "12345": { title: "...", time_updated: 17000000, preview_url: "..." }, ... }
     window.addEventListener('workspace-online-update', (e) => {
@@ -174,33 +319,29 @@ const confirmStore = useConfirmStore()
     })
     // 监听合集更新
     window.addEventListener('workspace-collection-updated', (e) => {
-    const updated = e.detail // { id, data: { collection, children, ... } }
-    // 如果当前用户正在看的正是这个合集，立即无感替换数据
+      const updated = e.detail // { id, data: { collection, children, ... } }
+      // 如果当前用户正在看的正是这个合集，立即无感替换数据
     if (collections.activeId === updated.id) {
-      collections.activeDetails = updated.data.collection
-      collections.activeChildren = updated.data.children
-      collections.isChildrenLoading = false
+      collections.activeDetails = {
+        ...(collections.activeDetails || {}),
+        ...(updated.data.collection || {})
+      }
+      collections.activeChildren = updated.data.children || []
+      collections.isChildrenLoading = false // 后台更新完毕，取消 loading
     }
-    // 同时更新右侧合集列表中的统计数字
-    const target = collections.savedList.find(c => c.id === updated.id)
-    if (target) {
-      Object.assign(target, {
-        total: updated.data.total,
-        need_download: updated.data.need_download,
-        preview_url: updated.data.collection.preview_url,
-        title: updated.data.collection.title
-      })
-    }
-    const self_workshop_ids = librariesMods.self.map(mod => mod.workshop_id)
-    const workshop_workshop_ids = librariesMods.workshop.map(mod => mod.workshop_id)
-    const local_package_ids = librariesMods.local.map(mod => mod.package_id)
-
-    collections.activeChildren.forEach(child => {
-      child.is_self = self_workshop_ids.includes(child.workshop_id)
-      child.is_workshop = workshop_workshop_ids.includes(child.workshop_id)
-      child.is_local = local_package_ids.includes(child.package_id)
+      // 同时更新右侧合集列表中的统计数字
+      const target = collections.savedList.find(c => c.id === updated.id)
+      if (target) {
+        Object.assign(target, {
+          total: updated.data.total,
+          preview_url: updated.data.collection.preview_url,
+          title: updated.data.collection.title,
+          description: updated.data.collection.description,
+          time_updated: updated.data.collection.time_updated
+        })
+        target.children = updated.data.children // 保存 children 供列表计算
+      }
     })
-  })
   }
 
   // 拉取无遮蔽的三个库全量数据
@@ -225,70 +366,70 @@ const confirmStore = useConfirmStore()
   }
 
   // 搜索缓存工坊数据库 (支持重置或追加)
-  const doNexusSearch = async (queryStr = '', isAppend = false) => {
+  const doWorkshopSearch = async (queryStr = '', isAppend = false) => {
     if (!window.pywebview) return
     // 防御性拦截
-    if (nexusSearch.isLoading || nexusSearch.isLoadMore) return
-    if (isAppend && !nexusSearch.hasMore) return
+    if (workshopSearch.isLoading || workshopSearch.isLoadMore) return
+    if (isAppend && !workshopSearch.hasMore) return
     // 状态设置
     if (isAppend) {
-      nexusSearch.isLoadMore = true
-      nexusSearch.page += 1
+      workshopSearch.isLoadMore = true
+      workshopSearch.page += 1
     } else {
-      nexusSearch.isLoading = true
-      nexusSearch.page = 1
-      nexusSearch.results = [] // 清空旧数据
+      workshopSearch.isLoading = true
+      workshopSearch.page = 1
+      workshopSearch.results = [] // 清空旧数据
     }
-    nexusSearch.query = queryStr
+    workshopSearch.query = queryStr
     try {
-      const res = await window.pywebview.api.nexus_search(queryStr, nexusSearch.page)
+      const res = await window.pywebview.api.workshop_search(queryStr, workshopSearch.page)
       if (checkResult(res, '工坊检索')) {
         const newItems = res.data.items || []
         if (isAppend) {
           // 核心修复：不要用 push！使用展开运算符创建新数组引用！
-          // nexusSearch.results.push(...newItems)
-          nexusSearch.results = [...nexusSearch.results, ...newItems] 
+          // workshopSearch.results.push(...newItems)
+          workshopSearch.results = [...workshopSearch.results, ...newItems] 
         } else {
-          nexusSearch.results = newItems
-          nexusSearch.total = res.data.total
+          workshopSearch.results = newItems
+          workshopSearch.total = res.data.total
         }
         // 判断是否还有下一页
-        nexusSearch.hasMore = nexusSearch.results.length < res.data.total
+        workshopSearch.hasMore = workshopSearch.results.length < res.data.total
       }
     } finally {
-      nexusSearch.isLoading = false
-      nexusSearch.isLoadMore = false
+      workshopSearch.isLoading = false
+      workshopSearch.isLoadMore = false
     }
   }
   // 获取云端详情 (包含网页抓取截图)
   // isNavigate: 是否是通过点击“推荐卡片”触发的内部跳转
-  const fetchNexusDetails = async (workshop_id, isNavigate = false) => {
-    if (!window.pywebview || nexusSearch.selectedId === workshop_id) return
+  const fetchWorkshopDetails = async (workshop_id, isNavigate = false) => {
+    if (!window.pywebview || workshopSearch.selectedId === workshop_id) return
     // 如果是点击左侧主列表，清空历史记录，重新开始
     if (!isNavigate) {
-      nexusSearch.historyStack = []
-    } else if (nexusSearch.selectedId) {
+      workshopSearch.historyStack = []
+    } else if (workshopSearch.selectedId) {
       // 如果是内部跳转，将当前 ID 压入栈中
-      nexusSearch.historyStack.push(nexusSearch.selectedId)
+      workshopSearch.historyStack.push(workshopSearch.selectedId)
     }
-    nexusSearch.selectedId = workshop_id
-    nexusSearch.isDetailLoading = true
+    workshopSearch.selectedId = workshop_id
+    workshopSearch.isDetailLoading = true
     try {
-      const res = await window.pywebview.api.nexus_get_details(workshop_id)
+      const res = await window.pywebview.api.workshop_get_details(workshop_id)
       if (checkResult(res, '获取云端详情')) {
-        nexusSearch.detailData = res.data
+        workshopSearch.detailData = res.data
       }
     } finally {
-      nexusSearch.isDetailLoading = false
+      workshopSearch.isDetailLoading = false
     }
   }
   // 详情页后退功能
-  const goBackNexusDetail = async () => {
-    if (nexusSearch.historyStack.length === 0) return
-    const prevId = nexusSearch.historyStack.pop()
-    await fetchNexusDetails(prevId, true)
+  const goBackWorkshopDetail = async () => {
+    if (workshopSearch.historyStack.length === 0) return
+    const prevId = workshopSearch.historyStack.pop()
+    await fetchWorkshopDetails(prevId, true)
     // 抵消刚刚 push 进去的动作
-    nexusSearch.historyStack.pop() 
+    workshopSearch.historyStack.pop() 
   }
 
 
@@ -311,14 +452,14 @@ const confirmStore = useConfirmStore()
   }
   // 打开并加载 Github 模组变更时间线
   const openTimelineGithub = async (path) => {
-    if (!window.pywebview) return
-    timeline.isOpen = true
+    if (!window.pywebview || !path) return
     console.log("打开Github时间线", path, github.subscribedRepos)
-    const repo = github.subscribedRepos.find(repo => path.includes(repo.local_folder))
+    const repo = github.subscribedRepos.find(repo => repo.local_folder && path.includes(repo.local_folder))
     if (!repo) {
       toast.warning('未找到该订阅')
       return
     }
+    timeline.isOpen = true
     timeline.workshopId = repo.repo_url
     timeline.modName = repo.repo_name
     timeline.isLoading = true
@@ -373,39 +514,33 @@ const confirmStore = useConfirmStore()
 
   // 接入(解析并保存)新合集
   const addCollection = async (inputUrl) => {
-    if (!window.pywebview || !inputUrl) return
+    if (!window.pywebview || !inputUrl) return false
     // 智能提取 ID
     const match = inputUrl.match(/id=(\d+)/) || inputUrl.match(/(\d+)/)
     const collId = match ? match[1] : inputUrl.trim()
     if (!/^\d+$/.test(collId)) {
       toast.error("无效的合集 ID 或链接，请输入纯数字或包含 id=xxx 的链接")
-      return
+      return false
     }
     if (collections.savedList.some(c => c.id === collId)) {
       toast.warning("该合集已在你的记录中！")
-      return
+      return false
     }
     collections.isParsing = true
     toast.info("正在解析并接入合集数据...")
     try {
-      const res = await window.pywebview.api.collection_add_and_fetch(collId)
-      if (checkResult(res, '解析并接入合集')) {
-        // 假设后端返回了保存成功的合集概览对象
-        const newColl = {
-          id: collId,
-          title: res.data.collection?.title || `合集 ${collId}`,
-          preview_url: res.data.collection?.preview_url,
-          total: res.data.total || 0,
-          need_download: res.data.need_download || 0
-        }
-        collections.savedList.unshift(newColl)
-        toast.success("合集编队接入成功！")
-        // 可选：自动选中刚添加的合集
-        selectCollection(newColl)
+      // 调用专门的同步接口
+      const res = await window.pywebview.api.collection_add(collId)
+      if (checkResult(res, '解析并接入合集',true)) {
+        collections.savedList.unshift(res.data)
+        // 立刻自动选中
+        await selectCollection(res.data)
+        return true
       }
     } finally {
       collections.isParsing = false
     }
+    return false
   }
 
   // 移除合集记录
@@ -431,18 +566,28 @@ const confirmStore = useConfirmStore()
   const selectCollection = async (coll) => {
     if (!window.pywebview) return
     collections.activeId = coll.id
+    collections.activeDetails = coll || null
+    collections.activeChildren = Array.isArray(coll?.children) ? [...coll.children] : []
     collections.isChildrenLoading = true
     
     // 这步会立即返回数据库里的旧数据 (或者为 null)
-    const res = await window.pywebview.api.lifecycle_fetch_collection(coll.id)
-    if (res.status === 'success' && res.data) {
-      collections.activeDetails = res.data.collection
-      collections.activeChildren = res.data.children
-      // 如果返回的是缓存，我们依然保持 loading 状态（或者显示一个“同步中”的小标志）
-      if (!res.data.is_cache) {
+    try {
+      const res = await window.pywebview.api.lifecycle_fetch_collection(coll.id)
+      if (res.status === 'success' && res.data) {
+        collections.activeDetails = res.data.collection
+        collections.activeChildren = res.data.children
+        // 如果后端判定是强力缓存且不过期，取消 loading
+        if (res.data.is_cache) {
+          collections.isChildrenLoading = false
+        }
+      } else if (res.status !== 'success') {
         collections.isChildrenLoading = false
       }
+    } catch (e) {
+      collections.isChildrenLoading = false
+      toast.error(`加载合集失败: ${e.message}`)
     }
+    // 如果没有缓存，loading 继续保持 true，等待 EventBus 触发
   }
 
   // 根据包名获取创意工坊ID映射
@@ -460,7 +605,7 @@ const confirmStore = useConfirmStore()
   const modTransfer = async (path_hashs, target_store, mode) => {
     const check = await confirmStore.confirmAction(
       '确认转移',
-      `确定要将选中的模组 ${mode === 'move' ? '移动' : '复制'} 到 [${target_store === 'local' ? '游戏本地' : '管理器'}] 库吗？`,
+      (`确定要将选中的模组 ${mode === 'move' ? '移动' : '复制'} 到 [${SOURCE_TYPE_MAP[target_store]}] 库吗？`+ (target_store=='workshop'?'\n注意：转移到创意工坊目录后可能会被Steam再次改变':'')),
       { type: 'info' }
     )
     if(check) {
@@ -483,10 +628,11 @@ const confirmStore = useConfirmStore()
 
 
   return {
-    librariesMods, isFetching, librariesSize,
-    nexusSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
-    fetchLibrariesMods, doNexusSearch, fetchNexusDetails, openTimeline, openTimelineGithub, setupListeners,
-    github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl, getWorkshopIdsByPackageIdsMap, goBackNexusDetail,
+    librariesMods, isFetching, librariesSize, activeChildrenWithStatus,
+    workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
+    matrixFocusTarget, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
+    fetchLibrariesMods, doWorkshopSearch, fetchWorkshopDetails, openTimeline, openTimelineGithub, setupListeners,
+    github, fetchGithubRepos, fetchGithubTimeline, initData, openSteamWorkshopUrl, getWorkshopIdsByPackageIdsMap, goBackWorkshopDetail,
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection
   }
 })

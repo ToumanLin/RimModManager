@@ -12,7 +12,11 @@
       </span>
     </div>
     <!-- 功能栏 -->
-    <div class="px-2 py-1 shadow-xl flex justify-end items-center" data-tour="backup-toolbar">
+    <div class="px-2 py-1 shadow-xl flex items-center justify-between gap-2" data-tour="backup-toolbar">
+      <div>
+        <HelpCircle v-tooltip="backupRulesTooltip" class="size-5 m-1 text-text-dim transition-colors duration-200 cursor-help hover:text-accent-primary"></HelpCircle>
+      </div>
+      <div class="flex items-center justify-end">
       <!-- <div class="">
         <div class="gap-1 group text-sm font-medium flex flex-row-reverse items-center rtl:space-x-reverse">
           <button class="group z-50 h-6 px-3 relative rounded-md whitespace-nowrap cursor-pointer 
@@ -56,27 +60,59 @@
           </button>
         </div>
       </div> -->
-      <HelpCircle v-tooltip="backupRulesTooltip" class="size-5 m-1 text-text-dim transition-colors duration-200 cursor-help hover:text-accent-primary"></HelpCircle>
-      <button @click="loadOrder('0')" v-tooltip="'导入Mod加载序列'" 
-        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center">
+      <CommonSelect v-model="selectedBackupProfileId" mini  placeholder="选择环境" description="切换其它环境备份"
+        :options="backupProfileOptions" @change="handleBackupProfileChange" />
+      <button @click="loadOrder('0')" v-tooltip="'导入Mod加载序列（支持 存档.rws / 序列.xml）'" 
+        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 transition-all duration-300">
         <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M16 4h2a2 2 0 0 1 2 2v4"/><path d="M21 14H11"/><path d="m15 10-4 4 4 4"/></svg>
       </button>
-      <button @click="exportOrder()" v-tooltip="'导出Mod加载序列'" 
+      <!-- <button @click="exportOrder()" v-tooltip="'导出为 ModsConfig.xml'" 
         class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center">
         <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 14h10"/><path d="M16 4h2a2 2 0 0 1 2 2v1.344"/><path d="m17 18 4-4-4-4"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
       </button>
+      <button @click="exportModList()" v-tooltip="'导出为 ModList.xml（含名称和工坊ID）'" 
+        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center">
+        <svg class="size-5.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor"><path d="m648-140 112-112v92h40v-160H640v40h92L620-168l28 28Zm-448 20q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v268q-19-9-39-15.5t-41-9.5v-243H200v560h242q3 22 9.5 42t15.5 38H200Zm0-120v40-560 243-3 280Zm80-40h163q3-21 9.5-41t14.5-39H280v80Zm0-160h244q32-30 71.5-50t84.5-27v-3H280v80Zm0-160h400v-80H280v80ZM720-40q-83 0-141.5-58.5T520-240q0-83 58.5-141.5T720-440q83 0 141.5 58.5T920-240q0 83-58.5 141.5T720-40Z"/></svg>
+      </button> -->
+
+      <div class="size-6">
+        <div class="gap-1 group text-sm font-medium flex flex-col items-center rtl:space-y-reverse">
+          <button class="group z-50 h-6 px-3 relative rounded-md whitespace-nowrap cursor-pointer 
+            inline-flex items-center self-center justify-center tracking-wide transition-all duration-300 
+          text-text-dim/70 bg-accent-primary/1 
+          hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
+          group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20"
+          @click="exportOrder()" v-tooltip="'导出为 ModsConfig.xml（仅含包名）'">
+            <span class="relative transition duration-300 only:-mx-6">
+              <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 14h10"/><path d="M16 4h2a2 2 0 0 1 2 2v1.344"/><path d="m17 18 4-4-4-4"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+            </span>
+          </button>
+          <button class="w-0 h-0 px-1 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
+            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
+          text-text-dim/70 bg-accent-primary/1 
+          hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
+          group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20
+            group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
+            @click="exportModList()" v-tooltip="'导出为 ModList.xml（含包名和工坊ID）'" >
+            <span class="relative only:-mx-6">
+              <svg class="size-5.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor"><path d="m648-140 112-112v92h40v-160H640v40h92L620-168l28 28Zm-448 20q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v268q-19-9-39-15.5t-41-9.5v-243H200v560h242q3 22 9.5 42t15.5 38H200Zm0-120v40-560 243-3 280Zm80-40h163q3-21 9.5-41t14.5-39H280v80Zm0-160h244q32-30 71.5-50t84.5-27v-3H280v80Zm0-160h400v-80H280v80ZM720-40q-83 0-141.5-58.5T520-240q0-83 58.5-141.5T720-440q83 0 141.5 58.5T920-240q0 83-58.5 141.5T720-40Z"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
       <!-- <button @click="refresh" v-tooltip="'备份设置'" 
         class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center">
         <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m15.228 16.852-.923-.383"/><path d="m15.228 19.148-.923.383"/><path d="M16 2v4"/><path d="m16.47 14.305.382.923"/><path d="m16.852 20.772-.383.924"/><path d="m19.148 15.228.383-.923"/><path d="m19.53 21.696-.382-.924"/><path d="m20.772 16.852.924-.383"/><path d="m20.772 19.148.924.383"/><path d="M21 10.592V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/><path d="M3 10h18"/><path d="M8 2v4"/><circle cx="18" cy="18" r="3"/></svg>
       </button> -->
-      <button @click="orderStore.openBackupPath" v-tooltip="'打开备份文件夹'" 
-        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center">
+      <button @click="orderStore.openBackupPath()" v-tooltip="'打开备份文件夹'" 
+        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 duration-300">
         <svg class="size-5"  xmlns="http://www.w3.org/2000/svg"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
       </button>
-      <button @click="refresh" v-tooltip="'刷新'"
-        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center">
+      <button @click="refresh()" v-tooltip="'刷新'"
+        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 duration-300">
         <svg :class="{'spin-once-reverse': loading}" @animationend.self="loading = false" class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       </button>
+      </div>
     </div>
 
     <!-- 列表内容区 -->
@@ -167,13 +203,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useOrderStore } from '../stores/orderStore'
 import { useAppStore } from '../stores/appStore'
 import { useConfirmStore } from '../stores/confirmStore'
+import { useProfileStore } from '../stores/profileStore'
 import { parse, formatDistanceToNow, differenceInCalendarDays, parseISO } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { HelpCircle } from 'lucide-vue-next'
+import CommonSelect from './common/input/CommonSelect.vue'
 
 // --- 子组件：BackupItem ---
 const BackupItem = {
@@ -201,6 +239,9 @@ const BackupItem = {
             <span v-if="item.displayTitle" v-tooltip="item.displayTitle" class="text-sm font-medium truncate flex items-center gap-1" :class="isSelected ? 'text-text-main' : 'text-text-main'">
               <svg class="w-3 h-3 min-w-4 min-h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
               {{ item.displayTitle }}
+              <span v-if="item.formatLabel" class="rounded bg-black/25 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-cool/80">
+                {{ item.formatLabel }}
+              </span>
             </span>
             <span >{{ item.displayTime }}</span>
           </div>
@@ -263,15 +304,39 @@ const BackupItem = {
 const appStore = useAppStore()
 const orderStore = useOrderStore()
 const confirmStore = useConfirmStore()
+const profileStore = useProfileStore()
 const loading = ref(false)
 const selectedPath = computed(() => orderStore.currentBackupFile)
+const currentProfileId = computed(() => profileStore.currentProfileId || appStore.settings.current_profile_id || 'default')
+const selectedBackupProfileId = computed({
+  get: () => orderStore.backupProfileId || currentProfileId.value,
+  set: (value) => orderStore.setBackupProfile(value),
+})
+const backupProfileOptions = computed(() => {
+  const profiles = profileStore.profiles || []
+  return profiles.map(profile => ({
+    label: profile.id === currentProfileId.value ? `${profile.name} · 当前` : profile.name,
+    value: profile.id,
+    desc: profile.msg || profile.description || profile.user_data_path || profile.id,
+  }))
+})
+const viewedProfile = computed(() =>
+  (profileStore.profiles || []).find(profile => profile.id === selectedBackupProfileId.value) || profileStore.currentProfile
+)
+const isViewingCurrentProfile = computed(() => selectedBackupProfileId.value === currentProfileId.value)
+const backupProfileSummary = computed(() => {
+  const profileName = viewedProfile.value?.name || selectedBackupProfileId.value || '默认环境'
+  return isViewingCurrentProfile.value
+    ? `${profileName} 的备份，自动保存仍按当前环境写入`
+    : `${profileName} 的备份列表，仅做只读查看`
+})
 
 // 原始数据
 const rawData = ref({ today: [], earlier: [], other: [], import: [] })
 
 // 监听备份列表变化，更新原始数据
 watch(() => orderStore.backups, (newVal) => {
-    Object.assign(rawData.value, newVal)
+    Object.assign(rawData.value, newVal || {})
 })
 // 数据长度统计
 const dataCount = computed(() => {
@@ -285,9 +350,9 @@ const dataCount = computed(() => {
 })
 
 // 辅助：从文件名解析时间
-// 格式: ModsConfig_YYYYMMDD_HHMMSS.xml
+// 格式: ModsConfig_YYYYMMDD_HHMMSS.xml / ModList_YYYYMMDD_HHMMSS.xml
 const parseFileTime = (filename) => {
-    const match = filename.match(/ModsConfig_(\d{8})_(\d{6})\.xml/)
+    const match = filename.match(/(?:ModsConfig|ModList)_(\d{8})_(\d{6})\.xml/i)
     if (match) {
         return parse(`${match[1]}${match[2]}`, 'yyyyMMddHHmmss', new Date())
     }
@@ -300,7 +365,8 @@ const backupRulesTooltip = computed(() => {
 ^^短期备份：^^每次保存或运行操作后，系统会自动备份当前配置文件(有变动才会备份)。短期备份默认保留 1 天，过期自动删除（每次启动时清理），仅保留最近一个作为当天的备份，归入长期备份。
 ^^长期备份：^^默认保留最近 30 天的自动长期备份，过期将会删除。
 ^^手动备份：^^用户可手动触发备份，文件将保存至指定目录，不会被自动删除。
-__备份文件格式：ModsConfig_YYYYMMDD_HHMMSS.xml__`
+__自动备份文件格式：ModsConfig_YYYYMMDD_HHMMSS.xml__
+__手动导出支持：ModsConfig.xml / ModList.xml__`
 })
 
 // 核心：处理数据并生成显示文本
@@ -310,9 +376,16 @@ const parsedData = computed(() => {
       const name = file.path.split(/[/\\]/).pop()
       const time = parseFileTime(name) || new Date(file.modify_time) || null
       
-      let displayTitle = ''
+      let displayTitle = file.list_name || ''
       let displayTime = '未知时间'
       let distanceNow = '未知时间'
+      // 用短标签提示当前条目来自哪种排序文件格式。
+      const formatLabelMap = {
+        modsconfig: 'ModsConfig',
+        modlist: 'ModList',
+        savegame: 'Save'
+      }
+      const formatLabel = formatLabelMap[file.format] || ''
 
       if (time) {
         const now = new Date()
@@ -332,13 +405,13 @@ const parsedData = computed(() => {
           if (diffDays === 1) distanceNow = '昨天'
           else if (diffDays === 2) distanceNow = '前天'
           else distanceNow = `${diffDays} 天前`
-        } else {
+        } else if (!displayTitle) {
           // Other: 直接显示文件名去后缀
-          displayTitle = name.replace('.xml', '')
+          displayTitle = name.replace(/\.(xml|rws)$/i, '')
         }
       } else {
         // 如果是 other 或无法解析时间，直接显示文件名去后缀
-        displayTitle = name.replace('.xml', '')
+        displayTitle = displayTitle || name.replace(/\.(xml|rws)$/i, '')
       }
 
       return {
@@ -348,7 +421,11 @@ const parsedData = computed(() => {
         time: time,
         distanceNow,
         displayTitle,
-        displayTime
+        displayTime,
+        format: file.format,
+        formatLabel,
+        list_name: file.list_name,
+        source_profile_id: file.source_profile_id || '',
       }
     }).sort((a, b) => {
       // 按时间倒序
@@ -372,15 +449,33 @@ const isEmpty = computed(() => {
           parsedData.value.import.length === 0
 })
 
+const clearOutOfScopeBackupSelection = (profileId = selectedBackupProfileId.value) => {
+  // 只在当前对比文件来自某个环境，且该环境已不再是当前查看对象时清空。
+  if (orderStore.currentBackupSourceProfileId && orderStore.currentBackupSourceProfileId !== profileId) {
+    orderStore.clearBackupOrder()
+    appStore.uiState.showDiffDrawer = false
+  }
+}
+
 // 刷新备份列表
-const refresh = async () => {
+const refresh = async (profileId = selectedBackupProfileId.value) => {
   loading.value = true
-  await orderStore.getBackups()
+  try {
+    await orderStore.getBackups(profileId)
+  } finally {
+    loading.value = false
+  }
+}
+const handleBackupProfileChange = async (option) => {
+  const nextProfileId = option?.value || selectedBackupProfileId.value || currentProfileId.value
+  orderStore.setBackupProfile(nextProfileId)
+  clearOutOfScopeBackupSelection(nextProfileId)
+  await refresh(nextProfileId)
 }
 // 选择备份项
 const selectItem = async (item) => {
   // selectedPath.value = item.path
-  await orderStore.getBackupOrder(item.path)
+  await orderStore.getBackupOrder(item.path, item.source_profile_id || '')
   appStore.uiState.showDiffDrawer = true
 }
 // 从备份列表加载
@@ -392,7 +487,7 @@ const handleLoad = async (e, item) => {
     type: 'warning'
   }, e.target)
   if (!confirmed) return
-  await orderStore.getLoadOrder(item.path)
+  await orderStore.getLoadOrder(item.path, item.source_profile_id || '')
 }
 // 删除备份文件
 const handleDelete = async (e, item) => {
@@ -405,23 +500,31 @@ const handleDelete = async (e, item) => {
   if (!confirmed) return
   // 调用后端删除接口
   await appStore.deletePath(item.path, false)
-  refresh()
+  if (orderStore.currentBackupFile == item.path) {
+    orderStore.clearBackupOrder()
+    appStore.uiState.showDiffDrawer = false
+  }
+  refresh(selectedBackupProfileId.value)
 }
 // 从导入列表移除
 const handleRemove = async (item) => {
   // 调用后端删除接口
   rawData.value.import = rawData.value.import.filter(i => i.path !== item.path)
   if (orderStore.currentBackupFile == item.path) {
-    orderStore.currentBackupFile = ''
-    orderStore.backupIds = []
+    orderStore.clearBackupOrder()
+    appStore.uiState.showDiffDrawer = false
   }
-  refresh()
+  refresh(selectedBackupProfileId.value)
 }
 // 导出当前加载顺序
-const exportOrder = async (path) => {
+const exportOrder = async (path, format='modsconfig') => {
   // 调用后端另存为接口
-  await orderStore.exportLoadOrder(path)
-  refresh()
+  await orderStore.exportLoadOrder(path, true, format)
+  refresh(selectedBackupProfileId.value)
+}
+const exportModList = async (path) => {
+  // ModList.xml 会额外写出名称和工坊ID，适合分享和后续订阅缺失项。
+  await exportOrder(path, 'modlist')
 }
 // 从导入列表加载
 const loadOrder = async (path) => {
@@ -429,15 +532,19 @@ const loadOrder = async (path) => {
   const data = await orderStore.getBackupOrder(path)
   if (data) {
     // console.log(data)
-    rawData.value.import.push(data)
+    // 临时导入列表按路径去重，避免同一个外部文件重复堆叠。
+    rawData.value.import = [data, ...rawData.value.import.filter(i => i.path !== data.path)]
     appStore.uiState.showDiffDrawer = true
   }
-  refresh()
+  refresh(selectedBackupProfileId.value)
 }
 
-onMounted(() => {
-  refresh()
-})
+watch(currentProfileId, async (newProfileId) => {
+  if (!newProfileId) return
+  orderStore.setBackupProfile(newProfileId)
+  clearOutOfScopeBackupSelection(newProfileId)
+  await refresh(newProfileId)
+}, { immediate: true })
 </script>
 
 <style scoped>

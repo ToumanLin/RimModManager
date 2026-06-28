@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col relative h-full bg-bg-surface/40 backdrop-blur-sm shadow-2xl"
-       :class="`border-2 rounded-2xl border-accent-${listColor}/20 overflow-hidden`">
+      :class="`border-2 rounded-2xl border-accent-${listColor}/20 overflow-hidden`">
     <!-- 标题栏 -->
     <div :data-tour="listId=='active'?'list-header':null" :class="`px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-accent-${listColor}/10`">
       <span :class="`text-sm font-bold text-accent-${listColor} uppercase tracking-wider flex items-center gap-1`">
@@ -11,7 +11,8 @@
           class="text-xs text-text-main/80 bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
           已筛选
         </span>
-        <span v-if="sortMode !== 'default' || !isSortAsc" v-tooltip="sortTooltip" class="text-xs text-text-main/80 bg-accent-highlight/30 px-1 rounded-full">
+        <span v-if="sortMode !== 'default' || !isSortAsc" v-tooltip="sortTooltip" @click="clearSort"
+          class="text-xs text-text-main/80 bg-accent-highlight/30 px-1 rounded-full ring-1 ring-accent-special/70 cursor-pointer hover:bg-accent-highlight/60 hover:text-text-main active:scale-95 transition-all">
           已排序
         </span>
       </span>
@@ -111,14 +112,14 @@
     
     <!-- 如果正在加载中，不渲染虚拟列表，防止 DOM 引擎崩溃 -->
     <div v-if="appStore.isLoading" class="w-full h-full flex items-center justify-center bg-bg-deep/50 z-50">
-        <div class="animate-spin size-8 border-4 border-accent-primary border-t-transparent rounded-full"></div>
+      <div class="animate-spin size-8 border-4 border-accent-primary border-t-transparent rounded-full"></div>
     </div>
     <!-- (tabindex="0" @keydown.ctrl.a.prevent="selectAll") 非焦点容器需要 tabindex 才能响应键盘事件 -->
     <!-- 列表区（底部渐变隐藏） -->
     <div v-else ref="listContainerRef" class="flex-1 flex pb-0.5 overflow-y-auto after:pointer-events-none 
-        after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10 
-        after:bg-linear-to-t after:from-bg-deep/80 after:to-transparent focus:outline-none"
-	      @click.self="modStore.clearSelection()">
+      after:content-[''] after:absolute after:bottom-0 after:w-full after:h-10 
+      after:bg-linear-to-t after:from-bg-deep/80 after:to-transparent focus:outline-none"
+      @click.self="modStore.clearSelection()">
       
       <!-- 左侧辅助功能区( @wheel.passive 监听滚轮事件) -->
       <div v-if="hasSidebar && appStore.settings.ui.show_dependency_graph" :data-tour="listId=='active'?'list-dependency':null" class="w-[55px] h-full flex-none"
@@ -134,9 +135,9 @@
       <div @click.self="modStore.clearSelection()" class="flex-1 h-full pl-1 pr-1 min-w-0 relative" :data-tour="listId=='active'?'list-modItem':null">
         <!-- 列表为空时的提示 -->
         <div v-show="modelValue.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed border-text-dim/60 text-gray-600 text-xs bg-bg-deep/90 select-none pointer-events-none">
-            可拖拽模组到此
-            <!-- 点阵背景 -->
-            <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
+          可拖拽模组到此
+          <!-- 点阵背景 -->
+          <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 20px 20px;"></div>
         </div>
         <!-- 列表 -->
           <!-- :size="isSimpleView ? 34 : 54" -->
@@ -158,39 +159,45 @@
             idAttribute: 'data-id'
           }">
           <template v-slot:item="{ record, index, dataKey }">
-            <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
-              :is-selected="modStore.selectedIds.includes(dataKey)" :simple="isSimpleView"
-              :is-in-search="searchResults.includes(dataKey) && searchQuery.length > 0" 
-              :show-icon="appStore.settings.ui.show_list_icon" 
-              :show-mod-icon="appStore.settings.ui.show_list_mod_icon" 
-              :show-type-icon="appStore.settings.ui.show_list_modtype_icon"
-              :show-index="appStore.settings.ui.show_list_index"
-              :search-match="currentTargetId === dataKey">
-            </ModItem>
+            <div class=" relative">
+              <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
+                :is-selected="modStore.selectedIds.includes(dataKey)" :simple="isSimpleView"
+                :is-in-search="searchResults.includes(dataKey) && searchQuery.length > 0" 
+                :show-icon="appStore.settings.ui.show_list_icon" 
+                :show-mod-icon="appStore.settings.ui.show_list_mod_icon" 
+                :show-type-icon="appStore.settings.ui.show_list_modtype_icon"
+                :show-index="appStore.settings.ui.show_list_index"
+                :search-match="currentTargetId === dataKey">
+              </ModItem>
+              <div v-if="modStore.takeModById(dataKey).last_active_time>appStore.settings.last_run_time && listId=='active'" v-tooltip="'最近启用（距上一次软件运行）'"
+                class="absolute top-0 right-0 rounded-md bg-accent-primary text-text-main px-1 py-0.5 text-[0.6rem] text-center flex items-center justify-center">
+                NEW
+              </div>
+            </div>
           </template>
         </VirtualList>
 
         <div class="absolute bottom-2 right-2 flex items-center justify-end gap-2">
           <!-- 一键订阅缺失的模组 -->
           <div v-if="missingModIds.length > 0" @click.stop="appStore.subscribePackageIds(missingModIds)" 
-            v-tooltip="`[[一键订阅共计 ${missingModIds.length} 个缺失的模组]]\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+            v-tooltip="`[[一键订阅共计 ${missingModIds.length} 个缺失的模组]]\n^^注意：部分创意工坊已经下架或者离线数据库无法查找到的模组将自动忽略！^^`"
             class="px-1 py-1 group relative bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
             <Flag />
 
             <button @click.stop="appStore.downloadPackageIds(missingModIds)" 
-              v-tooltip="`##一键下载共计 ${missingModIds.length} 个缺失的模组##\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+              v-tooltip="`##一键下载共计 ${missingModIds.length} 个缺失的模组##\n^^注意：部分创意工坊已经下架或者离线数据库无法查找到的模组将自动忽略！^^`"
               class="px-1 py-1 right-1/2 translate-x-1/2 absolute bottom-full mb-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all duration-200" >
               <Download />
             </button>
           </div>
           <!-- 一键订阅缺失的依赖项 -->
           <div v-if="missingDependencies.length > 0" @click.stop="appStore.subscribePackageIds(missingDependencies)" 
-            v-tooltip="`[[一键订阅共计 ${missingDependencies.length} 个缺失的依赖项]]\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+            v-tooltip="`[[一键订阅共计 ${missingDependencies.length} 个缺失的依赖项]]\n^^注意：部分创意工坊已经下架或者离线数据库无法查找到的模组将自动忽略！^^`"
             class="px-1 py-1 group relative bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
             <Flag />
 
             <button @click.stop="appStore.downloadPackageIds(missingDependencies)" 
-              v-tooltip="`##一键下载共计 ${missingDependencies.length} 个缺失的依赖项##\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+              v-tooltip="`##一键下载共计 ${missingDependencies.length} 个缺失的依赖项##\n^^注意：部分创意工坊已经下架或者离线数据库无法查找到的模组将自动忽略！^^`"
               class="px-1 py-1 right-1/2 translate-x-1/2 absolute bottom-full mb-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all duration-200" >
               <Download />
             </button>
@@ -327,6 +334,11 @@ const clearFilter = () => {
   filterByLine.value = []
   filterIssueType.value = ''
 }
+// 清除排序
+const clearSort = () => {
+  sortMode.value = 'default'
+  isSortAsc.value = true
+}
 
 // 动态计算帮助文本
 const searchHelpText = computed(() => {
@@ -400,6 +412,7 @@ const sortTooltip = computed(() => {
   let text = `按${SORT_MODE_MAP[sortMode.value]}排序`
   text += `${isSortAsc.value ? '（升序）' : '（降序）'}`
   text += "\n__筛选和排序只供视觉检阅，^^不影响实际顺序^^，\n并且此状态下^^禁止拖拽排序或插入^^__"
+  text += `\n\n__[[(点击恢复默认排序)]]__`
   return text
 })
 // 筛选提示

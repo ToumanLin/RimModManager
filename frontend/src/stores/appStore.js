@@ -388,7 +388,8 @@ export const useAppStore = defineStore('app', () => {
         const workspaceStore = useWorkspaceStore()
         workspaceStore.initData()
         const orderStore = useOrderStore()
-        orderStore.getBackups()
+        // 备份列表优先保持用户当前正在查看的环境视图；无选择时再回退到当前环境。
+        orderStore.getBackups(orderStore.backupProfileId || settings.value.current_profile_id || 'default')
       }
     } catch (e) {
       toast.error(`刷新数据失败: \n${e.message}`)
@@ -479,12 +480,12 @@ export const useAppStore = defineStore('app', () => {
             toast.error(`更新出错: ${data.msg}`)
         }
     })
-
     // 监听：AI 批量处理进度
     window.addEventListener('ai-batch-progress', (e) => {
       Object.assign(aiState, e.detail)
       aiState.isLoading = true 
     })
+
     // 每完成一个 Chunk，将数据推入数组，供弹窗实时渲染
     window.addEventListener('ai-batch-chunk-ready', (e) => {
       if (Array.isArray(e.detail)) {
@@ -508,7 +509,6 @@ export const useAppStore = defineStore('app', () => {
         toast.error(`AI 任务异常: ${e.detail.message}`)
       }
     })
-
     // 监听：本地化进度
     window.addEventListener('localize-progress', (e) => {
         // 复用 scanProgress 的状态，或者建立独立的 localizeProgress
@@ -899,6 +899,12 @@ export const useAppStore = defineStore('app', () => {
       window.open(steamUrl, '_blank')
     }
   }
+  const openSteamWorkshopById = (id) => {
+    if(id) {
+      const steamUrl = `steam://url/CommunityFilePage/${id}`
+      window.open(steamUrl, '_blank')
+    }
+  }
   // 根据包名下载Mod
   const downloadPackageIds = async (packageIds) => {
     if (!packageIds) return false
@@ -1246,7 +1252,7 @@ export const useAppStore = defineStore('app', () => {
     getThumbUrl, getLocalUrl, getRemoteUrl,
     // 游戏相关
     checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultCommunityPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
-    startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds,
+    startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds, openSteamWorkshopById,
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, showChangelog, setSidebarTab,
     
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, updateExternalDB,

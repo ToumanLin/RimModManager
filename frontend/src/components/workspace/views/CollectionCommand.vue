@@ -38,7 +38,7 @@
               class="flex-1 py-1.5 bg-accent-success/20 hover:bg-accent-success text-accent-success hover:text-black text-xs font-black rounded-lg border border-accent-success/30 transition-all flex items-center justify-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
               <DownloadCloud class="size-3.5" /> 补齐下载 ({{ missingCount }})
             </button>
-            <button @click="applyAsLoadOrder" v-tooltip="'应用到当前环境的加载顺序，请确保全部已下载！'"
+            <button @click="applyAsLoadOrder" v-tooltip="'应用合集列表顺序为加载顺序，请确保全部已下载！'"
               class="flex-1 px-3 py-1.5 bg-text-main/10 hover:bg-accent-warn hover:text-black text-text-main text-xs font-bold rounded-lg border border-text-main/10 transition-colors flex items-center justify-center gap-1 ">
               <ListOrdered class="size-3.5" /> 应用加载顺序
             </button>
@@ -51,7 +51,7 @@
             <div class="size-8 border-4 border-accent-warn border-t-transparent rounded-full animate-spin"></div>
           </div>
           <!-- 单个子 Mod 卡片 -->
-          <div v-for="mod in wsStore.collections.activeChildren" :key="mod.workshop_id"
+          <div v-for="mod in wsStore.activeChildrenWithStatus" :key="mod.workshop_id"
             class="flex items-center gap-3 p-2 rounded-xl border transition-all group hover:bg-text-main/5"
             :class="(mod.is_workshop || mod.is_self || mod.is_local) ? 'border-text-main/10 bg-text-main/2' : 'border-accent-danger/30 bg-accent-danger/5 opacity-80'">
             
@@ -76,6 +76,7 @@
 
               <!-- 操作按钮组 (Hover 显示) -->
               <div class="hidden group-hover:flex items-center gap-1 bg-bg-surface/80 p-1 rounded-lg backdrop-blur-md border border-text-main/10 shadow-lg">
+                <button @click="appStore.openSteamWorkshopById(mod.workshop_id)" v-tooltip="'访问创意工坊页面'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-black transition-colors"><ExternalLink class="size-3.5" /></button>
                 <button v-if="mod.is_workshop" @click="handleUnsubscribeSingle(mod.workshop_id)" v-tooltip="'取消订阅'" class="p-1.5 rounded-md hover:bg-accent-danger text-text-dim hover:text-black transition-colors"><FlagOff class="size-3.5" /></button>
                 <button v-else @click="handleSubscribeSingle(mod.workshop_id)" v-tooltip="'Steam 订阅'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-black transition-colors"><Flag class="size-3.5" /></button>
                 <button v-if="!mod.is_self" @click="handleDownloadSingle(mod.workshop_id)" v-tooltip="'SteamCMD 下载'" class="p-1.5 rounded-md hover:bg-accent-success text-text-dim hover:text-black transition-colors"><Download class="size-3.5" /></button>
@@ -133,15 +134,15 @@
                 
             <!-- 底部信息 -->
             <div class="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end z-10 pointer-events-none">
-              <span class="text-xs font-black text-text-main/80 text-shadow-lg drop-shadow-md leading-tight mb-1">{{ coll.description || '暂无说明' }}</span>
+              <span class="text-xs font-black text-text-main/80 text-shadow-lg drop-shadow-md leading-tight mb-1" >{{cleanRichText(coll.description,50) || '暂无说明'}}</span>
               
               <!-- 统计指示条 -->
               <div class="flex items-center justify-between mt-1">
                 <span class="text-[0.6rem] font-mono text-text-dim bg-black/60 px-1.5 py-0.5 rounded border border-white/5 backdrop-blur-sm">ID: {{ coll.id }}</span>
                 
                 <div class="flex gap-1.5">
-                  <span v-if="coll.need_download > 0" class="px-1.5 py-0.5 rounded bg-accent-danger/20 text-accent-danger text-[0.6rem] font-bold border border-accent-danger/30 flex items-center gap-1 shadow-lg shadow-accent-danger/20">
-                    <AlertCircle class="size-2.5"/> 缺 {{ coll.need_download }}
+                  <span v-if="getListMissingCount(coll) > 0" class="px-1.5 py-0.5 rounded bg-accent-danger/20 text-accent-danger text-[0.6rem] font-bold border border-accent-danger/30 flex items-center gap-1">
+                    <AlertCircle class="size-2.5"/> 缺 {{ getListMissingCount(coll) }}
                   </span>
                   <span class="px-1.5 py-0.5 rounded bg-text-main/10 text-text-main/80 text-[0.6rem] font-bold border border-text-main/10 flex items-center gap-1">
                     <Layers class="size-2.5"/> 共 {{ coll.total || 0 }}
@@ -168,13 +169,14 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { Layers, Plus, CircleCheck, Download, DownloadCloud, BoxSelect, Package, Trash2, ListOrdered, Flag, FlagOff, AlertCircle, FolderArchive, FolderDot } from 'lucide-vue-next'
+import { Layers, Plus, Download, DownloadCloud, BoxSelect, Package, Trash2, ListOrdered, Flag, FlagOff, AlertCircle, FolderArchive, FolderDot, ExternalLink } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useModStore } from '../../../stores/modStore'
 import { useConfirmStore } from '../../../stores/confirmStore'
 import { formatDate } from '../../../utils/uiHelper'
+import { cleanRichText } from '../../../utils/unityTextParser'
 
 const toast = useToast()
 const wsStore = useWorkspaceStore()
@@ -184,18 +186,39 @@ const confirmStore = useConfirmStore()
 
 // 本地 UI 状态
 const newCollectionInput = ref('')
+const OFFICIAL_PREFIX = 'ludeon.rimworld'
+
+const normalizePackageId = (value) => String(value || '').trim().toLowerCase()
+const isOfficialPackageId = (value) => normalizePackageId(value).startsWith(OFFICIAL_PREFIX)
 
 // 计算当前合集的缺失数量
-const missingCount = computed(() => wsStore.collections.activeChildren.filter(c => (!c.is_workshop && !c.is_self && !c.is_local)).length)
+const missingCount = computed(() => wsStore.activeChildrenWithStatus.filter(c => !c.is_installed).length)
+
+// 动态计算列表项的缺失数
+const getListMissingCount = (coll) => {
+  if (!coll.children) return 0;
+  return coll.children.filter(child => {
+      const wid = String(child.workshop_id)
+      const pid = child.package_id ? String(child.package_id).toLowerCase() : null
+      const is_installed =
+          wsStore.librariesMods.workshop.some(m => !m.is_missing && String(m.workshop_id) === wid) ||
+          wsStore.librariesMods.self.some(m => !m.is_missing && String(m.workshop_id) === wid) ||
+          wsStore.librariesMods.local.some(m => !m.is_missing && ((pid && m.package_id?.toLowerCase() === pid) || (m.workshop_id && String(m.workshop_id) === wid)))
+      return !is_installed
+  }).length;
+}
 
 const tooltipFormat = (coll) => {
-  return `**${coll.title || '未知合集'}**\n\n${coll.description || '暂无说明'}\n\n[[共 ${coll.total || 0} 个模组]] | ^^需要订阅: ${coll.need_download}^^`
+  const missing = getListMissingCount(coll)
+  return `**${coll.title || '未知合集'}**\n\n${cleanRichText(coll.description) || '暂无说明'}\n\n[[共 ${coll.total || 0} 个模组]] | ^^需要下载/订阅: ${missing}^^`
 }
 
 // --- 动作：添加与删除合集 ---
 const submitAddCollection = async () => {
-  await wsStore.addCollection(newCollectionInput.value)
-  newCollectionInput.value = '' // 如果成功，清空输入框
+  const added = await wsStore.addCollection(newCollectionInput.value)
+  if (added) {
+    newCollectionInput.value = ''
+  }
 }
 
 const confirmRemove = async (coll) => {
@@ -223,7 +246,8 @@ const handleUnsubscribeAll = () => {
 
 // 2. 仅下载缺失项 (SteamCMD)
 const handleDownloadMissing = () => {
-  const wids = wsStore.collections.activeChildren.filter(m => (!m.is_workshop && !m.is_self && !m.is_local)).map(m => String(m.workshop_id))
+  const wids = wsStore.activeChildrenWithStatus.filter(m => (!m.is_workshop && !m.is_self && !m.is_local)).map(m => String(m.workshop_id))
+  
   if (!wids.length) {
     toast.info("所有模组均已就绪，无需下载！")
     return
@@ -242,19 +266,45 @@ const applyAsLoadOrder = async () => {
     const ok = await confirmStore.confirmAction("警示", `当前合集有 ${missingCount.value} 个模组未安装。\n强行应用会导致排序中出现幽灵节点（空项）。强烈建议先下载补齐。\n是否继续强行应用？`, { type: 'warning' })
     if (!ok) return
   }
-  // 从后端的 activeChildren 中提取 package_id (前提是后端 `lifecycle_fetch_collection` 必须把 ext_db 里的 package_id 连带查出来返回)
-  const pids = wsStore.collections.activeChildren.map(c => c.package_id).filter(Boolean)
-  if (pids.length === 0) {
+
+  const officialIds = modStore.activeIds
+    .map(id => normalizePackageId(id))
+    .filter(id => id && isOfficialPackageId(id))
+
+  const collectionIds = []
+  const seenPackageIds = new Set(officialIds)
+  let unresolvedCount = 0
+  let duplicateCount = 0
+
+  wsStore.activeChildrenWithStatus.forEach(child => {
+    const pid = normalizePackageId(child.package_id)
+    if (!pid) {
+      unresolvedCount += 1
+      return
+    }
+    if (seenPackageIds.has(pid)) {
+      duplicateCount += 1
+      return
+    }
+    seenPackageIds.add(pid)
+    collectionIds.push(pid)
+  })
+
+  const nextActiveIds = [...officialIds, ...collectionIds]
+  if (nextActiveIds.length === 0) {
     toast.error("无法提取包名。可能后端接口未返回 package_id。")
     return
   }
-  if (pids.length < wsStore.collections.activeChildren.length) {
-    toast.warning("部分模组无法解析包名，可能已从 Steam 下架或数据缺失，已被过滤。")
+  if (unresolvedCount > 0) {
+    toast.warning(`有 ${unresolvedCount} 个合集项无法解析包名，可能是缓存缺失或本地未安装，已跳过这些项。`)
   }
-  // 应用 modStore 的 activeIds
-  modStore.activeIds = pids
-  // 给点视觉反馈，提示用户去主界面保存
-  toast.success("已应用于当前环境的加载序列！\n请返回主界面点击【保存】生效。")
+  if (duplicateCount > 0) {
+    toast.info(`已跳过 ${duplicateCount} 个重复包名项，避免生成重复加载节点。`)
+  }
+
+  modStore.activeIds = nextActiveIds
+  modStore.updateInactiveIds()
+  toast.success("已按合集顺序覆盖当前启用列表。\n官方 Core/DLC 会按当前启用状态保留，请返回主界面点击【保存】生效。")
 }
 </script>
 

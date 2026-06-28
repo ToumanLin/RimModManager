@@ -46,7 +46,7 @@ export const ISSUE_LEVEL = {
 
 // 错误类型枚举
 export const ISSUE_TYPE = {
-  ERROR_MISSING_FILE: 'missing_file',               // 本地文件丢失
+  ERROR_MISSING_FILE: 'missing_file',               // 本地文件缺失
   ERROR_MISSING_DEPENDENCY: 'missing_dependency',   // 缺前置 (完全没装)
   ERROR_INACTIVE_DEPENDENCY: 'inactive_dependency', // 前置没启用
   ERROR_INCOMPATIBLE: 'incompatible',               // 不兼容
@@ -66,7 +66,7 @@ export const ISSUE_TYPE = {
 
 // 定义类型到中文标题的映射
 export const ISSUE_TITLE_MAP = {
-  'missing_file': '文件丢失',
+  'missing_file': '文件缺失',
   'missing_dependency': '依赖缺失',
   'inactive_dependency': '依赖未启用',
   'incompatible': '模组冲突',

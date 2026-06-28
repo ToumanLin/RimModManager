@@ -1,4 +1,6 @@
+import json
 import os
+import socket
 import time
 import threading
 import psutil
@@ -8,6 +10,7 @@ from backend.utils.logger import logger
 from backend.utils.event_bus import EventBus
 
 from backend.static_page import IDLE_HTML # 不再使用字符串注入，改用文件
+
 
 class GameMonitor:
     def __init__(self, api):
@@ -60,9 +63,14 @@ class GameMonitor:
                         
                 elif not game_found and self.is_game_running:
                     self.is_game_running = False
-                    self.manual_override_idle = False # 游戏退出，重置手动状态
                     EventBus.emit('game-status-changed', {'running': False})
-                    self._exit_idle_mode()
+                    
+                    # 【核心修复1】：如果用户已经手动唤醒了，不要再去强刷页面！
+                    if self.manual_override_idle:
+                        logger.info("[Monitor] 游戏退出，但用户已在主界面，跳过页面重载")
+                        self.manual_override_idle = False # 仅重置标志位即可
+                    else:
+                        self._exit_idle_mode()
                 
                 time.sleep(5 if game_found else 2)
             except Exception as e:
@@ -96,9 +104,17 @@ class GameMonitor:
         logger.info("[Monitor] 恢复主界面")
         window = self.api.get_window()
         if not window: return
+        
         try:
+            # 【核心修复2】：防御性检查。如果当前不是 idle.html，说明已经在主界面了，绝对不要 load_url
+            curr = window.get_current_url()
+            if curr and 'idle.html' not in curr:
+                logger.info("[Monitor] 当前已是主界面，无需重载 URL")
+                return
+            
             from main import get_entrypoint
             target_url = self.resume_url if self.resume_url else get_entrypoint()
+            logger.info(f"[Monitor] 正在重载主界面: {target_url}")
             window.load_url(target_url)
             # 让前端在 onMounted 时主动调用 API 恢复
             logger.info("[Monitor] 等待前端 UI 唤醒确认...")

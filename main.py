@@ -149,14 +149,15 @@ def main():
     # additional_args.append("--disable-features=RendererCodeIntegrity") 
     # 某些环境下需要这个来允许本地文件交互
     additional_args.append('--allow-file-access-from-files') 
-            
+    
     # 设置环境变量传给 WebView2
     os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = " ".join(additional_args)
+    entrypoint = get_entrypoint()
     
     # 创建窗口
     window = webview.create_window(
         'RimModManager', 
-        url=get_entrypoint(),
+        url=entrypoint,
         js_api=api,
         width=window_width, # 读取记忆的窗口大小
         height=window_height,
@@ -164,7 +165,7 @@ def main():
         background_color='#0f172a', # 与前端背景色一致，防止白屏闪烁
         frameless=False, # 可以选择开启无边框模式来实现完全自定义标题栏
     )
-    logger.info(f"Entrypoint: {get_entrypoint()}")
+    logger.info(f"Entrypoint: {entrypoint}")
     if window: 
         api.set_window(window)
         window.events.resized += on_resized            # 窗口尺寸变化时触发

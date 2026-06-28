@@ -24,7 +24,7 @@ class ExtDAO:
         return None
     
     @staticmethod
-    def search_nexus(query: str, page: int = 1, page_size: int = 100):
+    def search_workshop(query: str, page: int = 1, page_size: int = 100):
         """外置数据分页搜索 (仅查找 Mod，排除合集)"""
         # 排除合集：合集通常没有 package_id，或者我们可以靠长度/内容判断
         q = WorkshopMeta.select(
@@ -61,7 +61,7 @@ class ExtDAO:
     
     
     @staticmethod
-    def get_nexus_detail(workshop_id: str):
+    def get_workshop_detail(workshop_id: str):
         """获取 Mod 的完整云端档案 (含详情、依赖、替代品)"""
         wid = str(workshop_id)
         meta = WorkshopMeta.get_or_none(WorkshopMeta.workshop_id == wid)
@@ -72,7 +72,7 @@ class ExtDAO:
         }
     
     @staticmethod
-    def get_nexus_detail_extended(workshop_id: str):
+    def get_workshop_detail_extended(workshop_id: str):
         """获取 Mod 的完整云端档案及生态圈数据"""
         wid = str(workshop_id)
         meta = WorkshopMeta.get_or_none(WorkshopMeta.workshop_id == wid)
@@ -109,3 +109,91 @@ class ExtDAO:
             "same_author_mods": same_author,
             "dependents_mods": dependents
         }
+
+    @staticmethod
+    def get_workshop_details_by_package_ids(package_ids: list[str]):
+        """批量获取包名对应的云端缓存信息（无网络请求，专门用于填充前端幽灵项）"""
+        if not package_ids: return {}
+        lower_ids = [pid.lower() for pid in package_ids]
+        
+        # 1. 查询基础信息
+        metas = WorkshopMeta.select(
+            WorkshopMeta.workshop_id, 
+            WorkshopMeta.package_id,
+            WorkshopMeta.name,
+            WorkshopMeta.title,
+            WorkshopMeta.author,
+            WorkshopMeta.preview_url
+        ).where(fn.LOWER(WorkshopMeta.package_id).in_(lower_ids)).dicts()
+        
+        meta_dict = { m['package_id'].lower(): m for m in metas if m.get('package_id') }
+        
+        # 2. 查询替代版本 (如果有替代，获取替代信息)
+        replacements = ModReplacement.select(
+            ModReplacement.old_package_id,
+            ModReplacement.new_workshop_id,
+            ModReplacement.new_name
+        ).where(fn.LOWER(ModReplacement.old_package_id).in_(lower_ids)).dicts()
+        
+        rep_dict = { r['old_package_id'].lower(): r for r in replacements if r.get('old_package_id') }
+        
+        # 3. 如果有替代，尝试读取替代版本的 WorkshopMeta 来覆盖信息
+        new_wids = [r['new_workshop_id'] for r in replacements if r.get('new_workshop_id')]
+        rep_metas = {}
+        if new_wids:
+            rep_metas_query = WorkshopMeta.select(
+                WorkshopMeta.workshop_id,
+                WorkshopMeta.name,
+                WorkshopMeta.title,
+                WorkshopMeta.author,
+                WorkshopMeta.preview_url
+            ).where(WorkshopMeta.workshop_id.in_(new_wids)).dicts()
+            rep_metas = { m['workshop_id']: m for m in rep_metas_query }
+            
+        result = {}
+        for pid in lower_ids:
+            data = meta_dict.get(pid)
+            rep = rep_dict.get(pid)
+            
+            # 优先使用替代版本的数据
+            if rep and rep.get('new_workshop_id'):
+                new_wid = rep['new_workshop_id']
+                new_meta = rep_metas.get(new_wid)
+                if new_meta:
+                    result[pid] = {
+                        "package_id": pid,
+                        "package_id_raw": pid,
+                        "workshop_id": new_meta['workshop_id'],
+                        "url": f"https://steamcommunity.com/sharedfiles/filedetails/?id={new_meta['workshop_id']}",
+                        "name": new_meta.get('title') or new_meta.get('name') or rep.get('new_name'),
+                        "author": [new_meta.get('author')],
+                        "preview_url": new_meta.get('preview_url'),
+                        "is_replacement_derived": True
+                    }
+                    continue
+                else:
+                    result[pid] = {
+                        "package_id": pid,
+                        "package_id_raw": pid,
+                        "workshop_id": new_wid,
+                        "url": f"https://steamcommunity.com/sharedfiles/filedetails/?id={new_wid}",
+                        "name": rep.get('new_name'),
+                        "is_replacement_derived": True
+                    }
+                    continue
+            
+            # 没有替代版本，使用自身数据
+            if data:
+                result[pid] = {
+                    "package_id": pid,
+                    "package_id_raw": pid,
+                    "workshop_id": data['workshop_id'],
+                    "url": f"https://steamcommunity.com/sharedfiles/filedetails/?id={data['workshop_id']}",
+                    "name": data.get('title') or data.get('name'),
+                    "author": [data.get('author')],
+                    "preview_url": data.get('preview_url')
+                }
+        
+                
+        return result
+

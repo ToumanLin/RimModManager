@@ -102,8 +102,9 @@
         
       </div>
 
+      <!-- 可替换版本提示 -->
       <div v-if="modData?.replacement" :class="[`rounded-4xl cursor-help text-sm font-bold
-        hover:scale-110  text-shadow-2xs text-shadow-black hover:shadow-bg-deep/50 transition-all`, 'text-accent-tip']"
+        hover:scale-110  text-shadow-2xs text-shadow-black hover:shadow-bg-deep/50 transition-all`, replacementInstalled?'text-text-dim':'text-accent-tip']"
         v-tooltip="replacementTooltip">
         <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
@@ -158,7 +159,7 @@ import { useRuleStore } from '../../stores/ruleStore'
 import { useContextMenuStore } from '../../stores/contextMenuStore'
 import { useConfirmStore } from '../../stores/confirmStore'
 import { hexToRgba, hexToRgb } from '../../utils/colorDeal'
-import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Download, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus } from 'lucide-vue-next';
+import { X, FolderInput, Tag, Group, Palette, ChessPawn, Goal, Download, Eraser, SquareX, Trash2, Cable, Link2, Link2Off, PencilRuler, MegaphoneOff, Megaphone, ExternalLink, Flag, FlagOff, Copy, CircleSlash2, CircleCheckBig, BotMessageSquare, CircleFadingPlus, CornerUpRight } from 'lucide-vue-next';
 import GroupItem from './GroupItem.vue'
 
 const props = defineProps({
@@ -220,10 +221,18 @@ const issueTooltip = computed(() => {
     return issues.value.map(i => i.message).join('\n')
 })
 
+// 可替换版本是否已经安装
+const replacementInstalled = computed(() => {
+    if (!modData.value.replacement) return false
+    return modStore.allModWorkshopIds.has(modData.value.replacement.new_workshop_id)
+})
+// 可替换版本提示
 const replacementTooltip = computed(() => {
     if (!modData.value.replacement) return null
-    const info = `存在可替换版本：##${modData.value.replacement.new_name}##（${modData.value.replacement.new_workshop_id}）\n可在右键菜单中订阅`
-    return info
+    if (replacementInstalled.value) {
+      return `已安装可替换版本：##${modData.value.replacement.new_name}##（${modData.value.replacement.new_workshop_id}）`
+    }
+    return `存在可替换版本：##${modData.value.replacement.new_name}##（${modData.value.replacement.new_workshop_id}）\n可在右键菜单中订阅`
 })
 
 // 错误提示
@@ -252,7 +261,7 @@ const getCardStyle = (id) => {
 // 双击启用/停用 Mod
 const handleDoubleClick = () => {
   if (appStore.settings.ui.double_click_active_mod) {
-    modStore.changeModsActive([props.item_id], !isActive.value)
+    modStore.changeModsActive(modStore.selectedIds, !isActive.value)
   }
 }
 // 点击处理
@@ -370,8 +379,8 @@ const handleContextMenu = async (event) => {
     { label: '编辑规则', icon: PencilRuler, shortcut: 'Alt+左键', action: () => ruleStore.currentId = props.item_id },
     { label: '访问网页', disabled: !modData.value.url, icon: ExternalLink, action: () => appStore.openUrl(modData.value.url) },
     { label: '打开文件夹', disabled: !modData.value.path, icon: FolderInput, action: () => appStore.openPath(modData.value.path) },
-    { label: 'Steam操作', icon: IconSteam, disabled: modData.value.store!=='workshop', children: [
-      { label: '访问创意工坊', disabled: modData.value.store!=='workshop', icon: IconSteam, action: () => appStore.openSteamWorkshopUrl(modData.value.url) },
+    { label: 'Steam操作', icon: IconSteam, disabled: !modData.value.workshop_id, children: [
+      { label: '访问创意工坊', icon: IconSteam, action: () => appStore.openSteamWorkshopById(modData.value.workshop_id) },
       { label: '订阅模组', disabled: (!!modData.value.workshop_id && !!modData.value.path), icon: Flag, action: () => appStore.subscribeMod([props.item_id]) },
       { label: '取消订阅'+ selectedCountStr, disabled: modData.value.store!=='workshop', icon: FlagOff, level: 'danger', action: () => unsubscribeMod() },
       { label: '取订并删除'+ selectedCountStr, disabled: modData.value.store!=='workshop', icon: Trash2, level: 'danger', action: () => unsubscribeMod(true) },
@@ -382,19 +391,24 @@ const handleContextMenu = async (event) => {
     const _selectedCountStr = workshop_ids.length>1?` (${workshop_ids.length}项)`:''
     singleMenuItems.push(
       { label: '替代版本', icon: Cable, children:[
-        { label: '下载替代版本'+ _selectedCountStr, icon: Download, action: () => appStore.downloadWorkshopItems(workshop_ids) },
+        { label: '访问创意工坊', icon: IconSteam, action: () => appStore.openSteamWorkshopById(modData.value.replacement.new_workshop_id) },
+        { label: '跳转到替代模组',disabled: !replacementInstalled.value, icon: CornerUpRight, action: () => modStore.currentTargetId=modData.value.replacement.new_package_id },
         { label: '订阅替代版本'+ _selectedCountStr, icon: Flag, action: () => appStore.subscribeMod(workshop_ids) },
+        { label: '下载替代版本'+ _selectedCountStr, icon: Download, action: () => appStore.downloadWorkshopItems(workshop_ids) },
       ]}
     )
   }
 
   if (modStore.selectedMods.some(m => (m.isMissing || !m.path))) {
     const package_ids = modStore.selectedMods.filter(m => (m.isMissing || !m.path)).map(m => m.package_id)
+    const workshop_ids = modStore.selectedMods.filter(m => (m.isMissing || !m.path)&&!!m.workshop_id).map(m => m.workshop_id)
     const _selectedCountStr = package_ids.length>1?` (${package_ids.length}项)`:''
+    const _selectedCountStr2 = workshop_ids.length>1?` (${workshop_ids.length}项)`:''
     singleMenuItems.push(
-      { label: '尝试补充缺失', icon: CircleFadingPlus, children:[
-        { label: '下载缺失项'+ _selectedCountStr, icon: Download, action: () => appStore.downloadPackageIds(package_ids) },
-        { label: '订阅缺失项'+ _selectedCountStr, icon: Flag, action: () => appStore.subscribePackageIds(package_ids) },
+      { label: '缺失处理', icon: CircleFadingPlus, children:[
+        { label: '移除缺失项'+ _selectedCountStr, icon: Eraser, action: () => modStore.removeIdsOnAllList(package_ids) },
+        { label: '订阅缺失项'+ _selectedCountStr2, disabled: workshop_ids.length === 0, icon: Flag, action: () => appStore.subscribeMod(workshop_ids) },
+        { label: '下载缺失项'+ _selectedCountStr2, disabled: workshop_ids.length === 0, icon: Download, action: () => appStore.downloadWorkshopItems(workshop_ids) },
       ]}
     )
   }

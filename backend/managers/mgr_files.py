@@ -371,7 +371,7 @@ class FileManager:
         return None
     
     @staticmethod
-    def save_file_dialog(initial_dir='', default_filename='ModsConfig.xml', file_types=('XML Files (*.xml;*.rws)', 'All Files (*.*)')):
+    def save_file_dialog(initial_dir='', default_filename='ModsConfig.xml', file_types=('XML Files (*.xml)', 'All Files (*.*)')):
         """
         打开系统原生的文件保存框
         """
@@ -965,6 +965,14 @@ class PathChecker:
             return cls._format_res(False, msg=f"父目录不存在: {parent_dir}")
         if parent_dir and not os.access(parent_dir, os.W_OK):
             return cls._format_res(False, msg="目录无写入权限，请以管理员身份运行或更换路径")
+        # 检查是否有Config目录和Saves目录，不存在则警告
+        config_dir = os.path.join(path_str, "Config")
+        saves_dir = os.path.join(path_str, "Saves")
+        if not os.path.exists(config_dir):
+            return cls._format_res(True, msg=f"用户数据路径 {path_str} 下无 Config 目录（自定义环境可忽视此警告，程序会自动生成）", msg_type="warn")
+        if not os.path.exists(saves_dir):
+            return cls._format_res(True, msg=f"用户数据路径 {path_str} 下无 Saves 目录（自定义环境可忽视此警告，程序会自动生成）", msg_type="warn")
+        
         return cls._format_res(True, msg="校验通过")
     
     @classmethod

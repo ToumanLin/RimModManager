@@ -199,12 +199,15 @@ const parseNewRepo = async () => {
 // 确认订阅仓库
 const confirmSubscribe = async (type) => {
   const info = workspaceStore.github.previewInfo
+  console.log('githubinfo',info)
   const payload = {
     url: newRepoUrl.value,
     owner: info.owner,
     repo: info.repo,
     default_branch: info.default_branch,
-    install_type: type
+    install_type: type,
+    installed_version: info.latest_release_tag,
+    info: info,
   }
   const res = await window.pywebview.api.github_subscribe(payload)
   if (checkResult(res, "建立订阅")) {
