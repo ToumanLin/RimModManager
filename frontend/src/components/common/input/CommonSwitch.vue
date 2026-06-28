@@ -4,7 +4,7 @@
     :class="[mini?'':'input-glass']">
     <div class="flex flex-col">
       <span class="text-sm font-bold text-text-main tracking-wide">{{ label }}
-        <label v-if="description && mini" v-tooltip="description" class="text-text-dim ml-1 italic cursor-help underline hover:text-text-main">?</label>
+        <label v-if="description && mini" v-tooltip="description" class="text-text-dim ml-0 mr-1.5 italic cursor-help underline hover:text-text-main">?</label>
       </span>
       <span v-if="description && !mini" class="text-[0.7rem] text-text-dim mt-0.5">{{ description }}</span>
     </div>

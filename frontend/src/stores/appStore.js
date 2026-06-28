@@ -124,6 +124,7 @@ export const useAppStore = defineStore('app', () => {
     workshop_mods_path: '',
     self_mods_path: '',
     move_old_self_mods: false,
+    enable_tool_mods: true,  // 是否启用工具 Mod
 
     user_rules_path: '',
     community_rules_url: '',
@@ -151,6 +152,8 @@ export const useAppStore = defineStore('app', () => {
       detail_delay: 300,          // 详情页加载延迟 (毫秒)
       tooltip_hover_time: 1000,  // 鼠标悬停显示提示时间 (毫秒)
       show_mod_hover_panel: true,  // 是否显示 Mod 悬停面板
+      show_ai_assistant: true,  // 是否显示 AI 助手入口
+      show_ai_assistant_fab: true,  // 是否显示 AI 助手悬浮球
       double_click_active_mod: true,  // 是否双击启用/停用 Mod
       main_layout: JSON.parse(JSON.stringify(DEFAULT_MAIN_LAYOUT)),  // 主界面布局配置
 
@@ -569,7 +572,7 @@ export const useAppStore = defineStore('app', () => {
     isLoading.value = true
     try {
       const res = await window.pywebview.api.save_setting(key, value)
-      if (checkResult(res, "保存单项设置")) {
+      if (checkResult(res, "保存单项设置", true)) {
         // 更新本地 store
         settings.value[key] = value
       } 

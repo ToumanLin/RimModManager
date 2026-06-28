@@ -199,6 +199,7 @@
                       description="影响创建共存Mod时的文件夹名称，处理优先级是 别名>原名>包名>工坊ID，所以即使Mod没有别名，也能按原名创建文件夹。" 
                       :options="[{label:'按工坊ID', value:'workshop_id'},{label:'按包名', value:'package_id'},{label:'按原名', value:'name'},{label:'按别名', value:'alias_name'}]" />
                     <CommonSwitch class="col-span-1" label="使用原始 Mod ID" v-model="formData.use_raw_ids" description="开启后，将使用 Mod 的原始 ID 写入排序文件，而不是标准化的小写。" />
+                    <CommonSwitch class="col-span-1" label="使用辅助工具模组" v-model="formData.enable_tool_mods" description="开启后，将在保存或自动排序时自动启用辅助工具模组，如提供日志获取等功能。" />
                     <CommonNumber class="col-span-1" label="自动备份保留天数" description="管理自动备份的最长保留时间，手动备份不受影响。" v-model="formData.backup_retention_days" :step="1" :min="0" :max="365" />
                   </div>
                 </div>
@@ -607,6 +608,9 @@ const loadAiProviders = async () => {
 }
 // 拉取模型列表 (兼容旧的，组装为 CommonSelect 接受的结构)
 const fetchAiModels = async () => {
+  if (!formData.value.ai.provider || !formData.value.ai.enabled || !formData.value.ai.base_url || !formData.value.ai.api_key) {
+    return
+  }
   const models = await appStore.getAiModels(formData.value.ai)
   if (models) {
     currentAiModels.value = models.map(m => ({ value: m, label: m }))

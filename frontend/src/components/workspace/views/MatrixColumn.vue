@@ -140,7 +140,7 @@ const use_workshop_mods = computed({
     return profileStore.currentProfile?.use_workshop_mods || false
   },
   set(val) {
-    profileStore.updateProfile(profileStore.currentProfile?.id, { use_workshop_mods: val })
+    profileStore.updateProfile(profileStore.currentProfileId, { use_workshop_mods: val })
   }
 })
 const use_self_mods = computed({
@@ -148,7 +148,7 @@ const use_self_mods = computed({
     return profileStore.currentProfile?.use_self_mods || false
   },
   set(val) {
-    profileStore.updateProfile(profileStore.currentProfile?.id, { use_self_mods: val })
+    profileStore.updateProfile(profileStore.currentProfileId, { use_self_mods: val })
   }
 })
 
