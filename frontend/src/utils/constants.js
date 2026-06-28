@@ -160,7 +160,7 @@ export const MOD_SIGN_COLOR_MAP = {
 export const SOURCE_TYPE_MAP = {
   'core': '游戏本体',
   'dlc': 'DLC',
-  'github': 'GitHub',
+  'github': 'Git 仓库',
   'workshop': 'Steam 创意工坊',
   'local': '本地文件',
   'self': '管理器下载',

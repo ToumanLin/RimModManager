@@ -75,10 +75,19 @@ export const buildWorkshopUrl = (workshopId = '') => {
     : ''
 }
 
+const GIT_REPOSITORY_HOSTS = ['github.com', 'gitlab.com', 'gitgud.io']
+const parseUrlHost = (value = '') => {
+  try {
+    return new URL(value).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
 export const detectUrlSubtype = (url = '') => {
   const normalizedUrl = normalizeUrl(url).toLowerCase()
   if (!normalizedUrl) return 'other'
-  if (normalizedUrl.includes('github.com')) return 'github'
+  if (GIT_REPOSITORY_HOSTS.includes(parseUrlHost(normalizedUrl))) return 'github'
   if (normalizedUrl.includes('ludeon.com') || normalizedUrl.includes('rimworldgame.com')) return 'official_forum'
   return 'other'
 }

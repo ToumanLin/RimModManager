@@ -1,44 +1,38 @@
 <template>
-  <div
-    id="backup-drop-zone"
-    class="relative flex flex-col h-full bg-bg-surface/40 backdrop-blur-sm border-2 border-text-main/5 rounded-2xl overflow-hidden shadow-2xl"
+  <div id="backup-drop-zone" class="relative flex flex-col h-full bg-bg-surface/40 border-2 border-border-base/5 rounded-2xl overflow-hidden shadow-2xl"
     @dragenter="handleDragEnter"
     @dragover="handleDragOver"
     @dragleave="handleDragLeave"
-    @drop="handleDrop"
-  >
+    @drop="handleDrop" >
     <Transition name="fade-drop">
-      <div
-        v-if="showDropOverlay"
-        class="absolute inset-0 z-30 flex items-center justify-center bg-bg-deep/70 backdrop-blur-sm"
-      >
-        <div class="mx-4 w-full max-w-md rounded-2xl border border-accent-primary/30 bg-accent-primary/10 px-6 py-8 text-center shadow-[0_0_40px_rgba(var(--color-accent-rgb),0.18)]">
-          <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-accent-primary/35 bg-accent-primary/15 text-accent-primary shadow-[0_0_25px_rgba(var(--color-accent-rgb),0.18)]">
+      <div v-if="showDropOverlay" class="absolute inset-0 z-30 flex items-center justify-center bg-bg-deep/70 backdrop-blur-sm" >
+        <div class="mx-4 w-full max-w-md rounded-2xl border border-accent-primary/30 bg-accent-primary/10 px-6 py-8 text-center shadow-[0_0_40px_rgba(var(--rgb-accent-primary),0.18)]">
+          <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-accent-primary/35 bg-accent-primary/15 text-accent-primary shadow-[0_0_25px_rgba(var(--rgb-accent-primary),0.18)]">
             <svg class="size-7" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
           </div>
           <div class="text-base font-bold tracking-wide text-text-main">拖入加载序列文件</div>
           <div class="mt-2 text-sm leading-relaxed text-text-dim">
             松手后将自动尝试导入到对比视图
           </div>
-          <div class="mt-3 text-xs text-text-dim/70">
+          <div class="mt-3 text-xs text-text-dim">
             支持 `xml` / `rws` / `rml` / `json` / `txt` / `list`
           </div>
         </div>
       </div>
     </Transition>
-    
+
     <!-- 标题栏 -->
-    <div class="px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-black/10">
+    <div class="px-3 h-8 border-b rounded-t-2xl border-border-base/5 flex justify-between items-center bg-bg-muted/50">
       <span :class="`text-sm font-bold text-accent-primary uppercase tracking-wider flex items-center gap-2`">
         <div :class="`w-1.5 h-1.5 rounded-full bg-accent-primary shadow-[0_0_8px_var(--color-accent-primary)]`"></div>
         备份
       </span>
-      <span :class="`text-xs bg-black/30 px-2 py-0.5 rounded text-accent-primary`">
+      <span :class="`text-xs bg-bg-inset/70 px-2 py-0.5 rounded text-accent-primary`">
         {{ dataCount.total }}
       </span>
     </div>
     <!-- 功能栏 -->
-    <div class="px-2 py-1 shadow-xl flex items-center justify-between gap-2 z-50" data-tour="backup-toolbar">
+    <div class="px-2 py-1 shadow-xl flex items-center justify-between gap-2 z-10" data-tour="backup-toolbar">
       <div>
         <HelpCircle v-tooltip="backupRulesTooltip" class="size-5 m-1 text-text-dim transition-colors duration-200 cursor-help hover:text-accent-primary"></HelpCircle>
       </div>
@@ -47,9 +41,9 @@
         :options="backupProfileOptions" @change="handleBackupProfileChange" />
       <div class="relative w-6 h-6 flex items-center justify-center">
         <div class="absolute top-0 overflow-visible gap-1 group text-sm font-medium flex flex-col items-center rtl:space-y-reverse">
-          <button class="group z-50 h-6 px-3 relative rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center tracking-wide transition-all duration-300 
-          text-text-dim/70 bg-accent-primary/1 
+          <button class="group z-10 h-6 px-3 relative rounded-md whitespace-nowrap cursor-pointer
+            inline-flex items-center self-center justify-center tracking-wide transition-all duration-300
+          text-text-dim bg-accent-primary/1
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20"
           @click="loadOrder('0')" v-tooltip="'导入加载序列（支持 ModsConfig.xml / ModList.xml / .rml / 存档.rws / RimPy XML / RimSort JSON / 文本列表 / Workshop ID 列表）'">
@@ -57,9 +51,9 @@
               <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M16 4h2a2 2 0 0 1 2 2v4"/><path d="M21 14H11"/><path d="m15 10-4 4 4 4"/></svg>
             </span>
           </button>
-          <button class="w-0 h-0 px-1 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-          text-text-dim/70 bg-accent-primary/1 
+          <button class="w-0 h-0 px-1 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer
+            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300
+          text-text-dim bg-accent-primary/1
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20
             group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
@@ -73,9 +67,9 @@
 
       <div class="relative w-6 h-6 flex items-center justify-center">
         <div class="absolute top-0 overflow-visible gap-1 group text-sm font-medium flex flex-col items-center rtl:space-y-reverse">
-          <button class="group z-50 h-6 px-3 relative rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center tracking-wide transition-all duration-300 
-          text-text-dim/70 bg-accent-primary/1 
+          <button class="group z-10 h-6 px-3 relative rounded-md whitespace-nowrap cursor-pointer
+            inline-flex items-center self-center justify-center tracking-wide transition-all duration-300
+          text-text-dim bg-accent-primary/1
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20"
           @click="exportOrder()" v-tooltip="'导出为 ModsConfig.xml（仅含包名）'">
@@ -83,9 +77,9 @@
               <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 14h10"/><path d="M16 4h2a2 2 0 0 1 2 2v1.344"/><path d="m17 18 4-4-4-4"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
             </span>
           </button>
-          <button class="w-0 h-0 px-1 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-          text-text-dim/70 bg-accent-primary/1 
+          <button class="w-0 h-0 px-1 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer
+            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300
+          text-text-dim bg-accent-primary/1
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20
             group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
@@ -94,9 +88,9 @@
               <svg class="size-5.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor"><path d="m648-140 112-112v92h40v-160H640v40h92L620-168l28 28Zm-448 20q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v268q-19-9-39-15.5t-41-9.5v-243H200v560h242q3 22 9.5 42t15.5 38H200Zm0-120v40-560 243-3 280Zm80-40h163q3-21 9.5-41t14.5-39H280v80Zm0-160h244q32-30 71.5-50t84.5-27v-3H280v80Zm0-160h400v-80H280v80ZM720-40q-83 0-141.5-58.5T520-240q0-83 58.5-141.5T720-440q83 0 141.5 58.5T920-240q0 83-58.5 141.5T720-40Z"/></svg>
             </span>
           </button>
-          <button class="w-0 h-0 px-1 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-          text-text-dim/70 bg-accent-primary/1 
+          <button class="w-0 h-0 px-1 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer
+            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300
+          text-text-dim bg-accent-primary/1
           hover:bg-accent-primary/30 hover:text-accent-primary hover:scale-110 active:scale-100
           group-hover:bg-accent-primary/10 group-hover:text-text-dim group-hover:shadow-2xl/20
             group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
@@ -107,12 +101,12 @@
           </button>
         </div>
       </div>
-      <button @click="orderStore.openBackupPath()" v-tooltip="'打开备份文件夹'" 
-        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 duration-300">
+      <button @click="orderStore.openBackupPath()" v-tooltip="'打开备份文件夹'"
+        class="rounded-lg hover:bg-bg-overlay/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 duration-300">
         <svg class="size-5"  xmlns="http://www.w3.org/2000/svg"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
       </button>
       <button @click="refresh()" v-tooltip="'刷新'"
-        class="rounded-lg hover:bg-text-main/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 duration-300">
+        class="rounded-lg hover:bg-bg-overlay/5 size-7 text-text-dim transition-colors cursor-pointer flex items-center justify-center hover:scale-110 active:scale-100 duration-300">
         <svg :class="{'spin-once-reverse': loading}" @animationend.self="loading = false" class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       </button>
       </div>
@@ -120,7 +114,7 @@
 
     <!-- 列表内容区 -->
     <div class="flex-1 overflow-y-auto p-2 space-y-4 scrollbar-thin" data-tour="backup-list">
-      
+
       <!-- 0. 临时导入 (import) -->
       <section v-if="parsedData.import.length > 0">
         <div class="px-2 mb-2 text-xs font-bold text-accent-warn uppercase opacity-80 flex items-center gap-2">
@@ -128,7 +122,7 @@
           <div class="h-px flex-1 bg-accent-warn/20"></div>
         </div>
         <div class="space-y-1">
-          <BackupItem v-for="item in parsedData.import" 
+          <BackupItem v-for="item in parsedData.import"
             :key="item.path" :item="item"
             :is-selected="selectedPath === item.path"
             @select="selectItem" @load="handleLoad" @remove="handleRemove"
@@ -156,8 +150,8 @@
           <div class="h-px flex-1 bg-accent-primary/20"></div>
         </div>
         <div class="space-y-1">
-          <BackupItem 
-            v-for="item in parsedData.today" 
+          <BackupItem
+            v-for="item in parsedData.today"
             :key="item.path"
             :item="item"
             :is-selected="selectedPath === item.path"
@@ -172,11 +166,11 @@
       <section v-if="parsedData.earlier.length > 0">
         <div class="px-2 mt-4 mb-2 text-xs font-bold text-text-dim uppercase opacity-60 flex items-center gap-2">
           <span>历史归档</span>
-          <div class="h-px flex-1 bg-text-main/5"></div>
+          <div class="h-px flex-1 bg-bg-overlay/5"></div>
         </div>
         <div class="space-y-1">
-          <BackupItem 
-            v-for="item in parsedData.earlier" 
+          <BackupItem
+            v-for="item in parsedData.earlier"
             :key="item.path"
             :item="item"
             :is-selected="selectedPath === item.path"
@@ -191,10 +185,10 @@
       <section v-if="parsedData.other.length > 0">
         <div class="px-2 mt-4 mb-2 text-xs font-bold text-text-dim uppercase opacity-60 flex items-center gap-2">
           <span>手动备份</span>
-          <div class="h-px flex-1 bg-text-main/5"></div>
+          <div class="h-px flex-1 bg-bg-overlay/5"></div>
         </div>
         <div class="space-y-1">
-          <BackupItem v-for="item in parsedData.other" 
+          <BackupItem v-for="item in parsedData.other"
             :key="item.path" :item="item"
             :is-selected="selectedPath === item.path"
             @select="selectItem"
@@ -205,7 +199,7 @@
       </section>
 
       <!-- 空状态 -->
-      <div v-if="isEmpty" class="flex flex-col items-center justify-center h-40 text-text-dim/40">
+      <div v-if="isEmpty" class="flex flex-col items-center justify-center h-40 text-text-disabled">
         <svg class="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         <span class="text-sm">暂无备份记录</span>
       </div>
@@ -225,95 +219,8 @@ import { parse, formatDistanceToNow, differenceInCalendarDays } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { Copy, HelpCircle, ClipboardPlus } from 'lucide-vue-next'
 import CommonSelect from './common/input/CommonSelect.vue'
+import BackupItem from './backup/BackupItem.vue'
 import { isBrowserRuntime as detectBrowserRuntime } from '../runtime/runtimeBridge'
-
-// --- 子组件：BackupItem ---
-const BackupItem = {
-  props: ['item', 'isSelected'],
-  emits: ['select', 'load', 'delete', 'remove', 'exportOrder'],
-  template: `
-    <div class="relative flex items-center py-1 px-2 rounded-lg border transition-all duration-200 cursor-pointer select-none"
-      :class="[isSelected ? 'bg-accent-primary/10 border-accent-primary/30 shadow-[inset_0_0_10px_rgba(var(--color-accent-rgb),0.1)]' : 'bg-text-main/[0.02] border-text-main/5 hover:bg-text-main/5 hover:border-text-main/10' ]"
-      @click="$emit('select', item)">
-      <!-- 中间信息 -->
-      <div class="flex-1 min-w-0 flex flex-col justify-center">
-        <!-- 距离时间/文件名 -->
-        
-        <div class="flex items-center gap-2">
-          <!-- 左侧图标 -->
-          <div v-if="!item.displayTitle" class="rounded-md px-1 py-0.5 w-17 flex items-center justify-center transition-colors text-[0.6rem] gap-0.5"
-            :class="isSelected ? 'bg-accent-primary/30 text-accent-primary' : 'bg-accent-primary/20 text-text-dim group-hover:text-text-main'">
-            <svg v-if="item.type === 'today'" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            <svg v-else-if="item.type === 'earlier'" class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
-            <svg v-else class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-            <span>{{ item.distanceNow }}</span>
-          </div>
-          <!-- 具体时间 -->
-          <div class="flex-1 text-[0.8rem] text-text-dim truncate font-mono mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
-            <span v-if="item.displayTitle" v-tooltip="item.displayTitle" class="text-sm font-medium truncate flex items-center gap-1" :class="isSelected ? 'text-text-main' : 'text-text-main'">
-              <svg class="w-3 h-3 min-w-4 min-h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-              {{ item.displayTitle }}
-              <span v-if="item.formatLabel" class="rounded bg-black/25 px-1.5 py-0.5 text-[0.7rem] font-bold uppercase tracking-wide text-accent-cool/80">
-                {{ item.formatLabel }}
-              </span>
-            </span>
-            <span >{{ item.displayTime }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 右侧操作 (Hover显示) -->
-      <div class="relative w-6 h-6 flex items-center justify-center">
-        <div class="absolute -right-2 mr-1 overflow-visible gap-1 group text-sm font-medium flex flex-row-reverse items-center rtl:space-x-reverse">
-          <button @click.stop="$emit('load',$event, item)" class="group z-50 h-6 px-3 relative rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-            text-text-dim/70 bg-accent-primary/10 
-            hover:bg-accent-primary/60 hover:text-text-main hover:scale-110 active:scale-100 
-            group-hover:bg-accent-primary/40 group-hover:text-text-dim group-hover:shadow-2xl/20"
-            v-tooltip="'加载文件'">
-            <span class="relative transition duration-300 only:-mx-6">
-              <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg>
-            </span>
-          </button>
-          <button v-if="item.type === 'import'" @click.stop="$emit('remove', item)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-            text-text-dim/70 bg-accent-danger/10 
-            hover:bg-accent-danger/60 hover:text-text-main hover:scale-110 active:scale-100
-            group-hover:bg-accent-danger/40 group-hover:text-text-dim group-hover:shadow-2xl/20
-            group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
-            v-tooltip="'从列表移除'">
-            <span class="relative only:-mx-6">
-              <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
-            </span>
-          </button>
-          <button v-else @click.stop="$emit('delete', $event, item)" class="w-0 h-0 px-1 translate-x-3 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-            text-text-dim/70 bg-accent-danger/10 
-            hover:bg-accent-danger/60 hover:text-text-main hover:scale-110 active:scale-100
-            group-hover:bg-accent-danger/40 group-hover:text-text-dim group-hover:shadow-2xl/20
-            group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
-            v-tooltip="'删除文件'">
-            <span class="relative only:-mx-6">
-              <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </span>
-          </button>
-          <!--<button @click.stop="$emit('exportOrder', item)" class="delay-[0.10s] w-0 h-0 px-1 translate-x-6 opacity-0 overflow-hidden rounded-md whitespace-nowrap cursor-pointer 
-            inline-flex items-center self-center justify-center justify-self-center tracking-wide transition-all duration-300 
-            text-text-dim/70 bg-accent-primary/10 
-            hover:bg-accent-primary/60 hover:text-text-main hover:scale-110 active:scale-100
-            group-hover:bg-accent-primary/40 group-hover:text-text-dim group-hover:shadow-2xl/20
-            group-hover:h-6 group-hover:w-6 group-hover:translate-x-0 group-hover:opacity-100"
-            v-tooltip="'另存为'">
-            <span class="relative only:-mx-6">
-              <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg>
-            </span>
-          </button>-->
-        </div>
-      </div>
-
-    </div>
-  `
-}
 
 const appStore = useAppStore()
 const orderStore = useOrderStore()
@@ -392,7 +299,7 @@ const parsedData = computed(() => {
     return files.map(file => { // file 是 path string
       const name = file.path.split(/[/\\]/).pop()
       const time = parseFileTime(name) || new Date(file.modify_time) || null
-      
+
       let displayTitle = file.list_name || ''
       let displayTime = '未知时间'
       let distanceNow = '未知时间'
@@ -414,9 +321,9 @@ const parsedData = computed(() => {
       if (time) {
         const now = new Date()
         // 生成 displayTime (具体时间)
-        displayTime = time.toLocaleString('zh-CN', { 
-          year: 'numeric', month: '2-digit', day: '2-digit', 
-          hour: '2-digit', minute: '2-digit', second: '2-digit' 
+        displayTime = time.toLocaleString('zh-CN', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
         })
 
         // 生成 displayTitle (相对时间)
@@ -471,9 +378,9 @@ const parsedData = computed(() => {
 })
 // 检查所有备份列表是否为空
 const isEmpty = computed(() => {
-  return parsedData.value.today.length === 0 && 
-          parsedData.value.earlier.length === 0 && 
-          parsedData.value.other.length === 0 && 
+  return parsedData.value.today.length === 0 &&
+          parsedData.value.earlier.length === 0 &&
+          parsedData.value.other.length === 0 &&
           parsedData.value.import.length === 0
 })
 

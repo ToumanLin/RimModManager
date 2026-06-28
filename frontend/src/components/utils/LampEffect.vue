@@ -1,5 +1,5 @@
 <template>
-  <div class="relative flex h-full min-h-100 w-full flex-col overflow-hidden bg-slate-950 rounded-md">
+  <div class="relative flex h-full min-h-100 w-full flex-col overflow-hidden bg-bg-deep rounded-md">
     
     <!-- 1. 上方空间 -->
     <div class="relative z-20 flex flex-col items-center justify-end ">
@@ -19,36 +19,35 @@
         <!-- 左侧光束 (Conic Gradient) -->
         <div
           :style="{ backgroundImage: `conic-gradient(var(--conic-position), var(--tw-gradient-stops))` }"
-          class="animate-conic-gradient absolute right-1/2 top-0 h-56 w-120 origin-top-right overflow-visible bg-linear-to-b from-cyan-500 via-transparent to-transparent text-text-main opacity-50 [--conic-position:from_70deg_at_center_top]"
+          class="animate-conic-gradient absolute right-1/2 top-0 h-56 w-120 origin-top-right overflow-visible bg-linear-to-b from-accent-primary via-transparent to-transparent text-text-main opacity-50 [--conic-position:from_70deg_at_center_top]"
         >
-          <div class="absolute bottom-0 left-0 z-20 h-40 w-full bg-slate-950 mask-[linear-gradient(to_top,white,transparent)]"></div>
-          <div class="absolute bottom-0 left-0 z-20 h-full w-40 bg-slate-950 mask-[linear-gradient(to_right,white,transparent)]"></div>
+          <div class="absolute bottom-0 left-0 z-20 h-40 w-full bg-bg-deep mask-[linear-gradient(to_top,white,transparent)]"></div>
+          <div class="absolute bottom-0 left-0 z-20 h-full w-40 bg-bg-deep mask-[linear-gradient(to_right,white,transparent)]"></div>
         </div>
 
         <!-- 右侧光束 (Conic Gradient) -->
         <div
           :style="{ backgroundImage: `conic-gradient(var(--conic-position), var(--tw-gradient-stops))` }"
-          class="animate-conic-gradient absolute left-1/2 top-0 h-56 w-120 origin-top-left bg-linear-to-b from-transparent via-transparent to-cyan-500 text-text-main opacity-50 [--conic-position:from_290deg_at_center_top]"
+          class="animate-conic-gradient absolute left-1/2 top-0 h-56 w-120 origin-top-left bg-linear-to-b from-transparent via-transparent to-accent-primary text-text-main opacity-50 [--conic-position:from_290deg_at_center_top]"
         >
-          <div class="absolute bottom-0 right-0 z-20 h-full w-40 bg-slate-950 mask-[linear-gradient(to_left,white,transparent)]"></div>
-          <div class="absolute bottom-0 right-0 z-20 h-40 w-full bg-slate-950 mask-[linear-gradient(to_top,white,transparent)]"></div>
+          <div class="absolute bottom-0 right-0 z-20 h-full w-40 bg-bg-deep mask-[linear-gradient(to_left,white,transparent)]"></div>
+          <div class="absolute bottom-0 right-0 z-20 h-40 w-full bg-bg-deep mask-[linear-gradient(to_top,white,transparent)]"></div>
         </div>
 
         <!-- 背景模糊与遮罩 -->
-        <div class="absolute top-0 h-48 w-full scale-x-150 bg-slate-950 blur-2xl"></div>
+        <div class="absolute top-0 h-48 w-full scale-x-150 bg-bg-deep blur-2xl"></div>
         <div class="absolute top-0 z-50 h-48 w-full bg-transparent opacity-10 backdrop-blur-md"></div>
         
         <!-- 中心高亮光晕 (Spotlight) -->
-        <div class="absolute animate-glowing-linelight top-0 z-50 h-36 w-full max-w-md -translate-y-1/2 rounded-full bg-cyan-500 opacity-50 blur-3xl"></div>
+        <div class="absolute animate-glowing-linelight top-0 z-50 h-36 w-full max-w-md -translate-y-1/2 rounded-full bg-accent-primary opacity-50 blur-3xl"></div>
         
-        <!-- 动态聚光灯 (Small Spotlight) -->
-        <!-- <div class="animate-spotlight absolute top-0 z-30 h-36 w-32 -translate-y-[6rem] rounded-full bg-cyan-400 blur-2xl"></div> -->
+        <!-- 动态聚光灯 -->
         <div class="absolute top-0 z-30 flex w-full justify-center overflow-hidden pointer-events-none">
-          <div class="animate-spotlight h-70 w-2/5 -translate-y-1/2 rounded-full bg-cyan-400 blur-2xl"></div>
+          <div class="animate-spotlight h-70 w-2/5 -translate-y-1/2 rounded-full bg-accent-primary blur-2xl"></div>
         </div>
         <!-- 发光线条 (The Glowing Line) - 也就是界限 -->
         <!-- translate-y-[-1px] 确保它在分界线正中心 -->
-        <div class="animate-glowing-line absolute top-0 z-50 h-0.5 w-120 -translate-y-px bg-cyan-400 shadow-[0_0_20px_2px_rgba(34,211,238,0.6)]"></div>
+        <div class="animate-glowing-line absolute top-0 z-50 h-0.5 w-120 -translate-y-px bg-accent-primary shadow-[0_0_20px_2px_rgba(var(--rgb-accent-primary),0.6)]"></div>
       </div>
     </div>
 

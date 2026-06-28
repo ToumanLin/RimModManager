@@ -16,11 +16,7 @@ class ModConfigManager:
     OFFICIAL_SUFFIX = ".xml"
 
     @classmethod
-    def get_overview(
-        cls,
-        context: ProfileContext | None,
-        active_tokens: list[str] | None = None,
-    ) -> dict[str, Any]:
+    def get_overview( cls, context: ProfileContext | None, active_tokens: list[str] | None = None) -> dict[str, Any]:
         if not context:
             raise ValueError("环境配置上下文缺失")
 

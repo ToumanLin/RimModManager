@@ -17,12 +17,12 @@
       <div class="relative flex-1 h-9 input-glass overflow-hidden flex items-center px-3 cursor-help min-w-0" v-tooltip="checkMsg || (modelValue || '未配置路径')" 
         :class="[ checkClassStyle ]">
         <!-- 固定前缀标签 -->
-        <div class="shrink-0 mr-2 text-text-dim/40 italic text-xs font-mono uppercase select-none">Path</div>
+        <div class="shrink-0 mr-2 text-text-disabled italic text-xs font-mono uppercase select-none">Path</div>
         
         <!-- 手动输入框 -->
         <input type="text" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)"
           :placeholder="placeholder || '请输入或粘贴路径...'"
-          class="flex-1 bg-transparent text-sm text-text-main/90 font-mono outline-none min-w-0 "
+          class="flex-1 bg-transparent text-sm text-text-soft font-mono outline-none min-w-0 "
           :class="{ 'direction-rtl': !isFocused }"
           @focus="isFocused = true" @blur="isFocused = false; $emit('blur')"
         />
@@ -30,7 +30,7 @@
         <!-- 路径状态指示灯 -->
         <div class="shrink-0 size-1 rounded-full ml-2 transition-all duration-500"
           :class="[
-            modelValue ? 'bg-accent-success shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-accent-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]',
+            modelValue ? 'bg-accent-success shadow-[0_0_8px_rgba(var(--rgb-accent-success),0.5)]' : 'bg-accent-danger shadow-[0_0_8px_rgba(var(--rgb-accent-danger),0.5)]',
             modelValue ? 'opacity-100' : 'opacity-40 animate-pulse'
           ]"
           v-tooltip="modelValue ? '已填写路径' : '路径为空，可能导致功能失效'"
@@ -39,7 +39,7 @@
 
       <!-- 浏览按钮 -->
       <button v-if="!readOnly" @click="$emit('browse')"
-        class="shrink-0 h-9 w-9 flex items-center justify-center bg-accent-primary/10 border border-accent-primary/30 rounded-lg text-accent-primary hover:bg-accent-primary hover:text-black transition-all duration-300 active:scale-90 shadow-lg"
+        class="input-addon-button flex h-9 w-9 items-center justify-center rounded-lg active:scale-90"
         v-tooltip="'通过文件浏览器选择'"
       >
         <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

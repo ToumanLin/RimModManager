@@ -1,21 +1,17 @@
 <template>
-  <transition name="panel-fade">
-    <div
-      v-if="appStore.uiState.showTextureOptModal"
-      class="fixed inset-0 z-100 flex items-center justify-center bg-bg-deep/70 backdrop-blur-md"
-      @click.self="closeModal"
-    >
-      <div data-tour="texture-opt-modal" class="flex h-[92vh] w-[92vw] max-w-screen-2xl flex-col overflow-hidden rounded-2xl border border-text-main/10 bg-bg-deep/95 shadow-2xl">
-        <header class="shrink-0 border-b border-text-main/5 bg-[linear-gradient(135deg,rgba(15,23,42,0.88),rgba(2,6,23,0.96))] px-6 py-2">
+  <CommonModalShell :show="appStore.uiState.showTextureOptModal" :show-header="false" size="custom" :z-index="100" accent="highlight" panel-class="h-[92vh] w-[92vw] max-w-screen-2xl" content-class="h-full flex flex-col"
+    @close="closeModal" >
+      <div data-tour="texture-opt-modal" class="flex h-full w-full flex-col overflow-hidden">
+        <header class="shrink-0 border-b border-border-base/5 bg-[linear-gradient(135deg,rgba(var(--rgb-bg-deep),0.88),rgba(var(--rgb-bg-inset),0.96))] px-6 py-2">
           <div class="flex items-center justify-between">
 
             <h2 data-tour="texture-opt-title" class="shrink-0 flex items-center gap-3 min-w-0 text-2xl font-black tracking-wider text-text-main">
               <Images class="w-6 h-6 text-accent-highlight" />
               <span>贴图优化</span>
-              <span v-tooltip="textureOptHelpText" class="inline-flex size-5 cursor-help items-center justify-center text-lg font-bold text-text-dim hover:text-text-main hover:border-text-main/30">?</span>
+              <span v-tooltip="textureOptHelpText" class="inline-flex size-5 cursor-help items-center justify-center text-lg font-bold text-text-dim hover:text-text-main hover:border-border-base/18">?</span>
             </h2>
 
-            <div data-tour="texture-opt-summary" class="mx-5 min-w-0 flex-1 rounded-xl border border-text-main/6 bg-black/18 px-4 py-2 text-xs">
+            <div data-tour="texture-opt-summary" class="bg-bg-surface/80 mx-5 min-w-0 flex-1 rounded-xl px-4 py-2 text-xs">
               <div class="grid grid-cols-4 gap-x-4 gap-y-2">
                 <div class="min-w-0">
                   <span class="text-accent-tip/80">PNG</span>
@@ -64,7 +60,7 @@
             </div>
 
             <div class="flex justify-end">
-              <button @click="closeModal" class="p-2 rounded-full text-text-dim hover:text-text-main hover:bg-red-500/20 transition-colors">
+              <button @click="closeModal" class="modal-close-button" aria-label="关闭">
                 <X class="w-5 h-5" />
               </button>
             </div>
@@ -73,49 +69,44 @@
         </header>
 
         <div class="relative flex flex-1 min-h-0">
-          <section class="flex min-w-0 flex-1 flex-col border-r border-text-main/5">
-            <div data-tour="texture-opt-list-toolbar" class="shrink-0 border-b border-text-main/5 bg-black/20 px-6 py-3">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-5">
-                  <div class="flex items-center gap-1 rounded-lg bg-text-main/5 p-1">
-                    <button v-for="mode in ['ALL', 'PNG', 'DDS']" :key="mode" @click="textureStore.viewMode = mode" class="px-3 py-1 rounded-md text-xs font-bold transition-all"
-                      :class="textureStore.viewMode === mode ? 'bg-text-main/15 text-text-main shadow-sm' : 'text-text-dim hover:text-text-main'" >
-                      {{ mode === 'ALL' ? '综合视图' : (mode === 'PNG' ? '仅看 PNG' : '仅看 DDS') }}
-                    </button>
-                  </div>
-                  <button class="rounded-lg border border-text-main/10 bg-text-main/5 px-3 py-2 text-xs font-bold text-text-dim transition-colors hover:text-text-main"
-                    @click="textureStore.isResultDrawerOpen = !textureStore.isResultDrawerOpen" >
-                    {{ textureStore.isResultDrawerOpen ? '隐藏结果面板' : '显示结果面板' }}
+          <section class="flex min-w-0 flex-1 flex-col border-r border-border-base/5">
+            <div data-tour="texture-opt-list-toolbar" class="toolbar-surface shrink-0 px-6 py-3">
+              <div class="flex items-center gap-2">
+
+                <div class="flex items-center gap-1 rounded-lg bg-bg-overlay/5 p-1">
+                  <button v-for="mode in ['ALL', 'PNG', 'DDS']" :key="mode" @click="textureStore.viewMode = mode" class="px-3 py-1 rounded-md text-xs font-bold transition-all"
+                    :class="textureStore.viewMode === mode ? 'bg-bg-overlay/10 text-text-main shadow-sm' : 'text-text-dim hover:text-text-main'" >
+                    {{ mode === 'ALL' ? '综合视图' : (mode === 'PNG' ? '仅看 PNG' : '仅看 DDS') }}
                   </button>
-
                 </div>
+                <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 px-1 py-2 text-xs font-bold text-text-dim transition-colors hover:text-text-main"
+                  @click="textureStore.isResultDrawerOpen = !textureStore.isResultDrawerOpen" >
+                  {{ textureStore.isResultDrawerOpen ? '隐藏结果面板' : '显示结果面板' }}
+                </button>
 
-                <div class="flex flex-wrap items-center gap-3">
-                  <div class="flex items-center gap-2 rounded-lg border border-text-main/10 bg-black/20 px-3 py-2">
-                    <Search class="w-4 h-4 text-text-dim" />
-                    <input v-model.trim="searchQuery" type="text" class="w-44 bg-transparent text-xs text-text-main outline-none"
-                      placeholder="筛选模组名称或路径" >
-                  </div>
-                  <CommonSelect class="w-44" v-model="sortMetric" :options="sortOptions" />
-                  <div class="text-xs italic text-text-dim">共 {{ displayRows.length }} 个结果</div>
+                <div class="input-glass flex items-center gap-1 px-2 py-2.5 min-w-0">
+                  <Search class="w-4 h-4 text-text-dim" />
+                  <input v-model.trim="searchQuery" type="text" class="flex-1 min-w-0 bg-transparent text-xs text-text-main outline-none"
+                    placeholder="筛选模组名称或路径" >
                 </div>
+                <CommonSelect class="w-44" v-model="sortMetric" :options="sortOptions" />
+                <div class="text-xs italic text-text-dim shrink-0">共 {{ displayRows.length }} 个结果</div>
               </div>
+
             </div>
 
-            <div data-tour="texture-opt-list" class="relative min-h-0 flex-1 overflow-hidden bg-black/10">
-              <div v-if="displayRows.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-text-dim/50" >
+            <!-- 结果列表 -->
+            <div data-tour="texture-opt-list" class=" relative min-h-0 flex-1 overflow-hidden">
+              <div v-if="displayRows.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-text-disabled" >
                 <Inbox class="mb-4 w-16 h-16 opacity-50" />
                 <p>暂无数据，请先扫描统计或直接开始生成。</p>
               </div>
 
               <DynamicScroller v-else :items="displayRows" :min-item-size="textureListMinItemSize" key-field="mod_instance_key"
-                class="h-full min-h-0 custom-scrollbar px-3 py-2" v-slot="{ item, index, active }" >
+                class="h-full min-h-0 px-3 py-2" v-slot="{ item, index, active }" >
                 <DynamicScrollerItem :item="item" :active="active" :data-index="index" :size-dependencies="getRowSizeDependencies(item)" >
                     <div class="pb-1">
-                    <TextureModCard
-                      :mod="item"
-                      :view-mode="textureStore.viewMode"
-                      :max-bytes="maxBytesInCurrentView"
+                    <TextureModCard :mod="item" :view-mode="textureStore.viewMode" :max-bytes="maxBytesInCurrentView"
                       :is-excluded="textureStore.isModExcluded(item.package_id)"
                       @toggle-mod-exclusion="handleToggleModExclusion"
                     />
@@ -124,11 +115,12 @@
               </DynamicScroller>
             </div>
 
-            <footer class="min-h-16 shrink-0 border-t border-text-main/5 bg-black/40 px-6 py-3">
+            <!-- 状态栏 -->
+            <footer class="min-h-16 shrink-0 border-t border-border-base/5 bg-bg-inset/80 px-6 py-3">
               <div v-if="showProgressBlock" class="space-y-2">
                 <div class="flex items-center gap-3">
                   <component :is="progressStatusIcon" class="w-4 h-4 shrink-0" :class="progressStatusIconClass" />
-                  <div class="min-w-0 flex-1 overflow-hidden rounded-full bg-text-main/10 h-2">
+                  <div class="min-w-0 flex-1 overflow-hidden rounded-full bg-bg-overlay/10 h-2">
                     <div class="h-full transition-all duration-300" :class="progressBarClass" :style="{ width: `${progressDisplayPercent}%` }"></div>
                   </div>
                   <span class="shrink-0 text-xs font-mono" :class="progressPercentClass">{{ progressDisplayPercent }}%</span>
@@ -151,6 +143,7 @@
             </footer>
           </section>
 
+          <!-- 选项面板 -->
           <aside class="flex w-96 shrink-0 flex-col bg-bg-surface">
             <div data-tour="texture-opt-options"  class="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-4">
               <div class="space-y-2">
@@ -162,11 +155,11 @@
                 </div>
 
                 <button v-if="!toolStatus.available && !isBusy" @click="textureStore.downloadTool()"
-                  class="w-full rounded-xl bg-text-main/10 py-2 text-sm font-bold transition-colors hover:bg-text-main/20" >
+                  class="w-full rounded-xl bg-bg-overlay/10 py-2 text-sm font-bold transition-colors hover:bg-bg-overlay/10" >
                   下载 todds
                 </button>
 
-                <section class="space-y-3 rounded-xl border border-text-main/8 bg-black/12 p-3">
+                <section class="modal-section space-y-3 p-3">
                   <h3 class="text-xs font-black uppercase tracking-widest text-text-main">处理范围</h3>
                   <CommonSelect v-model="targetScope"
                     :options="[
@@ -176,10 +169,8 @@
                   />
                 </section>
 
-                <section class="space-y-2 rounded-xl border border-text-main/8 bg-black/12 p-3">
+                <section class="modal-section space-y-2 p-3">
                   <h3 class="text-xs font-black uppercase tracking-widest text-text-main">生成选项</h3>
-                  <CommonSwitch label="生成 Mipmap" description="Mipmap 是给远距离显示准备的缩小层级。开启后远看更平滑、闪烁更少，但生成时间和文件体积会增加一些。" v-model="config.generate_mipmaps"
-                    @change="saveConfig" mini />
                   <CommonSelect label="生成范围" v-model="config.process_mode" @change="saveConfig"
                     description="决定这次是全量重做、只补缺失结果，还是只更新可缩放的图片。"
                     :options="[
@@ -188,21 +179,16 @@
                       { label: '只生成压缩贴图（覆盖）', value: 'scaled_only_overwrite' }
                     ]"
                   />
+                  <CommonSwitch label="生成 Mipmap" description="Mipmap 是给远距离显示准备的缩小层级。开启后远看更平滑、闪烁更少，但生成时间和文件体积会增加一些。" v-model="config.generate_mipmaps"
+                    @change="saveConfig" mini />
                 </section>
 
-                <section class="space-y-3 rounded-xl border border-text-main/8 bg-black/12 p-3">
-                  <h3 class="text-xs font-black uppercase tracking-widest text-text-main">缩放降显存</h3>
-                  <CommonSelect label="最小清晰度" v-model.number="config.max_size" @change="saveConfig"
-                    description="缩放时会尽量保证最短边不低于这个目标，避免图片被压得过小。"
-                    :options="[
-                      { label: '256 px', value: 256 },
-                      { label: '128 px', value: 128 }
-                    ]"
-                  />
+                <section class="modal-section space-y-3 p-3">
+                  <h3 class="text-xs font-black uppercase tracking-widest text-text-main">缩放贴图节省显存</h3>
                   <CommonSelect label="缩放比例" v-model.number="config.scale_factor" @change="saveConfig"
                     description="优先按当前比例处理；如果某些图片不适合这个比例，会自动回退到更稳妥的比例，必要时保持原尺寸。"
                     :options="[
-                      { label: '100%', value: 1.0 },
+                      { label: '不压缩', value: 1.0 },
                       { label: '80%', value: 0.8 },
                       { label: '75%', value: 0.75 },
                       { label: '60%', value: 0.6 },
@@ -212,20 +198,29 @@
                       { label: '20%', value: 0.2 }
                     ]"
                   />
+                  <CommonSelect label="最小清晰度" v-model.number="config.max_size" @change="saveConfig"
+                    :disabled="isNoCompressionMode"
+                    :description="maxSizeDescription"
+                    :options="[
+                      { label: '256 px', value: 256 },
+                      { label: '128 px', value: 128 }
+                    ]"
+                  />
                   <CommonSwitch label="超范围图片不参与缩放" description="太小或太大的图片仍会生成 DDS，但会保留原尺寸，不参与缩放比例计算。"
                     v-model="config.skip_small_textures" @change="saveConfig" mini />
                 </section>
 
-                <section class="space-y-2 rounded-xl border border-text-main/8 bg-black/12 p-3">
+                <section class="modal-section space-y-2 p-3">
                   <h3 class="text-xs font-black uppercase tracking-widest text-text-main">清理说明</h3>
-                  <div class="rounded-lg border border-text-main/10 bg-black/20 px-3 py-2 text-xs text-text-dim">
+                  <div class=" text-xs text-text-dim">
                     清理功能会删除当前选中范围内，存在同名 PNG 源图的 DDS 文件，即所有已生成的 DDS 文件，不清理独立DDS文件。
                   </div>
                 </section>
               </div>
             </div>
 
-            <div class="shrink-0 border-t border-text-main/5 bg-black/20 p-4">
+            <!-- 操作按钮 -->
+            <div class="modal-footer shrink-0 p-4">
               <div data-tour="texture-opt-actions" class="space-y-2">
                 <div class="flex gap-2">
                   <button data-tour="texture-opt-analyze" @click="handleAnalyze" :disabled="isBusy"
@@ -239,35 +234,32 @@
                 </div>
 
                 <button v-if="!isBusy" data-tour="texture-opt-generate" @click="handleOptimize" :disabled="!toolStatus.available"
-                  class="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-primary py-3 font-black text-black shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
+                  class="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-primary py-3 font-black text-on-accent-primary shadow-[0_0_15px_rgba(var(--rgb-accent-cool),0.3)] transition-all hover:scale-102 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
                   <Rocket class="w-5 h-5" /> {{ processModeLabel }}
                 </button>
 
-
-                <button v-else @click="handleCancel" class="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-danger py-3 font-black text-white shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all hover:scale-102 active:scale-95 cursor-pointer">
+                <button v-else @click="handleCancel" class="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-danger py-3 font-black text-on-accent-danger shadow-[0_0_15px_rgba(var(--rgb-accent-danger),0.3)] transition-all hover:scale-102 active:scale-95 cursor-pointer">
                   <Ban class="w-5 h-5" /> 停止当前任务
                 </button>
               </div>
             </div>
           </aside>
 
+          <!-- 结果面板 -->
           <transition name="panel-slide">
-            <aside
-              v-if="textureStore.isResultDrawerOpen"
-              class="absolute inset-y-0 right-0 z-20 flex w-[28rem] flex-col border-l border-text-main/10 bg-[linear-gradient(180deg,rgba(2,6,23,0.98),rgba(15,23,42,0.98))] shadow-2xl"
-            >
-              <div class="flex items-center justify-between border-b border-text-main/10 px-4 py-3">
+            <aside v-if="textureStore.isResultDrawerOpen" class="absolute inset-y-0 right-0 z-20 flex w-md flex-col border-l border-border-base/10 bg-[linear-gradient(180deg,rgba(var(--rgb-bg-inset),0.98),rgba(var(--rgb-bg-deep),0.98))] shadow-2xl" >
+              <div class="flex items-center justify-between border-b border-border-base/10 px-4 py-3">
                 <div>
                   <div class="text-sm font-black tracking-wider text-text-main">结果面板</div>
                   <div class="text-xs text-text-dim">当前任务、最近 3 次生成历史和排除规则</div>
                 </div>
-                <button class="rounded-lg p-1.5 text-text-dim hover:bg-text-main/10 hover:text-text-main" @click="textureStore.isResultDrawerOpen = false">
+                <button class="rounded-lg p-1.5 text-text-dim hover:bg-bg-overlay/10 hover:text-text-main" @click="textureStore.isResultDrawerOpen = false">
                   <X class="w-4 h-4" />
                 </button>
               </div>
 
               <div class="flex-1 space-y-4 overflow-y-auto custom-scrollbar p-4 text-xs">
-                <section class="space-y-2 rounded-xl border border-text-main/8 bg-black/20 p-3">
+                <section class="modal-section space-y-2 p-3">
                   <h3 class="font-black uppercase tracking-widest text-text-main">当前状态</h3>
                   <div class="text-text-dim">{{ progressFullMessage }}</div>
                   <div class="flex items-center gap-3 text-text-dim">
@@ -276,14 +268,14 @@
                   </div>
                 </section>
 
-                <section class="space-y-2 rounded-xl border border-text-main/8 bg-black/20 p-3">
+                <section class="modal-section space-y-2 p-3">
                   <div class="flex items-center justify-between gap-2">
                     <h3 class="font-black uppercase tracking-widest text-text-main">最近结果</h3>
                     <button class="text-text-dim hover:text-text-main" @click="textureStore.loadResultHistory()">刷新</button>
                   </div>
                   <div v-if="resultHistory.length === 0" class="text-text-dim">暂无历史结果</div>
                   <button v-for="item in resultHistory" :key="item.result_path" class="w-full rounded-lg border px-3 py-2 text-left transition-colors"
-                    :class="textureStore.selectedResultPath === item.result_path ? 'border-accent-primary/30 bg-accent-primary/10 text-text-main' : 'border-text-main/10 bg-text-main/5 text-text-dim hover:text-text-main'"
+                    :class="textureStore.selectedResultPath === item.result_path ? 'border-accent-primary/30 bg-accent-primary/10 text-text-main' : 'border-border-base/10 bg-bg-overlay/5 text-text-dim hover:text-text-main'"
                     @click="textureStore.selectedResultPath = item.result_path" >
                     <div class="flex items-center justify-between gap-3">
                       <span class="font-bold">{{ item.action === 'clean_generated' ? '清理任务' : '生成任务' }}</span>
@@ -295,28 +287,28 @@
                   </button>
                 </section>
 
-                <section class="space-y-2 rounded-xl border border-text-main/8 bg-black/20 p-3">
+                <section class="modal-section space-y-2 p-3">
                   <div class="flex items-center justify-between gap-2">
                     <h3 class="font-black uppercase tracking-widest text-text-main">失败项</h3>
                     <input v-model.trim="failedSearchQuery" type="text" placeholder="筛选失败项"
-                      class="w-40 rounded-lg border border-text-main/10 bg-black/20 px-2 py-1 text-xs text-text-main outline-none" >
+                      class="input-glass w-40 px-2 py-1 text-xs text-text-main outline-none" >
                   </div>
                   <div v-if="filteredFailedItems.length === 0" class="text-text-dim">当前结果没有失败项</div>
-                  <div v-for="item in filteredFailedItems" :key="`${item.mod_path}-${item.rel_path}-${item.error}`" class="rounded-lg border border-text-main/10 bg-black/20 p-2">
+                  <div v-for="item in filteredFailedItems" :key="`${item.mod_path}-${item.rel_path}-${item.error}`" class="modal-section-subtle p-2">
                     <div class="font-bold text-text-main">{{ item.mod_name || item.package_id || '未知模组' }}</div>
                     <div class="mt-1 break-all font-mono text-text-dim">{{ item.rel_path }}</div>
                     <div class="mt-1 text-accent-warning">{{ item.error }}</div>
                     <div class="mt-2 flex justify-end gap-2">
-                      <button class="rounded-lg border border-text-main/10 bg-text-main/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
+                      <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
                         @click="handleOpenTextureFile(item)" v-tooltip="'打开文件'" >
                         <FileText class="w-4 h-4" />
                       </button>
-                      <button class="rounded-lg border border-text-main/10 bg-text-main/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
+                      <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
                         @click="handleOpenTextureFolder(item)" v-tooltip="'打开所在目录'" >
                         <FolderOpen class="w-4 h-4" />
                       </button>
                       <button v-if="getFailedItemLogPath(item)" v-tooltip="'打开 todds 日志'"
-                        class="rounded-lg border border-text-main/10 bg-text-main/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
+                        class="rounded-lg border border-border-base/10 bg-bg-overlay/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
                         @click="handleOpenToddsLog(item)" >
                         <ScrollText class="w-4 h-4" />
                       </button>
@@ -329,22 +321,22 @@
                   </div>
                 </section>
 
-                <section class="space-y-2 rounded-xl border border-text-main/8 bg-black/20 p-3">
+                <section class="modal-section space-y-2 p-3">
                   <div class="flex items-center justify-between gap-2">
                     <h3 class="font-black uppercase tracking-widest text-text-main">模组排除</h3>
                     <input v-model.trim="excludeModQuery" type="text" placeholder="筛选已排除"
-                      class="w-40 rounded-lg border border-text-main/10 bg-black/20 px-2 py-1 text-xs text-text-main outline-none" >
+                      class="input-glass w-40 px-2 py-1 text-xs text-text-main outline-none" >
                   </div>
                   <div v-if="filteredExcludedModRows.length === 0" class="text-text-dim">
                     {{ excludedModRows.length === 0 ? '暂无模组排除' : '没有匹配的已排除模组' }}
                   </div>
                   <div class="max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
                     <div v-for="item in filteredExcludedModRows" :key="item.package_id"
-                      class="flex items-center justify-between gap-3 rounded-lg border border-text-main/10 bg-black/20 px-2 py-2" >
+                      class="modal-section-subtle flex items-center justify-between gap-3 px-2 py-2" >
                       <div class="min-w-0">
                         <div class="truncate font-bold text-text-main">{{ item.mod_name }}</div>
                         <div class="truncate font-mono text-text-dim">{{ item.package_id }}</div>
-                        <div v-if="item.mod_path" class="truncate text-[11px] text-text-dim/70">{{ item.mod_path }}</div>
+                        <div v-if="item.mod_path" class="truncate text-[11px] text-text-dim">{{ item.mod_path }}</div>
                       </div>
                       <button class="shrink-0 rounded-lg border border-accent-danger/20 bg-accent-danger/10 p-1.5 text-accent-danger transition-colors hover:bg-accent-danger/20"
                         @click="handleRemoveModExclusion(item)" v-tooltip="'移除模组排除'" >
@@ -354,17 +346,17 @@
                   </div>
                 </section>
 
-                <section class="space-y-2 rounded-xl border border-text-main/8 bg-black/20 p-3">
+                <section class="modal-section space-y-2 p-3">
                   <div class="flex items-center justify-between gap-2">
                     <h3 class="font-black uppercase tracking-widest text-text-main">文件排除</h3>
                     <input v-model.trim="excludeFileQuery" type="text" placeholder="筛选已排除"
-                      class="w-40 rounded-lg border border-text-main/10 bg-black/20 px-2 py-1 text-xs text-text-main outline-none" >
+                      class="input-glass w-40 px-2 py-1 text-xs text-text-main outline-none" >
                   </div>
                   <div class="flex gap-2">
                     <textarea v-model.trim="pathExclusionInput" rows="2" placeholder="粘贴完整文件路径，可多行"
-                      class="min-h-12 flex-1 resize-none rounded-lg border border-text-main/10 bg-black/20 px-2 py-1 text-xs text-text-main outline-none" >
+                      class="input-glass min-h-12 flex-1 resize-none px-2 py-1 text-xs text-text-main outline-none" >
                     </textarea>
-                    <button class="inline-flex items-center gap-1 rounded-lg border border-text-main/10 bg-text-main/5 px-3 py-1 font-bold text-text-dim hover:text-text-main" @click="handleAddPathExclusion">
+                    <button class="inline-flex items-center gap-1 rounded-lg border border-border-base/10 bg-bg-overlay/5 px-3 py-1 font-bold text-text-dim hover:text-text-main" @click="handleAddPathExclusion">
                       <Plus class="w-3.5 h-3.5" />
                       识别
                     </button>
@@ -372,16 +364,16 @@
                   <div v-if="filteredFileExclusionRows.length === 0" class="text-text-dim">
                     {{ fileExclusionRows.length === 0 ? '暂无文件排除' : '没有匹配的已排除文件' }}
                   </div>
-                  <div v-for="item in filteredFileExclusionRows" :key="`${item.mod_path}:${item.rel_path}`" class="rounded-lg border border-text-main/10 bg-black/20 p-2">
+                  <div v-for="item in filteredFileExclusionRows" :key="`${item.mod_path}:${item.rel_path}`" class="modal-section-subtle p-2">
                     <div class="font-bold text-text-main">{{ item.mod_name }}</div>
                     <div class="mt-1 break-all font-mono text-text-main">{{ item.rel_path }}</div>
                     <div class="mt-1 break-all text-text-dim">{{ item.mod_path }}</div>
                     <div class="mt-2 flex justify-end gap-2">
-                      <button class="rounded-lg border border-text-main/10 bg-text-main/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
+                      <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
                         @click="handleOpenTextureFile(item)" v-tooltip="'打开文件'" >
                         <FileText class="w-4 h-4" />
                       </button>
-                      <button class="rounded-lg border border-text-main/10 bg-text-main/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
+                      <button class="rounded-lg border border-border-base/10 bg-bg-overlay/5 p-1.5 text-text-dim transition-colors hover:text-text-main"
                         @click="handleOpenTextureFolder(item)" v-tooltip="'打开所在目录'" >
                         <FolderOpen class="w-4 h-4" />
                       </button>
@@ -397,8 +389,7 @@
           </transition>
         </div>
       </div>
-    </div>
-  </transition>
+  </CommonModalShell>
 </template>
 
 <script setup>
@@ -411,6 +402,7 @@ import { useTextureStore } from '../stores/textureStore'
 import { useModStore } from '../stores/modStore'
 import CommonSwitch from './common/input/CommonSwitch.vue'
 import CommonSelect from './common/input/CommonSelect.vue'
+import CommonModalShell from './common/CommonModalShell.vue'
 import TextureModCard from './utils/TextureModCard.vue'
 import { formatFileSize } from '../utils/format'
 import { toast } from '../utils/common'
@@ -424,6 +416,12 @@ const summary = computed(() => textureStore.globalSummary || {})
 const progressState = computed(() => textureStore.progressState)
 const toolStatus = computed(() => textureStore.toolStatus)
 const isBusy = computed(() => textureStore.isAnalyzing || textureStore.isOptimizing)
+const isNoCompressionMode = computed(() => Math.abs(Number(config.value?.scale_factor || 1) - 1) <= 1e-6)
+const maxSizeDescription = computed(() => (
+  isNoCompressionMode.value
+    ? '当前为不压缩，最小清晰度不会参与处理。'
+    : '缩放时会尽量保证最短边不低于这个目标，避免图片被压得过小。'
+))
 const resultHistory = computed(() => textureStore.resultHistory)
 const textureExclusions = computed(() => textureStore.textureExclusions)
 const now = useNow({ interval: 1000 })
@@ -907,16 +905,6 @@ function formatDateTime(value) {
 </script>
 
 <style scoped>
-.panel-fade-enter-active,
-.panel-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.panel-fade-enter-from,
-.panel-fade-leave-to {
-  opacity: 0;
-}
-
 .panel-slide-enter-active,
 .panel-slide-leave-active {
   transition: transform 0.25s ease, opacity 0.25s ease;
@@ -933,7 +921,7 @@ function formatDateTime(value) {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-border-strong);
   border-radius: 10px;
 }
 

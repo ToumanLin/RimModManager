@@ -74,6 +74,7 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
   const workspaceStore = useWorkspaceStore()
 
   const isVisible = ref(false)
+  const pendingAction = ref('')
   const selections = reactive({})
   const choiceSelections = reactive({})
   const cachedAnalysis = ref({
@@ -106,6 +107,7 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
   const selectedRows = computed(() => visibleRows.value.filter(row => !!selections[row.id]))
   const selectedCount = computed(() => selectedRows.value.length)
   const totalCount = computed(() => visibleRows.value.length)
+  const isActionPending = computed(() => !!pendingAction.value)
   const currentGameVersion = computed(() => normalizeVersion(profileStore.activeContext?.game_version))
 
   const isExcludedPackageId = (packageId = '') => (
@@ -605,6 +607,7 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
 
   const resetState = () => {
     isVisible.value = false
+    pendingAction.value = ''
     state.title = '缺失项安装管理'
     state.message = '处理未安装模组。'
     state.cancelText = '取消'
@@ -696,11 +699,15 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
   }
 
   const close = (result = false) => {
+    if (isActionPending.value) return false
     finalizeDialog(result)
+    return true
   }
 
   const continueCurrentAction = () => {
+    if (isActionPending.value) return false
     finalizeDialog(!!state.continueResult)
+    return true
   }
 
   const toggleRow = (rowId, checked) => {
@@ -808,7 +815,8 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
     })
   }
 
-  const executeSelectedAction = async (executor, emptyMessage) => {
+  const executeSelectedAction = async (executor, emptyMessage, actionType = '') => {
+    if (isActionPending.value) return false
     const sources = getSelectedSources()
     const hasReplacementSwitches = getSelectedInstalledReplacementRows().length > 0
 
@@ -817,34 +825,41 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
       return false
     }
 
-    let switched = false
-    if (hasReplacementSwitches) {
-      switched = await applyInstalledReplacementSelections()
-      if (!switched && sources.length === 0) return false
-    }
+    pendingAction.value = actionType
+    try {
+      let switched = false
+      if (hasReplacementSwitches) {
+        switched = await applyInstalledReplacementSelections()
+        if (!switched && sources.length === 0) return false
+      }
 
-    let success = true
-    if (sources.length > 0) {
-      success = await executor(sources)
-    }
+      let success = true
+      if (sources.length > 0) {
+        success = await executor(sources)
+      }
 
-    if (switched || success) {
-      finalizeDialog(false)
+      if (switched || success) {
+        finalizeDialog(false)
+      }
+      return switched || success
+    } finally {
+      pendingAction.value = ''
     }
-    return switched || success
   }
 
   const subscribeSelected = async () => (
     await executeSelectedAction(
       async (sources) => await appStore.subscribeInstallSources(sources),
-      '当前没有选中的可订阅项'
+      '当前没有选中的可订阅项',
+      'subscribe'
     )
   )
 
   const downloadSelected = async () => (
     await executeSelectedAction(
       async (sources) => await appStore.downloadInstallSources(sources),
-      '当前没有选中的可下载项'
+      '当前没有选中的可下载项',
+      'download'
     )
   )
 
@@ -978,6 +993,8 @@ export const useMissingInstallStore = defineStore('missingInstall', () => {
 
   return {
     isVisible,
+    pendingAction,
+    isActionPending,
     state,
     visibleRows,
     selectedCount,

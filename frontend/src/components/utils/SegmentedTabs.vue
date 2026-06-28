@@ -1,14 +1,11 @@
 <template>
   <!-- 容器 -->
-  <div class="relative grid items-center bg-text-main/10 backdrop-blur-2xl rounded-[9px] w-full max-w-md select-none">
+  <div class="relative grid items-center bg-bg-overlay/10 backdrop-blur-2xl rounded-[9px] w-full max-w-md select-none">
     
     <!-- 滑动滑块 (Indicator) -->
-    <!-- 
-       1. 宽度 = 100% / 选项数量
-       2. 位置 = 当前索引 * 100% (相对于自身宽度位移)
-    -->
-    <div class="absolute top-0.5 bottom-0.5 left-0.5 bg-accent-highlight/60 rounded-[7px] border-[0.5px] border-black/5
-             shadow-[0px_3px_8px_rgba(0,0,0,0.12),0px_3px_1px_rgba(0,0,0,0.04)]
+    <!-- 1. 宽度 = 100% / 选项数量 2. 位置 = 当前索引 * 100% (相对于自身宽度位移) -->
+    <div class="absolute top-0.5 bottom-0.5 left-0.5 bg-accent-highlight/60 rounded-[7px] border-[0.5px] border-border-base/10
+             shadow-[0px_2px_2px_var(--shadow-color),0px_1px_1px_var(--shadow-color)]
              transition-transform duration-200 ease-out z-0"
       :style="{
         width: `calc((100% - 4px) / ${options.length})`,

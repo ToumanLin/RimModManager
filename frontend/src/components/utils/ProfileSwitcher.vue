@@ -2,7 +2,7 @@
   <div class="relative group/profile" ref="containerRef">
     <!-- 激活状态显示按钮 -->
     <button @click="isOpen = !isOpen"
-      class="flex items-center gap-3 px-3 py-1 rounded-xl bg-text-main/5 border border-text-main/10 hover:bg-text-main/10 hover:border-accent-primary/50 transition-all duration-300"
+      class="flex items-center gap-3 px-3 py-1 rounded-xl bg-bg-overlay/5 border border-border-base/10 hover:bg-bg-overlay/10 hover:border-accent-primary/50 transition-all duration-300"
     >
       <!-- 状态图标：Steam 蓝或本地绿 -->
       <div class="relative flex items-center justify-center">
@@ -10,7 +10,7 @@
       </div>
 
       <div class="flex flex-col items-start gap-0 ">
-        <span class="text-sm font-black text-text-main/90 tracking-wide">{{ profileStore.currentProfile?.name || 'Default' }}</span>
+        <span class="text-sm font-black text-text-soft tracking-wide">{{ profileStore.currentProfile?.name || 'Default' }}</span>
         <div class="flex items-center gap-1">
             <span class="text-[0.6rem] text-text-dim uppercase tracking-tighter opacity-60">当前环境</span>
             <span class="text-[0.6rem] text-accent-tip bg-accent-success/20 px-2 py-0.5 rounded-full uppercase tracking-tighter opacity-60">{{ profileStore.currentProfile?.game_version || '未知版本' }}</span>
@@ -22,39 +22,38 @@
     </button>
 
     <!-- 下拉列表 -->
-    <Transition name="dropdown">
-      <div v-if="isOpen" 
-        class="absolute top-full mt-2 left-0 w-64 bg-bg-surface/90 backdrop-blur-xl border border-text-main/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-100">
-        
+    <FixedPopover :is-open="isOpen" :trigger-ref="containerRef" :offset="6">
+      <div class="w-64 bg-glass-medium backdrop-blur-2xl  border border-border-base/10 rounded-2xl shadow-[0_20px_50px_var(--shadow-color)] overflow-hidden z-100">
+
         <div class="p-1 space-y-1">
           <button v-for="p in profileStore.profiles" :key="p.id" @click="p.check ? handleSwitch(p.id) : null"
             class="w-full flex items-center gap-3 px-2 py-1 rounded-xl transition-all duration-200 group/item"
-            :class="p.check ? (p.id === profileStore.currentProfileId ? 'bg-accent-primary/10 border border-accent-primary/20 cursor-pointer' 
-            : 'hover:bg-text-main/5 border border-transparent cursor-pointer') 
+            :class="p.check ? (p.id === profileStore.currentProfileId ? 'bg-accent-primary/10 border border-accent-primary/20 cursor-pointer'
+            : 'hover:bg-bg-overlay/5 border border-transparent cursor-pointer')
             : 'bg-accent-danger/10 border border-accent-danger/20 cursor-not-allowed'"
           >
             <component :is="p.is_steam ? SteamIcon : Folder" class="size-4" :class="p.id === profileStore.currentProfileId ? 'text-accent-primary' : 'text-text-dim'" />
             <div class="flex-1 text-left">
               <div class="flex items-center gap-2">
-                <div class="text-sm font-bold" :class="p.id === profileStore.currentProfileId ? 'text-accent-primary' : 'text-text-main/80'">{{ p.name }}</div>
+                <div class="text-sm font-bold" :class="p.id === profileStore.currentProfileId ? 'text-accent-primary' : 'text-text-soft'">{{ p.name }}</div>
                 <span v-if="p.id === runtimeProfileId && appStore.runtimeSession?.state === 'running'" class="text-[0.55rem] px-1.5 py-0.5 rounded-full bg-accent-primary/15 text-accent-primary uppercase tracking-tighter">运行中</span>
               </div>
               <div class="text-[0.65rem] text-text-dim truncate max-w-50">{{ p.game_version || '未知版本' }}</div>
             </div>
             <Quote v-if="p.description && p.check" v-tooltip="p.description" class="size-4 text-text-dim hover:text-accent-primary hover:scale-120 transition-all duration-300" />
             <AlertOctagon v-if="!p.check" v-tooltip="`当前环境不可用：\n^^${p.msg}^^`" class="size-4 text-accent-danger hover:scale-120 transition-all duration-300 cursor-help" />
-            <div class="size-2 rounded-full bg-accent-primary shadow-[0_0_8px_#06b6d4]" :class="{'opacity-5':p.id !== profileStore.currentProfileId}"></div>
+            <div class="size-2 rounded-full bg-accent-primary shadow-[0_0_8px_rgba(var(--rgb-accent-primary),0.75)]" :class="{'opacity-5':p.id !== profileStore.currentProfileId}"></div>
           </button>
         </div>
 
-        <div class="p-1 border-t border-text-main/5 bg-text-main/2">
+        <div class="modal-footer p-1">
           <button @click="openManager" class="w-full py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase text-text-dim hover:text-text-main hover:bg-accent-primary/20 transition-all cursor-pointer">
             <Settings2 class="size-3" />
             管理环境中心
           </button>
         </div>
       </div>
-    </Transition>
+    </FixedPopover>
   </div>
 </template>
 
@@ -64,6 +63,7 @@ import { ChevronDown, Settings2, Folder, Quote, AlertOctagon } from 'lucide-vue-
 import { useProfileStore } from '../../stores/profileStore'
 import { useAppStore } from '../../stores/appStore'
 import { onClickOutside } from '@vueuse/core'
+import FixedPopover from '../common/FixedPopover.vue'
 
 const appStore = useAppStore()
 const profileStore = useProfileStore()

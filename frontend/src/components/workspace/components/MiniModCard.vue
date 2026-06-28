@@ -1,25 +1,25 @@
 <!-- src/components/workspace/components/MiniModCard.vue -->
 <template>
-  <div class="relative w-36 shrink-0 bg-black/40 rounded-xl border border-text-main/10 overflow-hidden group cursor-pointer hover:border-accent-primary/50 transition-all"
-       @click="$emit('navigate', mod.workshop_id)">
+  <div class="relative w-36 shrink-0 bg-bg-inset/80 rounded-xl border border-border-base/10 overflow-hidden group cursor-pointer hover:border-accent-primary/50 transition-all"
+    @click="$emit('navigate', mod.workshop_id)">
     
     <!-- 封面图 -->
-    <div class="h-24 w-full bg-black/60 relative overflow-hidden">
+    <div class="h-24 w-full bg-bg-inset relative overflow-hidden">
       <img v-if="mod.preview_url" :src="appStore.getRemoteUrl(mod.preview_url)" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
       <div v-else class="absolute inset-0 flex items-center justify-center text-text-dim text-xs">无封面</div>
       
       <!-- 悬浮操作层 -->
-      <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-sm" @click.stop>
+      <div class="absolute inset-0 rounded-t-xl bg-bg-inset opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-sm" @click.stop>
         <!-- 订阅 -->
-        <button v-if="!isSubscribed" @click="subscribe" v-tooltip="'订阅'" class="p-1.5 rounded-full bg-accent-primary/80 hover:bg-accent-primary text-black transition-transform hover:scale-110">
+        <button v-if="!isSubscribed" @click="subscribe" v-tooltip="'订阅'" class="p-1.5 rounded-full bg-accent-primary/80 hover:bg-accent-primary text-on-accent-primary transition-transform hover:scale-110">
           <Flag class="size-3.5" />
         </button>
         <!-- 取订 -->
-        <button v-else @click="unsubscribe" v-tooltip="'取消订阅'" class="p-1.5 rounded-full bg-accent-danger/80 hover:bg-accent-danger text-black transition-transform hover:scale-110">
+        <button v-else @click="unsubscribe" v-tooltip="'取消订阅'" class="p-1.5 rounded-full bg-accent-danger/80 hover:bg-accent-danger text-on-accent-danger transition-transform hover:scale-110">
           <FlagOff class="size-3.5" />
         </button>
         <!-- 下载 -->
-        <button @click="download" v-tooltip="'管理器下载'" class="p-1.5 rounded-full bg-accent-success/80 hover:bg-accent-success text-black transition-transform hover:scale-110">
+        <button @click="download" v-tooltip="'管理器下载'" class="p-1.5 rounded-full bg-accent-success/80 hover:bg-accent-success text-on-accent-success transition-transform hover:scale-110">
           <Download class="size-3.5" />
         </button>
       </div>

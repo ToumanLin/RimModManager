@@ -2,13 +2,13 @@
   <Teleport to="body">
     <!-- 统一过渡容器 -->
     <Transition :name="isMini ? 'mini-zoom' : 'modal-fade'">
-      <div v-if="confirmStore.isVisible" 
-        class="fixed inset-0 z-9999 font-sans text-text-main selection:bg-text-main/20"
+      <div v-if="confirmStore.isVisible"
+        class="fixed inset-0 z-9999 font-sans text-text-main selection:bg-bg-overlay/10"
         :class="isMini ? 'pointer-events-none' : 'flex items-center justify-center'"
         @keydown.esc="handleCancel"
         @keydown.enter="handleEnterKey"
       >
-        
+
         <!-- 1. 全屏模式下的环境光遮罩 -->
         <div v-if="!isMini" @mousedown="handleBackdropClick" class="absolute inset-0 bg-bg-deep/20 backdrop-blur-xs transition-opacity duration-500"></div>
 
@@ -17,11 +17,11 @@
           class="relative flex flex-col overflow-hidden transition-all pointer-events-auto box-border"
           :class="[
             // 核心质感：极深色玻璃 + 顶部高光边框 + 强阴影
-            'bg-bg-deep/85 backdrop-blur-2xl shadow-2xl ring-1 ring-text-main/10',
+            'bg-glass-heavy backdrop-blur-2xl shadow-2xl ring-1 ring-border-base/10',
             // 模式区分
-            isMini 
-              ? 'rounded-xl w-80 absolute shadow-[0_20px_30px_rgba(0,0,0,0.5)]' 
-              : 'rounded-2xl w-140 max-w-[90vw] shadow-[0_20px_50px_rgba(0,0,0,0.6)]',
+            isMini
+              ? 'rounded-xl w-80 absolute shadow-[0_20px_30px_var(--shadow-color)]'
+              : 'rounded-2xl w-140 max-w-[90vw] shadow-[0_20px_50px_var(--shadow-color)]',
             // 抖动动画类
             shake ? 'animate-shake' : ''
           ]"
@@ -29,14 +29,14 @@
         >
           <!-- A. 顶部装饰光条 (根据类型变色) -->
           <div class="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-current to-transparent opacity-80 shadow-[0_0_15px_currentColor]" :class="theme.text"></div>
-          
+
           <!-- B. 内部环境光晕 (氛围感) -->
-          <div class="absolute -top-20 -right-20 w-48 h-48 rounded-full blur-3xl opacity-15 pointer-events-none" 
+          <div class="absolute -top-20 -right-20 w-48 h-48 rounded-full blur-3xl opacity-15 pointer-events-none"
                :class="theme.bg"></div>
 
           <!-- C. 内容区域 -->
           <div class="flex relative z-10" :class="isMini ? 'p-3 pb-2 gap-2' : 'p-6 pb-4 gap-5'">
-            
+
             <!-- 左侧：全息图标容器 -->
             <div class="shrink-0 pt-1">
               <div class="relative flex items-center justify-center"
@@ -56,8 +56,8 @@
               <h3 class="text-base font-bold text-text-main tracking-wide text-wrap break-all leading-snug mb-1.5 flex items-center gap-2">
                 {{ confirmStore.state.title }}
               </h3>
-              
-              <div v-if="confirmStore.state.message" class="text-xs text-text-dim/90 leading-relaxed text-pretty font-medium">
+
+              <div v-if="confirmStore.state.message" class="text-xs text-text-dim leading-relaxed text-pretty font-medium">
                 <span v-if="confirmStore.state.isHtml" v-html="confirmStore.state.message" class="text-wrap break-all"></span>
                 <span v-else class="text-wrap break-all">{{ confirmStore.state.message }}</span>
               </div>
@@ -71,16 +71,14 @@
               <input v-model="confirmStore.state.inputValue"
                 ref="inputRef" type="text" spellcheck="false"
                 :placeholder="confirmStore.state.placeholder"
-                class="block w-full bg-black/40 border border-text-main/10 rounded-lg py-1 px-2 text-sm text-text-main font-mono placeholder:text-text-main/20 
-                        focus:outline-none focus:border-text-main/30 focus:bg-black/60 focus:shadow-[0_0_15px_rgba(255,255,255,0.05)]
-                        transition-all duration-200"
+                class="input-glass block w-full px-2 py-1 font-mono text-sm text-text-main placeholder:text-text-disabled focus:outline-none"
               />
               <!-- 输入框角落装饰 -->
-              <div class="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-text-main/20 rounded-br-lg pointer-events-none group-focus-within:border-text-main/50 transition-colors"></div>
+              <div class="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-border-base/18 rounded-br-lg pointer-events-none group-focus-within:border-border-base/10 transition-colors"></div>
             </div>
 
             <div v-else-if="confirmStore.state.showDeleteOptions" class="space-y-2">
-              <label class="flex items-start gap-3 rounded-xl border border-text-main/10 bg-black/25 px-3 py-2 cursor-pointer transition-colors hover:border-text-main/20">
+              <label class="flex items-start gap-3 rounded-xl border border-border-base/10 bg-bg-inset/60 px-3 py-2 cursor-pointer transition-colors hover:border-border-base/18">
                 <input
                   v-model="confirmStore.state.forceDelete"
                   class="mt-0.5 accent-accent-danger"
@@ -90,7 +88,7 @@
                 >
                 <div class="min-w-0">
                   <div class="text-sm font-semibold text-text-main">{{ confirmStore.state.trashOptionText }}</div>
-                  <div class="text-xs text-text-dim/80 leading-relaxed">更安全，文件会进入系统回收站，可在系统中恢复。</div>
+                  <div class="text-xs text-text-dim leading-relaxed">更安全，文件会进入系统回收站，可在系统中恢复。</div>
                 </div>
               </label>
 
@@ -104,56 +102,106 @@
                 >
                 <div class="min-w-0">
                   <div class="text-sm font-semibold text-accent-danger">{{ confirmStore.state.forceOptionText }}</div>
-                  <div class="text-xs text-text-dim/80 leading-relaxed">直接彻底删除，不进入回收站，通常无法恢复。</div>
+                  <div class="text-xs text-text-dim leading-relaxed">直接彻底删除，不进入回收站，通常无法恢复。</div>
                 </div>
               </label>
 
-              <p v-if="confirmStore.state.deleteOptionsHint" class="px-1 text-xs leading-relaxed text-text-dim/70">
+              <p v-if="confirmStore.state.deleteOptionsHint" class="px-1 text-xs leading-relaxed text-text-dim">
                 {{ confirmStore.state.deleteOptionsHint }}
               </p>
+            </div>
+
+            <!-- 队列弹窗条目区：每个检查项独立处理，成功后由 store 从列表移除。 -->
+            <div v-else-if="confirmStore.state.promptItems?.length" class="space-y-2 max-h-[46vh] overflow-y-auto pr-1">
+              <div
+                v-for="item in confirmStore.state.promptItems"
+                :key="item.id"
+                class="rounded-xl border border-border-base/10 bg-bg-inset/60 px-3 py-2"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold text-text-main break-all">{{ item.title }}</div>
+                    <div v-if="item.description" class="mt-1 text-xs text-text-dim leading-relaxed break-all">{{ item.description }}</div>
+                    <div v-if="item.meta?.length" class="mt-1 flex flex-wrap gap-1">
+                      <span
+                        v-for="meta in item.meta"
+                        :key="meta"
+                        class="rounded-md border border-border-base/10 bg-bg-overlay/5 px-1.5 py-0.5 text-[10px] text-text-dim"
+                      >
+                        {{ meta }}
+                      </span>
+                    </div>
+                    <div
+                      v-if="item.statusMessage"
+                      class="mt-1 text-xs"
+                      :class="item.status === 'failed' ? 'text-accent-danger' : item.status === 'success' ? 'text-accent-success' : 'text-text-dim'"
+                    >
+                      {{ item.statusMessage }}
+                    </div>
+                  </div>
+                  <div class="shrink-0 flex flex-wrap justify-end gap-1">
+                    <button
+                      v-for="action in item.actions"
+                      :key="action.id"
+                      :disabled="item.status !== 'pending' || confirmStore.state.isResolving"
+                      @click="confirmStore.choosePromptItemAction(item.id, action.id)"
+                      class="rounded-lg px-2 py-1 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                      :class="action.kind === 'primary'
+                        ? `${theme.btnBg} text-on-accent-primary`
+                        : action.kind === 'danger'
+                          ? 'bg-accent-danger/90 text-on-accent-danger'
+                          : 'text-text-dim hover:text-text-main hover:bg-bg-overlay/10 border border-border-base/5'"
+                    >
+                      {{ action.label }}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- D. 底部操作栏 (玻璃分割线) -->
-          <div class=" flex items-center justify-end gap-3 border-t border-text-main/5 bg-text-main/1"
+          <div class="modal-footer flex items-center justify-end gap-3"
             :class="isMini ? 'px-2 py-1' : 'px-4 py-2'">
-            
+
+            <!-- 自定义底部按钮用于“全部处理/全部稍后”等窗口级动作，保持普通确认弹窗的旧按钮逻辑不变。 -->
             <template v-if="Array.isArray(confirmStore.state.actionButtons) && confirmStore.state.actionButtons.length > 0">
               <button
                 v-for="action in confirmStore.state.actionButtons"
-                :key="action.value"
+                :key="action.value?.action || action.label"
+                :disabled="confirmStore.state.isResolving"
                 @click="confirmStore.chooseAction(action.value)"
-                class="rounded-lg text-xs font-bold transition-all duration-200"
+                class="rounded-lg text-xs font-bold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
                 :class="[
                   isMini ? 'px-2 py-1' : 'px-4 py-1.5',
                   action.kind === 'primary'
-                    ? `${theme.btnBg} text-black shadow-lg`
+                    ? `${theme.btnBg} text-on-accent-primary shadow-lg`
                     : action.kind === 'danger'
-                      ? 'bg-accent-danger/90 text-black shadow-lg shadow-accent-danger/20'
-                      : 'text-text-dim hover:text-text-main hover:bg-text-main/10 border border-transparent hover:border-text-main/5'
+                      ? 'bg-accent-danger/90 text-on-accent-danger shadow-lg shadow-accent-danger/20'
+                      : 'text-text-dim hover:text-text-main hover:bg-bg-overlay/10 border border-transparent hover:border-border-base/5'
                 ]"
               >
                 {{ action.label }}
               </button>
             </template>
-            
+
             <!-- Cancel Button -->
-            <button v-else-if="confirmStore.state.mode !== 'alert'" 
+            <button v-else-if="confirmStore.state.mode !== 'alert'"
               @click="handleCancel"
-              class=" rounded-lg text-xs font-bold text-text-dim hover:text-text-main hover:bg-text-main/10 border border-transparent hover:border-text-main/5 transition-all duration-200"
+              class=" rounded-lg text-xs font-bold text-text-dim hover:text-text-main hover:bg-bg-overlay/10 border border-transparent hover:border-border-base/5 transition-all duration-200"
               :class="isMini ? 'px-2 py-1' : 'px-4 py-1.5'">
               {{ confirmStore.state.cancelText }}
             </button>
-            
+
             <!-- Confirm Button (流光按钮) -->
             <button v-if="!confirmStore.state.actionButtons?.length"
               @click="handleConfirm"
-              class="relative overflow-hidden  rounded-lg text-xs font-bold text-black shadow-lg transition-transform active:scale-95 group/btn"
+              class="relative overflow-hidden  rounded-lg text-xs font-bold text-on-accent-primary shadow-lg transition-transform active:scale-95 group/btn"
               :class="[theme.btnBg, isMini ? 'px-3 py-1' : 'px-6 py-1.5']"
             >
               <!-- 按钮内部高光扫描动画 -->
               <div class="absolute inset-0 -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700 bg-linear-to-r from-transparent via-text-main/40 to-transparent skew-x-12"></div>
-              
+
               <div class="relative flex items-center gap-1.5">
                 <span>{{ confirmStore.state.confirmText }}</span>
                 <svg v-if="confirmStore.state.mode === 'prompt'" class="w-3 h-3 opacity-60 group-hover/btn:translate-x-0.5 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -218,19 +266,19 @@ const containerStyle = computed(() => {
   const X_MARGEN = appStore.scalePx(50)
   const MODAL_WIDTH = appStore.scalePx(300)
   // 预估高度，如果内容多可能要调整，或者用 nextTick 动态获取
-  const ESTIMATED_HEIGHT = appStore.scalePx(180) 
+  const ESTIMATED_HEIGHT = appStore.scalePx(180)
 
   // 1. 垂直定位逻辑：优先下方，溢出则翻转到上方
   let top = rect.bottom + GAP
   let transformOriginY = 'top' // 动画锚点
-  
+
   if (top + ESTIMATED_HEIGHT > winH.value) {
     // 空间不足，放上面
     // 注意：这里需要配合 CSS translateY(-100%) 或者直接计算 bottom 坐标
     // 为了简单，计算 top 坐标为：目标顶部 - 弹窗高度 - 间隙
     // 但因为高度不确定，更好的方式是用 bottom 定位
     // 这里简单处理：假设高度固定，实际项目中可用 Floating UI
-    top = rect.top - GAP - ESTIMATED_HEIGHT 
+    top = rect.top - GAP - ESTIMATED_HEIGHT
     transformOriginY = 'bottom'
   }
 

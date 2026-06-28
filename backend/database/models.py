@@ -18,6 +18,9 @@ from backend.utils.tools import current_ms
 
 db = SqliteDatabase(None)
 
+MOD_ASSET_STATE_PRESENT = "present"
+MOD_ASSET_STATE_MISSING = "missing"
+
 
 class BaseModel(Model):
     class Meta:
@@ -78,6 +81,8 @@ class ModAsset(BaseModel):
     url = cast(str, CharField(null=True))
     source = cast(str, CharField(default='local'))
     store = cast(str, CharField(default='local'))
+    # 库存状态只描述物理资产是否仍可用；About.xml.disabled 仍由 disabled 字段表达。
+    state = cast(str, CharField(default=MOD_ASSET_STATE_PRESENT, index=True))
     icon_path = cast(str, CharField(null=True))
     preview_path = cast(str, CharField(null=True))
     gallery_paths = cast(list[str], UTF8JSONField(default=list))
@@ -97,6 +102,8 @@ class ModAsset(BaseModel):
     file_modify_time = cast(int, BigIntegerField(default=0))
     last_active_time = cast(int, BigIntegerField(default=0))
     last_moved_time = cast(int, BigIntegerField(default=0))
+    last_seen_at = cast(int, BigIntegerField(default=0))
+    last_scanned_at = cast(int, BigIntegerField(default=0))
     file_size = cast(int, BigIntegerField(default=0))
 
     shadow_paths = cast(list[str], UTF8JSONField(default=list))
@@ -141,8 +148,10 @@ class GroupMod(BaseModel):
 
 
 class GithubModRecord(BaseModel):
-    """GitHub 模组订阅记录"""
+    """Git 仓库模组订阅记录"""
     repo_url = CharField(primary_key=True)
+    provider = CharField(default="github")
+    host = CharField(default="github.com")
     owner = CharField()
     repo_name = CharField()
     install_type = CharField(default="source")

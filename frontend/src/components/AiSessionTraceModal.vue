@@ -1,33 +1,30 @@
 <template>
-  <transition name="fade">
-    <div v-if="aiStore.traceModalState.visible" class="fixed inset-0 z-140 flex items-center justify-center bg-bg-deep/80 backdrop-blur-md">
-      <!-- 主容器：会话链路三栏视图 -->
-      <div class="flex h-[86vh] w-[92vw] max-w-7xl select-text flex-col overflow-hidden rounded-2xl border border-accent-special/20 bg-bg-surface/95 shadow-[0_0_80px_rgba(0,0,0,0.75)]">
-        <!-- 顶部标题栏：会话标识与刷新/关闭操作 -->
-        <div class="flex h-14 shrink-0 items-center justify-between border-b border-text-main/10 bg-black/35 px-5">
-          <div class="min-w-0">
-            <div class="truncate text-sm font-bold text-text-main">会话请求链路</div>
-            <div class="truncate font-mono text-[0.7rem] text-text-dim">{{ activeSession?.session_id || aiStore.traceModalState.sessionId }}</div>
-          </div>
-          <div class="flex items-center gap-2">
-            <button @click="refresh" class="rounded border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-text-dim transition-colors hover:text-accent-special">
-              刷新
-            </button>
-            <button @click="aiStore.closeSessionTraceViewer()" class="p-2 text-text-dim transition-colors hover:text-accent-special">
-              <X class="size-5" />
-            </button>
-          </div>
-        </div>
+  <CommonModalShell
+    :show="aiStore.traceModalState.visible"
+    title="会话请求链路"
+    :description="activeSession?.session_id || aiStore.traceModalState.sessionId"
+    size="xl"
+    :z-index="140"
+    accent="special"
+    panel-class="select-text border-accent-special/20"
+    content-class="h-full"
+    @close="aiStore.closeSessionTraceViewer()"
+  >
+    <template #header-actions>
+      <button @click="refresh" class="rounded border border-border-base/10 bg-bg-overlay/5 px-3 py-1.5 text-xs text-text-dim transition-colors hover:text-accent-special">
+        刷新
+      </button>
+    </template>
 
-        <div class="grid min-h-0 flex-1 grid-cols-[22rem_minmax(0,1fr)_24rem]">
+        <div class="grid h-full min-h-0 grid-cols-[22rem_minmax(0,1fr)_24rem]">
           <!-- 左栏：会话概览与累计 token 指标 -->
-          <div class="min-h-0 overflow-y-auto border-r border-text-main/10 bg-black/20 p-4">
-            <div class="mb-4 text-xs font-black uppercase tracking-[0.2em] text-text-dim/60">会话概览</div>
-            <div v-if="!activeSession" class="rounded-xl border border-white/10 bg-black/20 px-4 py-6 text-center text-xs text-text-dim">
+          <div class="sidebar-surface min-h-0 overflow-y-auto p-4">
+            <div class="mb-4 text-xs font-black uppercase tracking-[0.2em] text-text-disabled">会话概览</div>
+            <div v-if="!activeSession" class="modal-section-subtle px-4 py-6 text-center text-xs text-text-dim">
               当前会话暂无链路数据
             </div>
             <div v-else class="space-y-3 text-xs text-text-dim">
-              <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div class="modal-section-subtle p-3">
                 <div class="mb-2 text-sm font-bold text-text-main">{{ activeSession.title || '未命名会话' }}</div>
                 <div>所属助手：{{ activeSession.assistant_id || '未知' }}</div>
                 <div>当前模型：{{ sessionRequestMeta.model }}</div>
@@ -35,10 +32,10 @@
                 <div>请求数量：{{ activeSession.request_count || 0 }}</div>
                 <div>会话状态：{{ activeSession.status || 'unknown' }}</div>
               </div>
-              <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div class="modal-section-subtle p-3">
                 <div class="mb-2 flex items-center gap-1 text-sm font-bold text-text-main">
                   <span>消息累计</span>
-                  <button class="text-text-dim/70 hover:text-accent-special transition-colors" v-tooltip="'这里显示的是这条消息对应请求的^^估算Token^^消耗量，包含固定说明、上下文、附件、用户输入和工具补充内容。'">
+                  <button class="text-text-dim hover:text-accent-special transition-colors" v-tooltip="'这里显示的是这条消息对应请求的^^估算Token^^消耗量，包含固定说明、上下文、附件、用户输入和工具补充内容。'">
                     <CircleHelp class="size-3.5" />
                   </button>
                 </div>
@@ -46,7 +43,7 @@
                   <div class="flex items-center justify-between text-text-main">
                     <div class="flex items-center gap-1">
                       <span>消息输入总计</span>
-                      <button class="text-text-dim/70 hover:text-accent-special transition-colors" v-tooltip="sessionMessageUsageTooltip">
+                      <button class="text-text-dim hover:text-accent-special transition-colors" v-tooltip="sessionMessageUsageTooltip">
                         <CircleHelp class="size-3.5" />
                       </button>
                     </div>
@@ -57,7 +54,7 @@
                       <span>主对话输入</span>
                       <span class="font-mono">{{ formatTokenMetric(sessionTokenSummary.mainPromptTokens) }}</span>
                     </div>
-                    <div class="text-[0.7rem] text-text-dim/70 -mt-1">
+                    <div class="text-[0.7rem] text-text-dim -mt-1">
                       <div v-if="sessionTokenSummary.promptTemplateTokens > 0" class="flex items-center justify-between pl-8">
                         <span>系统提示</span>
                         <span class="font-mono">{{ formatTokenMetric(sessionTokenSummary.promptTemplateTokens) }}</span>
@@ -88,7 +85,7 @@
                   <div class="flex items-center justify-between pt-1 text-text-main">
                     <div class="flex items-center gap-1">
                       <span>消息输出总计</span>
-                      <button class="text-text-dim/70 hover:text-accent-special transition-colors" v-tooltip="sessionOutputUsageTooltip">
+                      <button class="text-text-dim hover:text-accent-special transition-colors" v-tooltip="sessionOutputUsageTooltip">
                         <CircleHelp class="size-3.5" />
                       </button>
                     </div>
@@ -99,7 +96,7 @@
                       <span>主回复输出</span>
                       <span class="font-mono">{{ formatTokenMetric(sessionTokenSummary.mainCompletionTokens) }}</span>
                     </div>
-                    <div class="text-[0.7rem] text-text-dim/70 -mt-1">
+                    <div class="text-[0.7rem] text-text-dim -mt-1">
                       <div v-if="sessionTokenSummary.reasoningTokens > 0" class="flex items-center justify-between pl-8 ">
                         <span>深度思考</span>
                         <span class="font-mono">{{ formatTokenMetric(sessionTokenSummary.reasoningTokens) }}</span>
@@ -117,10 +114,10 @@
                   </div>
                 </div>
               </div>
-              <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div class="modal-section-subtle p-3">
                 <div class="mb-2 flex items-center gap-1 text-sm font-bold text-text-main">
                   <span>补充指标</span>
-                  <button class="text-text-dim/70 hover:text-accent-special transition-colors" v-tooltip="sessionRequestUsageTooltip">
+                  <button class="text-text-dim hover:text-accent-special transition-colors" v-tooltip="sessionRequestUsageTooltip">
                     <CircleHelp class="size-3.5" />
                   </button>
                 </div>
@@ -139,16 +136,16 @@
           </div>
 
           <!-- 中栏：统一时间轴，按请求顺序展开事件 -->
-          <div class="min-h-0 overflow-y-auto overflow-x-hidden bg-bg-surface/40 p-4">
-            <div v-if="aiStore.traceModalState.isLoading" class="rounded-xl border border-white/10 bg-black/20 px-4 py-8 text-center text-sm text-text-dim">
+          <div class="content-surface min-h-0 overflow-y-auto overflow-x-hidden p-4">
+            <div v-if="aiStore.traceModalState.isLoading" class="modal-section px-4 py-8 text-center text-sm text-text-dim">
               正在加载链路...
             </div>
             <div v-else>
-              <div class="mb-4 text-xs font-black uppercase tracking-[0.2em] text-text-dim/60">统一时间轴</div>
-              <div v-if="!timelineItems.length" class="rounded-xl border border-white/10 bg-black/20 px-4 py-8 text-center text-sm text-text-dim">
+              <div class="mb-4 text-xs font-black uppercase tracking-[0.2em] text-text-disabled">统一时间轴</div>
+              <div v-if="!timelineItems.length" class="modal-section px-4 py-8 text-center text-sm text-text-dim">
                 当前会话没有可展示的链路数据
               </div>
-              <div v-else class="relative space-y-4 pb-6 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-white/10">
+              <div v-else class="relative space-y-4 pb-6 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-bg-overlay/10">
                 <div v-for="item in timelineItems" :key="item.id" class="relative pl-4" >
                   <div class="absolute -left-1 top-7 size-3 rounded-full border border-primary/10 bg-accent-primary shadow-accent-primary" :class="item.dotClass"></div>
                   <div class="rounded-2xl border p-3" :class="item.cardClass">
@@ -168,28 +165,28 @@
 
                     <div v-if="item.attachments?.length" class="mb-3 flex flex-wrap gap-2">
                       <span v-for="(attachment, attachmentIndex) in item.attachments" :key="`${item.id}-${attachmentIndex}`"
-                        class="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1 text-[0.7rem] text-text-dim" >
+                        class="rounded-lg border border-border-base/10 bg-bg-inset/55 px-2.5 py-1 text-[0.7rem] text-text-dim" >
                         {{ attachment }}
                       </span>
                     </div>
 
                     <div v-if="item.metrics?.length" class="mb-3 grid grid-cols-2 gap-2 text-xs text-text-dim">
                       <div v-for="metric in item.metrics" :key="`${item.id}-${metric.label}`"
-                        class="rounded-lg border border-white/5 bg-black/25 px-2.5 py-2" >
+                        class="rounded-lg border border-border-base/10 bg-bg-inset/60 px-2.5 py-2" >
                         {{ metric.label }}：{{ metric.value }}
                       </div>
                     </div>
 
                     <pre v-if="item.body" class="whitespace-pre-wrap break-all text-xs text-text-dim">{{ item.body }}</pre>
 
-                    <div v-if="item.reasoning" class="mt-3 rounded-xl border border-white/5 bg-black/20 p-3">
+                    <div v-if="item.reasoning" class="modal-section-subtle mt-3 p-3">
                       <div class="mb-2 text-xs font-bold text-text-main">思考流</div>
                       <pre class="whitespace-pre-wrap break-all text-xs text-text-dim">{{ item.reasoning }}</pre>
                     </div>
 
-                    <details v-if="item.details" class="mt-3 rounded border border-white/5 bg-black/20 p-2 text-[0.7rem] text-text-main">
+                    <details v-if="item.details" class="modal-section-subtle mt-3 p-2 text-[0.7rem] text-text-main">
                       <summary class="cursor-pointer text-text-dim">查看原始数据</summary>
-                      <pre class="mt-2 whitespace-pre-wrap break-all rounded border border-white/5 bg-black/25 p-2">{{ prettyJson(item.details) }}</pre>
+                      <pre class="mt-2 whitespace-pre-wrap break-all rounded border border-border-base/10 bg-bg-inset/60 p-2">{{ prettyJson(item.details) }}</pre>
                     </details>
                   </div>
                 </div>
@@ -198,20 +195,19 @@
           </div>
 
           <!-- 右栏：当前选中会话的原始 JSON 面板 -->
-          <div class="min-h-0 overflow-y-auto border-l border-text-main/10 bg-black/20 p-4">
-            <div class="mb-4 text-xs font-black uppercase tracking-[0.2em] text-text-dim/60">原始 JSON</div>
-            <pre class="whitespace-pre-wrap break-all rounded-2xl border border-white/10 bg-black/30 p-3 text-[0.7rem] text-text-main">{{ prettyJson(rawJsonPanel) }}</pre>
+          <div class="min-h-0 overflow-y-auto border-l border-border-base/10 bg-bg-muted/70 p-4">
+            <div class="mb-4 text-xs font-black uppercase tracking-[0.2em] text-text-disabled">原始 JSON</div>
+            <pre class="whitespace-pre-wrap break-all rounded-2xl border border-border-base/10 bg-bg-inset/70 p-3 text-[0.7rem] text-text-main">{{ prettyJson(rawJsonPanel) }}</pre>
           </div>
         </div>
-      </div>
-    </div>
-  </transition>
+  </CommonModalShell>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { CircleHelp, X } from 'lucide-vue-next'
+import { CircleHelp } from 'lucide-vue-next'
 import { useAiStore } from '../stores/aiStore'
+import CommonModalShell from './common/CommonModalShell.vue'
 import {
   buildAssistantMessageUsageTooltip,
   buildRequestTotalUsageTooltip,

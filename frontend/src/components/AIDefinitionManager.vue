@@ -1,35 +1,20 @@
 <!-- frontend/src/components/AIDefinitionManager.vue -->
 <template>
-  <transition name="fade">
-    <div v-if="appStore.uiState.showAIDefinitionManager" class="fixed inset-0 z-130 flex items-center justify-center bg-bg-deep/80 backdrop-blur-md">
-      <!-- 主容器：定义管理三段式工作台 -->
-      <div class="relative flex h-[88vh] w-[92%] max-w-7xl flex-col overflow-hidden rounded-2xl border border-accent-special/30 bg-bg-surface/95 shadow-[0_0_80px_rgba(0,0,0,0.8)]">
-        <div class="pointer-events-none absolute right-0 top-0 h-125 w-125 rounded-full bg-accent-special/5 blur-2xl"></div>
+  <CommonModalShell :show="appStore.uiState.showAIDefinitionManager" title="AI 定义管理" description="在这里集中管理 AI 助手、任务和模板。"
+    size="xl" :z-index="130" accent="special" panel-class="border-accent-special/30" content-class="h-full flex flex-col"
+    @close="closeModal" >
+    <template #icon>
+      <Drama class="size-5 text-accent-special" />
+    </template>
 
-        <!-- 顶部标题栏：当前模块标题与关闭入口 -->
-        <div class="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-text-main/10 bg-black/40 px-6">
-          <div class="flex items-center gap-4">
-            <div class="rounded-lg border border-accent-special/30 bg-accent-special/20 p-2 text-accent-special">
-              <Drama class="size-5" />
-            </div>
-            <div>
-              <h2 class="text-lg font-black tracking-widest text-text-main">AI 定义管理</h2>
-              <p class="mt-0.5 text-[0.65rem] font-mono uppercase text-text-dim">在这里集中管理 AI 助手、任务和模板。</p>
-            </div>
-          </div>
-          <button class="p-2 text-text-dim transition-colors hover:text-accent-special" @click="closeModal">
-            <X class="size-6" />
-          </button>
-        </div>
-
-        <div class="relative z-10 flex flex-1 overflow-hidden">
+        <div class="relative z-10 flex h-full flex-1 overflow-hidden">
           <!-- 左侧导航栏：入口/模板切换、搜索与列表 -->
-          <div class="flex w-[22rem] shrink-0 flex-col border-r border-text-main/10 bg-black/20">
-            <div class="space-y-3 border-b border-text-main/5 p-4">
+          <div class="sidebar-surface flex w-88 shrink-0 flex-col">
+            <div class="space-y-3 border-b border-border-base/5 p-4">
               <div class="flex gap-2">
                 <button v-for="tab in TABS" :key="tab.id" @click="activeTab = tab.id"
                   class="flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors"
-                  :class="activeTab === tab.id ? 'border-accent-special/30 bg-accent-special/15 text-accent-special' : 'border-text-main/10 bg-black/30 text-text-dim hover:text-text-main'"
+                  :class="activeTab === tab.id ? 'border-accent-special/30 bg-accent-special/15 text-accent-special' : 'border-border-base/10 bg-bg-inset/70 text-text-dim hover:text-text-main'"
                 >
                   {{ tab.label }}
                 </button>
@@ -44,7 +29,7 @@
               <template v-if="activeTab === 'entries'">
                 <div class="space-y-1">
                   <div v-for="entry in filteredEntries" :key="entry.id" @click="selectEntry(entry)"
-                    class="cursor-pointer rounded-lg px-3 py-2 transition-all" :class="currentEntryId === entry.id ? 'bg-accent-special/20 shadow-[inset_3px_0_0_rgba(var(--color-accent-special),1)]' : 'hover:bg-text-main/5'" >
+                    class="cursor-pointer rounded-lg px-3 py-2 transition-all" :class="currentEntryId === entry.id ? 'bg-accent-special/20 shadow-[inset_3px_0_0_rgba(var(--rgb-accent-special),1)]' : 'hover:bg-bg-overlay/5'" >
                     <div class="min-w-0" v-tooltip="entryTooltip(entry)">
                       <div class="truncate text-sm font-bold" :class="currentEntryId === entry.id ? 'text-accent-special' : 'text-text-main'">{{ entry.name }}</div>
                       <div class="truncate font-mono text-[0.65rem] text-text-dim">{{ entry.id }}</div>
@@ -55,10 +40,10 @@
 
               <template v-else>
                 <div v-if="groupedPromptEntries.system.length > 0" class="mb-3">
-                  <div class="px-2 pb-1 text-[0.7rem] font-black uppercase tracking-[0.22em] text-text-dim/60">系统模板</div>
+                  <div class="px-2 pb-1 text-[0.7rem] font-black uppercase tracking-[0.22em] text-text-disabled">系统模板</div>
                   <div class="space-y-1">
                     <div v-for="[promptId, prompt] in groupedPromptEntries.system" :key="promptId" @click="selectPrompt(promptId)"
-                      class="cursor-pointer rounded-lg px-3 py-2 transition-all" :class="currentPromptId === promptId ? 'bg-accent-special/20 shadow-[inset_3px_0_0_rgba(var(--color-accent-special),1)]' : 'hover:bg-text-main/5'" >
+                      class="cursor-pointer rounded-lg px-3 py-2 transition-all" :class="currentPromptId === promptId ? 'bg-accent-special/20 shadow-[inset_3px_0_0_rgba(var(--rgb-accent-special),1)]' : 'hover:bg-bg-overlay/5'" >
                       <div class="mb-1 flex items-start justify-between gap-2">
                         <span class="truncate text-sm font-bold" :class="currentPromptId === promptId ? 'text-accent-special' : 'text-text-main'">{{ prompt.name }}</span>
                         <Lock class="size-3 shrink-0 text-text-dim" />
@@ -68,10 +53,10 @@
                   </div>
                 </div>
                 <div v-if="groupedPromptEntries.custom.length > 0">
-                  <div class="px-2 pb-1 text-[0.7rem] font-black uppercase tracking-[0.22em] text-text-dim/60">自定义模板</div>
+                  <div class="px-2 pb-1 text-[0.7rem] font-black uppercase tracking-[0.22em] text-text-disabled">自定义模板</div>
                   <div class="space-y-1">
                     <div v-for="[promptId, prompt] in groupedPromptEntries.custom" :key="promptId" @click="selectPrompt(promptId)"
-                      class="cursor-pointer rounded-lg px-3 py-2 transition-all" :class="currentPromptId === promptId ? 'bg-accent-special/20 shadow-[inset_3px_0_0_rgba(var(--color-accent-special),1)]' : 'hover:bg-text-main/5'" >
+                      class="cursor-pointer rounded-lg px-3 py-2 transition-all" :class="currentPromptId === promptId ? 'bg-accent-special/20 shadow-[inset_3px_0_0_rgba(var(--rgb-accent-special),1)]' : 'hover:bg-bg-overlay/5'" >
                       <div class="mb-1 flex items-start justify-between gap-2">
                         <span class="truncate text-sm font-bold" :class="currentPromptId === promptId ? 'text-accent-special' : 'text-text-main'">{{ prompt.name }}</span>
                         <User class="size-3 shrink-0 text-accent-primary" />
@@ -84,18 +69,18 @@
             </div>
           </div>
 
-          <div class="flex flex-1 flex-col bg-bg-surface/50">
+          <div class="content-surface flex flex-1 flex-col">
             <template v-if="activeTab === 'entries' && currentEntryForm">
-              <div class="flex h-12 shrink-0 items-center justify-between border-b border-text-main/10 bg-black/10 px-6">
+              <div class="toolbar-surface flex h-12 shrink-0 items-center justify-between px-6">
                 <div class="flex items-center gap-2">
                   <span class="rounded border border-accent-special/20 bg-accent-special/10 px-2 py-0.5 font-mono text-xs text-accent-special">
                     ID: {{ currentEntryId }}
                   </span>
-                  <span class="rounded border border-text-main/10 bg-black/30 px-2 py-0.5 text-[0.7rem] text-text-dim">
+                  <span class="rounded border border-border-base/10 bg-bg-inset/70 px-2 py-0.5 text-[0.7rem] text-text-dim">
                     {{ currentEntryKindLabel }}
                   </span>
                 </div>
-                <button @click="handleSaveEntry" class="rounded bg-accent-special px-6 py-1.5 text-xs font-bold text-black transition-all hover:bg-accent-special/80">
+                <button @click="handleSaveEntry" class="rounded bg-accent-special px-6 py-1.5 text-xs font-bold text-on-accent-special transition-all hover:bg-accent-special/80">
                   保存入口配置
                 </button>
               </div>
@@ -127,7 +112,7 @@
                   <div class="mb-3 text-sm font-bold text-text-main">可用工具</div>
                   <p class="mb-3 text-xs text-text-dim">这里决定这个助手能使用哪些工具。新会话默认会全部开启，你也可以在会话里临时关闭部分工具。</p>
                   <div class="grid grid-cols-2 gap-2">
-                    <label v-for="tool in toolDefinitionEntries" :key="`assistant-${tool.id}`" class="flex items-start gap-2 rounded-lg bg-black/20 px-3 py-2 text-xs text-text-main">
+                    <label v-for="tool in toolDefinitionEntries" :key="`assistant-${tool.id}`" class="modal-section-subtle flex items-start gap-2 px-3 py-2 text-xs text-text-main">
                       <input :checked="currentEntryForm.tool_scope_selectable.includes(tool.id)" type="checkbox" @change="toggleAssistantTool(tool.id, $event.target.checked)" />
                       <div class="min-w-0">
                         <div class="font-semibold" v-tooltip="getToolTooltip(tool)">{{ tool.label || tool.id }}</div>
@@ -139,21 +124,21 @@
             </template>
 
             <template v-else-if="activeTab === 'prompts' && currentPromptForm">
-              <div class="flex h-12 shrink-0 items-center justify-between border-b border-text-main/10 bg-black/10 px-6">
+              <div class="toolbar-surface flex h-12 shrink-0 items-center justify-between px-6">
                 <div class="flex items-center gap-2">
                   <span class="rounded border border-accent-special/20 bg-accent-special/10 px-2 py-0.5 font-mono text-xs text-accent-special">
                     ID: {{ currentPromptId || '保存后自动生成' }}
                   </span>
-                  <span class="rounded border px-2 py-0.5 text-[0.7rem]" :class="currentPromptForm.is_system ? 'border-text-main/10 bg-black/30 text-text-dim' : 'border-accent-primary/20 bg-accent-primary/10 text-accent-primary'">
+                  <span class="rounded border px-2 py-0.5 text-[0.7rem]" :class="currentPromptForm.is_system ? 'border-border-base/10 bg-bg-inset/70 text-text-dim' : 'border-accent-primary/20 bg-accent-primary/10 text-accent-primary'">
                     {{ currentPromptForm.is_system ? '系统模板' : '自定义模板' }}
                   </span>
                 </div>
                 <div class="flex items-center gap-2">
                   <span v-if="currentPromptForm.is_system" class="text-xs text-text-dim">系统模板只读</span>
-                  <button v-if="!currentPromptForm.is_system && !isPromptNew" @click="handleDeletePrompt" class="rounded border border-accent-danger/30 bg-accent-danger/10 px-4 py-1.5 text-xs font-bold text-accent-danger transition-all hover:bg-accent-danger hover:text-white">
+                  <button v-if="!currentPromptForm.is_system && !isPromptNew" @click="handleDeletePrompt" class="rounded border border-accent-danger/30 bg-accent-danger/10 px-4 py-1.5 text-xs font-bold text-accent-danger transition-all hover:bg-accent-danger hover:text-on-accent-danger">
                     删除模板
                   </button>
-                  <button v-if="!currentPromptForm.is_system" @click="handleSavePrompt" class="rounded bg-accent-special px-6 py-1.5 text-xs font-bold text-black transition-all hover:bg-accent-special/80">
+                  <button v-if="!currentPromptForm.is_system" @click="handleSavePrompt" class="rounded bg-accent-special px-6 py-1.5 text-xs font-bold text-on-accent-special transition-all hover:bg-accent-special/80">
                     保存模板
                   </button>
                 </div>
@@ -192,27 +177,27 @@
                     <Paperclip class="size-4 text-accent-special" /> 可用附件
                   </div>
                   <div class="grid grid-cols-2 gap-2">
-                    <label v-for="attachment in attachmentDefinitionEntries" :key="attachment.kind" class="flex items-center gap-2 rounded-lg bg-black/20 px-3 py-2 text-xs text-text-main" :class="currentPromptForm.is_system ? 'opacity-80' : ''">
+                    <label v-for="attachment in attachmentDefinitionEntries" :key="attachment.kind" class="modal-section-subtle flex items-center gap-2 px-3 py-2 text-xs text-text-main" :class="currentPromptForm.is_system ? 'opacity-80' : ''">
                       <input :checked="currentPromptForm.attachment_kinds.includes(attachment.kind)" :disabled="currentPromptForm.is_system" type="checkbox" @change="togglePromptAttachment(attachment.kind, $event.target.checked)" />
                       <span>{{ attachment.label }}</span>
                     </label>
                   </div>
                 </div>
 
-                <div v-if="selectedAttachmentDefinitions.length > 0" class="rounded-lg border border-text-main/10 bg-black/20 p-4">
+                <div v-if="selectedAttachmentDefinitions.length > 0" class="modal-section p-4">
                   <div class="mb-3 text-sm font-bold text-text-main">发送给 AI 的附件内容</div>
                   <p class="mb-4 text-xs text-text-dim">控制附件里哪些信息会发给 AI。取消勾选后，这部分内容通常不会发送。</p>
                   <div class="space-y-4">
-                    <div v-for="attachment in selectedAttachmentDefinitions" :key="`projection-${attachment.kind}`" class="rounded-lg border border-white/8 bg-black/20 p-3">
+                    <div v-for="attachment in selectedAttachmentDefinitions" :key="`projection-${attachment.kind}`" class="modal-section-subtle p-3">
                       <div class="mb-2 text-xs font-bold uppercase tracking-widest text-text-dim">{{ attachment.label }}</div>
                       <div class="grid grid-cols-2 gap-2">
                         <label v-for="field in attachment.projection_options || []" :key="`${attachment.kind}-${field.path}`"
-                          class="flex items-start gap-2 rounded-lg bg-black/25 px-3 py-2 text-xs text-text-main" >
+                          class="flex items-start gap-2 rounded-lg border border-border-base/10 bg-bg-inset/60 px-3 py-2 text-xs text-text-main" >
                           <input :checked="isProjectionFieldEnabled(attachment.kind, field.path)" :disabled="currentPromptForm.is_system"
                             type="checkbox" @change="toggleProjectionField(attachment.kind, field.path, $event.target.checked)" />
                           <div class="min-w-0">
                             <div class="font-semibold" v-tooltip="field.description || field.path">{{ field.label }}</div>
-                            <div class="font-mono text-[0.7rem] text-text-dim/80">{{ field.path }}</div>
+                            <div class="font-mono text-[0.7rem] text-text-dim">{{ field.path }}</div>
                           </div>
                         </label>
                       </div>
@@ -229,7 +214,7 @@
                       <div class="mb-2 text-xs font-bold uppercase tracking-widest text-text-dim">通用变量</div>
                       <div class="flex flex-wrap gap-2">
                         <button v-for="variable in baseVariables" :key="`base-${variable.key}`" :disabled="currentPromptForm.is_system" v-tooltip="variable.description || variable.key"
-                          class="rounded-md border border-accent-primary/30 bg-black/40 px-2 py-1 text-left text-xs text-accent-primary transition-colors hover:bg-accent-primary hover:text-black disabled:cursor-default disabled:opacity-70 disabled:hover:bg-black/40 disabled:hover:text-accent-primary"
+                          class="rounded-md border border-accent-primary/30 bg-bg-inset/80 px-2 py-1 text-left text-xs text-accent-primary transition-colors hover:bg-accent-primary hover:text-on-accent-primary disabled:cursor-default disabled:opacity-70 disabled:hover:bg-bg-inset/80 disabled:hover:text-accent-primary"
                           @click="insertVariable(variable.key)">
                           <div class="font-semibold">{{ variable.label }}</div>
                           <div class="font-mono text-[0.7rem] opacity-70">{{ '{' + variable.key + '}' }}</div>
@@ -241,7 +226,7 @@
                       <div class="mb-2 text-xs font-bold uppercase tracking-widest text-text-dim">{{ attachment.label }}</div>
                       <div class="flex flex-wrap gap-2">
                         <button v-for="variable in attachment.prompt_variables" :key="`${attachment.kind}-${variable.key}`" :disabled="currentPromptForm.is_system" v-tooltip="variable.description || variable.key"
-                          class="rounded-md border border-accent-primary/30 bg-black/40 px-2 py-1 text-left text-xs text-accent-primary transition-colors hover:bg-accent-primary hover:text-black disabled:cursor-default disabled:opacity-70 disabled:hover:bg-black/40 disabled:hover:text-accent-primary"
+                          class="rounded-md border border-accent-primary/30 bg-bg-inset/80 px-2 py-1 text-left text-xs text-accent-primary transition-colors hover:bg-accent-primary hover:text-on-accent-primary disabled:cursor-default disabled:opacity-70 disabled:hover:bg-bg-inset/80 disabled:hover:text-accent-primary"
                           @click="insertVariable(variable.key)">
                           <div class="font-semibold">{{ variable.label }}</div>
                           <div class="font-mono text-[0.7rem] opacity-70">{{ '{' + variable.key + '}' }}</div>
@@ -256,7 +241,7 @@
                     <span class="flex items-center gap-2"><Bot class="size-4 text-accent-special" /> 系统提示词</span>
                     <span class="font-mono text-[0.6rem] opacity-50">给 AI 的固定说明</span>
                   </label>
-                  <textarea v-model="currentPromptForm.system" :disabled="currentPromptForm.is_system" class="min-h-60 w-full resize-y rounded-lg border border-text-main/10 bg-[#0a0a0a] p-3 font-mono text-sm leading-relaxed text-accent-cool focus:border-accent-special focus:outline-none disabled:opacity-70"></textarea>
+                  <textarea v-model="currentPromptForm.system" :disabled="currentPromptForm.is_system" class="input-glass min-h-60 w-full resize-y p-3 font-mono text-sm leading-relaxed text-accent-cool focus:outline-none disabled:opacity-70"></textarea>
                 </div>
 
                 <div class="space-y-2">
@@ -264,25 +249,24 @@
                     <span class="flex items-center gap-2"><User class="size-4 text-accent-primary" /> 用户输入模板</span>
                     <span class="font-mono text-[0.6rem] opacity-50">每次发送时的输入格式</span>
                   </label>
-                  <textarea v-model="currentPromptForm.user_template" :disabled="currentPromptForm.is_system" class="min-h-60 w-full resize-y rounded-lg border border-text-main/10 bg-[#0a0a0a] p-3 font-mono text-sm leading-relaxed text-text-main focus:border-accent-special focus:outline-none disabled:opacity-70"></textarea>
+                  <textarea v-model="currentPromptForm.user_template" :disabled="currentPromptForm.is_system" class="input-glass min-h-60 w-full resize-y p-3 font-mono text-sm leading-relaxed text-text-main focus:outline-none disabled:opacity-70"></textarea>
                 </div>
               </div>
             </template>
 
-            <div v-else class="flex flex-1 flex-col items-center justify-center text-text-dim/50">
+            <div v-else class="flex flex-1 flex-col items-center justify-center text-text-disabled">
               <TerminalSquare class="mb-4 size-16 opacity-20" />
               <p class="text-sm uppercase tracking-widest">请选择左侧项目</p>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  </transition>
+  </CommonModalShell>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { Bot, Braces, Drama, Lock, Paperclip, Plus, TerminalSquare, User, X } from 'lucide-vue-next'
+import { Bot, Braces, Drama, Lock, Paperclip, Plus, TerminalSquare, User } from 'lucide-vue-next'
+import CommonModalShell from './common/CommonModalShell.vue'
 import CommonInput from './common/input/CommonInput.vue'
 import CommonSelect from './common/input/CommonSelect.vue'
 import { useAppStore } from '../stores/appStore'
@@ -630,6 +614,6 @@ const handleDeletePrompt = async () => {
 
 /* --- 滚动条 (Scrollbar) --- */
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(var(--color-accent-special), 0.5); }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(var(--rgb-accent-special), 0.5); }
 </style>

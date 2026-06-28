@@ -91,7 +91,7 @@ class DataBundleManager:
         {
             "key": "subscriptions",
             "label": "订阅数据",
-            "description": "包含 GitHub 订阅记录和 Steam 合集记录，不包含缓存和历史状态。",
+            "description": "包含 Git 仓库订阅记录和 Steam 合集记录，不包含缓存和历史状态。",
             "dependencies": [],
             "supports_profiles": False,
         },
@@ -488,6 +488,8 @@ class DataBundleManager:
         for record in GithubModRecord.select().dicts():
             github_records.append({
                 "repo_url": record.get("repo_url"),
+                "provider": record.get("provider") or "github",
+                "host": record.get("host") or "github.com",
                 "owner": record.get("owner"),
                 "repo_name": record.get("repo_name"),
                 "install_type": record.get("install_type") or "source",
@@ -633,6 +635,8 @@ class DataBundleManager:
                 existing = GithubModRecord.get_or_none(GithubModRecord.repo_url == repo_url)
                 values = {
                     "repo_url": repo_url,
+                    "provider": str(repo.get("provider") or "github").strip() or "github",
+                    "host": str(repo.get("host") or "github.com").strip() or "github.com",
                     "owner": str(repo.get("owner") or "").strip(),
                     "repo_name": str(repo.get("repo_name") or "").strip(),
                     "install_type": str(repo.get("install_type") or "source").strip() or "source",
@@ -640,6 +644,8 @@ class DataBundleManager:
                 }
                 if existing:
                     GithubModRecord.update(
+                        provider=values["provider"],
+                        host=values["host"],
                         owner=values["owner"],
                         repo_name=values["repo_name"],
                         install_type=values["install_type"],

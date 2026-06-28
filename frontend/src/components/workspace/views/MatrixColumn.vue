@@ -1,7 +1,8 @@
 <!-- src/components/workspace/views/MatrixColumn.vue -->
 <template>
-  <div class="flex-1 flex flex-col bg-black/30 border border-text-main/10 rounded-2xl overflow-hidden shadow-2xl relative">
-    <div class="px-4 py-3 bg-text-main/5 border-b border-text-main/10 flex flex-col gap-3" :data-tour="'workspace-'+storeType + '-toolbar'">
+  <div class="flex-1 flex flex-col bg-bg-inset/70 border border-border-base/10 rounded-2xl overflow-hidden shadow-2xl relative"
+    :class="{ 'brightness-60 grayscale pointer-events-none': disabled }">
+    <div class="px-4 py-3 bg-bg-overlay/5 border-b border-border-base/10 flex flex-col gap-3" :data-tour="'workspace-'+storeType + '-toolbar'">
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-bold text-text-main flex items-center gap-2 cursor-help" v-tooltip="tooltip">
           <div class="w-2.5 h-2.5 rounded-full shadow-lg" :class="iconColor.replace('text-', 'bg-')"></div>
@@ -11,12 +12,13 @@
             v-model="use_workshop_mods" description="适用于非 Steam 版环境。为当前环境使用创意工坊模组，启用后将通过链接方式自动为游戏添加创意工坊模组。（前提是账号拥有游戏，或创意工坊内容本身可正常使用。）" />
           <CommonSwitch v-else-if="storeType === 'self'" label="" mini class="w-22 -ml-4"
             v-model="use_self_mods" description="为当前环境使用管理器Mod，启用后将通过链接方式自动为游戏添加管理器 Mod。" />
-        </h3>
+          <CommonSwitch v-if="storeType === 'local'" label="显示官方" mini class="text-text-dim" v-model="showOfficialLocalModsModel" description="默认隐藏 Core/DLC 等官方项目；隐藏时不会进入本地列表和多选范围。" />
+          </h3>
         <div class="flex gap-2">
-          <span class="text-[0.65rem] font-mono text-text-dim bg-black/40 px-2 py-0.5 rounded-md border border-text-main/5">
-            {{ formatFileSize(workspaceStore.librariesSize[storeType]) }}
+          <span class="text-[0.65rem] font-mono text-text-dim bg-bg-inset/80 px-2 py-0.5 rounded-md border border-border-base/5">
+            {{ formatFileSize(columnSize) }}
           </span>
-          <span class="text-[0.65rem] font-mono text-text-main bg-black/40 px-2 py-0.5 rounded-md border border-text-main/5">
+          <span class="text-[0.65rem] font-mono text-text-main bg-bg-inset/80 px-2 py-0.5 rounded-md border border-border-base/5">
             {{ mods.length }} 项
           </span>
         </div>
@@ -25,7 +27,7 @@
       <div class="flex flex-col items-center gap-2">
         <div class="relative w-full">
           <input v-model="searchQuery" placeholder="在此域检索..."
-            class="w-full bg-black/60 border border-text-main/10 rounded-lg pl-3 pr-2 py-1.5 text-xs text-text-main focus:border-accent-primary outline-none transition-colors"
+            class="w-full bg-bg-inset border border-border-base/10 rounded-lg pl-3 pr-2 py-1.5 text-xs text-text-main focus:border-accent-primary outline-none transition-colors"
           />
         </div>
         <div class="flex items-center w-full justify-end gap-2">
@@ -41,7 +43,7 @@
             ]"
           />
 
-          <Motion :class="`p-1 size-7 rounded-md bg-text-dim/10 border border-text-main/10 hover:text-text-main hover:bg-text-dim/20 text-xs font-bold flex items-center justify-center cursor-pointer `"
+          <Motion :class="`p-1 size-7 rounded-md bg-bg-overlay/5 border border-border-base/10 hover:text-text-main hover:bg-bg-overlay/10 text-xs font-bold flex items-center justify-center cursor-pointer `"
             :initial="{ rotateX: 0, opacity: 1 }"
             :animate="{ rotateX: isSortDsc ? 0 : 180 }"
             :transition="{ type: 'spring', stiffness: 300, damping: 20 }"
@@ -60,11 +62,10 @@
     </div>
 
     <div class="flex-1 overflow-hidden relative p-1">
-      <VirtualList v-if="displayMods.length > 0" ref="vListRef" v-model="displayMods"
-        dataKey="path_hash" class="h-full custom-scrollbar pb-10" :keeps="40"
-        :sortable="false" group="none" :disabled="true"
+      <div v-if="displayMods.length > 0" ref="scrollRef"
+        class="relative h-full overflow-auto custom-scrollbar pb-10"
         v-selectable-list="{
-          data: displayMods.map(m => m.path_hash),
+          data: displayPathHashes,
           selectedIds: localSelectedPathHashes,
           onSelect: handleSelect,
           onClear: clearSelection,
@@ -73,17 +74,27 @@
           idAttribute: 'data-id'
         }"
       >
-        <template v-slot:item="{ record, dataKey }">
-          <div class="relative group">
-            <MatrixItem class="timeline-trigger" :mod="record" :storeType="storeType"
-              :lastPlayedTime="lastPlayedTime" :isSelected="localSelectedPathHashes.includes(dataKey)"
-              @contextmenu="handleContextMenu" @click="$emit('open-timeline', record)"
+        <!--
+          矩阵列只需要虚拟滚动，不需要拖拽。
+          这里直接使用 TanStack Virtual，避免为了“禁用拖拽”保留额外的列表库。
+          外层总高度负责撑开滚动条，可见行用 translateY 放回真实位置；vSelection 仍绑定在滚动容器上。
+        -->
+        <div :style="{ height: `${totalSize}px`, position: 'relative' }">
+          <div
+            v-for="virtualRow in virtualRows"
+            :key="displayMods[virtualRow.index]?.path_hash || virtualRow.index"
+            class="absolute left-0 right-0"
+            :style="{ transform: `translateY(${virtualRow.start}px)`, height: `${virtualRow.size}px` }"
+          >
+            <MatrixItem class="timeline-trigger h-full" :mod="displayMods[virtualRow.index]" :storeType="storeType"
+              :lastPlayedTime="lastPlayedTime" :isSelected="localSelectedPathHashes.includes(displayMods[virtualRow.index]?.path_hash)"
+              @contextmenu="handleContextMenu" @click="$emit('open-timeline', displayMods[virtualRow.index])"
             />
           </div>
-        </template>
-      </VirtualList>
+        </div>
+      </div>
 
-      <div v-else class="absolute inset-0 flex flex-col items-center justify-center text-text-dim/30">
+      <div v-else class="absolute inset-0 flex flex-col items-center justify-center text-text-disabled">
         <svg class="size-12 mb-2 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
         <span class="text-xs font-bold tracking-widest uppercase">库内暂无数据</span>
       </div>
@@ -93,7 +104,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import VirtualList from 'vue-virtual-sortable'
+import { useVirtualizer } from '@tanstack/vue-virtual'
 import { Motion } from 'motion-v'
 import { Activity, ArrowRightLeft, Cable, Copy, CornerUpRight, DownloadCloud, Flag, FlagOff, FolderInput, Lock, LockOpen, Trash2, Upload } from 'lucide-vue-next'
 import CommonSelect from '../../common/input/CommonSelect.vue'
@@ -106,6 +117,7 @@ import { useProfileStore } from '../../../stores/profileStore'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import { IconSteam, SOURCE_TYPE_MAP } from '../../../utils/constants'
 import { formatFileSize } from '../../../utils/format'
+import { checkResult, toast } from '../../../utils/common'
 import { getMatrixItemState, getMatrixReplacementTargets, matchesMatrixFilter, MATRIX_FILTER_STATE_OPTIONS } from '../utils/matrixItemState'
 import CommonSwitch from '../../common/input/CommonSwitch.vue'
 
@@ -117,10 +129,12 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
-  tooltip: String
+  showOfficialLocalMods: Boolean,
+  tooltip: String,
+  disabled: Boolean
 })
 
-const emit = defineEmits(['open-timeline'])
+const emit = defineEmits(['open-timeline', 'update:show-official-local-mods'])
 const appStore = useAppStore()
 const profileStore = useProfileStore()
 const menuStore = useContextMenuStore()
@@ -133,7 +147,8 @@ const sortBy = ref('change')
 const isSortDsc = ref(true)
 const filterState = ref('default')
 const localSelectedPathHashes = ref([])
-const vListRef = ref(null)
+const scrollRef = ref(null)
+const columnSize = computed(() => (props.mods || []).reduce((acc, mod) => acc + (mod.file_size || 0), 0))
 
 const lastPlayedTime = computed(() => profileStore.currentProfile?.last_played_time || 0)
 const hasWorkshopLibrary = computed(() => !!appStore.settings.workshop_mods_path)
@@ -155,7 +170,14 @@ const use_self_mods = computed({
     profileStore.updateProfile(profileStore.currentProfileId, { use_self_mods: val })
   }
 })
-
+const showOfficialLocalModsModel = computed({
+  get() {
+    return !!props.showOfficialLocalMods
+  },
+  set(val) {
+    emit('update:show-official-local-mods', !!val)
+  }
+})
 
 const clearSelection = () => {
   localSelectedPathHashes.value = []
@@ -202,10 +224,16 @@ const focusMatrixItem = async (pathHash) => {
 
   localSelectedPathHashes.value = [pathHash]
   await nextTick()
-  vListRef.value?.scrollToKey?.(pathHash)
+  scrollToPathHash(pathHash)
   requestAnimationFrame(() => {
-    vListRef.value?.scrollToKey?.(pathHash)
+    scrollToPathHash(pathHash)
   })
+}
+
+const scrollToPathHash = (pathHash) => {
+  const index = displayMods.value.findIndex(mod => mod.path_hash === pathHash)
+  if (index === -1) return
+  virtualizer.value.scrollToIndex(index, { align: 'center' })
 }
 
 const modsWithState = computed(() => {
@@ -248,6 +276,24 @@ const displayMods = computed(() => {
   const sortedList = isSortDsc.value ? list : list.reverse()
   return sortedList.map(({ mod }) => mod)
 })
+// vSelection 只需要有序 ID 列表；单独缓存避免每次模板渲染都重新 map。
+const displayPathHashes = computed(() => displayMods.value.map(mod => mod.path_hash))
+
+const matrixRowHeight = computed(() => appStore.scalePx(62))
+const virtualizer = useVirtualizer(computed(() => ({
+  count: displayMods.value.length,
+  getScrollElement: () => scrollRef.value,
+  estimateSize: () => matrixRowHeight.value,
+  overscan: 10,
+})))
+const virtualRows = computed(() => virtualizer.value.getVirtualItems())
+const totalSize = computed(() => virtualizer.value.getTotalSize())
+
+watch([matrixRowHeight, () => displayMods.value.length], async () => {
+  await nextTick()
+  // 切换排序、筛选或全局缩放后刷新估算缓存，避免虚拟行高度沿用旧值造成半行裁切。
+  virtualizer.value.measure()
+})
 
 watch(
   () => (props.mods || []).map(mod => mod.path_hash),
@@ -282,7 +328,56 @@ const unsubscribeWorkshopIds = async (pathHashes, deleteFile = false) => {
   )
   if (!check) return
 
-  await appStore.unsubscribeWorkshopIds(workshopIds, deleteFile ? pathHashes : null)
+  const ok = await appStore.unsubscribeWorkshopIds(workshopIds, deleteFile ? pathHashes : null)
+  if (ok) await workspaceStore.fetchLibrariesMods()
+}
+
+const unsubscribeAndClearMissingWorkshopRecords = async (mods) => {
+  const targets = (mods || []).filter(mod => mod?.is_missing && mod?.workshop_id && mod?.steam_status?.is_subscribed === true)
+  const workshopIds = [...new Set(targets.map(mod => String(mod.workshop_id)).filter(Boolean))]
+  if (!workshopIds.length) return false
+
+  const check = await confirmStore.confirmAction(
+    '清理失效并取消订阅',
+    `确定要取消订阅这些异常缺失的工坊项并清理本地记录吗？（${workshopIds.length} 项）`,
+    { type: 'error' }
+  )
+  if (!check) return false
+
+  const ok = await appStore.unsubscribeWorkshopIds(workshopIds)
+  if (!ok) return false
+
+  const recordHashes = targets
+    .map(mod => String(mod.path_hash || '').trim())
+    .filter(pathHash => pathHash && !pathHash.startsWith('ghost_'))
+  if (recordHashes.length > 0) {
+    const res = await window.pywebview.api.mods_delete(recordHashes, false)
+    if (!checkResult(res, '清理缺失数据记录')) return false
+  }
+
+  await workspaceStore.fetchLibrariesMods()
+  return true
+}
+
+const clearMissingRecords = async (pathHashes) => {
+  if (!window.pywebview) return false
+  const hashes = (Array.isArray(pathHashes) ? pathHashes : [pathHashes]).filter(Boolean)
+  if (!hashes.length) return false
+
+  const check = await confirmStore.confirmAction(
+    '清理数据记录',
+    `确定要清理选中缺失项的数据记录吗？（${hashes.length} 项）\n这不会取消 Steam 订阅，也不会删除任何仍存在的文件。`,
+    { type: 'warning' }
+  )
+  if (!check) return false
+
+  const res = await window.pywebview.api.mods_delete(hashes, false)
+  if (checkResult(res, '清理缺失数据记录')) {
+    toast.success(`已清理 ${res.data?.success_count || hashes.length} 条缺失数据记录`)
+    await workspaceStore.fetchLibrariesMods()
+    return true
+  }
+  return false
 }
 
 const downloadMods = async (pathHashes) => {
@@ -305,6 +400,12 @@ const handleContextMenu = async (event, targetMod) => {
   const selectedPackageIds = selectedMods.map(mod => mod.package_id).filter(Boolean)
   const selectedNumStr = selectedMods.length > 1 ? ` (${selectedMods.length} 项)` : ''
   const isMissing = !!targetMod.is_missing
+  const selectedMissingPathHashes = selectedMods
+    .filter(mod => mod?.is_missing)
+    .map(mod => mod?.path_hash)
+    .filter(Boolean)
+  const selectedMissingNumStr = selectedMissingPathHashes.length > 1 ? ` (${selectedMissingPathHashes.length} 项)` : ''
+  const selectedSubscribedMissingMods = selectedMods.filter(mod => mod?.is_missing && mod?.steam_status?.is_subscribed === true && mod?.workshop_id)
   const sameTargets = workspaceStore.getMatrixSameItems(targetMod.path_hash)
   const replacementTargets = getMatrixReplacementTargets(targetMod, workspaceStore)
 
@@ -314,14 +415,14 @@ const handleContextMenu = async (event, targetMod) => {
     { label: '复制到 管理器库', disabled: props.storeType === 'self', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'self', 'copy') },
   ]
   const moveTargets = [
-    { label: '移动到 游戏本地库', disabled: props.storeType === 'local' || props.storeType === 'workshop', icon: FolderInput, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'local', 'move') },
-    { label: '移动到 管理器库', disabled: props.storeType === 'self' || props.storeType === 'workshop', icon: FolderInput, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'self', 'move') },
+    { label: '移动到 游戏本地库', disabled: props.storeType === 'local' || props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'local', 'move') },
+    { label: '移动到 管理器库', disabled: props.storeType === 'self' || props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'self', 'move') },
   ]
   if (hasWorkshopLibrary.value) {
     // 工坊库路径缺失时，这类入口会把用户带到一个并不存在的落点；
     // 因此这里直接不渲染“转入工坊库”的菜单项，避免出现隐藏列仍可操作的残留入口。
     transferTargets.push({ label: '复制到 创意工坊库', disabled: props.storeType === 'workshop', icon: Copy, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'workshop', 'copy') })
-    moveTargets.push({ label: '移动到 创意工坊库', disabled: props.storeType === 'workshop', icon: FolderInput, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'workshop', 'move') })
+    moveTargets.push({ label: '移动到 创意工坊库', disabled: props.storeType === 'workshop', icon: ArrowRightLeft, action: () => workspaceStore.modTransfer(localSelectedPathHashes.value, 'workshop', 'move') })
   }
 
   // 1. 常规信息操作
@@ -366,7 +467,7 @@ const handleContextMenu = async (event, targetMod) => {
     children: [
       { label: '访问创意工坊', disabled: !targetMod.workshop_id, icon: IconSteam, action: () => appStore.openSteamWorkshopById(targetMod.workshop_id) },
       { label: '订阅模组' + selectedNumStr, disabled: selectedWorkshopIds.length === 0 || (!!targetMod.steam_status?.is_subscribed && selectedWorkshopIds.length === 1), icon: Flag, action: () => appStore.subscribeWorkshopIds(selectedWorkshopIds) },
-      { label: '取消订阅' + selectedNumStr, disabled: props.storeType !== 'workshop' || selectedWorkshopIds.length === 0, icon: FlagOff, level: 'danger', action: () => unsubscribeWorkshopIds(localSelectedPathHashes.value, false) },
+      { label: '取消订阅' + selectedNumStr, disabled: props.storeType !== 'workshop' || selectedWorkshopIds.length === 0 || targetMod.steam_status?.is_subscribed === false, icon: FlagOff, level: 'danger', action: () => unsubscribeWorkshopIds(localSelectedPathHashes.value, false) },
     ]
   })
 
@@ -375,9 +476,11 @@ const handleContextMenu = async (event, targetMod) => {
   if(!isMissing) {
     menuItems.push({ label: targetMod.disabled ? '解禁' : '禁用' + selectedNumStr, icon: targetMod.disabled ? LockOpen : Lock, level: 'warn', action: () => modStore.disableMods(localSelectedPathHashes.value, !targetMod.disabled) })
     menuItems.push({ label: '删除文件' + selectedNumStr, icon: Trash2, level: 'danger', action: () => modStore.deleteMods(localSelectedPathHashes.value) })
+  } else if (props.storeType === 'workshop' && selectedSubscribedMissingMods.length > 0) {
+    // 工坊列中仍处于订阅状态的缺失项，代表“订阅还在但文件异常丢失”。
+    menuItems.push({ label: '清理失效并取消订阅' + selectedNumStr, icon: Trash2, level: 'danger', action: () => unsubscribeAndClearMissingWorkshopRecords(selectedSubscribedMissingMods) })
   } else {
-    // 对于缺失项，提供一键清除幽灵记录的功能（取消订阅）
-    menuItems.push({ label: '清理此失效订阅' + selectedNumStr, icon: Trash2, level: 'danger', action: () => unsubscribeWorkshopIds(localSelectedPathHashes.value, false) })
+    menuItems.push({ label: '清理数据记录' + selectedMissingNumStr, icon: Trash2, level: 'danger', action: () => clearMissingRecords(selectedMissingPathHashes) })
   }
 
   menuStore.open(event, menuItems)

@@ -52,40 +52,40 @@ defineEmits(['execute'])
 // -----------------------------------------------------------------
 const toneThemeMap = {
   accent: {
-    card: 'bg-linear-to-b from-white/5 to-transparent border-white/10 hover:border-accent-special/50',
+    card: 'bg-linear-to-b from-text-main/5 to-transparent border-border-base/10 hover:border-accent-special/50',
     title: 'text-accent-special',
-    preview: 'text-text-main/82',
-    button: 'border-accent-special/20 bg-accent-special/10 text-accent-special hover:border-transparent hover:bg-accent-special hover:text-white',
+    preview: 'text-text-soft',
+    button: 'border-accent-special/20 bg-accent-special/10 text-accent-special hover:border-transparent hover:bg-accent-special hover:text-on-accent-special',
   },
   success: {
     card: 'bg-linear-to-b from-accent-success/10 to-transparent border-accent-success/22 hover:border-accent-success/45',
     title: 'text-accent-success',
-    preview: 'text-text-main/85',
-    button: 'border-accent-success/25 bg-accent-success/12 text-accent-success hover:border-transparent hover:bg-accent-success hover:text-black',
+    preview: 'text-text-soft',
+    button: 'border-accent-success/25 bg-accent-success/12 text-accent-success hover:border-transparent hover:bg-accent-success hover:text-on-accent-success',
   },
   warn: {
     card: 'bg-linear-to-b from-accent-warn/10 to-transparent border-accent-warn/22 hover:border-accent-warn/45',
     title: 'text-accent-warn',
-    preview: 'text-text-main/85',
-    button: 'border-accent-warn/25 bg-accent-warn/12 text-accent-warn hover:border-transparent hover:bg-accent-warn hover:text-black',
+    preview: 'text-text-soft',
+    button: 'border-accent-warn/25 bg-accent-warn/12 text-accent-warn hover:border-transparent hover:bg-accent-warn hover:text-on-accent-warn',
   },
   warning: {
     card: 'bg-linear-to-b from-accent-warning/10 to-transparent border-accent-warning/22 hover:border-accent-warning/45',
     title: 'text-accent-warning',
-    preview: 'text-text-main/85',
-    button: 'border-accent-warning/25 bg-accent-warning/12 text-accent-warning hover:border-transparent hover:bg-accent-warning hover:text-black',
+    preview: 'text-text-soft',
+    button: 'border-accent-warning/25 bg-accent-warning/12 text-accent-warning hover:border-transparent hover:bg-accent-warning hover:text-on-accent-warning',
   },
   primary: {
     card: 'bg-linear-to-b from-accent-primary/10 to-transparent border-accent-primary/22 hover:border-accent-primary/45',
     title: 'text-accent-primary',
-    preview: 'text-text-main/85',
-    button: 'border-accent-primary/25 bg-accent-primary/12 text-accent-primary hover:border-transparent hover:bg-accent-primary hover:text-black',
+    preview: 'text-text-soft',
+    button: 'border-accent-primary/25 bg-accent-primary/12 text-accent-primary hover:border-transparent hover:bg-accent-primary hover:text-on-accent-primary',
   },
   danger: {
     card: 'bg-linear-to-b from-accent-danger/10 to-transparent border-accent-danger/22 hover:border-accent-danger/45',
     title: 'text-accent-danger',
-    preview: 'text-text-main/85',
-    button: 'border-accent-danger/25 bg-accent-danger/12 text-accent-danger hover:border-transparent hover:bg-accent-danger hover:text-white',
+    preview: 'text-text-soft',
+    button: 'border-accent-danger/25 bg-accent-danger/12 text-accent-danger hover:border-transparent hover:bg-accent-danger hover:text-on-accent-danger',
   },
 }
 
@@ -109,7 +109,7 @@ const subjectToneMap = {
     chip: 'border-accent-danger/18 bg-accent-danger/8 text-accent-danger',
   },
   neutral: {
-    chip: 'border-white/10 bg-white/4 text-text-main',
+    chip: 'border-border-base/10 bg-bg-overlay/5 text-text-main',
   },
 }
 

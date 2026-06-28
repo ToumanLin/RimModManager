@@ -3,17 +3,15 @@
   <div class="h-full flex gap-4 p-4 overflow-hidden">
     
     <!-- 左侧：列表 -->
-    <div class="w-[35%] flex flex-col bg-black/30 border border-text-main/10 rounded-2xl overflow-hidden shadow-2xl" data-tour="workspace-workshop-results">
-      <div class="p-4 bg-accent-primary/5 border-b border-text-main/10 space-y-3 relative z-10 shrink-0" data-tour="workspace-workshop-search">
+    <div class="w-[35%] flex flex-col bg-bg-inset/70 border border-border-base/10 rounded-2xl overflow-hidden shadow-2xl" data-tour="workspace-workshop-results">
+      <div class="p-4 bg-accent-primary/5 border-b border-border-base/10 space-y-3 relative z-10 shrink-0" data-tour="workspace-workshop-search">
         <div class="flex justify-between items-center">
           <h3 class="text-sm font-black tracking-widest text-accent-primary flex items-center gap-2 uppercase">
             <Globe class="size-4" /> {{ workspaceStore.workshopSearch.sourceMode === 'online' ? '在线工坊搜索' : '缓存工坊浏览' }}
           </h3>
           <div class="flex items-center gap-3">
             <label class="flex items-center gap-2 text-[0.7rem] font-bold text-text-dim cursor-pointer select-none">
-              <input :checked="workspaceStore.workshopSearch.sourceMode === 'online'"
-                type="checkbox" class="accent-cyan-400" @change="toggleOnlineSearch"
-              />
+              <input :checked="workspaceStore.workshopSearch.sourceMode === 'online'" type="checkbox" class="accent-cyan-400" @change="toggleOnlineSearch" />
               在线搜索
             </label>
             <span class="text-[0.7rem] text-text-dim font-mono">共 {{ workspaceStore.workshopSearch.total }} 项</span>
@@ -24,7 +22,7 @@
           <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-text-dim" />
           <!-- 添加了 clearable 交互 -->
           <input v-model="localQuery" @input="debouncedSearch" :placeholder="workspaceStore.workshopSearch.sourceMode === 'online' ? '搜索 Steam 工坊标题或工坊ID...' : '搜索模组名称、包名或工坊ID...'" 
-            class="w-full bg-black/60 border border-text-main/10 rounded-xl pl-9 pr-8 py-2 text-sm text-text-main focus:border-accent-primary focus:bg-black/80 outline-none transition-all shadow-inner" />
+            class="w-full bg-bg-inset border border-border-base/10 rounded-xl pl-9 pr-8 py-2 text-sm text-text-main focus:border-accent-primary focus:bg-bg-inset outline-none transition-all shadow-inner" />
           
           <button v-if="localQuery" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-text-dim hover:text-text-main">
             <X class="size-4" />
@@ -33,7 +31,7 @@
       </div>
 
       <!-- 列表内容区 -->
-      <div class="flex-1 overflow-hidden relative bg-black/20">
+      <div class="content-surface relative flex-1 overflow-hidden">
         
         <!-- 首次加载大遮罩 -->
         <div v-if="workspaceStore.workshopSearch.isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-accent-primary z-10 bg-bg-deep/50 backdrop-blur-sm">
@@ -43,25 +41,22 @@
 
         <!-- 替换为 RecycleScroller -->
         <RecycleScroller v-if="workspaceStore.workshopSearch.results.length > 0"
-          ref="scrollerRef" class="h-full custom-scrollbar" :items="workspaceStore.workshopSearch.results" :item-size="72" key-field="workshop_id"
-          @scroll="handleScroll"
-        >
+          ref="scrollerRef" class="h-full custom-scrollbar p-2 bg-bg-inset/90" :items="workspaceStore.workshopSearch.results" :item-size="itemHeight" key-field="workshop_id"
+          @scroll="handleScroll" >
           <template v-slot="{ item }">
             <div @click="selectMod(item)" v-tooltip="buildResultTooltip(item)"
-              class="h-18 px-3 py-2 border-b border-text-main/5 cursor-pointer transition-all hover:bg-accent-primary/10 group flex items-center gap-3"
-              :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'bg-accent-primary/20 border-r-4 border-r-accent-primary shadow-[inset_2px_0_10px_rgba(59,130,246,0.1)]' : ''">
-              <div v-if="workspaceStore.workshopSearch.sourceMode === 'online'"
-                class="size-12 shrink-0 overflow-hidden rounded-lg border border-text-main/10 bg-black/50"
-              >
-                <img v-if="item.preview_url" class="h-full w-full object-cover" :src="appStore.getRemoteUrl(item.preview_url)" />
-                <div v-else class="flex h-full w-full items-center justify-center text-text-dim/40">
+              class="h-18 px-3 py-2 rounded-md bg-glass-medium/60 border border-border-base/5 cursor-pointer transition-all hover:bg-accent-primary/10 group flex items-center gap-3"
+              :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'bg-accent-primary/20 border-r-4 border-r-accent-primary shadow-[inset_2px_0_10px_rgba(var(--rgb-accent-cool),0.1)]' : ''">
+              <div v-if="workspaceStore.workshopSearch.sourceMode === 'online'" class="size-12 shrink-0 overflow-hidden rounded-lg border border-border-base/10 bg-bg-inset/90" >
+                <img v-if="item.preview_url" class="h-full w-full object-cover" loading="lazy" :src="appStore.getRemoteUrl(item.preview_url)" />
+                <div v-else class="flex h-full w-full items-center justify-center text-text-disabled">
                   <Image class="size-4" />
                 </div>
               </div>
 
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-bold truncate transition-colors" 
-                  :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'text-text-main' : 'text-text-main/80 group-hover:text-accent-primary'">
+                  :class="workspaceStore.workshopSearch.selectedId === item.workshop_id ? 'text-text-main' : 'text-text-soft group-hover:text-accent-primary'">
                   {{ item.title || item.name || '未知模组' }}
                 </div>
                 <div class="flex justify-between items-center mt-1 gap-2">
@@ -69,10 +64,10 @@
                     {{ item.package_id || item.short_description || item.author_steam_id || 'N/A' }}
                   </div>
                   <div class="flex items-center gap-1 text-[0.7rem] shrink-0">
-                    <span v-if="item.subscriptions" class="font-bold px-1 rounded bg-accent-primary/10 text-accent-primary border border-accent-primary/20">
+                    <span v-if="item.subscriptions" class="font-bold px-1 rounded bg-accent-primary/10 text-accent-primary border border-accent-primary/20" v-tooltip="'订阅人数'">
                       {{ formatCount(item.subscriptions) }}
                     </span>
-                    <div class="font-bold px-1 rounded bg-black/40 text-text-dim border border-text-main/10">
+                    <div class="font-bold px-1 rounded bg-bg-inset/80 text-text-dim border border-border-base/10" v-tooltip="'工坊ID'">
                       {{ item.workshop_id }}
                     </div>
                   </div>
@@ -88,14 +83,14 @@
               <div class="size-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin mr-2"></div>
               <span class="text-xs">加载更多...</span>
             </div>
-            <div v-else-if="!workspaceStore.workshopSearch.hasMore && workspaceStore.workshopSearch.results.length > 0" class="py-3 text-center text-xs text-text-dim/50">
+            <div v-else-if="!workspaceStore.workshopSearch.hasMore && workspaceStore.workshopSearch.results.length > 0" class="py-3 text-center text-xs text-text-disabled">
               - 已经到底啦 -
             </div>
           </template>
         </RecycleScroller>
 
         <!-- 空状态 -->
-        <div v-else-if="!workspaceStore.workshopSearch.isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-text-dim/30">
+        <div v-else-if="!workspaceStore.workshopSearch.isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-text-disabled">
           <Cpu class="size-16 mb-4 opacity-50" />
           <span class="text-sm font-bold tracking-widest">暂无结果</span>
         </div>
@@ -104,13 +99,13 @@
     </div>
 
     <!-- 右侧：详情展示 -->
-    <div class="flex-1 bg-black/40 border border-text-main/10 rounded-2xl overflow-hidden flex flex-col relative shadow-2xl" data-tour="workspace-workshop-detail">
+    <div class="flex-1 bg-bg-inset/80 border border-border-base/10 rounded-2xl overflow-hidden flex flex-col relative shadow-2xl" data-tour="workspace-workshop-detail">
       
       <template v-if="selectedMod && !workspaceStore.workshopSearch.isDetailLoading">
         <!-- 顶部导航面包屑/后退栏 -->
         <div v-if="workspaceStore.workshopSearch.historyStack.length > 0" class="absolute top-0 left-0 z-20 flex items-center opacity-60">
           <button @click="workspaceStore.goBackWorkshopDetail" 
-                  class="flex items-center gap-1 px-3 py-1.5 bg-black/80 backdrop-blur-md rounded-lg text-xs font-bold text-text-main hover:text-accent-primary border border-text-main/20 hover:border-accent-primary/50 transition-all shadow-lg">
+                  class="flex items-center gap-1 px-3 py-1.5 bg-bg-inset backdrop-blur-md rounded-lg text-xs font-bold text-text-main hover:text-accent-primary border border-border-base/18 hover:border-accent-primary/50 transition-all shadow-lg">
             <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
             返回上一层
           </button>
@@ -130,8 +125,8 @@
           <div class="pt-3 flex gap-6 items-end">
             
             <img v-if="selectedMod?.preview_url" :src="appStore.getRemoteUrl(selectedMod?.preview_url)" 
-              class="size-40 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] border-2 border-text-main/10 object-cover z-10" />
-            <div class="size-40 rounded-xl bg-black/50 border-2 border-dashed border-text-main/20 flex items-center justify-center z-10" v-else>
+              class="size-40 rounded-xl shadow-[0_10px_30px_var(--shadow-color)] border-2 border-border-base/10 object-cover z-10" />
+            <div class="size-40 rounded-xl bg-bg-inset/90 border-2 border-dashed border-border-base/18 flex items-center justify-center z-10" v-else>
               <span class="text-xs text-text-dim">NO IMAGE</span>
             </div>
 
@@ -142,22 +137,22 @@
                   <span class="px-2 py-1 rounded bg-accent-primary/20 text-accent-primary text-[0.6rem] font-black border border-accent-primary/30 uppercase tracking-widest">
                     WID: {{ selectedId }}
                   </span>
-                  <span class="px-2 py-1 rounded bg-black/40 text-text-main/70 text-[0.6rem] font-mono border border-text-main/10 flex items-center gap-1.5">
+                  <span class="px-2 py-1 rounded bg-bg-inset/80 text-text-dim text-[0.6rem] font-mono border border-border-base/10 flex items-center gap-1.5">
                     <Fingerprint class="size-3 opacity-50" />
                     {{ selectedMod?.package_id || 'N/A' }}
                   </span>
                 </div>
                 <!-- 第二行：作者与时间 -->
                 <div class="flex flex-wrap gap-2 items-center">
-                  <span class="px-2 py-1 rounded bg-black/60 text-text-main text-[0.65rem] font-bold border border-text-main/20 flex items-center gap-1.5 backdrop-blur-sm">
+                  <span class="px-2 py-1 rounded bg-bg-inset text-text-main text-[0.65rem] font-bold border border-border-base/18 flex items-center gap-1.5 backdrop-blur-sm">
                     <UserRound class="size-3 text-accent-success" />
                     {{ selectedMod?.author || selectedMod?.author_steam_id || '未知作者' }}
                   </span>
-                  <span v-if="selectedMod?.time_updated" class="px-2 py-1 rounded bg-black/60 text-text-main text-[0.65rem] font-bold border border-text-main/20 flex items-center gap-1.5 backdrop-blur-sm">
+                  <span v-if="selectedMod?.time_updated" class="px-2 py-1 rounded bg-bg-inset text-text-main text-[0.65rem] font-bold border border-border-base/18 flex items-center gap-1.5 backdrop-blur-sm">
                     <Calendar class="size-3 text-text-dim"/>
                     {{ formatDate(selectedMod?.time_updated) }}
                   </span>
-                  <span v-if="selectedMod?.subscriptions" class="px-2 py-1 rounded bg-black/60 text-text-main text-[0.65rem] font-bold border border-text-main/20 flex items-center gap-1.5 backdrop-blur-sm">
+                  <span v-if="selectedMod?.subscriptions" class="px-2 py-1 rounded bg-bg-inset text-text-main text-[0.65rem] font-bold border border-border-base/18 flex items-center gap-1.5 backdrop-blur-sm">
                     <CloudDownload class="size-3 text-accent-primary" />
                     {{ formatCount(selectedMod?.subscriptions) }} 订阅
                   </span>
@@ -183,7 +178,7 @@
                     {{ tag }}
                   </span>
                 </div>
-                <div v-else class="text-[0.7rem] text-text-dim/50 italic font-mono flex items-center gap-1">
+                <div v-else class="text-[0.7rem] text-text-disabled italic font-mono flex items-center gap-1">
                   <Layers class="size-3" /> 未标注适用版本
                 </div>
               </div>
@@ -191,16 +186,16 @@
             
             <!-- 动作按钮 -->
             <div class="flex flex-col gap-2 z-10 shrink-0" data-tour="workspace-workshop-actions">
-              <button v-if="!isSubscribed([selectedId])" @click="handleSubscribe([selectedId])" class="w-36 py-2 rounded-xl bg-accent-primary/20 text-accent-primary text-sm border border-accent-primary/40 font-bold hover:scale-105 hover:bg-accent-primary active:scale-95 transition-all hover:text-black flex items-center justify-center gap-2">
+              <button v-if="!isSubscribed([selectedId])" @click="handleSubscribe([selectedId])" class="w-36 py-2 rounded-xl bg-accent-primary/20 text-accent-primary text-sm border border-accent-primary/40 font-bold hover:scale-105 hover:bg-accent-primary active:scale-95 transition-all hover:text-on-accent-primary flex items-center justify-center gap-2">
                 <CloudDownload class="size-4" /> 订阅
               </button>
-              <button v-else @click="handleUnsubscribe([selectedId])" class="w-36 py-2 rounded-xl bg-accent-danger/20 text-accent-danger border border-accent-danger/40 font-bold text-sm hover:bg-accent-danger hover:text-black hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all flex items-center justify-center gap-2">
+              <button v-else @click="handleUnsubscribe([selectedId])" class="w-36 py-2 rounded-xl bg-accent-danger/20 text-accent-danger border border-accent-danger/40 font-bold text-sm hover:bg-accent-danger hover:text-on-accent-danger hover:shadow-[0_0_15px_rgba(var(--rgb-accent-danger),0.3)] transition-all flex items-center justify-center gap-2">
                 <CloudDownload class="size-4" /> 取消订阅
               </button>
-              <button @click="handleDownload([selectedId])" class="w-36 py-2 rounded-xl bg-accent-success/20 text-accent-success border border-accent-success/40 font-bold text-sm hover:bg-accent-success hover:text-black hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
+              <button @click="handleDownload([selectedId])" class="w-36 py-2 rounded-xl bg-accent-success/20 text-accent-success border border-accent-success/40 font-bold text-sm hover:bg-accent-success hover:text-on-accent-success hover:shadow-[0_0_15px_rgba(var(--rgb-accent-success),0.3)] transition-all flex items-center justify-center gap-2">
                 <Download class="size-4" /> 管理器下载
               </button>
-              <span @click="openWebUrl(selectedId)" title="打开创意工坊页面" class="px-2.5 py-1 rounded bg-black/60 text-[0.65rem] text-text-dim hover:text-accent-primary cursor-pointer transition-all font-bold border border-text-main/20 flex items-center gap-1 backdrop-blur-sm">
+              <span @click="openWebUrl(selectedId)" title="打开创意工坊页面" class="px-2.5 py-1 rounded bg-bg-inset text-[0.65rem] text-text-dim hover:text-accent-primary cursor-pointer transition-all font-bold border border-border-base/18 flex items-center gap-1 backdrop-blur-sm">
                 <Link class="size-2.5" />
                 打开创意工坊页面
               </span>
@@ -210,7 +205,7 @@
         </div>
 
         <!-- 内容区 (使用 Tailwind Typography) -->
-        <div class="flex-1 overflow-y-auto p-5 custom-scrollbar bg-text-main/2">
+        <div class="workshop-detail-scroll content-surface flex-1 overflow-y-auto p-5 custom-scrollbar">
           <!-- 依赖提示框 (如果是解析得到的) -->
           <div v-if="selectedMod?.dependencies_mods && dependencies_ids.length > 0" data-tour="workspace-workshop-dependencies"
             class="mb-6 p-3 rounded-xl bg-accent-warn/10 border border-accent-warn/30">
@@ -232,16 +227,16 @@
             </div>
             <div class="flex flex-wrap gap-2">
               <span v-for="(name, wid) in selectedMod?.dependencies_mods" :key="wid"
-                class="px-2 py-0.5 text-sm group relative rounded border border-text-main/10 font-mono cursor-pointer"
-                :class="[isSubscribed([wid]) ? 'bg-accent-primary/20 text-accent-primary' : isInstalled([wid]) ? 'bg-accent-success/20 text-accent-success' : 'bg-text-main/10 text-text-dim']"
+                class="px-2 py-0.5 text-sm group relative rounded border border-border-base/10 font-mono cursor-pointer"
+                :class="[isSubscribed([wid]) ? 'bg-accent-primary/20 text-accent-primary' : isInstalled([wid]) ? 'bg-accent-success/20 text-accent-success' : 'bg-bg-overlay/10 text-text-dim']"
                 @click="handleNavigateInside(wid)"
                 >
                 {{ name }} <span class="opacity-50 text-[0.6rem]">({{ wid }})</span>
                 <div class="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto flex gap-0.5 justify-center items-center text-[0.6rem] transition-all">
-                  <button @click.stop="openWebUrl(wid)" v-tooltip="'打开创意工坊页面'" class="p-1.5 cursor-pointer rounded-full bg-accent-special/80 hover:bg-accent-special scale-90 hover:scale-105 text-black transition-all"><Link class="size-3" /></button>
-                  <button v-if="isSubscribed([wid])" @click.stop="handleUnsubscribe([wid])" v-tooltip="'取消订阅'" class="p-1.5 cursor-pointer rounded-full bg-accent-danger/80 hover:bg-accent-danger scale-90 hover:scale-105 text-black transition-all"><FlagOff class="size-3" /></button>
-                  <button v-else @click.stop="handleSubscribe([wid])" v-tooltip="'Steam 订阅'" class="p-1.5 cursor-pointer rounded-full bg-accent-primary/80 hover:bg-accent-primary scale-90 text-black hover:scale-105 transition-all"><Flag class="size-3" /></button>
-                  <button @click.stop="handleDownloadSingle([wid])" v-tooltip="'下载到管理器'" class="p-1.5 cursor-pointer rounded-full bg-accent-success/80 hover:bg-accent-success scale-90 text-black hover:scale-105 transition-all"><Download class="size-3" /></button>
+                  <button @click.stop="openWebUrl(wid)" v-tooltip="'打开创意工坊页面'" class="p-1.5 cursor-pointer rounded-full bg-accent-special/80 hover:bg-accent-special scale-90 hover:scale-105 text-on-accent-special transition-all"><Link class="size-3" /></button>
+                  <button v-if="isSubscribed([wid])" @click.stop="handleUnsubscribe([wid])" v-tooltip="'取消订阅'" class="p-1.5 cursor-pointer rounded-full bg-accent-danger/80 hover:bg-accent-danger scale-90 hover:scale-105 text-on-accent-danger transition-all"><FlagOff class="size-3" /></button>
+                  <button v-else @click.stop="handleSubscribe([wid])" v-tooltip="'Steam 订阅'" class="p-1.5 cursor-pointer rounded-full bg-accent-primary/80 hover:bg-accent-primary scale-90 text-on-accent-primary hover:scale-105 transition-all"><Flag class="size-3" /></button>
+                  <button @click.stop="handleDownloadSingle([wid])" v-tooltip="'下载到管理器'" class="p-1.5 cursor-pointer rounded-full bg-accent-success/80 hover:bg-accent-success scale-90 text-on-accent-success hover:scale-105 transition-all"><Download class="size-3" /></button>
                 </div>
               </span>
             </div>
@@ -255,10 +250,10 @@
             <!-- 使用 flex nowrap 和 overflow-x-auto 实现横向滚动 -->
             <div class="flex gap-3 overflow-x-auto custom-scrollbar pb-2 snap-x">
               <div v-for="(img, idx) in selectedMod.screenshots" :key="idx"
-                class="relative h-32 w-56 shrink-0 snap-start overflow-hidden rounded-lg border border-text-main/10 bg-black/40"
+                class="relative h-32 w-56 shrink-0 snap-start overflow-hidden rounded-lg border border-border-base/10 bg-bg-inset/80"
               >
-                <div v-if="!loadedScreenshotMap[img]" class="absolute inset-0 flex items-center justify-center bg-black/50" >
-                  <svg viewBox="0 0 160 96" class="h-12 w-20 text-text-dim/45" fill="none" aria-hidden="true">
+                <div v-if="!loadedScreenshotMap[img]" class="absolute inset-0 flex items-center justify-center bg-bg-inset/90" >
+                  <svg viewBox="0 0 160 96" class="h-12 w-20 text-text-disabled" fill="none" aria-hidden="true">
                     <rect x="10" y="10" width="140" height="76" rx="10" stroke="currentColor" stroke-width="4" stroke-dasharray="6 6" />
                     <circle cx="48" cy="38" r="10" fill="currentColor" class="opacity-60" />
                     <path d="M24 72L58 48L80 66L106 42L136 72" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" class="opacity-70" />
@@ -275,13 +270,13 @@
             <div v-else class="text-text-dim italic">该模组没有提供详细描述。</div>
           </div>
 
-          <div v-if="selectedMod?.children?.length > 0" class="space-y-2 border-t border-text-main/10 pt-4">
+          <div v-if="selectedMod?.children?.length > 0" class="space-y-2 border-t border-border-base/10 pt-4">
             <h4 class="text-xs font-bold text-accent-tip uppercase tracking-widest flex items-center gap-1">
               <Link class="size-3" /> 工坊关联项
             </h4>
             <div class="flex flex-wrap gap-2">
               <button v-for="child in selectedMod.children" :key="`${child.workshop_id}-${child.sort_order}`"
-                class="px-2 py-1 rounded bg-black/40 text-text-main/80 text-xs border border-text-main/10 hover:border-accent-primary/40 hover:text-accent-primary transition-colors"
+                class="px-2 py-1 rounded bg-bg-inset/80 text-text-soft text-xs border border-border-base/10 hover:border-accent-primary/40 hover:text-accent-primary transition-colors"
                 @click="handleNavigateInside(child.workshop_id)" >
                 {{ child.workshop_id }}
               </button>
@@ -289,7 +284,7 @@
           </div>
 
           <!-- 反向依赖推荐 (有谁依赖了我) -->
-          <div v-if="selectedMod.dependents_mods?.length > 0" class="space-y-2 border-t border-text-main/10 pt-4">
+          <div v-if="selectedMod.dependents_mods?.length > 0" class="space-y-2 mt-3 border-t border-border-base/10 pt-4">
             <h4 class="text-xs font-bold text-accent-primary uppercase tracking-widest flex items-center gap-1">
               <Network class="size-3" /> 生态关联 (被以下模组依赖)
             </h4>
@@ -301,7 +296,7 @@
           </div>
 
           <!-- 同作者的其他作品 -->
-          <div v-if="selectedMod.same_author_mods?.length > 0" class="space-y-2 border-t border-text-main/10 pt-4">
+          <div v-if="selectedMod.same_author_mods?.length > 0" class="space-y-2 border-t border-border-base/10 pt-4">
             <h4 class="text-xs font-bold text-accent-success uppercase tracking-widest flex items-center gap-1">
               <User class="size-3" /> 作者的其他作品
             </h4>
@@ -316,7 +311,7 @@
       <!-- 加载遮罩 -->
       <div v-if="workspaceStore.workshopSearch.isDetailLoading" class="absolute inset-0 bg-bg-deep flex flex-col items-center justify-center z-50">
         <div class="relative flex items-center justify-center">
-          <div class="size-16 border-2 border-text-main/10 rounded-full"></div>
+          <div class="size-16 border-2 border-border-base/10 rounded-full"></div>
           <div class="absolute size-16 border-2 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
           <Globe class="size-6 text-accent-primary absolute animate-pulse" />
         </div>
@@ -360,6 +355,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (searchTimeout) clearTimeout(searchTimeout)
 })
+const itemHeight = computed(() => appStore.scalePx(72)+4 )
 
 const selectedMod = computed(() => {
   return workspaceStore.workshopSearch.detailData
@@ -445,7 +441,7 @@ const selectMod = (item) => {
 // 点击详情页内的推荐卡片 (会压入历史栈)
 const handleNavigateInside = (workshop_id) => {
   // 滚动条回到顶部 (可选，提升体验)
-  const scrollContainer = document.querySelector('.custom-scrollbar.bg-text-main\\/2')
+  const scrollContainer = document.querySelector('.workshop-detail-scroll')
   if (scrollContainer) scrollContainer.scrollTop = 0
   loadedScreenshotMap.value = {}
   workspaceStore.fetchWorkshopDetails(workshop_id, true)

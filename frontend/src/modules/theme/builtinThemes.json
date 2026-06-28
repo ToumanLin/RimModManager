@@ -1,0 +1,122 @@
+[
+  {
+    "id": "obsidian-cyan",
+    "name": "黑曜石青",
+    "builtin": true,
+    "tokens": {
+      "bg": { "deep": "#0f172a", "surface": "#1e293b", "elevated": "#263449", "highlight": "#2d3748", "muted": "#172033", "inset": "#0b1120", "overlay": "#f1f5f9", "contrast": "#f1f5f9", "neutral": "#94a3b8" },
+      "glass": { "light": "rgba(241, 245, 249, 0.05)", "medium": "rgba(30, 41, 59, 0.74)", "heavy": "rgba(15, 23, 42, 0.92)" },
+      "accent": {
+        "danger": "#ef4444",
+        "highlight": "#ec4899",
+        "special": "#8b5cf6",
+        "cool": "#3b82f6",
+        "primary": "#06b6d4",
+        "success": "#10b981",
+        "tip": "#84cc16",
+        "warn": "#eab308",
+        "secondary": "#f59e0b",
+        "warning": "#f97316"
+      },
+      "text": { "main": "#f1f5f9", "soft": "rgba(241, 245, 249, 0.82)", "dim": "#94a3b8", "subtle": "#64748b", "disabled": "rgba(148, 163, 184, 0.50)", "inverse": "#020617" },
+      "border": { "base": "#f1f5f9" },
+      "overlay": { "scrim": "rgba(15, 23, 42, 0.70)" }
+    }
+  },
+  {
+    "id": "graphite-ash",
+    "name": "石墨灰夜",
+    "builtin": true,
+    "tokens": {
+      "bg": { "deep": "#0b0b0c", "surface": "#151517", "elevated": "#1d1d20", "highlight": "#2a2a2e", "muted": "#111113", "inset": "#0f1421", "overlay": "#f5f5f5", "contrast": "#f5f5f5", "neutral": "#8b8b91" },
+      "glass": { "light": "rgba(255, 255, 255, 0.045)", "medium": "rgba(22, 22, 24, 0.78)", "heavy": "rgba(8, 8, 9, 0.94)" },
+      "accent": {
+        "danger": "#827676",
+        "highlight": "#d4d4d8",
+        "special": "#838391",
+        "cool": "#8d98a1",
+        "primary": "#e5e7eb",
+        "success": "#a9a9a9",
+        "tip": "#6b6767",
+        "warn": "#7a7971",
+        "secondary": "#7d756f",
+        "warning": "#615a52"
+      },
+      "text": { "main": "#f5f5f5", "soft": "rgba(245, 245, 245, 0.82)", "dim": "#a1a1aa", "subtle": "#71717a", "disabled": "rgba(161, 161, 170, 0.48)", "inverse": "#09090b" },
+      "border": { "base": "#f5f5f5" },
+      "overlay": { "scrim": "rgba(5, 5, 6, 0.74)" }
+    }
+  },
+  {
+    "id": "win11-mica",
+    "name": "云母浅灰",
+    "builtin": true,
+    "tokens": {
+      "bg": { "deep": "#d4d4d4", "surface": "#ebebeb", "elevated": "#fbfbfb", "highlight": "#e8f1fb", "muted": "#f7f7f7", "inset": "#ededed", "overlay": "#1f2937", "contrast": "#1f1f1f", "neutral": "#8a8a8a" },
+      "glass": { "light": "rgba(255, 255, 255, 0.62)", "medium": "rgba(249, 249, 249, 0.84)", "heavy": "rgba(243, 243, 243, 0.94)" },
+      "accent": {
+        "danger": "#f53838",
+        "highlight": "#fcc02e",
+        "special": "#be71cc",
+        "cool": "#4258ff",
+        "primary": "#64b5f6",
+        "success": "#51d134",
+        "tip": "#a3d968",
+        "warn": "#ffeb3c",
+        "secondary": "#ff8a66",
+        "warning": "#f5971d"
+      },
+      "text": { "main": "#1f1f1f", "soft": "rgba(31, 31, 31, 0.82)", "dim": "#5f5f5f", "subtle": "#8a8a8a", "disabled": "rgba(95, 95, 95, 0.50)", "inverse": "#ffffff" },
+      "border": { "base": "#1f2937" },
+      "overlay": { "scrim": "rgba(31, 31, 31, 0.26)" }
+    }
+  },
+  {
+    "id": "mint-paper",
+    "name": "薄荷清新",
+    "builtin": true,
+    "tokens": {
+      "bg": { "deep": "#eefbf5", "surface": "#fbfffc", "elevated": "#ffffff", "highlight": "#d8f3e7", "muted": "#e2f5ec", "inset": "#f4fbf7", "overlay": "#10231b", "contrast": "#10231b", "neutral": "#718078" },
+      "glass": { "light": "rgba(255, 255, 255, 0.62)", "medium": "rgba(251, 255, 252, 0.82)", "heavy": "rgba(238, 251, 245, 0.92)" },
+      "accent": {
+        "danger": "#e11d48",
+        "highlight": "#be185d",
+        "special": "#7c3aed",
+        "cool": "#2563eb",
+        "primary": "#029688",
+        "success": "#83c683",
+        "tip": "#4d7c0f",
+        "warn": "#b45309",
+        "secondary": "#ca8a04",
+        "warning": "#ea580c"
+      },
+      "text": { "main": "#10231b", "soft": "rgba(16, 35, 27, 0.82)", "dim": "#53645d", "subtle": "#718078", "disabled": "rgba(83, 100, 93, 0.50)", "inverse": "#ffffff" },
+      "border": { "base": "#10231b" },
+      "overlay": { "scrim": "rgba(16, 35, 27, 0.30)" }
+    }
+  },
+  {
+    "id": "ember-coffee",
+    "name": "余烬咖啡",
+    "builtin": true,
+    "tokens": {
+      "bg": { "deep": "#211713", "surface": "#36251d", "elevated": "#422d23", "highlight": "#4a3328", "muted": "#2b1d17", "inset": "#160f0c", "overlay": "#fff7ed", "contrast": "#fff7ed", "neutral": "#a98d79" },
+      "glass": { "light": "rgba(255, 247, 237, 0.06)", "medium": "rgba(54, 37, 29, 0.76)", "heavy": "rgba(33, 23, 19, 0.92)" },
+      "accent": {
+        "danger": "#ef4444",
+        "highlight": "#fb7185",
+        "special": "#f59e0b",
+        "cool": "#38bdf8",
+        "primary": "#f97316",
+        "success": "#22c55e",
+        "tip": "#a3e635",
+        "warn": "#facc15",
+        "secondary": "#fb923c",
+        "warning": "#ea580c"
+      },
+      "text": { "main": "#fff7ed", "soft": "rgba(255, 247, 237, 0.82)", "dim": "#d6bca8", "subtle": "#a98d79", "disabled": "rgba(214, 188, 168, 0.50)", "inverse": "#1c120d" },
+      "border": { "base": "#fff7ed" },
+      "overlay": { "scrim": "rgba(33, 23, 19, 0.72)" }
+    }
+  }
+]

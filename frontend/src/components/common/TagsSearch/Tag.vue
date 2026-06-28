@@ -4,7 +4,7 @@
        :class="tagStyle">
     
     <!-- 排除标记 -->
-    <span v-if="tag.exclude" class="text-red-400 font-bold">-</span>
+    <span v-if="tag.exclude" class="text-accent-danger font-bold">-</span>
     
     <!-- 键 -->
     <span v-if="tag.key" class="opacity-70">{{ tag.originalKey }}:</span>
@@ -26,7 +26,7 @@
 
     <!-- 删除按钮 -->
     <button @click.stop="$emit('remove')"
-            class="w-0 group-hover:w-4 overflow-hidden transition-all duration-200 text-current hover:text-red-400 flex items-center justify-end">
+            class="w-0 group-hover:w-4 overflow-hidden transition-all duration-200 text-current hover:text-accent-danger flex items-center justify-end">
       <svg class="shrink-0 size-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
     </button>
   </div>
@@ -49,14 +49,13 @@ const localValue = ref('')
 // 注意：需要把父组件的 colorPalette 逻辑也移过来，或者通过 Props 传入颜色类名
 // 这里为了演示，假设把 getTagStyle 逻辑封装到了一个单独的 js 文件，或者直接复制过来
 const tagStyle = computed(() => {
-    // 这里简单复制之前的逻辑，实际建议提取公共工具函数
     const colorPalette = [
-        { bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400' },
-        { bg: 'bg-green-500/10', border: 'border-green-500/20', text: 'text-green-400' },
-        { bg: 'bg-purple-500/10', border: 'border-purple-500/20', text: 'text-purple-400' },
-        { bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', text: 'text-yellow-400' },
-        { bg: 'bg-pink-500/10', border: 'border-pink-500/20', text: 'text-pink-400' },
-        { bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', text: 'text-cyan-400' },
+        { bg: 'bg-accent-cool/10', border: 'border-accent-cool/20', text: 'text-accent-cool' },
+        { bg: 'bg-accent-success/10', border: 'border-accent-success/20', text: 'text-accent-success' },
+        { bg: 'bg-accent-special/10', border: 'border-accent-special/20', text: 'text-accent-special' },
+        { bg: 'bg-accent-warn/10', border: 'border-accent-warn/20', text: 'text-accent-warn' },
+        { bg: 'bg-accent-highlight/10', border: 'border-accent-highlight/20', text: 'text-accent-highlight' },
+        { bg: 'bg-accent-primary/10', border: 'border-accent-primary/20', text: 'text-accent-primary' },
     ]
     const hashString = (str) => {
         let hash = 0;
@@ -64,8 +63,8 @@ const tagStyle = computed(() => {
         return Math.abs(hash);
     }
 
-    if (props.tag.exclude) return 'bg-red-500/10 border-red-500/20 text-red-400'
-    if (!props.tag.key) return 'bg-text-main/5 border-text-main/10 text-gray-300'
+    if (props.tag.exclude) return 'bg-accent-danger/10 border-accent-danger/20 text-accent-danger'
+    if (!props.tag.key) return 'bg-bg-overlay/5 border-border-base/10 text-text-soft'
     
     const index = hashString(props.tag.key) % colorPalette.length
     const theme = colorPalette[index]

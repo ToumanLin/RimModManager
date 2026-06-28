@@ -1,19 +1,17 @@
 <template>
-  <transition name="modal-fade">
-    <div v-if="appStore.uiState.showUpdateModal" 
-      class="fixed inset-0 z-9999 flex items-center justify-center bg-bg-deep/70 backdrop-blur-md"
-      @click.self="shakeComponent('.update-modal-box')">
-      
-      <!-- 弹窗主体 -->
-      <div class="update-modal-box relative w-full max-w-2xl max-h-[85vh] flex flex-col bg-bg-surface/95 border border-text-main/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden animate-in zoom-in-95 duration-300">
+  <CommonModalShell :show="appStore.uiState.showUpdateModal" :show-header="false"
+    :close-on-backdrop="false" size="custom" :z-index="9999" accent="primary" panel-class="update-modal-box w-full max-w-2xl max-h-[85vh]" content-class="h-full flex flex-col"
+    @backdrop="shakeComponent('.update-modal-box')"
+    @close="closeModal"
+  >
         
         <!-- 背景光效 -->
         <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[120%] h-32 bg-accent-primary/20 blur-[60px] rounded-full pointer-events-none"></div>
 
         <!-- Header -->
-        <header class="relative px-8 py-3 bg-bg-deep/40 border-b border-text-main/5 flex items-center justify-between shrink-0">
+        <header class="relative px-5 py-3 bg-bg-deep/40 border-b border-border-base/5 flex items-center justify-between shrink-0">
           <div class="flex items-center gap-4">
-            <div class="p-2 bg-accent-primary/20 text-accent-primary rounded-xl ring-1 ring-accent-primary/50 shadow-[0_0_15px_rgba(var(--color-accent-primary),0.3)]">
+            <div class="p-2 bg-accent-primary/20 text-accent-primary rounded-xl shadow-[0_0_15px_rgba(var(--rgb-accent-primary),0.3)]">
               <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
             </div>
             <div>
@@ -29,8 +27,12 @@
             </div>
           </div>
           
-          <!-- 全量切换开关 -->
-          <common-switch v-model="showFullHistory" mini label="完整历史" class="w-35" />
+          <div class="flex items-center gap-2">
+            <common-switch v-model="showFullHistory" mini label="完整历史" class="w-35" />
+            <button class="modal-close-button" aria-label="关闭" @click="closeModal">
+              <X class="size-4" />
+            </button>
+          </div>
         </header>
 
         <!-- 滚动时间线区域 -->
@@ -43,29 +45,29 @@
             <div v-for="(log, idx) in displayedLogs" :key="log.version" 
                 class="relative flex items-start gap-5 group">
               <!-- 圆点：固定在左侧线条上 -->
-              <div class="flex self-center w-6 h-6 flex-none shrink-0 rounded-full border-4 border-bg-surface bg-text-main/20 text-text-dim shadow z-10 transition-colors duration-300"
+              <div class="flex self-center w-6 h-6 flex-none shrink-0 rounded-full border-4 border-bg-surface bg-bg-overlay/10 text-text-dim shadow z-10 transition-colors duration-300"
                   :class="{ 'bg-accent-primary border-accent-primary/30 ring-2 ring-accent-primary': idx === 0 }">
               </div>
               <!-- 内容卡片：占据右侧剩余空间 (flex-1) -->
-              <div class="flex-1 p-4 rounded-xl border border-text-main/10 bg-black/20 backdrop-blur-sm transition-all hover:bg-black/40 hover:border-text-main/20 hover:shadow-lg">
+              <div class="modal-section flex-1 rounded-xl p-4 backdrop-blur-sm transition-all hover:bg-bg-inset/80 hover:border-border-base/18 hover:shadow-lg">
                 <div class="flex items-center justify-between mb-3">
-                  <span class="text-lg font-black font-mono text-text-main" :class="{'text-accent-primary drop-shadow-[0_0_5px_rgba(var(--color-accent-primary),0.8)]': idx === 0}">
+                  <span class="text-lg font-black font-mono text-text-main" :class="{'text-accent-primary drop-shadow-[0_0_5px_rgba(var(--rgb-accent-primary),0.8)]': idx === 0}">
                     v{{ log.version }}
                   </span>
-                  <span class="text-xs text-text-dim bg-text-main/10 px-2 py-0.5 rounded-full">{{ log.date || '开发中' }}</span>
+                  <span class="text-xs text-text-dim bg-bg-overlay/10 px-2 py-0.5 rounded-full">{{ log.date || '开发中' }}</span>
                 </div>
                 <div class="space-y-4">
                   <section
                     v-for="(entry, entryIdx) in log.entries || []"
                     :key="`${log.version}-${entryIdx}-${entry.title || 'entry'}`"
                     class="space-y-2.5"
-                    :class="{ 'border-t border-text-main/8 pt-4': entryIdx > 0 }"
+                    :class="{ 'border-t border-border-base/10 pt-4': entryIdx > 0 }"
                   >
-                    <div v-if="entry.title" class="text-xs font-bold uppercase tracking-[0.18em] text-text-dim/80">
+                    <div v-if="entry.title" class="text-xs font-bold uppercase tracking-[0.18em] text-text-dim">
                       {{ entry.title }}
                     </div>
                     <ul class="space-y-2.5">
-                      <li v-for="(change, cIdx) in entry.changes || []" :key="cIdx" class="flex items-start gap-2 text-sm text-text-main/80">
+                      <li v-for="(change, cIdx) in entry.changes || []" :key="cIdx" class="flex items-start gap-2 text-sm text-text-soft">
                         <span v-if="change.type === 'feature'" class="shrink-0 mt-0.5" ><CircleFadingPlus class="size-4 text-accent-tip"/></span>
                         <span v-else-if="change.type === 'optimize'" class="shrink-0 mt-0.5" ><Zap class="size-4 text-accent-special"/></span>
                         <span v-else-if="change.type === 'fix'" class="shrink-0 mt-0.5" ><Bug class="size-4 text-accent-warn"/></span>
@@ -83,16 +85,13 @@
         </div>
 
         <!-- Footer -->
-        <footer class="px-8 py-4 border-t border-text-main/5 bg-text-main/5 flex justify-end shrink-0 relative z-10">
+        <footer class="px-8 py-4 border-t border-border-base/5 bg-bg-overlay/5 flex justify-end shrink-0 relative z-10">
           <button @click="closeModal" 
-            class="px-8 py-2.5 bg-accent-primary hover:bg-accent-primary/90 text-black text-sm font-bold rounded-xl shadow-[0_0_15px_rgba(var(--color-accent-primary),0.4)] hover:scale-105 active:scale-95 transition-all">
+            class="px-8 py-2.5 bg-accent-primary hover:bg-accent-primary/90 text-on-accent-primary text-sm font-bold rounded-xl shadow-[0_0_15px_rgba(var(--rgb-accent-primary),0.4)] hover:scale-105 active:scale-95 transition-all">
             我知道了
           </button>
         </footer>
-
-      </div>
-    </div>
-  </transition>
+  </CommonModalShell>
 </template>
 
 <script setup>
@@ -100,7 +99,8 @@ import { ref, computed, watch } from 'vue'
 import { useAppStore } from '../stores/appStore'
 import { shakeComponent } from '../utils/domEffects'
 import CommonSwitch from './common/input/CommonSwitch.vue'
-import { Bug, CircleFadingPlus, Dna, Zap } from 'lucide-vue-next'
+import CommonModalShell from './common/CommonModalShell.vue'
+import { Bug, CircleFadingPlus, Dna, Zap, X } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 
 const appStore = useAppStore()
@@ -172,8 +172,3 @@ const closeModal = () => {
 }
 
 </script>
-
-<style scoped>
-.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.3s ease; }
-.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
-</style>

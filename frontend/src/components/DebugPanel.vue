@@ -2,17 +2,17 @@
   <div class="fixed bottom-8 left-2 z-9999 font-mono text-xs">
     <!-- 开关按钮 -->
     <button @click="isOpen = !isOpen" 
-      class="bg-black/80 text-accent-primary border border-accent-primary/50 px-2 py-1 rounded shadow-lg hover:bg-black transition-all mb-1">
+      class="bg-bg-inset text-accent-primary border border-accent-primary/50 px-2 py-1 rounded shadow-lg hover:bg-bg-inset transition-all mb-1">
       {{ isOpen ? 'Close Debug' : 'Debug State' }}
     </button>
 
     <!-- 面板主体 -->
     <div v-if="isOpen" 
-      class="w-[400px] h-[600px] bg-[#1e1e1e] border border-text-main/10 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+      class="w-[400px] h-[600px] bg-bg-inset border border-border-base/10 rounded-lg shadow-2xl flex flex-col overflow-hidden">
       
       <!-- 顶部信息 -->
-      <div class="p-2 border-b border-text-main/10 bg-text-main/5 flex justify-between">
-        <span class="text-green-400">Store 快照</span>
+      <div class="p-2 border-b border-border-base/10 bg-bg-overlay/5 flex justify-between">
+        <span class="text-accent-success">Store 快照</span>
         <button @click="refresh" class="hover:text-text-main">刷新</button>
       </div>
 

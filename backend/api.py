@@ -45,7 +45,7 @@ from backend.utils.logger import logger, app_log_reader
 from backend.managers.mgr_network import network_mgr
 
 # 2. 引入数据库层
-from backend.database.models import ModAsset, ModInterlock, UserModData, GithubModRecord, GithubTimeline, db
+from backend.database.models import MOD_ASSET_STATE_MISSING, MOD_ASSET_STATE_PRESENT, ModAsset, ModInterlock, UserModData, GithubModRecord, GithubTimeline, db
 from backend.database.dao import CollectionDAO, GroupDAO, ModDAO, ModInterlockDAO, ModMaintenanceDAO
 from backend.database.dao_ext import ExtDAO
 from backend.database.runtime import close_db, clear_db, init_db
@@ -89,6 +89,8 @@ from backend.browser_runtime import build_sub_browser_target_url
 from backend.utils.restart import launch_new_application
 from backend.migrations.app_upgrade import normalize_duplicate_group_names_on_load, run_app_upgrade_migrations
 from backend.text_search.manager import FileSearchManager
+from backend.startup import StartupCoordinator
+from backend.theme_store import ThemeStore
 
 GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS = 3 * 60 * 1000
 
@@ -256,8 +258,7 @@ class API:
         self._github_subs_refresh_running = False
         self._github_subs_refresh_started_at = 0
         self._last_runtime_link_sync_result: dict[str, Any] = {}
-        # 桌面模式首屏阶段只允许触发一次后台预热，避免 loaded / ready 多次回调时重复导入大缓存文件。
-        self._startup_warmup_started = False
+        self.theme_store = ThemeStore()
         # 应用层升级迁移必须早于外置缓存库管理器初始化。
         # 否则像 workshop_cache.db 这类需要“删库重建”的迁移，
         # 会在 Windows 上撞到已打开文件句柄导致无法删除。
@@ -306,6 +307,12 @@ class API:
             self.texture_mgr,
             self.workshop_db_mgr,
             rule_mgr_provider=lambda: self.sorter.rule_mgr if self.sorter else None,
+        )
+        # 启动期后台动作交给协调器，API 只注入依赖，避免 __init__ 继续膨胀。
+        self.startup_coordinator = StartupCoordinator(
+            self.workshop_db_mgr,
+            rule_mgr_provider=lambda: self.sorter.rule_mgr if self.sorter else None,
+            append_messages=lambda messages: self._upgrade_context["messages"].extend(messages),
         )
         
         # 每次启动 API 时，强制检查并修复 SteamCMD 的软链接！
@@ -367,6 +374,17 @@ class API:
                 "message": str(message or "").strip(),
             },
         )
+
+    @staticmethod
+    def _log_maintenance_check(event: str, check_id: str, **fields):
+        """统一检测日志格式。
+
+        前后端都使用 [RMM][maintenance-check] 前缀，排查启动检测时可以按 id/event 快速过滤。
+        """
+        parts = [f"event={event}", f"id={check_id}"]
+        for key, value in fields.items():
+            parts.append(f"{key}={value}")
+        logger.info("[RMM][maintenance-check] %s", " ".join(parts))
 
     @staticmethod
     def _build_delete_response(target_name: str, total: int, result: dict, success_message: str = ""):
@@ -805,33 +823,7 @@ class API:
         - 社区工坊库 / 替代库缓存重建属于“有则更好”的能力，不应拖住桌面首屏；
         - 因此把它后移到窗口完成首轮加载后再后台执行，用户至少能先看到主界面。
         """
-        if self._startup_warmup_started: return
-
-        self._startup_warmup_started = True
-
-        def background_warmup():
-            startup_messages: list[str] = []
-            try:
-                if not self.workshop_db_mgr.cache_loaded:
-                    logger.info("启动后台预热：开始加载社区工坊缓存与替代规则缓存")
-                    self.workshop_db_mgr.load_all_cache()
-                    if self.sorter and self.sorter.rule_mgr:
-                        # 工坊缓存会影响依赖/替代规则判断，因此缓存热加载完成后要同步重建规则镜像。
-                        self.sorter.rule_mgr.build_workshop_rules()
-                    startup_messages.append("社区规则缓存已在后台完成预热。")
-            except Exception as e:
-                logger.error(f"启动后台预热失败: {e}", exc_info=True)
-                startup_messages.append("社区缓存预热失败，首屏已继续打开；部分依赖/替代提示可能稍后才恢复。")
-            finally:
-                if startup_messages:
-                    self._upgrade_context["messages"].extend(startup_messages)
-                    EventBus.send_toast("\n".join(startup_messages), type="warning" if any("失败" in item for item in startup_messages) else "info")
-
-        threading.Thread(
-            target=background_warmup,
-            name="rmm-startup-warmup",
-            daemon=True,
-        ).start()
+        self.startup_coordinator.start_background_warmup()
 
     def _normalize_native_drop_selector(self, selector: str | None = None) -> str:
         """把前端传入的 id / selector 统一成 pywebview 可直接查询的 CSS 选择器。"""
@@ -980,6 +972,11 @@ class API:
         """
         前端启动时调用，一次性获取所有必要数据。
         """
+        try:
+            user_themes = self.theme_store.list_user_themes()
+        except Exception as e:
+            logger.error(f"Load user themes during startup failed: {e}", exc_info=True)
+            user_themes = []
         result = {
             "app_version": __version__,
             "build_mode": __build__,
@@ -998,6 +995,7 @@ class API:
             "active_context": self.active_context if self.active_context else None,
             "upgrade_context": self._upgrade_context.copy(),
             "runtime_session": self._get_runtime_session_data(),
+            "user_themes": user_themes,
         }
         if not self.active_context or not self.active_context.is_healthy: return ApiResponse.success(result)
         
@@ -1375,13 +1373,14 @@ class API:
                 env_changed = True
             # B. 处理全局设置数据
             if global_data:
-                settings.update_from_dict(global_data)  # recursive_update 批量更新
+                normalization_warnings = settings.update_from_dict(global_data)  # recursive_update 批量更新
                 network_mgr.apply() # 应用网络设置
                 # 如果修改了某些会影响环境的全局路径（如 steamcmd_path）
                 if 'steamcmd_path' in global_data or 'workshop_mods_path' in global_data:
                     env_changed = True
                 rule_paths_changed = 'user_rules_path' in global_data or 'community_rules_path' in global_data
             else:
+                normalization_warnings = []
                 rule_paths_changed = False
             if env_changed:
                 logger.info("检测到核心路径变动，正在重新装配执行引擎...")
@@ -1391,7 +1390,9 @@ class API:
                 # 规则文件路径切换后必须立即重载，否则本次会话仍会持有旧文件内容。
                 logger.info("检测到规则文件路径变动，正在重载规则缓存...")
                 self.sorter.rule_mgr.load_all()
-             
+            if normalization_warnings:
+                EventBus.send_toast("\n".join(normalization_warnings), type="warning", duration=5000)
+
             return ApiResponse.success({
                 "settings": asdict(settings.config),
                 "active_context": self.active_context # 这里的 serialize_data 会自动调用 to_dict
@@ -1402,6 +1403,35 @@ class API:
         except Exception as e:
             logger.error(f"Save all settings failed: {str(e)}", exc_info=True)
             return ApiResponse.error(f"保存所有设置失败：{str(e)}")
+
+    @log_api_call
+    def theme_list_user(self):
+        """读取用户自定义主题；内置主题由前端只读资源提供。"""
+        try:
+            return ApiResponse.success({"themes": self.theme_store.list_user_themes()})
+        except Exception as e:
+            logger.error(f"Load user themes failed: {e}", exc_info=True)
+            return ApiResponse.error(f"读取用户主题失败：{e}")
+
+    @log_api_call
+    def theme_save_user(self, theme: dict):
+        """新增或覆盖用户自定义主题。"""
+        try:
+            saved_theme = self.theme_store.save_user_theme(theme)
+            return ApiResponse.success({"theme": saved_theme}, message="主题已保存")
+        except Exception as e:
+            logger.error(f"Save user theme failed: {e}", exc_info=True)
+            return ApiResponse.error(f"保存用户主题失败：{e}")
+
+    @log_api_call
+    def theme_delete_user(self, theme_id: str):
+        """删除用户自定义主题。"""
+        try:
+            deleted = self.theme_store.delete_user_theme(theme_id)
+            return ApiResponse.success({"deleted": deleted}, message="主题已删除" if deleted else "主题不存在")
+        except Exception as e:
+            logger.error(f"Delete user theme failed: {e}", exc_info=True)
+            return ApiResponse.error(f"删除用户主题失败：{e}")
 
     @log_api_call
     def get_remote_image_cache_stats(self):
@@ -1632,7 +1662,12 @@ class API:
                         paths_to_scan.append(self.active_context.local_mods_path)
                     # 3. Self Mods (管理器的 Mods 目录)
                     if os.path.exists(cfg.self_mods_path):
-                        paths_to_scan.append(cfg.self_mods_path)
+                        self_path = Path(cfg.self_mods_path).resolve()
+                        if (
+                            (not self.active_context.local_mods_path or self_path != Path(self.active_context.local_mods_path).resolve())
+                            and (not cfg.workshop_mods_path or self_path != Path(cfg.workshop_mods_path).resolve())
+                        ):
+                            paths_to_scan.append(cfg.self_mods_path)
                     # 4. Workshop Mods (公共工坊目录)
                     # 注意：库存扫描始终同步所有已配置域。
                     # use_workshop_mods / use_self_mods 只影响后续运行态冲突分析与链接部署，
@@ -2454,7 +2489,12 @@ class API:
         if os.path.exists(context.local_mods_path):
             paths_to_scan.append(context.local_mods_path)
         if os.path.exists(cfg.self_mods_path):
-            paths_to_scan.append(cfg.self_mods_path)
+            self_path = Path(cfg.self_mods_path).resolve()
+            if (
+                (not context.local_mods_path or self_path != Path(context.local_mods_path).resolve())
+                and (not cfg.workshop_mods_path or self_path != Path(cfg.workshop_mods_path).resolve())
+            ):
+                paths_to_scan.append(cfg.self_mods_path)
         if os.path.exists(cfg.workshop_mods_path):
             paths_to_scan.append(cfg.workshop_mods_path)
         if os.path.exists(str(TOOL_MODS_DIR)) and cfg.enable_tool_mods:
@@ -3702,6 +3742,7 @@ class API:
             info = self.update_mgr.check_all()
             # 记录检查时间
             settings.set('last_update_check_time', current_ms())
+            self._log_maintenance_check("api_result", "app-update", status="success", has_update=bool(info.has_update), version=info.version or "", local_status=info.local_status or "", manual=bool(manual))
             # 2. 自动忽略逻辑
             # 如果不是手动检查，且版本是被用户标记忽略的，且本地没有已经下载好的包
             # (如果本地已经下好了，即使是忽略版本也应该提示安装，避免浪费空间)
@@ -3753,6 +3794,7 @@ class API:
             checked = self.maintenance_mgr.check_tools()
             checked_at = int(checked.get("checked_at") or current_ms())
             settings.set("last_tool_check_time", checked_at)
+            self._log_maintenance_check("api_result", "tools", status="success", checked_at=checked_at, issues=len(checked.get("issues") or []), total=len(checked.get("items") or []))
             return ApiResponse.success(checked)
         except Exception as e:
             logger.error("Check tools maintenance failed: %s", e, exc_info=True)
@@ -3771,6 +3813,7 @@ class API:
             # 整轮远端状态都没拿到时，不刷新“上次成功检查时间”，避免自动检查被失败结果错误限流。
             if not items or len(failed) < len(items):
                 settings.set("last_external_data_update_check_time", checked_at)
+            self._log_maintenance_check("api_result", "external-data", status="success", checked_at=checked_at, updates=len(checked.get("updates") or []), failed=len(failed), total=len(items))
             return ApiResponse.success(checked)
         except Exception as e:
             logger.error("Check external data maintenance failed: %s", e, exc_info=True)
@@ -3783,10 +3826,24 @@ class API:
             checked = self.maintenance_mgr.check_steamcmd_mod_updates()
             checked_at = int(checked.get("checked_at") or current_ms())
             settings.set("last_steamcmd_mod_update_check_time", checked_at)
+            self._log_maintenance_check("api_result", "steamcmd-mods", status="success", checked_at=checked_at, updates=len(checked.get("updates") or []))
             return ApiResponse.success(checked)
         except Exception as e:
             logger.error("Check SteamCMD mod updates failed: %s", e, exc_info=True)
             return ApiResponse.error(f"检查 SteamCMD 模组更新失败: {e}")
+
+    @log_api_call
+    def maintenance_check_managed_mod_updates(self):
+        """统一检查管理器负责的模组更新，包括 SteamCMD 工坊模组和 GitHub 订阅模组。"""
+        try:
+            checked = self.maintenance_mgr.check_managed_mod_updates()
+            checked_at = int(checked.get("checked_at") or current_ms())
+            settings.set("last_steamcmd_mod_update_check_time", checked_at)
+            self._log_maintenance_check("api_result", "managed-mods", status="success", checked_at=checked_at, updates=len(checked.get("updates") or []), steamcmd=checked.get("steamcmd_count", 0), github=checked.get("github_count", 0))
+            return ApiResponse.success(checked)
+        except Exception as e:
+            logger.error("Check managed mod updates failed: %s", e, exc_info=True)
+            return ApiResponse.error(f"检查管理器模组更新失败: {e}")
     
     
     # =========================================================================
@@ -4917,7 +4974,7 @@ class API:
             if r.get('old_workshop_id')
         }
         
-        install_workshop_ids = set()
+        known_workshop_ids = set()
         # install_self_ids = set()
         
         def inject_workspace_fields(mod: dict, steam_map: dict | None = None):
@@ -4925,14 +4982,21 @@ class API:
             if steam_map and wid and wid in steam_map:
                 mod['steam_status'] = steam_map[wid]
             mod['replacement'] = replacements_map.get(wid)
-            mod['is_missing'] = False
+            state = str(mod.get('state') or MOD_ASSET_STATE_PRESENT).strip().lower()
+            is_missing = state == MOD_ASSET_STATE_MISSING or not str(mod.get('path') or '').strip()
+            mod['state'] = MOD_ASSET_STATE_MISSING if is_missing else (state or MOD_ASSET_STATE_PRESENT)
+            mod['is_missing'] = is_missing
+            if is_missing and wid and str(mod.get('store') or '').lower() == 'workshop':
+                is_subscribed = (mod.get('steam_status') or {}).get('is_subscribed') is True
+                mod['workshop_missing_status'] = 'subscribed_missing' if is_subscribed else 'not_subscribed_missing'
+                mod['workshop_missing_can_unsubscribe'] = is_subscribed
             return wid
 
         # 3. 为已有的物理模组注入 Steam 状态
         for mod in matrix['workshop']:
             wid = inject_workspace_fields(mod, ws_map)
-            if mod.get('path') and wid:
-                install_workshop_ids.add(wid)
+            if wid:
+                known_workshop_ids.add(wid)
         
         # 为 self (管理器) 域注入数据
         for mod in matrix['self']:
@@ -4943,8 +5007,8 @@ class API:
             inject_workspace_fields(mod)
         
         # 4. 核心逻辑：找出“已订阅但物理丢失”的模组 (Ghost Mods)
-        # 找出 ACF 中标记已订阅，但物理文件没被扫描到的 ID
-        ghost_ws_ids = set([wid for wid, data in ws_map.items() if data.get('is_subscribed')]) - install_workshop_ids
+        # ACF 中仍标记订阅、但 DB 没有对应工坊资产的条目，仍然属于“工坊列表”视图。
+        ghost_ws_ids = set([wid for wid, data in ws_map.items() if data.get('is_subscribed')]) - known_workshop_ids
         # ghost_self_ids = set([wid for wid, data in mg_map.items() if data.get('is_subscribed')]) - install_self_ids
         
         # 5. 从 ExtDB (外置社区库) 中获取这些幽灵模组的信息，使其在 UI 上能显示名字和图片
@@ -4965,9 +5029,12 @@ class API:
                 "path_hash": f"ghost_{store_type}_{wid}", # 临时唯一哈希
                 "store": store_type,
                 "source": "workshop",
+                "state": MOD_ASSET_STATE_MISSING,
                 "is_missing": True, 
                 "steam_status": steam_status,
-                "replacement": replacements_map.get(wid)
+                "replacement": replacements_map.get(wid),
+                "workshop_missing_status": "subscribed_missing",
+                "workshop_missing_can_unsubscribe": True,
             }
         for wid in ghost_ws_ids:
             matrix['workshop'].append(create_ghost(wid, 'workshop', ws_map.get(wid)))
@@ -4975,9 +5042,18 @@ class API:
         res = {
             "workshop": matrix['workshop'],
             "self": matrix['self'],
-            "local": matrix['local']
+            "local": matrix['local'],
         }
         
+        missing_workshop_ids = list({
+            str(mod.get("workshop_id") or "").strip()
+            for mod in matrix["workshop"]
+            if mod.get("is_missing") and str(mod.get("workshop_id") or "").strip().isdigit()
+        })
+        if missing_workshop_ids:
+            import threading
+            threading.Thread(target=self._bg_probe_missing_workshop_items, args=(missing_workshop_ids,), daemon=True).start()
+
         # 6. 后台触发在线比对，统一只针对 self / SteamCMD 域做在线状态预热与更新标记。
         all_wids = list({
             str(item.get("workshop_id") or "").strip()
@@ -4997,6 +5073,12 @@ class API:
             threading.Thread(target=self._bg_check_online_updates, args=(all_wids,), daemon=True).start()
 
         return ApiResponse.success(res)
+
+    def _bg_probe_missing_workshop_items(self, workshop_ids: list[str]):
+        """后台探查缺失工坊项目是否仍可从 Steam 获取详情，用于给 UI 标记疑似下架。"""
+        probe_result = SteamWebAPI.probe_item_availability(workshop_ids)
+        from backend.utils.event_bus import EventBus
+        EventBus.emit('workspace-missing-workshop-probe', probe_result)
     
     def _bg_check_online_updates(self, all_wids: list):
         """后台静默检测，完成后通过 EventBus 推送"""
@@ -5296,14 +5378,32 @@ class API:
     
     
     # ==========================================
-    # GitHub 相关接口
+    # Git 仓库相关接口
     # ==========================================
     @log_api_call
     def github_fetch_info(self, url: str, source_branch: str = ""):
-        """解析并获取远程仓库信息"""
+        """解析并获取远程 Git 仓库信息"""
         res = self.github_mgr.fetch_repo_info(url, source_branch=source_branch)
         if "error" in res: return ApiResponse.error(res["error"])
         return ApiResponse.success(res)
+
+    @log_api_call
+    def github_get_provider_catalog(self, url: str = "", force_refresh: bool = False):
+        """获取 Git 推荐列表"""
+        try:
+            return ApiResponse.success(self.github_mgr.fetch_provider_catalog(url, force_refresh=bool(force_refresh)))
+        except Exception as e:
+            logger.error("获取 Git 推荐列表失败: %s", e, exc_info=True)
+            return ApiResponse.error(f"获取推荐列表失败: {e}")
+
+    @log_api_call
+    def github_fetch_readme(self, url: str, source_branch: str = ""):
+        """获取公开 Git 仓库 README，用于在线推荐详情展示"""
+        try:
+            return ApiResponse.success(self.github_mgr.fetch_repo_readme(url, ref=source_branch))
+        except Exception as e:
+            logger.error("获取 Git 仓库 README 失败: %s", e, exc_info=True)
+            return ApiResponse.error(f"获取 README 失败: {e}")
 
     @log_api_call
     def github_subscribe(self, payload: dict):
@@ -5312,13 +5412,18 @@ class API:
         if not url: return ApiResponse.error("URL 不能为空")
         installed_version = str(payload.get("installed_version") or "").strip()
         info = payload.get("info") or {}
+        provider, host = self.github_mgr.detect_repo_provider(url)
         install_type = str(payload.get("install_type") or "source").strip() or "source"
-        target_branch = str(payload.get("default_branch") or "").strip() or "main"
+        target_branch = str(payload.get("default_branch") or "").strip()
+        if install_type != "zip":
+            target_branch = target_branch or "main"
 
         with db.atomic():
             record, created = GithubModRecord.get_or_create(
                 repo_url=url,
                 defaults={
+                    "provider": str(payload.get("provider") or info.get("provider") or provider),
+                    "host": str(payload.get("host") or info.get("host") or host),
                     "owner": payload.get("owner"),
                     "repo_name": payload.get("repo"),
                     "target_branch": target_branch,
@@ -5329,9 +5434,11 @@ class API:
                 }
             )
             if created:
-                self.github_mgr.record_timeline(url, "subscribe", "已添加 GitHub 仓库监听记录")
+                self.github_mgr.record_timeline(url, "subscribe", "已添加 Git 仓库监听记录")
             else:
                 # 再次订阅同一仓库时，更新监听策略和最新在线缓存，但不擅自覆盖已部署版本。
+                record.provider = str(payload.get("provider") or info.get("provider") or provider)
+                record.host = str(payload.get("host") or info.get("host") or host)
                 record.owner = payload.get("owner") or record.owner
                 record.repo_name = payload.get("repo") or record.repo_name
                 record.target_branch = target_branch
@@ -5345,26 +5452,64 @@ class API:
 
     @log_api_call
     def github_get_subscribed(self):
-        """获取所有已订阅的 Github 仓库"""
+        """获取所有已订阅的 Git 仓库"""
         records = list(GithubModRecord.select().dicts())
+        missing_urls: list[str] = []
+        latest_missing_time: dict[str, int] = {}
+        latest_present_time: dict[str, int] = {}
+        if records:
+            repo_urls = [str(r.get("repo_url") or "") for r in records if str(r.get("repo_url") or "")]
+        else:
+            repo_urls = []
+        if repo_urls:
+            latest_logs = (
+                GithubTimeline
+                .select(GithubTimeline.repo_url, GithubTimeline.action, GithubTimeline.time)
+                .where(GithubTimeline.repo_url.in_(repo_urls))
+                .order_by(GithubTimeline.repo_url, GithubTimeline.time.desc())
+            )
+            for log in latest_logs:
+                if log.action == "missing":
+                    latest_missing_time.setdefault(log.repo_url, int(log.time or 0))
+                elif log.action == "success":
+                    latest_present_time.setdefault(log.repo_url, int(log.time or 0))
         for r in records:
+            provider, host = self.github_mgr.detect_repo_provider(r.get("repo_url"))
+            r["provider"] = r.get("provider") or provider
+            r["host"] = r.get("host") or host
             # 将缓存的字典暴露给前端的 online_info 字段
             r["online_info"] = r.get("online_info_cache", {})
+            repo_url = str(r.get("repo_url") or "")
+            local_folder = str(r.get("local_folder") or "").strip()
+            if local_folder:
+                local_path = Path(str(settings.config.self_mods_path or "")) / local_folder
+                local_exists = local_path.exists()
+                r["local_exists"] = local_exists
+                last_missing = latest_missing_time.get(repo_url, 0)
+                last_present = latest_present_time.get(repo_url, 0)
+                if not local_exists and last_present >= last_missing:
+                    missing_urls.append(repo_url)
+            else:
+                r["local_exists"] = False
+        if missing_urls:
+            with db.atomic():
+                for repo_url in missing_urls:
+                    self.github_mgr.record_timeline(repo_url, "missing", "扫描时发现本地目录已不存在")
         self._schedule_github_subs_refresh(records)
 
         return ApiResponse.success(records)
 
     def _schedule_github_subs_refresh(self, records: list) -> bool:
-        """给 GitHub 订阅刷新加最短触发间隔，避免页面频繁打开时重复打满 API。"""
+        """给 Git 仓库订阅刷新加最短触发间隔，避免页面频繁打开时重复打满 API。"""
         if not records: return False
 
         now = current_ms()
         with self._github_subs_refresh_lock:
             if self._github_subs_refresh_running:
-                logger.debug("GitHub 订阅后台刷新已在执行，跳过重复触发")
+                logger.debug("Git 仓库订阅后台刷新已在执行，跳过重复触发")
                 return False
             if now - self._github_subs_refresh_started_at < GITHUB_SUBS_REFRESH_MIN_INTERVAL_MS:
-                logger.debug("GitHub 订阅后台刷新距离上次启动过近，跳过本轮触发")
+                logger.debug("Git 仓库订阅后台刷新距离上次启动过近，跳过本轮触发")
                 return False
             self._github_subs_refresh_running = True
             self._github_subs_refresh_started_at = now
@@ -5378,16 +5523,19 @@ class API:
 
     def _bg_refresh_github_subs(self, records: list):
         """
-        后台多线程并发刷新 GitHub 数据
+        后台多线程并发刷新 Git 仓库数据
         """
         try:
             if not records: return
             
             updated_records = {}
-            # 使用线程池并发请求 GitHub API，避免串行卡顿
+            # 使用线程池并发请求远端 API，避免串行卡顿
             # 假设有 5 个订阅，5 个线程同时发请求，耗时取决于最慢的一个 (通常 < 500ms)
             def fetch_single(record):
                 repo_url = record["repo_url"]
+                if str(record.get("install_type") or "").strip() == "zip":
+                    info = self.github_mgr.resolve_catalog_subscription_info(record)
+                    return repo_url, info or {}
                 source_branch = ""
                 if str(record.get("install_type") or "").strip() == "source":
                     source_branch = str(record.get("target_branch") or "").strip()
@@ -5400,10 +5548,10 @@ class API:
                 for future in futures:
                     try:
                         repo_url, info = future.result()
-                        if "error" not in info:
+                        if info and "error" not in info:
                             updated_records[repo_url] = info
                     except Exception as e:
-                        logger.error(f"后台刷新 GitHub Repo 失败: {e}", exc_info=True)
+                        logger.error(f"后台刷新 Git 仓库失败: {e}", exc_info=True)
 
             # 如果没有成功获取到任何数据，直接结束
             if not updated_records: return
@@ -5419,7 +5567,7 @@ class API:
                     ).where(GithubModRecord.repo_url == repo_url).execute()
             # 【核心】通过 EventBus 将最新数据推给前端 Vue
             EventBus.emit('github-online-update', updated_records)
-            logger.info(f"后台 GitHub 数据刷新完成，已推送 {len(updated_records)} 条更新")
+            logger.info(f"后台 Git 仓库数据刷新完成，已推送 {len(updated_records)} 条更新")
         finally:
             with self._github_subs_refresh_lock:
                 self._github_subs_refresh_running = False
@@ -5427,31 +5575,34 @@ class API:
     @log_api_call
     def github_trigger_download(self, url: str, install_type: str, version: str):
         """触发下载与安装流程"""
-        task_id = self.github_mgr.install_repo_mod(self.download_mgr, url, install_type, version)
-        return ApiResponse.success({"task_id": task_id}, message="GitHub 部署任务已启动")
+        if str(install_type or "").strip() == "zip":
+            task_id = self.github_mgr.install_catalog_zip_mod(self.download_mgr, url)
+        else:
+            task_id = self.github_mgr.install_repo_mod(self.download_mgr, url, install_type, version)
+        return ApiResponse.success({"task_id": task_id}, message="Git 订阅部署任务已启动")
 
     @log_api_call
     def github_get_timeline(self, url: str):
         """获取某仓库的本地操作时间线"""
         logs = list(GithubTimeline.select().where(GithubTimeline.repo_url == url).order_by(GithubTimeline.time.desc()).dicts())
         result=[]
-        title_map = {"subscribe": "订阅", "download": "下载", "update": "更新", "extract": "解压", "success":'部署成功', "error": "错误"}
-        color_map = {"subscribe": "primary", "download": "info", "update": "tip", "extract": "info", "success": "success", "error": "danger"}
+        title_map = {"subscribe": "订阅", "download": "下载", "update": "更新", "extract": "解压", "success":'部署成功', "error": "错误", "remove": "移除", "missing": "本地缺失"}
+        color_map = {"subscribe": "primary", "download": "info", "update": "tip", "extract": "info", "success": "success", "error": "danger", "remove": "danger", "missing": "danger"}
         for log in logs:
             result.append({
                 "time": log["time"],
                 "type": log["action"],
                 "desc": log["message"],
-                "title": title_map[log["action"]],
-                "color": color_map[log["action"]],
+                "title": title_map.get(log["action"], log["action"]),
+                "color": color_map.get(log["action"], "info"),
             })
         return ApiResponse.success(result)
         
     @log_api_call
     def github_remove_subscription(self, url: str):
         """移除订阅，可选连带删除文件(前端应另行调用删除文件API)"""
+        self.github_mgr.record_timeline(url, "remove", "已移除 Git 仓库订阅记录")
         GithubModRecord.delete().where(GithubModRecord.repo_url == url).execute()
-        GithubTimeline.delete().where(GithubTimeline.repo_url == url).execute()
         return ApiResponse.success(message="已移除订阅记录")
     
     
@@ -5553,12 +5704,12 @@ class API:
     # =========================================================================
 
     @log_api_call
-    def ripgrep_prepare_download(self):
+    def ripgrep_prepare_download(self, force: bool = False):
         """触发自动下载 ripgrep。"""
         try:
             from backend.text_search.tooling import prepare_ripgrep_download
 
-            res = prepare_ripgrep_download(self.download_mgr, getattr(settings.config, "ripgrep_path", ""))
+            res = prepare_ripgrep_download(self.download_mgr, getattr(settings.config, "ripgrep_path", ""), force=bool(force))
             if res.get("already_ready"):
                 return ApiResponse.success(res, message="工具已经就绪")
             return ApiResponse.success(res, message="已启动 ripgrep 下载任务")

@@ -6,7 +6,7 @@
     @mouseleave="handleMouseLeave"
   >
     <!-- 1. 分割线 -->
-    <div v-if="item.divider" class="h-px bg-text-dim/30 my-0 mx-[6px]"></div>
+    <div v-if="item.divider" class="h-px bg-bg-overlay/10 my-0 mx-[6px]"></div>
 
     <!-- 2. Grid 面板模式 (嵌入式网格) -->
     <div v-else-if="item.type === 'grid'" class="px-1 py-1">
@@ -27,13 +27,13 @@
             // 样式分支 B: 标签块 (有 label 时显示)
             subItem.label ? 'px-[4px] py-[4px] rounded-md text-[11px] min-w-[35px]' : '',
             // 通用状态样式
-            subItem.active ? 'ring-2 ring-text-main z-10 border-transparent bg-text-main/20' : 'border-text-main/10 hover:border-text-main/30 bg-text-main/5 hover:bg-text-main/10',
+            subItem.active ? 'ring-2 ring-bg-contrast z-10 border-transparent bg-bg-overlay/10' : 'border-border-base/10 hover:border-border-base/18 bg-bg-overlay/5 hover:bg-bg-overlay/10',
             // 禁用状态
             subItem.disabled ? 'opacity-40 cursor-not-allowed grayscale' : 'hover:scale-105',
             // 全选状态 (Solid)
-            subItem.state === 'all' ? 'ring-2 ring-text-main z-10 border-transparent bg-text-main/20' : '',
+            subItem.state === 'all' ? 'ring-2 ring-bg-contrast z-10 border-transparent bg-bg-overlay/10' : '',
             // 半选状态 (Dashed / Dimmed)
-            subItem.state === 'some' ? 'ring-1 ring-text-main/50 border-text-main/30 bg-text-main/10' : ''
+            subItem.state === 'some' ? 'ring-1 ring-border-base/18 border-border-base/18 bg-bg-overlay/10' : ''
           ]"
           :style="{ backgroundColor: subItem.bgColor || subItem.color || 'transparent' }"
         >
@@ -59,7 +59,7 @@
           </template>
           
           <!-- 颜色块模式下的特殊图标 (比如清除颜色的 X) -->
-            <component v-else-if="subItem.icon" :is="subItem.icon" class="w-[16px] h-[16px] text-text-main/50 group-hover/btn:text-text-main" />
+            <component v-else-if="subItem.icon" :is="subItem.icon" class="w-[16px] h-[16px] text-text-disabled group-hover/btn:text-text-main" />
           </button>
         </template>
       </div>
@@ -90,7 +90,7 @@
     <!-- 递归子菜单 (仅针对非 Grid 类型的子菜单) -->
     <Transition name="submenu">
       <div v-if="item.children && activeSubMenu && item.type !== 'grid'" ref="subMenuRef"
-        class="absolute z-50 min-w-fit rounded-xl border border-text-dim/30 bg-bg-surface/90 p-[1px] backdrop-blur-lg shadow-xl shadow-black/40"
+        class="absolute z-50 min-w-fit rounded-xl border border-border-base/10 bg-glass-medium p-[1px] backdrop-blur-lg shadow-xl shadow-black/40"
         :class="subMenuPositionClass" >
         <ContextMenuItem v-for="(subItem, idx) in item.children" :key="idx"
           :item="subItem" @close-menu="$emit('close-menu')" />
@@ -125,7 +125,7 @@ const levelClass = () => {
     'success': 'text-accent-success hover:bg-accent-success/20!',
     'warning': 'text-accent-warning hover:bg-accent-warning/20!',
     'warn': 'text-accent-warn hover:bg-accent-warn/20!',
-    'error': 'text-red-500 hover:bg-red-500/20!',
+    'error': 'text-accent-danger hover:bg-accent-danger/20!',
     'danger': 'text-accent-danger hover:bg-accent-danger/20!',
   }
   return classMap[level]

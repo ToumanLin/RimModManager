@@ -338,6 +338,49 @@ class SteamWebAPI:
         return fetched_details
 
     @classmethod
+    def probe_item_availability(cls, workshop_ids: list) -> dict[str, dict[str, Any]]:
+        """
+        探查工坊项目是否仍能从 Steam 获取有效详情。
+
+        这个结果只服务运行时 UI 提示，不写入缓存和数据库，避免把网络波动误固化成业务事实。
+        """
+        normalized_ids = cls._normalize_workshop_ids(workshop_ids)
+        result = {
+            wid: {"workshop_id": wid, "status": "unknown", "result": None, "online_info": None}
+            for wid in normalized_ids
+        }
+        for i in range(0, len(normalized_ids), 100):
+            batch_ids = normalized_ids[i : i + 100]
+            data = {"itemcount": len(batch_ids), "includepreviews": 1}
+            for idx, wid in enumerate(batch_ids):
+                data[f"publishedfileids[{idx}]"] = str(wid)  # type: ignore
+
+            try:
+                payload = cls._request_json("POST", cls.PUBLISHED_FILE_DETAILS_URL, data=data, timeout=(5, 12))
+                for item in payload.get("response", {}).get("publishedfiledetails", []):
+                    wid = str(item.get("publishedfileid") or "").strip()
+                    if wid not in result:
+                        continue
+                    result_code = cls._safe_int(item.get("result"))
+                    title = str(item.get("title") or "").strip()
+                    preview_url = str(item.get("preview_url") or "").strip()
+                    time_updated = cls._safe_int(item.get("time_updated")) * 1000
+                    has_usable_detail = bool(title or preview_url or time_updated)
+                    result[wid] = {
+                        "workshop_id": wid,
+                        "status": "available" if result_code == 1 and has_usable_detail else "unavailable",
+                        "result": result_code,
+                        "online_info": {
+                            "title": title,
+                            "preview_url": preview_url or None,
+                            "time_updated": time_updated,
+                        } if has_usable_detail else None,
+                    }
+            except Exception as e:
+                logger.warning("Steam 工坊项目可用性探查失败：%s", e)
+        return result
+
+    @classmethod
     def _save_online_details(cls, details_map: dict[str, dict[str, object]], sync_time: int) -> None:
         """将统一结构的在线详情批量落入缓存表。"""
         cache_batch = [
@@ -642,14 +685,14 @@ if __name__ == "__main__":
     # children = SteamWebAPI.fetch_collection_children(collection_id)
     # print(f"合集 {collection_id} 包含 {len(children)} 个 Mod")
     #  # 测试用例：解析 Mod 详情
-    mod_id = '3009527756'
+    mod_id = '3723552881'
     # details = SteamWebAPI.fetch_item_details([mod_id], True)
     # print(f"Mod {mod_id} 详情: {details}")
     
     # screenshots = SteamWebAPI._fetch_screenshots_via_scraper(mod_id)
     # print(f"Mod 截图: {screenshots}")
     
-    search_res = SteamWebAPI.search_workshop_online("Flora reskin")
-    print(f"搜索结果: {search_res}")
+    # search_res = SteamWebAPI.search_workshop_online("rim tuber")
+    # print(f"搜索结果: {search_res}")
     
     

@@ -9,6 +9,7 @@ import {
   dedupeNormalizedPackageIds,
   normalizeInstallSources,
   normalizePackageId,
+  normalizeUrl,
   normalizeWorkshopId,
 } from '../utils/modIdentity'
 
@@ -138,10 +139,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     activeChildren: [],   // 当前选中合集内的子 Mod 列表
     isChildrenLoading: false // 子列表加载状态
   })
-  // 5. GitHub 订阅状态
+  // 5. Git 仓库订阅状态
   const github = reactive({
     subscribedRepos: [],
+    recommendedRepos: [],
+    catalogMeta: {},
     isLoading: false,
+    isCatalogLoading: false,
+    catalogLoaded: false,
+    catalogError: '',
     activeRepo: null,     // 当前查看的 repo
     repoTimelines: [],    // 当前选中仓库的日志
     previewInfo: null,    // 解析新链接时的预览信息
@@ -234,21 +240,57 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const getMatrixConflictItems = (pathHash) => matrixConflictMap.value.get(pathHash) || []
   const getGithubOnlineVersion = (repo) => {
     if (!repo?.online_info) return ''
+    if (repo.install_type === 'zip') {
+      return String(repo.online_info.catalog_signature || '').trim()
+    }
     if (repo.install_type === 'release') {
       return String(repo.online_info.latest_release_tag || '').trim()
     }
     return String(repo.online_info.latest_source_version || '').trim()
   }
+  const parseGithubSourceVersion = (value) => {
+    const raw = String(value || '').trim()
+    const [branch, marker = ''] = raw.split('@')
+    const time = Date.parse(marker)
+    return {
+      raw,
+      branch: branch || '',
+      marker,
+      time: Number.isFinite(time) ? time : 0,
+    }
+  }
   const githubRepoNeedsUpdate = (repo) => {
+    const status = getGithubRepoStatus(repo)
+    return status.key === 'upgrade'
+  }
+  const getGithubRepoStatus = (repo) => {
+    if (!repo) return { key: 'unknown', label: '状态未知', tone: 'text-text-dim', version: '' }
     const localVersion = String(repo?.installed_version || '').trim()
     const onlineVersion = getGithubOnlineVersion(repo)
-    if (!localVersion || !onlineVersion) return false
-    return localVersion !== onlineVersion
+    if (repo.local_folder && repo.local_exists === false) {
+      return { key: 'missing', label: '本地文件缺失', tone: 'text-accent-danger', version: localVersion }
+    }
+    if (!localVersion) return { key: 'not_deployed', label: '未部署', tone: 'text-text-dim', version: onlineVersion }
+    if (!onlineVersion) return { key: 'installed', label: '已安装', tone: 'text-accent-success', version: localVersion }
+    if (repo?.install_type === 'source') {
+      const localSource = parseGithubSourceVersion(localVersion)
+      const onlineSource = parseGithubSourceVersion(onlineVersion)
+      if (localSource.branch && onlineSource.branch && localSource.branch !== onlineSource.branch) {
+        return { key: 'branch_changed', label: '跟踪分支不同', tone: 'text-accent-warn', version: onlineVersion }
+      }
+      if (localSource.time && onlineSource.time) {
+        if (onlineSource.time > localSource.time) return { key: 'upgrade', label: '可升级', tone: 'text-accent-warn', version: onlineVersion }
+        return { key: 'current', label: '已是最新', tone: 'text-accent-success', version: onlineVersion }
+      }
+    }
+    if (localVersion !== onlineVersion) return { key: 'upgrade', label: '可升级', tone: 'text-accent-warn', version: onlineVersion }
+    return { key: 'current', label: '已是最新', tone: 'text-accent-success', version: onlineVersion }
   }
   const applyGithubRepoComputedState = (repo) => {
     if (!repo) return repo
     repo.online_info = repo.online_info || repo.online_info_cache || {}
-    repo.has_update = githubRepoNeedsUpdate(repo)
+    repo.status = getGithubRepoStatus(repo)
+    repo.has_update = repo.status.key === 'upgrade'
     return repo
   }
   const stopGithubTimelinePolling = () => {
@@ -265,7 +307,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const fetchGithubTimeline = async (url) => {
     if (!window.pywebview || !url) return
     const res = await window.pywebview.api.github_get_timeline(url)
-    if (checkResult(res, '获取Github模组时间线')) {
+    if (checkResult(res, '获取 Git 仓库模组时间线')) {
       if (github.activeRepo?.repo_url !== url) return
       github.repoTimelines = res.data
     }
@@ -449,11 +491,23 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
       mergeOnlineData(librariesMods.self)
     })
-    // 【监听 B】: GitHub 在线状态静默更新
-    // payload 格式: { "https://github.com/...": { latest_release_tag: "v1.2", ... }, ... }
+    // 【监听 A2】: 缺失工坊项可用性探查。只更新运行时标签，不改变库存状态。
+    window.addEventListener('workspace-missing-workshop-probe', (e) => {
+      const probeMap = e.detail || {}
+      librariesMods.workshop.forEach(mod => {
+        const wid = normalizeWorkshopId(mod?.workshop_id)
+        if (!wid || !probeMap[wid]) return
+        const probe = probeMap[wid]
+        mod.workshop_online_status = probe.status || 'unknown'
+        mod.workshop_online_result = probe.result ?? null
+        if (probe.online_info) mod.online_info = probe.online_info
+      })
+    })
+    // 【监听 B】: Git 仓库在线状态静默更新
+    // payload 格式: { "https://host/group/repo": { latest_release_tag: "v1.2", ... }, ... }
     window.addEventListener('github-online-update', (e) => {
       const updatedReposMap = e.detail
-      console.log("[Workspace] 收到 GitHub 在线状态推送:", Object.keys(updatedReposMap).length, "条记录")
+      console.log("[Workspace] 收到 Git 仓库在线状态推送:", Object.keys(updatedReposMap).length, "条记录")
 
       github.subscribedRepos.forEach(repo => {
         if (updatedReposMap[repo.repo_url]) {
@@ -655,6 +709,29 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workshopSearch.historyStack.pop() 
   }
 
+  const normalizeGitTimelinePath = (value = '') => String(value || '').trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/g, '').toLowerCase()
+  const getGitTimelinePathSegments = (value = '') => normalizeGitTimelinePath(value).split('/').filter(Boolean)
+  const getGitTimelineFolder = (value = '') => {
+    const segments = getGitTimelinePathSegments(value)
+    return segments.length ? segments[segments.length - 1] : ''
+  }
+  const findGithubRepoForTimelineTarget = (target) => {
+    const targetMod = target && typeof target === 'object' ? target : null
+    const targetPath = targetMod ? targetMod.path : target
+    const targetUrls = [
+      targetMod?.repo_url,
+      targetMod?.repoUrl,
+      targetMod?.url,
+    ].map(value => normalizeUrl(value)).filter(Boolean)
+    const targetSegments = getGitTimelinePathSegments(targetPath)
+
+    return github.subscribedRepos.find(repo => {
+      const repoUrl = normalizeUrl(repo?.repo_url)
+      if (repoUrl && targetUrls.includes(repoUrl)) return true
+      const repoFolder = getGitTimelineFolder(repo?.local_folder || (repo?.repo_name ? `_GH_${repo.repo_name}` : ''))
+      return !!repoFolder && targetSegments.includes(repoFolder)
+    }) || null
+  }
 
   // 打开并加载模组变更时间线
   const openTimeline = async (workshopId, modName, is_steamcmd=false) => {
@@ -673,13 +750,19 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       timeline.isLoading = false
     }
   }
-  // 打开并加载 Github 模组变更时间线
-  const openTimelineGithub = async (path) => {
-    if (!window.pywebview || !path) return
-    console.log("打开Github时间线", path, github.subscribedRepos)
-    const repo = github.subscribedRepos.find(repo => repo.local_folder && path.includes(repo.local_folder))
+  // 打开并加载 Git 仓库模组变更时间线
+  const openTimelineGithub = async (target) => {
+    if (!window.pywebview || !target) return
+    let repo = findGithubRepoForTimelineTarget(target)
+    if (!repo && await fetchGithubRepos()) {
+      repo = findGithubRepoForTimelineTarget(target)
+    }
     if (!repo) {
       toast.warning('未找到该订阅')
+      return
+    }
+    if (!repo.repo_url) {
+      toast.warning('订阅记录缺少仓库地址，无法获取时间线')
       return
     }
     timeline.isOpen = true
@@ -689,7 +772,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     timeline.logs = []
     try {
       const res = await window.pywebview.api.github_get_timeline(repo.repo_url)
-      if (checkResult(res, '获取Github模组时间线')) {
+      if (checkResult(res, '获取 Git 仓库模组时间线')) {
         timeline.logs = res.data
       }
     } finally {
@@ -697,7 +780,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  // 拉取 GitHub 订阅列表，拉取所有订阅记录
+  // 拉取 Git 仓库订阅列表，拉取所有订阅记录
   const fetchGithubRepos = async () => {
     if (!window.pywebview) return
     setupListeners()
@@ -706,7 +789,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const activeRepoUrl = github.activeRepo?.repo_url || ''
       // 瞬间返回带缓存的数据
       const res = await window.pywebview.api.github_get_subscribed()
-      if (checkResult(res, '获取Github订阅')) {
+      if (checkResult(res, '获取 Git 仓库订阅')) {
         github.subscribedRepos = (res.data || []).map(repo => applyGithubRepoComputedState(repo))
         github.activeRepo = activeRepoUrl
           ? github.subscribedRepos.find(repo => repo.repo_url === activeRepoUrl) || null
@@ -720,6 +803,37 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
     } finally {
       github.isLoading = false
+    }
+    return false
+  }
+
+  // 拉取 Git 推荐来源，用于在订阅页展示可选项目。
+  const fetchGithubProviderCatalog = async ({ force = false, url = '' } = {}) => {
+    if (!window.pywebview) return false
+    if (github.catalogLoaded && !force) return true
+    github.isCatalogLoading = true
+    github.catalogError = ''
+    try {
+      const res = await window.pywebview.api.github_get_provider_catalog(url, !!force)
+      if (checkResult(res, '获取 Git 仓库推荐列表')) {
+        github.recommendedRepos = Array.isArray(res.data?.items) ? res.data.items : []
+        github.catalogMeta = {
+          source_url: res.data?.source_url || '',
+          sources: Array.isArray(res.data?.sources) ? res.data.sources : [],
+          total: Number(res.data?.total || 0),
+          fetched_at: Number(res.data?.fetched_at || 0),
+          is_stale: !!res.data?.is_stale,
+          warning: res.data?.warning || '',
+        }
+        github.catalogLoaded = true
+        return true
+      }
+      github.catalogError = res?.message || '获取推荐列表失败'
+    } catch (error) {
+      github.catalogError = String(error?.message || error || '获取推荐列表失败')
+      throw error
+    } finally {
+      github.isCatalogLoading = false
     }
     return false
   }
@@ -928,8 +1042,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workshopSearch, timeline, subscribedWorkshopIds, installedAllIds, missingWorkshopIds, getModStatus, modTransfer,
     matrixFocusTarget, getMatrixSameItems, getMatrixConflictItems, jumpToMatrixItem,
     fetchLibrariesMods, refreshLifecycleUpdateStates, doWorkshopSearch, fetchWorkshopDetails, openTimeline, openTimelineGithub, setupListeners, setWorkshopSearchMode,
-    github, fetchGithubRepos, fetchGithubTimeline, startGithubTimelinePolling, stopGithubTimelinePolling, selectGithubRepo, clearActiveGithubRepo,
-    getGithubOnlineVersion, githubRepoNeedsUpdate, ensureLibrariesLoaded, ensureGithubLoaded, ensureCollectionsLoaded, ensureWorkspaceTabLoaded, refreshLoadedData, openSteamWorkshopUrl, getInstallSourcesByPackageIdsMap, getWorkshopIdsByPackageIdsMap, resolvePackageIdsToWorkshopIds, goBackWorkshopDetail,
+    github, fetchGithubRepos, fetchGithubProviderCatalog, fetchGithubTimeline, startGithubTimelinePolling, stopGithubTimelinePolling, selectGithubRepo, clearActiveGithubRepo,
+    getGithubOnlineVersion, getGithubRepoStatus, githubRepoNeedsUpdate, ensureLibrariesLoaded, ensureGithubLoaded, ensureCollectionsLoaded, ensureWorkspaceTabLoaded, refreshLoadedData, openSteamWorkshopUrl, getWorkshopDetailsByPackageIdsMap, getInstallSourcesByPackageIdsMap, getWorkshopIdsByPackageIdsMap, resolvePackageIdsToWorkshopIds, goBackWorkshopDetail,
     collections, fetchSavedCollections, addCollection, removeCollection, selectCollection
   }
 })

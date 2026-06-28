@@ -49,6 +49,7 @@ COMMUNITY_RULES_PATH = RULES_DIR / "communityRules.json"    # 社区库规则路
 # 外置数据库路径
 COMMUNITY_WORKSHOP_DB_PATH = DATA_DIR / "steamDB.json"         # 社区库数据库路径
 COMMUNITY_INSTEAD_DB_PATH = DATA_DIR / "replacements.json.gz"  # 替代Mod数据库路径
+GIT_PROVIDER_CATALOG_DIR = DATA_DIR / "git_catalogs"  # Git 推荐清单缓存目录
 
 
 @dataclass
@@ -137,7 +138,7 @@ class AIConfig:
 
 @dataclass
 class UIConfig:
-    theme: str = "system"       # light, dark, system
+    theme_id: str = "obsidian-cyan"  # 当前使用的主题 ID；完整主题数据由主题文件管理。
     font_size: int = 16
     drag_delay: int = 30            # 拖动判定延迟 (毫秒)
     detail_delay: int = 200         # Mod 详情页加载延迟 (毫秒)
@@ -233,6 +234,7 @@ class AppConfig:
     # --- 高级设置 ---
     backup_retention_days: int = 30           # 备份保留天数
     bundle_compress_level: int = 6            # 打包压缩级别：0 最快，9 最省空间
+    bundle_mod_folder_name_type: str = "default"  # 模组包内文件夹命名方式
     enable_auto_scan: bool = True             # 启动时自动扫描
     enable_launch_profile_quick_scan: bool = True  # 环境列表直启前是否执行检查同步
     enable_file_size_scan: bool = False         # 扫描时是否检查文件大小
@@ -253,6 +255,7 @@ class AppConfig:
     community_instead_db_path: str = str(COMMUNITY_INSTEAD_DB_PATH)
     community_rules_url: str = "https://github.com/RimSort/Community-Rules-Database/blob/main/communityRules.json"
     community_rules_path: str = str(COMMUNITY_RULES_PATH)
+    git_provider_catalog_url: str = "RJW|https://gitgud.io/api/v4/projects/AblativeAbsolute%2Flibidinous_loader_providers/packages/generic/provider_nopin/latest/providers.json"
     user_rules_path: str = str(USER_RULES_PATH)
     steam_web_api_key: str = ""  # Steamworks Web API 鉴权密钥，仅供需要受限接口的后端请求使用
     
@@ -490,13 +493,17 @@ class SettingsManager:
             self._normalize_config()
             self._sync_derived_paths()
 
-    def _normalize_config(self):
+    def _normalize_config(self) -> list[str]:
+        warnings: list[str] = []
         self.config.home_path = str(HOME_DIR)
         self.config.current_profile_id = str(self.config.current_profile_id or "").strip() or "default"
         self.config.steam_path = str(self.config.steam_path or "").strip()
         self.config.workshop_mods_path = str(self.config.workshop_mods_path or "").strip()
         self.config.steamcmd_path = str(self.config.steamcmd_path or "").strip() or str(TOOLS_DIR / "steamcmd")
         self.config.self_mods_path = str(self.config.self_mods_path or "").strip() or str(MODS_DIR)
+        if self.config.workshop_mods_path and Path(self.config.self_mods_path).resolve() == Path(self.config.workshop_mods_path).resolve():
+            self.config.self_mods_path = str(MODS_DIR)
+            warnings.append("管理器下载模组路径不能与创意工坊目录相同，已自动恢复为默认目录。")
         self.config.ripgrep_path = str(self.config.ripgrep_path or "").strip() or str(TOOLS_DIR / "ripgrep")
         self.config.language = normalize_language_code(self.config.language, default="zh-CN") or "zh-CN"
         valid_modes = {"default", "remember", "custom"}
@@ -512,6 +519,9 @@ class SettingsManager:
             self.config.bundle_compress_level = max(0, min(9, int(self.config.bundle_compress_level or 0)))
         except (TypeError, ValueError):
             self.config.bundle_compress_level = 6
+        valid_mod_folder_name_types = {"default", "workshop_id", "package_id", "name", "alias_name"}
+        mod_folder_name_type = str(getattr(self.config, "bundle_mod_folder_name_type", "default") or "default").strip().lower()
+        self.config.bundle_mod_folder_name_type = mod_folder_name_type if mod_folder_name_type in valid_mod_folder_name_types else "default"
         ai_cfg = self.config.ai
         if isinstance(ai_cfg, AIConfig):
             try:
@@ -526,6 +536,7 @@ class SettingsManager:
                 ai_cfg.context_window_tokens = max(0, int(ai_cfg.context_window_tokens or 0))
             except (TypeError, ValueError):
                 ai_cfg.context_window_tokens = 0
+        return warnings
     
     def _sync_derived_paths(self):
         """
@@ -621,16 +632,17 @@ class SettingsManager:
                 pass
 
     # 强烈建议新增这个方法供 api.save_all_settings 使用
-    def update_from_dict(self, data_dict: Dict[str, Any]):
+    def update_from_dict(self, data_dict: Dict[str, Any]) -> list[str]:
         """
         全量更新，同样需要处理逻辑触发
         """
         before_state = asdict(self.config)
         self._recursive_update(self.config, data_dict)
-        self._normalize_config()
+        normalization_warnings = self._normalize_config()
         self._sync_derived_paths()
         after_state = asdict(self.config)
-        if after_state == before_state: return
+        if after_state == before_state:
+            return normalization_warnings
         old_self_mods_path = before_state.get('self_mods_path', '')
         old_steamcmd_path = before_state.get('steamcmd_path', '')
         new_self_mods_path = after_state.get('self_mods_path', '')
@@ -644,6 +656,7 @@ class SettingsManager:
                 move_old_data=self.config.move_old_self_mods
             )
         self.save()
+        return normalization_warnings
 
     def update_paths(self, paths_dict: Dict[str, str]):
         """批量更新路径"""
