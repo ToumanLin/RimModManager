@@ -760,8 +760,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       appStore.isLoading = true
       const res = await window.pywebview.api.workspace_transfer_mods(path_hashs, target_store, mode)
       if(appStore.checkResult(res, "库间转移")) {
-        // 成功后刷新三大库数据
-        fetchLibrariesMods()
+        await appStore.requestModScan()
       }
       appStore.isLoading = false
     }

@@ -20,6 +20,7 @@ export const useSearchStore = defineStore('search', () => {
     alias_name: { type: FIELD_TYPES.STRING, defaultSearch: true, label: '别名' },
     author: { type: FIELD_TYPES.STRING, suggest: true, defaultSearch: true, label: '作者' },
     package_id: { type: FIELD_TYPES.STRING, label: '包名' },
+    workshop_id: { type: FIELD_TYPES.STRING, label: '创意工坊ID' },
 
     // === 列表类型 ===
     tags: { type: FIELD_TYPES.LIST, suggest: true, label: '标签' },
@@ -99,7 +100,7 @@ export const useSearchStore = defineStore('search', () => {
             /colors?$/i,      // 屏蔽所有以 color 结尾的 (color)
             'description','descriptions_by_version' ,'notes',    // 屏蔽描述 (太长，不适合 key:value 搜索，适合全文搜索)
             'version','id','mod_id', 'path_hash','rules', 'disabled',
-            'package_id_raw',
+            'package_id_raw', 'language_pack_owner_result',
             'file_size',
             // 'ignored_issues',
         ]

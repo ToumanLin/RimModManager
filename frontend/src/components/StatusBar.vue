@@ -121,7 +121,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Bot, Download, Image, LoaderCircle, Radar, X } from 'lucide-vue-next'
+import { Bot, Download, Image, LoaderCircle, Radar, X, Flag, FlagOff, ScanSearch, Box } from 'lucide-vue-next'
 import { useModStore } from '../stores/modStore'
 import { useAppStore } from '../stores/appStore'
 import { useProfileStore } from '../stores/profileStore'
@@ -140,12 +140,12 @@ const taskTypeMeta = {
   download: { title: '下载任务', icon: Download, text: 'text-blue-400', bar: 'bg-blue-500', border: 'border-blue-400/30' },
   update: { title: '软件更新', icon: Download, text: 'text-cyan-400', bar: 'bg-cyan-500', border: 'border-cyan-400/30' },
   'steamcmd-download': { title: 'SteamCMD 下载', icon: Download, text: 'text-sky-400', bar: 'bg-sky-500', border: 'border-sky-400/30' },
-  'steam-subscribe': { title: 'Steam 订阅', icon: Download, text: 'text-lime-400', bar: 'bg-lime-500', border: 'border-lime-400/30' },
-  'steam-unsubscribe': { title: 'Steam 取消订阅', icon: Download, text: 'text-rose-400', bar: 'bg-rose-500', border: 'border-rose-400/30' },
+  'steam-subscribe': { title: 'Steam 订阅', icon: Flag, text: 'text-lime-400', bar: 'bg-lime-500', border: 'border-lime-400/30' },
+  'steam-unsubscribe': { title: 'Steam 取消订阅', icon: FlagOff, text: 'text-rose-400', bar: 'bg-rose-500', border: 'border-rose-400/30' },
   'texture-opt': { title: '贴图优化', icon: Image, text: 'text-amber-400', bar: 'bg-amber-500', border: 'border-amber-400/30' },
-  'texture-opt-analyze': { title: '贴图分析', icon: Image, text: 'text-amber-400', bar: 'bg-amber-500', border: 'border-amber-400/30' },
+  'texture-opt-analyze': { title: '贴图分析', icon: ScanSearch, text: 'text-amber-400', bar: 'bg-amber-500', border: 'border-amber-400/30' },
   'ai-batch': { title: 'AI 批量处理', icon: Bot, text: 'text-accent-special', bar: 'bg-accent-special', border: 'border-accent-special/30' },
-  localize: { title: '本地化模组', icon: Download, text: 'text-emerald-400', bar: 'bg-emerald-500', border: 'border-emerald-400/30' },
+  localize: { title: '本地化模组', icon: Box, text: 'text-emerald-400', bar: 'bg-emerald-500', border: 'border-emerald-400/30' },
   'steamcmd-init': { title: 'SteamCMD 初始化', icon: Download, text: 'text-orange-400', bar: 'bg-orange-500', border: 'border-orange-400/30' },
 }
 

@@ -183,9 +183,10 @@
 
         <div class="absolute bottom-2 right-2 flex items-center justify-end gap-2"
           :data-tour="listId=='active'?'list-quick-actions':null">
-          <button v-if="props.listId === 'active' && (missingInstallSummary.missingTotal > 0 || missingInstallSummary.optionalInstallTotal > 0)" @click="openMissingInstallDialog()"
+          <button v-if="props.listId === 'active' && (missingInstallSummary.installableTotal > 0 || missingInstallSummary.optionalInstallTotal > 0)" @click="openMissingInstallDialog()"
             v-tooltip="missingInstallTooltip"
-            class="px-1 py-1 rounded-md bg-accent-danger/80 text-text-main/50 hover:bg-accent-danger hover:text-text-main transition-all" >
+            class="px-1 py-1 rounded-md transition-all"
+            :class="missingInstallButtonClass" >
             <Download />
           </button>
           <button v-if="props.listId === 'active' && supplementSummary.count > 0" @click="openSupplementDialog()"
@@ -415,17 +416,17 @@ watch(
   { immediate: true }
 )
 const missingInstallTooltip = computed(() => {
-  if ((missingInstallSummary.value.missingTotal || 0) + (missingInstallSummary.value.optionalInstallTotal || 0) === 0) {
-    return '当前没有可管理的下载/订阅候选'
+  if ((missingInstallSummary.value.installableTotal || 0) + (missingInstallSummary.value.optionalInstallTotal || 0) === 0) {
+    return '当前没有可处理的安装项'
   }
-  const lines = [
-    `[[缺失 ${missingInstallSummary.value.missingTotal} 项]]`,
-  ]
+  const lines = []
+  if (missingInstallSummary.value.installableTotal > 0) {
+    lines.push(`[[缺失安装 ${missingInstallSummary.value.installableTotal} 项]]`)
+  } else if (missingInstallSummary.value.optionalInstallTotal > 0) {
+    lines.push(`^^仅可选安装 ${missingInstallSummary.value.optionalInstallTotal} 项^^`)
+  }
   if (missingInstallSummary.value.installableTotal > 0) {
     lines.push(`• 可安装: ${missingInstallSummary.value.installableTotal}`)
-  }
-  if (missingInstallSummary.value.unknownTotal > 0) {
-    lines.push(`• 未知来源: ${missingInstallSummary.value.unknownTotal}`)
   }
   if (missingInstallSummary.value.optionalInstallTotal > 0) {
     lines.push(`• 可选安装: ${missingInstallSummary.value.optionalInstallTotal}`)
@@ -434,8 +435,16 @@ const missingInstallTooltip = computed(() => {
     lines.push(`• 已装替代: ${missingInstallSummary.value.alreadyInstalledReplacementTotal}`)
   }
   lines.push('')
-  lines.push('__[[(点击打开统一下载/订阅窗口)]]__')
+  lines.push('__[[(点击打开安装处理窗口)]]__')
   return lines.join('\n')
+})
+const missingInstallButtonClass = computed(() => {
+  const hasOnlyOptionalInstall = missingInstallSummary.value.optionalInstallTotal > 0
+    && missingInstallSummary.value.installableTotal === 0
+  if (hasOnlyOptionalInstall) {
+    return 'bg-accent-warn/80 text-text-main/60 hover:bg-accent-warn hover:text-text-main'
+  }
+  return 'bg-accent-danger/80 text-text-main/60 hover:bg-accent-danger hover:text-text-main'
 })
 const supplementSummary = computed(() => {
   if (props.listId !== 'active') return { groups: [], count: 0, requiredCount: 0, optionalCount: 0, urgency: 'none' }
@@ -448,14 +457,14 @@ const supplementButtonClass = computed(() => {
   return 'bg-accent-warn/80 text-text-main/60 hover:bg-accent-warn hover:text-text-main'
 })
 const supplementTooltip = computed(() => {
-  if (supplementSummary.value.count === 0) return '当前没有可补充项'
+  if (supplementSummary.value.count === 0) return '当前没有需要启用的建议'
   const groupLines = supplementSummary.value.groups
     .map(group => `• ${group.title}: ${group.count} 项`)
     .join('\n')
   const urgencyLine = supplementSummary.value.requiredCount > 0
     ? `!!必需项 ${supplementSummary.value.requiredCount} 个!!`
     : `^^可选项 ${supplementSummary.value.optionalCount} 个^^`
-  return `${urgencyLine}\n发现 ${supplementSummary.value.count} 个补缺建议\n${groupLines}\n\n__[[(点击打开补缺选择窗口)]]__`
+  return `${urgencyLine}\n发现 ${supplementSummary.value.count} 个启用建议\n${groupLines}\n\n__[[(点击打开启用建议窗口)]]__`
 })
 // 提取需要被移除的无效 Mod 列表（这个其实是一一对应的，为了模板整洁也包装一下）
 const invalidModsToRemove = computed(() => {

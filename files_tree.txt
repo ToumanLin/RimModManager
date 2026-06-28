@@ -203,6 +203,7 @@
 │   │   │   ├──  colorDeal.js
 │   │   │   ├──  constants.js
 │   │   │   ├──  modIdentity.js
+│   │   │   ├──  packageScope.js
 │   │   │   ├──  tools.js
 │   │   │   ├──  uiHelper.js
 │   │   │   ├──  unityTextParser.js

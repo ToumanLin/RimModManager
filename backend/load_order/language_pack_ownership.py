@@ -28,6 +28,9 @@ GENERIC_NAME_NOISE_TOKENS = {
     "mod",
 }
 
+# 默认关闭名称决胜，避免把整合语言包压成单一归属。
+ENABLE_NAME_TIEBREAKER = False
+
 
 def _is_language_pack_mod(mod: dict[str, Any] | None) -> bool:
     mod_type = str((mod or {}).get("user_mod_type") or (mod or {}).get("mod_type") or "").strip()
@@ -149,45 +152,43 @@ def _get_user_rule_override(user_mod_rules: dict[str, Any] | None, package_id: s
 def _build_candidate(
     package_id: str,
     source_flags: set[str],
-    language_pack: dict[str, Any],
+    language_pack_name: str,
     asset_index: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     target = asset_index.get(package_id, {})
-    target_name = str(target.get("name") or package_id)
-    similarity = _name_similarity(language_pack.get("name") or "", target_name)
     known = bool(target)
     is_language_pack_target = _is_language_pack_mod(target)
     is_hard_noise = _is_hard_noise(package_id)
-
-    score = 0
-    if "dependency" in source_flags and "load_after" in source_flags:
-        score += 80
-    elif "dependency" in source_flags:
-        score += 55
-    elif "load_after" in source_flags:
-        score += 35
-
-    if known:
-        score += 10
-    else:
-        score -= 6
-
-    if is_language_pack_target:
-        score -= 20
-
-    if is_hard_noise:
-        score -= 120
-
-    score += round(similarity * 35)
+    similarity = _name_similarity(language_pack_name, str(target.get("name") or package_id))
 
     return {
         "package_id": package_id,
         "source_flags": sorted(source_flags),
         "is_hard_noise": is_hard_noise,
+        "is_language_pack_target": is_language_pack_target,
         "is_soft_noise": is_language_pack_target or not known,
         "name_similarity": round(similarity, 4),
-        "score": score,
     }
+
+
+def _filter_auto_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        candidate for candidate in candidates
+        if not candidate["is_hard_noise"] and not candidate["is_language_pack_target"]
+    ]
+
+
+def _merge_unique_candidates(*candidate_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in candidate_groups:
+        for candidate in group:
+            package_id = normalize_package_id(candidate.get("package_id"))
+            if not package_id or package_id in seen:
+                continue
+            seen.add(package_id)
+            merged.append(candidate)
+    return merged
 
 
 def _pick_best_by_name_similarity(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
@@ -195,7 +196,7 @@ def _pick_best_by_name_similarity(candidates: list[dict[str, Any]]) -> tuple[dic
         return None, None
     ordered = sorted(
         candidates,
-        key=lambda item: (item.get("name_similarity", 0), item.get("score", 0)),
+        key=lambda item: item.get("name_similarity", 0),
         reverse=True,
     )
     best = ordered[0]
@@ -255,26 +256,19 @@ def _resolve_candidate_set(
         )
 
     if len(load_after_candidates) > 1:
-        best, second = _pick_best_by_name_similarity(load_after_candidates)
-        if best:
-            gap = best.get("name_similarity", 0) - (second.get("name_similarity", 0) if second else 0)
-            if best.get("name_similarity", 0) >= 0.55 and gap >= 0.12:
-                return (
-                    [best],
-                    "single",
-                    "medium",
-                )
+        if ENABLE_NAME_TIEBREAKER:
+            best, second = _pick_best_by_name_similarity(load_after_candidates)
+            if best:
+                gap = best.get("name_similarity", 0) - (second.get("name_similarity", 0) if second else 0)
+                if best.get("name_similarity", 0) >= 0.55 and gap >= 0.12:
+                    return (
+                        [best],
+                        "single",
+                        "medium",
+                    )
         return (
             load_after_candidates,
             "multiple",
-            "medium",
-        )
-
-    if candidates:
-        best_by_score = max(candidates, key=lambda item: item.get("score", 0))
-        return (
-            [best_by_score],
-            "single",
             "medium",
         )
 
@@ -344,35 +338,38 @@ def resolve_language_pack_ownership_for_mod(
     if not candidate_sources:
         return _finalize_result([], "unknown", "unknown")
 
-    candidates = [
-        _build_candidate(package_id, source_flags, language_pack, asset_index)
+    analyzed_candidates = [
+        _build_candidate(package_id, source_flags, str(language_pack.get("name") or ""), asset_index)
         for package_id, source_flags in candidate_sources.items()
     ]
-    analyzed_candidates = [dict(candidate) for candidate in candidates]
-    analyzed_effective_candidates = [candidate for candidate in analyzed_candidates if not candidate["is_hard_noise"]] or analyzed_candidates
+    analyzed_effective_candidates = _filter_auto_candidates(analyzed_candidates)
     analyzed_owners, analyzed_relation_type, analyzed_confidence = _resolve_candidate_set(
         analyzed_effective_candidates,
     )
 
     if override_owner_ids:
-        for candidate in candidates:
-            if candidate["package_id"] not in override_owner_ids:
-                continue
-            candidate["score"] += 220 if override_replace else 120
-    if override_owner_ids and override_replace:
-        candidates = [candidate for candidate in candidates if candidate["package_id"] in override_owner_ids]
-    # 用户手动覆盖属于最终裁决，不能在最后一步又被 hard-noise 过滤吞掉。
-    effective_candidates = [
-        candidate for candidate in candidates
-        if not candidate["is_hard_noise"] or candidate["package_id"] in override_owner_ids
-    ] or candidates
+        override_candidates = [
+            _build_candidate(package_id, {"user_override"}, str(language_pack.get("name") or ""), asset_index)
+            for package_id in override_owner_ids
+        ]
+        owners = override_candidates if override_replace else _merge_unique_candidates(analyzed_owners, override_candidates)
+        if owners:
+            relation_type = "single" if len(owners) == 1 else "multiple"
+            confidence = "high"
+            return _finalize_result(
+                owners,
+                relation_type,
+                confidence,
+                analyzed_owners=analyzed_owners,
+                analyzed_relation_type=analyzed_relation_type,
+                analyzed_confidence=analyzed_confidence,
+            )
 
-    owners, relation_type, confidence = _resolve_candidate_set(effective_candidates)
-    if owners:
+    if analyzed_owners:
         return _finalize_result(
-            owners,
-            relation_type,
-            confidence,
+            analyzed_owners,
+            analyzed_relation_type,
+            analyzed_confidence,
             analyzed_owners=analyzed_owners,
             analyzed_relation_type=analyzed_relation_type,
             analyzed_confidence=analyzed_confidence,
