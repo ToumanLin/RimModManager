@@ -20,7 +20,7 @@
               label="显示共存问题" mini description="关闭后，仅显示冲突的包ID，不显示版本共存问题"
               class="w-45 text-xs text-text-dim peer-disabled:cursor-not-allowed hover:text-text-main transition-colors"
             />
-            <button v-tooltip="'我管你这的那的，下次再说！'" class="text-sm text-text-dim hover:text-accent-danger transition-colors" @click="visible = false">
+            <button v-tooltip="'我管这的那的，下次再说！'" class="text-sm text-text-dim hover:text-accent-danger transition-colors" @click="visible = false">
               <x-circle></x-circle>
             </button>
           </div>
@@ -294,7 +294,7 @@ const submit = async () => {
     return;
   }
   try {
-    const res = await window.pywebview.api.resolve_scan_conflicts(operations)
+    const res = await window.pywebview.api.scan_conflicts_resolve(operations)
     if (appStore.checkResult(res, '处理冲突')) {
       toast.success("冲突已解决，正在刷新列表...")
       // 关键：先清理 Store 中的状态，防止弹窗逻辑因异步扫描再次触发

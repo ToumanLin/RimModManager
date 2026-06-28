@@ -5,6 +5,7 @@ import { useAppStore } from './appStore'
 import { useGroupStore } from './groupStore'
 import { ISSUE_LEVEL, ISSUE_TYPE, ISSUE_TITLE_MAP } from '../utils/constants'
 import { useConfirmStore } from './confirmStore'
+import { useProfileStore } from './profileStore'
 
 export const useModStore = defineStore('mods', () => {
   const toast = createToastInterface()
@@ -369,6 +370,8 @@ export const useModStore = defineStore('mods', () => {
     // 扫描结束后，主动拉取一次最新数据刷新界面
     console.log("扫描统计:", detail)
     await appStore.refreshData()
+    const profileStore = useProfileStore()
+    await profileStore.fetchProfiles()
     // 状态注入
     if (coexistenceList.value.length > 0){
       // 处理可共存Mod，标记为 is_coexistence = true
@@ -440,6 +443,24 @@ export const useModStore = defineStore('mods', () => {
       appStore.isLoading = false;
     }
   }
+  const disableMods = async (path_hashs, disabled = true) => {
+    if (!path_hashs || path_hashs.length === 0) return;
+    if(disabled) {
+      const confirm = await confirmStore.confirmAction(
+        '禁用确认',
+        `确定要禁用该模组吗？\n禁用后将无法在游戏中使用，直到重新启用。`,
+        { type: 'warning' }
+      );
+      if(!confirm) return
+    }
+    appStore.isLoading = true;
+    const res = await window.pywebview.api.mods_disable(path_hashs, disabled);
+    if (appStore.checkResult(res, '禁用选中的模组')) {
+      // 成功后会在完成时刷新数据
+      scanMods()
+    }
+    appStore.isLoading = false;
+  }
 
   // --- Mod数据操作 ---
   // 更新Mod用户数据
@@ -449,7 +470,7 @@ export const useModStore = defineStore('mods', () => {
       // 更新本地 Map
       const mod = allModsMap.value.get(modId.toLowerCase())
       if (mod) Object.assign(mod, userData)
-      const res = await window.pywebview.api.update_mod_user_data(modId, userData)
+      const res = await window.pywebview.api.mod_user_data_update(modId, userData)
       if (!checkResult(res, "更新Mod用户数据", true)) {
         await appStore.refreshData();
         return false
@@ -475,7 +496,7 @@ export const useModStore = defineStore('mods', () => {
         last_moved_time: mod.last_moved_time
       }));
       console.log("更新Mod最后操作时间:", {all_mods_time:all_mods})
-      const res = await window.pywebview.api.update_mod_time(all_mods)
+      const res = await window.pywebview.api.mod_time_update(all_mods)
       if (!checkResult(res, "更新Mod最后操作时间")) {
         await appStore.refreshData();
         return false
@@ -500,7 +521,7 @@ export const useModStore = defineStore('mods', () => {
         if (mod) mod.sign_color = color
       })
       // 发送请求给后端
-      const res = await window.pywebview.api.set_mods_color(modIds, color)
+      const res = await window.pywebview.api.mods_sign_color_update(modIds, color)
       if (!checkResult(res, "批量设置 Mod 颜色", true)) {
         await appStore.refreshData();
         return false
@@ -522,7 +543,7 @@ export const useModStore = defineStore('mods', () => {
         if (mod) mod.user_mod_type = type
       })
       // 发送请求给后端
-      const res = await window.pywebview.api.set_user_mods_type(modIds, type)
+      const res = await window.pywebview.api.mods_user_mod_type_update(modIds, type)
       if (!checkResult(res, "批量设置 Mod 类型", true)) {
         await appStore.refreshData();
         return false
@@ -544,7 +565,7 @@ export const useModStore = defineStore('mods', () => {
         if (mod) mod.tags = [...new Set([...(mod.tags || []), ...tags])]  // 自动去重
       })
       // 发送请求给后端
-      const res = await window.pywebview.api.add_tags_to_mods(modIds, tags)
+      const res = await window.pywebview.api.mods_add_tags(modIds, tags)
       if (!checkResult(res, "批量添加 Mod 标签", true)) {
         await appStore.refreshData();
         return false
@@ -566,7 +587,7 @@ export const useModStore = defineStore('mods', () => {
         if (mod) mod.tags = (mod.tags || []).filter(t => !tags.includes(t))
       })
       // 发送请求给后端
-      const res = await window.pywebview.api.remove_tags_from_mods(modIds, tags)
+      const res = await window.pywebview.api.mods_remove_tags(modIds, tags)
       if (!checkResult(res, "批量移除 Mod 标签", true)) {
         await appStore.refreshData();
         return false
@@ -612,7 +633,7 @@ export const useModStore = defineStore('mods', () => {
         }
       })
       // 发送请求给后端
-      const res = await window.pywebview.api.link_mods(modIds)
+      const res = await window.pywebview.api.mods_link(modIds)
       if (!checkResult(res, "批量设置 Mod 联锁", true)) {
         await appStore.refreshData();
         return false
@@ -638,7 +659,7 @@ export const useModStore = defineStore('mods', () => {
           mod.lock_next_mod = null
         }
       })
-      const res = await window.pywebview.api.unlink_mods(modIds)
+      const res = await window.pywebview.api.mods_unlink(modIds)
       if (!checkResult(res, "批量解除 Mod 联锁", true)) {
         await appStore.refreshData();
         return false
@@ -666,7 +687,7 @@ export const useModStore = defineStore('mods', () => {
       })
       
       // 2. 发送请求给后端
-      const res = await window.pywebview.api.batch_update_user_data(updatesList)
+      const res = await window.pywebview.api.mods_user_data_update(updatesList)
       if (!checkResult(res, "批量更新Mod数据", true)) {
         await appStore.refreshData()
         return false
@@ -879,8 +900,7 @@ export const useModStore = defineStore('mods', () => {
         // 如果 Mod 本身就没有声明支持的语言列表（通常意味着没有文本或是框架），直接跳过检查
         if (!mod.supported_languages || mod.supported_languages.length === 0) {
           // pass
-        } 
-        else {
+        } else {
           // 检查自身是否直接支持当前语言
           const modSupportsLang = mod.supported_languages?.some(l => l.toLowerCase() === targetLang.toLowerCase())
           // 如果自身不支持，且自身不是语言包本体
@@ -901,6 +921,26 @@ export const useModStore = defineStore('mods', () => {
                   `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_MISSING_LANGUAGE]}^^：不支持当前语言，且未在本地发现相关语言包`)
               }
             }
+          } // 自身是语言包，检查是否存在前置或依赖，且目标Mod是否启用
+          else if(isSelfLangPack) {
+            // 检查是否存在依赖或前置，如果都不存在，提示语言包指向对象未知，用户可手动指定前置对象
+            const modDependencies = mod.rules.dependencies?.map(d => d.target_id.toLowerCase()) || []
+            const modLoadAfter = mod.rules.load_after?.map(d => d.target_id.toLowerCase()) || []
+            const allRelatedModIds = [...modDependencies, ...modLoadAfter]
+            if(allRelatedModIds.length === 0) {
+              _add(currentId, ISSUE_TYPE.WARN_UNKNOWN_TARGET, ISSUE_LEVEL.WARN,
+                `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_UNKNOWN_TARGET]}^^：语言包指向对象未知，可在规则编辑器手动指定前置对象`)
+            }
+            // 如果存在依赖或前置，检测是否有任意一个启用(部分语言包支持多个Mod，只要有一个启用即可)，
+            // 如果未启用则提示用户存在多余的语言包，或者提示指向对象未启用
+            else {
+              const anyActive = allRelatedModIds.some(id => activeIndexMap.has(id))
+              if(!anyActive) {
+                _add(currentId, ISSUE_TYPE.WARN_INACTIVE_TARGET, ISSUE_LEVEL.WARN,
+                  `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_INACTIVE_TARGET]}^^：语言包指向对象未启用，请检查该语言包是否多余`)
+              }
+            }
+
           }
         }
       }
@@ -915,7 +955,6 @@ export const useModStore = defineStore('mods', () => {
     _checkListChain(tempIds.value, _add)
     return issuesMap
   })
-
   // 辅助：检查整个列表的联锁
   const _checkListChain = (list, addFunc) => {
     const len = list.length
@@ -927,7 +966,6 @@ export const useModStore = defineStore('mods', () => {
       }
     }
   }
-
   // 辅助：检查单个 Mod 的前后联锁
   const _checkChainLink = (mod, index, list, addFunc) => {
     const id = mod.package_id.toLowerCase()
@@ -954,7 +992,6 @@ export const useModStore = defineStore('mods', () => {
       }
     }
   }
-
   // 提取当前列表所有未启用的有效依赖项 ID
   const getMissingLocalDependencies = (targetIds) => {
     const toActivate = new Set()
@@ -985,8 +1022,7 @@ export const useModStore = defineStore('mods', () => {
     })
     return Array.from(toActivate)
   }
-
-  // 辅助：获取某个 Mod 问题的最高级别
+  // 获取某个 Mod 问题的最高级别
   const getModIssueState = (id) => {
     const issues = modIssues.value.get(id.toLowerCase())
     if (!issues || issues.length === 0) return null
@@ -1063,7 +1099,7 @@ export const useModStore = defineStore('mods', () => {
       // 如果没有实质性变化，直接返回
       if (updates.length === 0) return;
       // 3. 一次性调用后端 API
-      const res = await window.pywebview.api.set_mods_ignore_issues(updates);
+      const res = await window.pywebview.api.mods_ignore_issues_update(updates);
       if (checkResult(res, "批量忽略/取消忽略问题")) {
         toast.success(type ? `已忽略 ${updates.length} 项问题` : `已恢复 ${updates.length} 项警告`);
       } else {
@@ -1131,7 +1167,7 @@ export const useModStore = defineStore('mods', () => {
     // Actions
     setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, 
     updateInactiveIds, takeInactiveIds, removeIdsOnAllList, selectMods, clearSelection, changeModsActive,
-    scanMods, scanComplete, autoSortMods, localizeSelectedMods,
+    scanMods, scanComplete, autoSortMods, localizeSelectedMods, disableMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, batchUpdateModsUserData,
     setModsColor, setModsType, addModsTags, removeModsTags, selectModsTag, selectModsGroup, 
     getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getMissingLocalDependencies, getMissingLanguagePacks,

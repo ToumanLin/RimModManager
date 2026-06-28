@@ -37,13 +37,18 @@
             <!-- 当前激活标识 -->
             <div class="px-2 text-[0.65rem] font-bold text-text-dim uppercase tracking-tighter opacity-60">已记录环境</div>
             
-            <div v-for="p in profileStore.profiles" :key="p.id" 
-              @click="profileStore.switchProfile(p.id)"
-              class="group relative p-2 rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden"
-              :class="p.id === profileStore.currentProfileId 
-                ? 'bg-accent-primary/15 border-accent-primary/40 shadow-[0_0_15px_rgba(6,182,212,0.15)]' 
-                : 'bg-text-dim/15 border-text-main/5 hover:border-text-main/20 hover:bg-text-main/5'"
+            <div v-for="p in profileStore.profiles" :key="p.id"
+              @click="p.check ? profileStore.switchProfile(p.id) : null" 
+              class="group relative p-2 rounded-xl border transition-all duration-300 overflow-hidden"
+              :class="[p.check ? (p.id === profileStore.currentProfileId 
+                ? 'bg-accent-primary/15 border-accent-primary/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] cursor-pointer' 
+                : 'bg-text-dim/15 border-text-main/5 hover:border-text-main/20 hover:bg-text-main/5 cursor-pointer')
+                : 'bg-accent-danger/15 border-accent-danger/40 shadow-[0_0_15px_rgba(255,69,0,0.15)] cursor-not-allowed' ]"
             >
+              <div v-if="!p.check" class="absolute bottom-2 right-2 z-100 text-accent-warn scale-100 cursor-help hover:scale-110 transition-transform">
+                <AlertTriangle class="size-8 " v-tooltip="`^^${p.msg}^^`"></AlertTriangle>
+              </div>
+              
               <!-- 激活时的动态流光 -->
               <div v-if="p.id === profileStore.currentProfileId" class="absolute inset-0 bg-linear-to-r from-accent-primary/10 to-transparent animate-pulse-slow"></div>
 
@@ -54,14 +59,18 @@
                     <!-- 环境名称 -->
                     <div class="flex items-center gap-2 min-w-0">
                       <div class="size-2 rounded-full ml-1" 
-                        :class="p.id === profileStore.currentProfileId ? 'bg-accent-primary animate-pulse shadow-[0_0_8px_#06b6d4]' : 'bg-text-dim/30'"></div>
+                        :class="p.check ? (p.id === profileStore.currentProfileId ? 'bg-accent-primary animate-pulse shadow-[0_0_8px_#06b6d4]' 
+                          : 'bg-text-dim/30'):'bg-accent-danger animate-pulse shadow-[0_0_8px_#ff4500]'">
+                      </div>
                       <h4 class="shrink font-bold text-sm truncate min-w-0" v-tooltip="`[[${p.name}]]\n__${p.description}__`" :class="p.id === profileStore.currentProfileId ? 'text-text-main' : 'text-text-main'">{{ p.name }}</h4>
                     </div>
                     <!-- 操作组 -->
                     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button v-if="p.id !== 'default'" @click.stop="handleDelete(p)" v-tooltip="'删除环境'" class="p-1.5 rounded-lg hover:bg-accent-danger/20 text-text-dim hover:text-accent-danger transition-all"><Trash2 class="size-3.5" /></button>
                       <button @click.stop="handleEdit(p)" v-tooltip="'编辑环境'" class="p-1.5 rounded-lg hover:bg-text-main/10 text-text-dim hover:text-text-main transition-all"><Settings2 class="size-3.5" /></button>
-                      <button @click.stop="handlePlay(p)" v-tooltip="'运行环境'" class="p-1.5 rounded-lg text-text-dim  transition-all hover:text-accent-success hover:bg-accent-success/20"><Play class="size-3.5" /></button>
+                      <button @click.stop="handlePlay(p)" v-tooltip="'运行环境'" class="p-1.5 rounded-lg text-text-dim  transition-all hover:text-accent-success hover:bg-accent-success/20"
+                        :class="p.check ? 'cursor-pointer' : 'cursor-not-allowed pointer-events-none'"><Play class="size-3.5" />
+                      </button>
                     </div>
                   </div>
 
@@ -69,6 +78,7 @@
                   <div class="flex items-center gap-1 min-w-0">
                     <span v-tooltip="'游戏版本'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-secondary/20 text-accent-secondary border border-text-dim/10 ">{{ p.game_version || 'Unknown' }}</span>
                     <span v-if="p.use_workshop_mods" v-tooltip="'使用Workshop模组'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-success/10 text-accent-success border border-text-dim/10 ">Workshop</span>
+                    <span v-if="p.use_self_mods" v-tooltip="'使用管理器 Mod'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-success/10 text-accent-success border border-text-dim/10 ">Mannager</span>
                     <span v-if="p.id === 'default'" v-tooltip="'默认环境'" class="text-[0.6rem] px-1.5 py-0.5 rounded bg-accent-highlight/20 text-accent-highlight border border-text-dim/10 ">Default</span>
                   </div>
                   
@@ -137,9 +147,15 @@
         <div class="p-6 space-y-5">
           <CommonInput label="显示名称" v-model="form.name" placeholder="例如: 1.5 中世纪" />
           <CommonInput label="环境描述" v-model="form.description" placeholder="这里可以写一些关于这个环境的说明..." />
-          <CommonPathInput label="游戏执行目录" v-model="form.game_install_path" @browse="browsePath('game_install_path')" @blur="checkGamePath" :description="gameInfo" />
-          <CommonPathInput label="用户数据目录" v-model="form.user_data_path" @browse="browsePath('user_data_path')" :placeholder= '(!isEditing?"可空，默认在软件 data/profiles 目录下自动生成":"编辑模式下不可留空！")' />
+          <CommonPathInput label="游戏执行目录" v-model="form.game_install_path" @browse="browsePath('game_install_path')" 
+            :check="form.check_info?.game_install_path" @blur="checkPath('game_install_path', form.game_install_path)"
+            description="游戏安装目录，即游戏主程序所在的目录" />
+          <CommonPathInput v-if="form.id!='default'" label="用户数据目录" v-model="form.user_data_path" @browse="browsePath('user_data_path')" 
+            :check="form.check_info?.user_data_path" @blur="checkPath('user_data_path', form.user_data_path)"
+            description="游戏数据目录，可随意指定位置，或者留空自动生成，包含游戏配置及排序存档等用户信息。"
+            :placeholder= '(!isEditing?"可空，默认在软件 data/profiles 目录下自动生成":"编辑模式下不可留空！")' />
           <CommonSwitch v-if="form.id!='default' && appStore.settings.workshop_mods_path" label="使用创意工坊 Mod" v-model="form.use_workshop_mods" description="启用后将通过链接方式自动为游戏添加创意工坊 Mod，仅在非Steam启动时生效，Steam 运行时会自动加载创意工坊 Mod。" />
+          <CommonSwitch v-if="appStore.settings.self_mods_path" label="使用管理器 Mod" v-model="form.use_self_mods" description="启用后将通过链接方式自动为游戏添加管理器 Mod。" />
           <CommonSwitch v-if="!isEditing" label="继承当前配置" v-model="form.copy_current_data" description="自动复制当前的游戏配置到新环境" />
           <CommonTagInput label="游戏启动参数" v-model="form.run_commands" :allTags="RUN_COMMAND_TAGS" placeholder="请输入一个完整指令后回车确认……" description="注意不要使用 [[-savedatafolder]] 指令，多环境管理已经默认使用此指令，无需手动配置。" />
 
@@ -163,7 +179,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
-import { Database, Plus, Trash2, Settings2, ZapOff, X, Play } from 'lucide-vue-next'
+import { Database, Plus, Trash2, Settings2, ZapOff, X, Play, AlertTriangle } from 'lucide-vue-next'
 import { createToastInterface } from 'vue-toastification'
 import { useProfileStore } from '../stores/profileStore'
 import { useAppStore } from '../stores/appStore'
@@ -190,6 +206,7 @@ const form = reactive({
   game_install_path: '',
   user_data_path: '',
   use_workshop_mods: false,
+  use_self_mods: false,
   copy_current_data: false
 })
 
@@ -205,29 +222,34 @@ const openCreate = () => {
   form.game_install_path = appStore.settings.game_install_path
   form.user_data_path = ''
   form.use_workshop_mods = false
+  form.use_self_mods = false
   form.copy_current_data = false
   form.run_commands = []
   isEditing.value = false
   showModal.value = true
 }
 
-const handleEdit = (p) => {
+const handleEdit = async (p) => {
   form.id = p.id
   form.name = p.name
   form.description = p.description
   form.game_install_path = p.game_install_path
   form.user_data_path = p.user_data_path
   form.use_workshop_mods = p.use_workshop_mods
+  form.use_self_mods = p.use_self_mods
   form.run_commands = p.run_commands
   isEditing.value = true
   showModal.value = true
+  
+  await checkPath('user_data_path', form.user_data_path)
+  await checkPath('game_install_path', form.game_install_path)
 }
 
 const browsePath = async (type) => {
   const path = await appStore.getFolderPath(form[type])
   if (path) form[type] = path
   if (type === 'game_install_path') {
-    checkGamePath()
+    checkPath('game_install_path', form.game_install_path)
   }
 }
 
@@ -244,6 +266,16 @@ const submitForm = async () => {
     toast.warning('请输入用户数据目录')
     return
   }
+  await checkPath('user_data_path', form.user_data_path)
+  await checkPath('game_install_path', form.game_install_path)
+  if (form['check_info']['game_install_path'] && !form['check_info']['game_install_path']['pass']) {
+    toast.warning('请选择一个有效的游戏执行目录')
+    return
+  }
+  if (form['check_info']['user_data_path'] && !form['check_info']['user_data_path']['pass'] && isEditing.value) {
+    toast.warning('请输入一个有效的用户数据目录')
+    return
+  }
   if (isEditing.value) {
     const cleanForm = { ...form }
     delete cleanForm.copy_current_data
@@ -256,14 +288,13 @@ const submitForm = async () => {
   showModal.value = false
 }
 
-const checkGamePath = async () => {
-  const game_info = await appStore.getGameInfo(form.game_install_path)
-  if (!game_info || !game_info.exe) {
-    // 游戏版本为空时
-    gameInfo.value = `^^未找到游戏可执行文件，请检查路径是否正确！^^`
-    return
+// 检查游戏路径是否有效
+const checkPath = async (type, path) => {
+  const res = await appStore.checkPath(type, path)
+  if (!form['check_info']) {
+    form['check_info'] = {};
   }
-  gameInfo.value = `游戏版本: ${game_info.version}\n游戏路径: ${game_info.exe}`
+  form['check_info'][type] = res
 }
 
 const handleDelete = async (p) => {

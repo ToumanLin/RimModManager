@@ -25,49 +25,52 @@
       </div>
     </div>
 
-    <!-- 中间：动态任务进度条 (扫描 OR 下载) -->
-    <transition name="slide-up">
-      <div v-if="activeTask" class="absolute bottom-0 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-bg-surface px-4 pt-1 pb-0.5 rounded-t-lg border-t border-accent-primary/30 shadow-[0_-4px_10px_rgba(0,0,0,0.3)] max-w-160 justify-center">
-        
-        <!-- 图标区 -->
-        <template v-if="taskType === 'scan'">
-          <Radar class="animate-spin animate-duration-2000 h-4 w-4 text-accent-primary" />
-        </template>
-        <template v-else-if="taskType === 'download'">
-          <Download class="h-4 w-4 text-blue-400 animate-bounce" />
-        </template>
-        <template v-else-if="taskType === 'ai'">
-          <Bot class="h-4 w-4 text-accent-special animate-pulse" />
-        </template>
+    
+    <Teleport to="body">
+      <!-- 中间：动态任务进度条 (扫描 OR 下载) -->
+      <transition name="slide-up">
+        <div v-if="activeTask" class="fixed bottom-0 z-9999 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-bg-surface px-4 pt-1 pb-0.5 rounded-t-lg border-t border-accent-primary/30 shadow-[0_-4px_10px_rgba(0,0,0,0.3)] max-w-160 justify-center">
+          
+          <!-- 图标区 -->
+          <template v-if="taskType === 'scan'">
+            <Radar class="animate-spin animate-duration-2000 h-4 w-4 text-accent-primary" />
+          </template>
+          <template v-else-if="taskType === 'download'">
+            <Download class="h-4 w-4 text-blue-400 animate-bounce" />
+          </template>
+          <template v-else-if="taskType === 'ai'">
+            <Bot class="h-4 w-4 text-accent-special animate-pulse" />
+          </template>
 
-        <!-- 进度条背景 -->
-        <div class="w-48 h-2 bg-text-main/10 rounded-full relative overflow-hidden">
-          <div class="h-full transition-all duration-300 ease-out rounded-full"
-            :class="{
-              'bg-accent-primary': taskType === 'scan',
-              'bg-blue-500': taskType === 'download',
-              'bg-accent-special': taskType === 'ai'
-            }"
-            :style="{ width: taskPercent + '%' }">
+          <!-- 进度条背景 -->
+          <div class="w-48 h-2 bg-text-main/10 rounded-full relative overflow-hidden">
+            <div class="h-full transition-all duration-300 ease-out rounded-full"
+              :class="{
+                'bg-accent-primary': taskType === 'scan',
+                'bg-blue-500': taskType === 'download',
+                'bg-accent-special': taskType === 'ai'
+              }"
+              :style="{ width: taskPercent + '%' }">
+            </div>
+          </div>
+          
+          <!-- 文字信息 -->
+          <div class="flex items-center gap-2 text-[0.7rem] font-mono">
+            <span :class="taskType === 'scan' ? 'text-accent-primary' : 'text-blue-400'" class="font-bold">
+              {{ taskPercent }}%
+            </span>
+            <span class="truncate max-w-100 text-text-dim" :title="taskMessage">
+              {{ taskMessage }}
+            </span>
+            <!-- 下载专属：速度 -->
+            <span v-if="taskType === 'download'" class="text-text-main/50 scale-90">
+              {{ activeTask.speed }}
+            </span>
           </div>
         </div>
-        
-        <!-- 文字信息 -->
-        <div class="flex items-center gap-2 text-[0.7rem] font-mono">
-          <span :class="taskType === 'scan' ? 'text-accent-primary' : 'text-blue-400'" class="font-bold">
-            {{ taskPercent }}%
-          </span>
-          <span class="truncate max-w-100 text-text-dim" :title="taskMessage">
-            {{ taskMessage }}
-          </span>
-          <!-- 下载专属：速度 -->
-          <span v-if="taskType === 'download'" class="text-text-main/50 scale-90">
-             {{ activeTask.speed }}
-          </span>
-        </div>
-      </div>
-    </transition>
-
+      </transition>
+    </Teleport>
+    
     <!-- 右侧：版本 -->
     <div class="flex items-center gap-2 hover:text-text-main" >
        <span>RimWorld {{ appStore.settings.game_version || '未知版本' }}</span>

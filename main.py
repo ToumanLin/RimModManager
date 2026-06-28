@@ -1,8 +1,14 @@
+try:
+    import pip_system_certs
+    # 该模块一旦被导入，就会自动为 ssl, requests, httpx, urllib3 打补丁
+except ImportError:
+    pass
+
 import multiprocessing
 import sys
 import os
 from backend.utils.logger import logger 
-from backend.settings import settings
+from backend.settings import settings, BASE_RESOURCE_DIR, HOME_DIR
 from backend.utils.event_bus import EventBus
 from validate_environment import get_entrypoint, validate_environment
 
@@ -13,23 +19,24 @@ import builtins
 # ic_install()    # 全局启用 icecream，利用 Python 的动态特性实现“一次安装，到处运行”。
 
 
-
 # 强制切换工作目录到 exe 所在文件夹
 # 解决任务栏启动找不到配置文件的问题
 def setup_working_directory():
-    if getattr(sys, 'frozen', False):
-        # 如果是打包后的 exe
-        application_path = os.path.dirname(sys.executable)
-    else:
-        # 如果是开发环境 (py 脚本)
-        application_path = os.path.dirname(os.path.abspath(__file__))
-    
-    # 切换工作目录
-    os.chdir(application_path)
+    os.chdir(HOME_DIR)
     # 顺便把这个路径加到 sys.path，防止导包报错
-    sys.path.insert(0, application_path)
+    sys.path.insert(0, str(HOME_DIR))
 
-setup_working_directory()
+# 执行逻辑：如果是 steam-worker 模式，跳过 chdir
+if "--steam-worker" not in sys.argv:
+    setup_working_directory()
+else:
+    # Worker 模式下，不需要切换目录（因为主进程已经通过 cwd 指定好了）
+    # 但可能仍需要把项目根目录加入 sys.path，以便能 import 后端的模块
+    app_path = os.path.dirname(os.path.abspath(__file__))
+    if getattr(sys, 'frozen', False):
+        app_path = os.path.dirname(sys.executable)
+    if app_path not in sys.path:
+        sys.path.insert(0, app_path)
     
 def get_webview_proxy_args():
     """生成 WebView2 的启动参数"""
@@ -78,8 +85,8 @@ def main():
         try:
             # 解析参数: [exe, --steam-worker, action, mod_id]
             action = sys.argv[2]
-            mod_id = int(sys.argv[3])
-            run_steam_worker(action, mod_id)
+            payload  = sys.argv[3]
+            run_steam_worker(action, payload)
         except Exception as e:
             logger.error(f"Worker Error: {e}")
         
@@ -99,7 +106,7 @@ def main():
     window_width = int(settings.config.window_width)  # 默认1400px
     window_height = int(settings.config.window_height)  # 默认900px
     
-     # 获取代理参数
+    # 获取代理参数
     # Pywebview 目前对代理的直接支持有限，通常需要通过底层 flag 传递
     # 对于 WebView2 (Windows)，可以通过 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS']
     additional_args = []
@@ -114,6 +121,8 @@ def main():
     # --disable-features=RendererCodeIntegrity: 解决部分杀毒软件注入导致渲染进程崩溃
     # --disable-gpu: 最后的手段，解决显卡兼容性
     # additional_args.append("--disable-features=RendererCodeIntegrity") 
+    # 某些环境下需要这个来允许本地文件交互
+    additional_args.append('--allow-file-access-from-files') 
             
     # 设置环境变量传给 WebView2
     os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = " ".join(additional_args)

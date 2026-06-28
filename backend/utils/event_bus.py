@@ -1,6 +1,8 @@
 # backend/utils/event_bus.py
 from webview import WebViewException, Window
 
+from backend.utils.tools import current_ms
+
 class EventBus:
     _instance = None   # 存储单例实例的变量
     _window = None
@@ -54,7 +56,7 @@ class EventBus:
             cls._window.evaluate_js(js_code)
         except WebViewException:
             # 窗口可能还没准备好，或者已经关闭
-            # 这种情况下，我们静默失败，只在控制台打印简单的 stderr，防止递归调用 logger
+            # 这种情况下，静默失败，只在控制台打印简单的 stderr，防止递归调用 logger
             import sys
             print(f"[EventBus Error] Window not ready for event: {event_name}", file=sys.stderr)
         except Exception as e:
@@ -81,5 +83,26 @@ class EventBus:
             'message': message,
             'type': type
         })
-        
     
+    @classmethod
+    def emit_progress(cls, task_id, task_type, status="running", progress=0, message="", metrics=None):
+        """
+        统一进度发送器
+        :param task_id: 任务唯一ID (uuid)
+        :param task_type: 任务类型 (SCAN | DOWNLOAD | AI | SYNC | REPAIR)
+        :param status: 状态 (pending | running | success | failed | cancelled)
+        :param progress: 0-100 的整数
+        :param message: 当前处理的具体信息 (如文件名)
+        :param metrics: 额外指标数据 (如 {'speed': '2MB/s', 'eta': '10s', 'count': '10/100'})
+        """
+        payload = {
+            "id": task_id,
+            "type": task_type,
+            "status": status,
+            "progress": progress,
+            "message": message,
+            "metrics": metrics or {},
+            "timestamp": current_ms()
+        }
+        cls.emit('global-progress', payload)
+        

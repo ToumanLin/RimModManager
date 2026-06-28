@@ -54,8 +54,12 @@ export const ISSUE_TYPE = {
   WARN_VERSION_MISMATCH: 'version_mismatch',        // 版本不对
   WARN_LINK_MOD_MISSING: 'link_mod_missing',        // 联锁模组缺失
   WARN_LINK_WRONG_ORDER: 'link_wrong_order',        // 联锁排序错误
+
   WARN_MISSING_LANGUAGE: 'warn_missing_language',   // 缺少语言支持
   WARN_INACTIVE_LANGUAGE_PACK: 'warn_inactive_language_pack', // 语言包未启用
+  WARN_UNKNOWN_TARGET: 'warn_unknown_target',       // 未知指向对象
+  WARN_INACTIVE_TARGET: 'warn_inactive_target',     // 指向对象未启用
+
   INFO_ALTERNATIVE_USED: 'info_alternative_used',   // 依赖替代
 
 }
@@ -71,8 +75,12 @@ export const ISSUE_TITLE_MAP = {
   'link_mod_missing': '联锁模组缺失',
   'link_wrong_order': '联锁排序错误',
   'info_alternative_used': '依赖替代',
+
   'warn_missing_language': '缺少语言支持',
   'warn_inactive_language_pack': '语言包未启用',
+  'warn_unknown_target': '语言包指向未知',
+  'warn_inactive_target': '语言包指向未启用',
+
   'default': '其他问题'
 
 }
@@ -137,17 +145,17 @@ export const MOD_TYPE_ICON_MAP = {
   ]),
 }
 // 模组颜色列表
-export const MOD_COLOR_LIST = [
-  '#ef4444',
-  '#ec4899',
-  '#8b5cf6',
-  '#3b82f6',
-  '#06b6d4',
-  '#10b981',
-  '#84cc16',
-  '#eab308',
-  '#f97316'
-]
+export const MOD_SIGN_COLOR_MAP = {
+  '#ef4444': '红色',
+  '#ec4899': '粉色',
+  '#8b5cf6': '紫色',
+  '#3b82f6': '蓝色',
+  '#06b6d4': '青色',
+  '#10b981': '绿色',
+  '#84cc16': '草色',
+  '#eab308': '黄色',
+  '#f97316': '橙色',
+}
 // 模组来源映射
 export const SOURCE_TYPE_MAP = {
   'core': '游戏本体',
@@ -155,6 +163,7 @@ export const SOURCE_TYPE_MAP = {
   'github': 'GitHub',
   'workshop': 'Steam 创意工坊',
   'local': '本地文件',
+  'self': '管理器下载',
   'other': '其它来源'
 }
 
@@ -162,3 +171,8 @@ export const RUN_COMMAND_TAGS = [
   { value: '-popupwindow', label: '无边框窗口模式' },
   { value: '-quicktest', label: '快速测试' },
 ]
+export const IconSteam = h('svg', { viewBox: "0 0 448 512", fill: "currentColor" }, 
+  [ h('path', { d: "M273.5 177.5a61 61 0 1 1 122 0 61 61 0 1 1 -122 0zm174.5 .2c0 63-51 113.8-113.7 113.8L225 371.3c-4 43-40.5 76.8-84.5 76.8-40.5 0-74.7-28.8-83-67L0 358 0 250.7 97.2 290c15.1-9.2 32.2-13.3 52-11.5l71-101.7C220.7 114.5 271.7 64 334.2 64 397 64 448 115 448 177.7zM203 363c0-34.7-27.8-62.5-62.5-62.5-4.5 0-9 .5-13.5 1.5l26 10.5c25.5 10.2 38 39 27.7 64.5-10.2 25.5-39.2 38-64.7 27.5-10.2-4-20.5-8.3-30.7-12.2 10.5 19.7 31.2 33.2 55.2 33.2 34.7 0 62.5-27.8 62.5-62.5zM410.5 177.7a76.4 76.4 0 1 0 -152.8 0 76.4 76.4 0 1 0 152.8 0z" })]
+)
+// <svg  class=" size-4 grayscale-20" viewBox="0 0 96 96" > <use href="/icon.svg"></use></svg>
+export const IconSelf = h('svg', { viewBox: "0 0 96 96", fill: "currentColor" }, [ h('use', { href: "/icon.svg" }) ])

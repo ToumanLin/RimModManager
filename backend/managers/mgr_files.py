@@ -1,5 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import os
+from pathlib import Path
 import re
 import shutil
 import tempfile
@@ -7,13 +9,15 @@ import threading
 import subprocess
 import platform
 import time
-from typing import List
+from typing import Any, Dict, List
 from urllib.parse import unquote, quote
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from PIL import Image
+import requests
 import webview # 引入 webview 库
 from send2trash import send2trash
-from backend.settings import CACHE_DIR
+from backend.managers.mgr_game import GameManager
+from backend.settings import GALLERY_CACHE_DIR, THUMBNAIL_CACHE_DIR
 from backend.utils.event_bus import EventBus
 from backend.utils.logger import logger
 
@@ -30,11 +34,9 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
                 # 1. 解析参数
                 query_part = self.path.split('path=', 1)[1]
                 local_path = unquote(query_part) # 解码 URL
-
                 # 2. 安全与存在性检查
                 if os.path.exists(local_path) and os.path.isfile(local_path):
                     self.send_response(200)
-                    
                     # 3. 设置 MIME 类型
                     ext = os.path.splitext(local_path)[1].lower()
                     ctype = 'application/octet-stream'
@@ -42,12 +44,10 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
                     elif ext in ['.jpg', '.jpeg']: ctype = 'image/jpeg'
                     elif ext == '.webp': ctype = 'image/webp'
                     elif ext == '.gif': ctype = 'image/gif'
-                    
                     self.send_header('Content-type', ctype)
                     self.send_header('Access-Control-Allow-Origin', '*') # 允许跨域
                     self.send_header('Cache-Control', 'max-age=604800') # 强缓存7天(本地文件很少变)
                     self.end_headers()
-                    
                     # 4. 写入文件流 (零拷贝传输)
                     with open(local_path, 'rb') as f:
                         # shutil.copyfileobj(f, self.wfile) # 这种方式更高效
@@ -70,12 +70,66 @@ class LocalAssetHandler(SimpleHTTPRequestHandler):
                     pass # 如果发送错误信息时连接也断了，就彻底忽略
                 return
         
-        # 其他请求直接 400
-        self.send_error(400, "Invalid Request Path")
+        # 处理 /gallery 请求
+        # 格式: /gallery?wid=123&url=https://...
+        if self.path.startswith('/gallery?'):
+            try:
+                # 1. 解析参数
+                from urllib.parse import urlparse, parse_qs
+                query = parse_qs(urlparse(self.path).query)
+                wid = query.get('wid', ['unknown'])[0]
+                remote_url = query.get('url', [None])[0]
+                if not remote_url:
+                    self.send_error(400, "Missing URL")
+                    return
+                # 2. 生成本地缓存路径
+                # 按照 workshop_id 分文件夹，文件名使用 URL 的 MD5 以防冲突
+                url_hash = hashlib.md5(remote_url.encode('utf-8')).hexdigest()
+                save_dir = GALLERY_CACHE_DIR / wid
+                save_dir.mkdir(parents=True, exist_ok=True)
+                # 简单判断后缀，默认为 jpg
+                ext = ".jpg"
+                if ".png" in remote_url.lower(): ext = ".png"
+                local_path = save_dir / f"{url_hash}{ext}"
+                # 3. 检查缓存：如果没有则下载
+                if not local_path.exists():
+                    logger.debug(f"Downloading gallery image to cache: {local_path}")
+                    resp = requests.get(remote_url, timeout=15)
+                    if resp.status_code == 200:
+                        with open(local_path, 'wb') as f:
+                            f.write(resp.content)
+                    else:
+                        self.send_error(404, "Remote image not found")
+                        return
+                # 4. 复用已有的文件发送逻辑
+                self._serve_file(str(local_path))
+                
+            except Exception as e:
+                logger.error(f"Gallery Proxy Error: {e}")
+                self.send_error(500)
+            return
+
+        self.send_error(404)
 
     def log_message(self, format, *args):
         # 重写此方法以屏蔽控制台日志输出，保持清爽
         pass
+    
+    def _serve_file(self, local_path):
+        """通用文件发送逻辑（抽取自原 do_GET）"""
+        ext = os.path.splitext(local_path)[1].lower()
+        ctype = 'image/jpeg'
+        if ext == '.png': ctype = 'image/png'
+        elif ext == '.webp': ctype = 'image/webp'
+        
+        self.send_response(200)
+        self.send_header('Content-type', ctype)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'max-age=2592000') # 缓存 30 天
+        self.end_headers()
+        with open(local_path, 'rb') as f:
+            self.wfile.write(f.read())
+
 
 
 class FileManager:
@@ -92,8 +146,10 @@ class FileManager:
     
     def __init__(self):
         # 1. 确保存储目录存在
-        if not os.path.exists(CACHE_DIR):
-            os.makedirs(CACHE_DIR, exist_ok=True)
+        if not os.path.exists(THUMBNAIL_CACHE_DIR):
+            os.makedirs(THUMBNAIL_CACHE_DIR, exist_ok=True)
+        if not os.path.exists(GALLERY_CACHE_DIR):
+            os.makedirs(GALLERY_CACHE_DIR, exist_ok=True)
             
         # 2. 启动 HTTP Server
         self._port = 0
@@ -131,13 +187,20 @@ class FileManager:
     # =========================================================
     #  2. 缩略图管理 (Thumbnail)
     # =========================================================
-
-    def get_thumbnail_path(self, package_id):
+    def get_gallery_url(self, workshop_id, remote_url):
+        """生成指向本地服务器的代理 URL"""
+        if not remote_url: return ""
+        from urllib.parse import quote
+        safe_url = quote(remote_url)
+        return f"http://127.0.0.1:{self._port}/gallery?wid={workshop_id}&url={safe_url}"
+    
+    @staticmethod
+    def get_thumbnail_path(package_id):
         """
         获取某个 Mod 已生成的缩略图路径 (物理路径)。
         如果不存在返回 None。
         """
-        target_path = os.path.join(CACHE_DIR, f"{package_id}.webp")
+        target_path = os.path.join(THUMBNAIL_CACHE_DIR, f"{package_id}.webp")
         if os.path.exists(target_path):
             return target_path
         return None
@@ -148,11 +211,8 @@ class FileManager:
         如果缩略图已存在且未过期，直接返回路径；否则重新生成。
         :return: 缩略图的绝对路径 (str) 或 None
         """
-        if not original_path or not os.path.exists(original_path):
-            return None
-
-        target_path = os.path.join(CACHE_DIR, f"{package_id}.webp")
-
+        if not original_path or not os.path.exists(original_path): return None
+        target_path = os.path.join(THUMBNAIL_CACHE_DIR, f"{package_id}.webp")
         # 检查是否需要重新生成 (存在性 + 修改时间)
         need_generate = True
         if os.path.exists(target_path):
@@ -162,10 +222,7 @@ class FileManager:
                     need_generate = False
             except OSError:
                 pass
-
-        if not need_generate:
-            return target_path
-
+        if not need_generate: return target_path
         # 开始生成
         try:
             with Image.open(original_path) as img:
@@ -177,10 +234,8 @@ class FileManager:
                         img = img.convert('RGBA')
                 else:
                     img = img.convert('RGB')
-                
                 # 缩放 (长宽最大 128px)
                 img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-                
                 # 保存 (WEBP 格式，体积小速度快)
                 img.save(target_path, 'WEBP', quality=80)
                 return target_path
@@ -248,7 +303,7 @@ class FileManager:
                     success_count += 1
                 else:
                     # 如果路径本来就不存在，可以视为删除成功的一种
-                    # 或者记录为跳过，这里我们直接累加成功，减少用户困惑
+                    # 或者记录为跳过，这里直接累加成功，减少用户困惑
                     success_count += 1
                     
             except Exception as e:
@@ -262,6 +317,11 @@ class FileManager:
         """
         打开系统原生的文件夹选择框
         """
+        # 如果是文件路径则取目录，不是则设为空字符串
+        path = os.path.dirname(initial_dir) if os.path.isfile(initial_dir) else initial_dir
+        # 检查路径是否有效
+        if not os.path.exists(path): path = ''
+        
         # 获取当前活动窗口
         if len(webview.windows) > 0:
             window = webview.windows[0]
@@ -269,7 +329,7 @@ class FileManager:
             # allow_multiple=False: 单选
             result = window.create_file_dialog(
                 webview.FileDialog.FOLDER, 
-                directory=initial_dir if initial_dir else '', 
+                directory=path, 
                 allow_multiple=False
             )
             # result 返回的是一个列表 (因为可能多选)，或者 None (取消)
@@ -283,11 +343,16 @@ class FileManager:
         打开系统原生的文件选择框
         file_types 示例: ('XML Files (*.xml;*.rws)', 'All Files (*.*)')
         """
+        # 如果是文件路径则取目录，不是则设为空字符串
+        path = os.path.dirname(initial_dir) if os.path.isfile(initial_dir) else initial_dir
+        # 检查路径是否有效
+        if not os.path.exists(path): path = ''
+        
         if len(webview.windows) > 0:
             window = webview.windows[0]
             result = window.create_file_dialog(
                 webview.FileDialog.OPEN, 
-                directory=initial_dir if initial_dir else '', 
+                directory=path, 
                 allow_multiple=False,
                 file_types=file_types
             )
@@ -300,13 +365,18 @@ class FileManager:
         """
         打开系统原生的文件保存框
         """
+        # 如果是文件路径则取目录，不是则设为空字符串
+        path = os.path.dirname(initial_dir) if os.path.isfile(initial_dir) else initial_dir
+        # 检查路径是否有效
+        if not os.path.exists(path): path = ''
+        
         if len(webview.windows) > 0:
             window = webview.windows[0]
             # pywebview 的 create_file_dialog 参数：
             # dialog_type, directory, allow_multiple, save_filename, file_types
             result = window.create_file_dialog(
                 webview.FileDialog.SAVE, 
-                directory=initial_dir, 
+                directory=path, 
                 save_filename=default_filename, # 设置默认文件名
                 allow_multiple=False,
                 file_types=file_types
@@ -439,7 +509,7 @@ class FileManager:
         2. 指向路径错误的链接，全部删除并重建。
         3. 已经正确指向的链接，绝对不动（0操作）。
         """
-        # logger.info(f"Sync links: local_mods_path={local_mods_path}, workshop_mod_paths={workshop_mod_paths}")
+        # logger.debug(f"Sync links: local_mods_path={local_mods_path}, workshop_mod_paths={workshop_mod_paths}")
         if not local_mods_path or not os.path.exists(local_mods_path):
             logger.error("Sync links failed: Local mods path does not exist.")
             return False
@@ -457,7 +527,7 @@ class FileManager:
             }
 
         # --- 2. 扫描磁盘并识别“必须删除”的项 ---
-        # 我们遍历目录下的所有内容，只要命中前缀且不在 target_map 中，就是删除目标
+        # 遍历目录下的所有内容，只要命中前缀且不在 target_map 中，就是删除目标
         to_delete_paths = []
         existing_valid_keys = set()
 
@@ -580,5 +650,387 @@ class FileManager:
         finally:
             if os.path.exists(temp_path): os.remove(temp_path)
     
+    @staticmethod
+    def sync_links_fast(local_mods_path, workshop_mod_paths: list):
+        """极致性能的增量同步逻辑 (纯 Python 原生实现，0 Shell 调用)"""
+        if not local_mods_path or not os.path.exists(local_mods_path):
+            return False
+
+        from backend.utils.logger import logger
+        # 1. 准备目标清单 (统一转小写进行防呆匹配)
+        target_map = {}
+        for src in workshop_mod_paths:
+            if not src: continue
+            wid = os.path.basename(os.path.normpath(src))
+            link_name = f"{FileManager.LINK_PREFIX}{wid}"
+            target_map[link_name.lower()] = {
+                'raw_name': link_name,
+                'src_path': os.path.normpath(os.path.abspath(src))
+            }
+
+        to_delete_paths = []
+        links_to_create = []
+        existing_valid_keys = set()
+
+        # 2. 极速扫描与判定
+        try:
+            with os.scandir(local_mods_path) as it:
+                for entry in it:
+                    if not entry.name.startswith(FileManager.LINK_PREFIX): continue
+                    
+                    name_lower = entry.name.lower()
+                    # 判定 A: 在目标清单中？
+                    if name_lower not in target_map.keys():
+                        # 指向错误、或者是多余的链接，加入删除队列
+                        to_delete_paths.append(entry.path)
+                        continue
+                    # 判定 B: 链接指向是否正确？(使用无 IO 开销的 readlink)
+                    expected_src = target_map.get(name_lower, {}).get('src_path')
+                    if not expected_src:
+                        # 目标清单中不存在此链接，加入删除队列
+                        to_delete_paths.append(entry.path)
+                        continue
+                    if not FileManager._is_link_correct(entry.path, expected_src):
+                        to_delete_paths.append(entry.path)
+                        continue
+                        
+                    existing_valid_keys.add(name_lower)
+                
+        except OSError as e:
+            from backend.utils.logger import logger
+            logger.error(f"Scan links failed: {e}")
+
+        # 3. 计算缺失的链接
+        for key, info in target_map.items():
+            if key not in existing_valid_keys:
+                dst_path = os.path.join(local_mods_path, info['raw_name'])
+                links_to_create.append((info['src_path'], dst_path))
+        
+        logger.info(f"Delete links: {to_delete_paths}")
+        # 4. 执行极速删除 (os.rmdir 对于 Junction 是瞬间且安全的，不会删除原文件)
+        for path in to_delete_paths:
+            try:
+                # 尝试用 unlink (适用于软链接)，如果报错则用 rmdir (适用于 Junction/目录)
+                if os.path.islink(path): os.unlink(path)
+                else: os.rmdir(path)
+            except Exception:
+                pass # 忽略占用等特殊情况
+
+        logger.info(f"Create links: {links_to_create}")
+        # 5. 执行极速创建
+        if links_to_create:
+            FileManager._create_links_fast(links_to_create)
+
+        return True
+
+    @staticmethod
+    def _create_links_fast(link_tasks: list):
+        """调用底层 API 极速创建链接"""
+        is_windows = platform.system() == 'Windows'
+        if is_windows:
+            try:
+                import _winapi # 导入 Windows 底层 API
+            except ImportError:
+                is_windows = False
+
+        for src, dst in link_tasks:
+            try:
+                if is_windows:
+                    # 使用底层 CreateJunction，速度极快且不需要管理员权限
+                    _winapi.CreateJunction(src, dst)
+                else:
+                    os.symlink(src, dst)
+            except Exception as e:
+                from backend.utils.logger import logger
+                logger.error(f"Failed to link {dst} -> {src}: {e}")
+    
+    # =========================================================
+    #  5. SteamCMD 根目录重定向 (Root Redirect)
+    # =========================================================
+
+    @staticmethod
+    def sync_steamcmd_root_link(old_mods_path: str|None = None, move_old_data: bool = False):
+        """
+        同步 SteamCMD 下载根目录到自定义存储目录的软链接。
+        
+        :param old_mods_path: 变更前的 mods_path，用于数据迁移
+        :param move_old_data: 如果 mods_path 变了，是否把旧路径的数据搬过来
+        """
+        from backend.settings import settings
+        
+        # 1. 获取最新配置
+        # 实际物理存储路径 (Target)
+        real_storage_path = os.path.normpath(os.path.abspath(settings.config.self_mods_path))
+        # SteamCMD 期望的下载路径 (Link Location, 通常是 .../294100)
+        steamcmd_link_path = os.path.normpath(os.path.abspath(settings.config.steamcmd_mods_path))
+
+        logger.info(f"Redirecting SteamCMD: {steamcmd_link_path} -> {real_storage_path}")
+
+        # ---------------------------------------------------------
+        # 步骤 A: 处理 mods_path 变更导致的数据迁移
+        # ---------------------------------------------------------
+        if move_old_data and old_mods_path:
+            old_mods_path = os.path.normpath(os.path.abspath(old_mods_path))
+            if old_mods_path != real_storage_path and os.path.exists(old_mods_path):
+                logger.info(f"Moving data from OLD mods_path: {old_mods_path} -> {real_storage_path}")
+                FileManager._merge_and_delete_folder(old_mods_path, real_storage_path)
+
+        # 确保实际物理目录存在
+        os.makedirs(real_storage_path, exist_ok=True)
+
+        # ---------------------------------------------------------
+        # 步骤 B: 处理 SteamCMD 链接位置 (Link Location)
+        # ---------------------------------------------------------
+        
+        # 如果该位置已经存在
+        if os.path.lexists(steamcmd_link_path):
+            # 情况 1: 它已经是一个链接了
+            if os.path.islink(steamcmd_link_path) or FileManager._is_junction_windows(steamcmd_link_path):
+                # 检查它指向的是不是我们现在的物理路径
+                if FileManager._is_link_correct(steamcmd_link_path, real_storage_path):
+                    logger.info("SteamCMD link is already correct. Skipping.")
+                    return True
+                else:
+                    # 指向了错误的路径，或者是旧的路径，删掉这个链接（不会删掉源文件）
+                    logger.info("Removing stale or incorrect SteamCMD link.")
+                    FileManager._remove_link_safe(steamcmd_link_path)
+            
+            # 情况 2: 它是一个真实的文件夹 (里面可能有 SteamCMD 之前下的 Mod)
+            elif os.path.isdir(steamcmd_link_path):
+                logger.info(f"Found real folder at SteamCMD path. Merging to {real_storage_path}...")
+                # 把里面的 Mod 搬到物理路径
+                FileManager._merge_and_delete_folder(steamcmd_link_path, real_storage_path)
+                # 搬完后删掉这个空壳文件夹，为创建链接腾位置
+                shutil.rmtree(steamcmd_link_path, ignore_errors=True)
+
+        # ---------------------------------------------------------
+        # 步骤 C: 创建新的链接
+        # ---------------------------------------------------------
+        # 再次确保父目录存在 (steamapps/workshop/content/)
+        os.makedirs(os.path.dirname(steamcmd_link_path), exist_ok=True)
+        
+        try:
+            if platform.system() == 'Windows':
+                # 使用 Junction (mklink /j)，不需要管理员权限，且对磁盘 IO 最友好
+                subprocess.run(f'mklink /j "{steamcmd_link_path}" "{real_storage_path}"', 
+                               shell=True, check=True, capture_output=True)
+            else:
+                os.symlink(real_storage_path, steamcmd_link_path)
+            
+            logger.info("Successfully created SteamCMD redirection link.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create SteamCMD link: {e}")
+            return False
+
+    # =========================================================
+    #  辅助私有方法
+    # =========================================================
+
+    @staticmethod
+    def _is_junction_windows(path):
+        """判断 Windows 下是否为联接点"""
+        if platform.system() != 'Windows': return False
+        try:
+            # Junction 在 Windows 下通过特定属性识别
+            output = subprocess.check_output(['dir', '/ad', os.path.dirname(path)], shell=True).decode('gbk', errors='ignore')
+            return f"<JUNCTION>     {os.path.basename(path)}" in output
+        except:
+            return False
+
+    @staticmethod
+    def _remove_link_safe(path):
+        """安全移除链接而不伤及目标"""
+        try:
+            if platform.system() == 'Windows':
+                # 对于 Junction，使用 rmdir 是安全的，它只删链接不删内容
+                subprocess.run(f'rd "{os.path.normpath(path)}"', shell=True, check=True)
+            else:
+                os.unlink(path)
+        except Exception as e:
+            logger.error(f"Failed to remove link {path}: {e}")
+
+    @staticmethod
+    def _merge_and_delete_folder(src, dst):
+        """
+        合并两个文件夹的内容并删除源文件夹。
+        如果目标位置已存在同名 Mod，则覆盖。
+        """
+        if not os.path.exists(src): return
+        os.makedirs(dst, exist_ok=True)
+        
+        try:
+            for item in os.listdir(src):
+                s_path = os.path.join(src, item)
+                d_path = os.path.join(dst, item)
+                
+                if os.path.isdir(s_path):
+                    if os.path.exists(d_path):
+                        shutil.rmtree(d_path, ignore_errors=True)
+                    shutil.move(s_path, d_path)
+                else:
+                    if os.path.exists(d_path):
+                        os.remove(d_path)
+                    shutil.move(s_path, d_path)
+            
+            # 清理残留空目录
+            if os.path.exists(src):
+                shutil.rmtree(src, ignore_errors=True)
+        except Exception as e:
+            logger.error(f"Merge folder failed: {e}")
     
     
+    
+class PathChecker:
+
+    @staticmethod
+    def _format_res(is_pass: bool, data: Any = None, msg: str = "", msg_type: str = "success"):
+        """统一返回格式"""
+        return {
+            'pass': is_pass,
+            'data': data,
+            'type': msg_type if is_pass else ("error" if msg_type == "success" else msg_type),
+            'msg': msg
+        }
+    
+    @staticmethod
+    def check_normal_path(path_str: str) -> Dict:
+        """
+        检查普通路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
+        if not path_str: return PathChecker._format_res(False, msg="路径不能为空")
+        path = Path(path_str)
+        if not path.exists(): return PathChecker._format_res(False, msg=f"{path_str}\n路径不存在！")
+        return PathChecker._format_res(True, data=str(path), msg=f"路径有效：{path}")
+    
+    @staticmethod
+    def check_install_path(path_str: str) -> Dict:
+        """
+        检查游戏安装路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
+        if not path_str: return PathChecker._format_res(False, msg="安装路径不能为空")
+        path = Path(path_str)
+        if not path.exists(): return PathChecker._format_res(False, msg="游戏安装路径不存在！")
+
+        res = {}
+        # 1. 检查执行文件
+        exe = GameManager.detect_executable(str(path))
+        if exe:
+            res = PathChecker._format_res(True, data={}, msg=f"游戏安装路径: {path}")
+            res['data']["game_exe"] = str(exe)
+        else:
+            res = PathChecker._format_res(False, msg="无法检测到游戏程序")
+            return res
+
+        # 2. 检查版本
+        version = GameManager.get_game_version(str(path))
+        res['data']["game_version"] = version if version else "未知"
+
+        # 3. Steam 判定 (优化判定逻辑)
+        is_steam = "steamapps" in path.parts and "common" in path.parts
+        res['data']["is_steam"] = is_steam
+        
+        res['msg'] = f"游戏本体：{exe}\n游戏版本：{version}\n{'是' if is_steam else '非'}Steam版"
+        
+        return res
+
+    @staticmethod
+    def check_mods_config(path_str: str) -> Dict:
+        """
+        检查 Mods 配置文件是否存在
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
+        path = Path(path_str) / "ModsConfig.xml"
+        if path.exists():
+            return PathChecker._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
+        return PathChecker._format_res(False, msg="未找到 ModsConfig.xml", msg_type="warn")
+
+    @staticmethod
+    def check_workshop_path(path_str: str) -> Dict:
+        """
+        检查 Workshop 路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
+        if not path_str or not Path(path_str).exists():
+            return PathChecker._format_res(False, msg="Workshop 路径不存在")
+        
+        is_valid = "steamapps" in Path(path_str).parts and "workshop" in Path(path_str).parts
+        return PathChecker._format_res(is_valid, data=path_str, 
+                               msg=f"Workshop 路径：{path_str}" if is_valid else "路径不在 Steam 库中",
+                               msg_type="success" if is_valid else "warn")
+        
+    @staticmethod
+    def check_steam_path(path_str: str) -> Dict:
+        """
+        检查 Steam 客户端路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
+        if not path_str: return PathChecker._format_res(False, msg="未指定 Steam 路径")
+        exe_path = Path(path_str) / "steam.exe"
+        if exe_path.exists():
+            return PathChecker._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
+        return PathChecker._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
+        
+    @staticmethod
+    def paths_check(paths_data: Dict[str, str]) -> Dict:
+        """
+        主入口：支持全量检测
+        """
+        if not paths_data: return {}
+        results = {}
+        try:
+            # 1. 安装路径相关 (包含 exe, version, steam 判定)
+            if "game_install_path" in paths_data:
+                results["game_install_path"] = PathChecker.check_install_path(paths_data["game_install_path"])
+            
+            # 2. 配置文件 
+            if "game_config_path" in paths_data:
+                results["game_config_path"] = PathChecker.check_mods_config(paths_data["game_config_path"])
+
+            # 3. Workshop
+            if "workshop_mods_path" in paths_data:
+                results["workshop_mods_path"] = PathChecker.check_workshop_path(paths_data["workshop_mods_path"])
+
+            # 4. Steam 主程序
+            if "steam_path" in paths_data:
+                results["steam_path"] = PathChecker.check_steam_path(paths_data["steam_path"])
+            
+            # 5. 其他路径
+            for key, path in paths_data.items():
+                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path"]: continue
+                results[key] = PathChecker.check_normal_path(path)
+
+            return results
+        except Exception as e:
+            logger.error(f"Check Paths Error: {e}", exc_info=True)
+            return {}
+        
+    
+file_mgr = FileManager()

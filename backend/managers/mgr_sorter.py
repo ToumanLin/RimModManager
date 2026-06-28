@@ -44,7 +44,7 @@ class OrderSorter:
         第一步：将激活列表转化为原子组列表
         """
         # 1. 获取所有 Mod 的联锁数据
-        # 注意：为了性能，我们一次性查出所有涉及到的 Mod 数据
+        # 注意：为了性能，一次性查出所有涉及到的 Mod 数据
         # 即使有的 Mod 不在 active_ids 里，只要它被联锁引用了，也要查
         all_mods_data = ModDAO.get_profile_mods()
         mod_map = {m['package_id'].lower(): m for m in all_mods_data}
@@ -126,8 +126,7 @@ class OrderSorter:
             return 60
         # 3. 根据 Mod 类型判定 (来自 analyzer.py 的分析结果)
         mod_type = str(mod_data.get('user_mod_type') or mod_data.get('mod_type', 'Unknown')).strip()
-        # if pkg_id == 'optimizer.zh':
-        #     logger.info(f"optimizer.zh 权重: {mod_type},{mod_data.get('mod_type', 'Unknown')}, mod_data: {mod_data}")
+        
         if mod_type == 'LanguagePack':
             return 900  # 汉化包置底
         if mod_type == 'Texture':
@@ -398,7 +397,19 @@ class OrderSorter:
             # C. 计算权重
             for mid in g.mod_ids:
                 m_data = mod_map.get(mid, {})
+                # 计算默认基础权重 (类型/作者等)
                 w = self.calculate_mod_base_weight(m_data)
+                
+                # 获取该 Mod 生效的所有规则
+                effective_rules = self.rule_mgr.get_effective_mod_rules(mid, m_data)
+                # 【核心新增】应用绝对位置覆盖 (Top / Bottom)
+                override = effective_rules.get("weight_override")
+                if override:
+                    if override["type"] == "top":
+                        w = 0 
+                    elif override["type"] == "bottom":
+                        w = 1000 # 极高数字，确保沉底
+                
                 # 确保动态规则的全局开关在这里也能生效
                 if self.rule_mgr.settings.get("dynamic_rules_enabled", True):
                     matched_dyn = self.rule_mgr.get_matching_dynamic_rules(m_data)
@@ -409,6 +420,7 @@ class OrderSorter:
                         elif act.get('type') == 'top': w = 0
                         elif act.get('type') == 'bottom': w = 1000
                 weights.append(w)
+            # 一个原子组如果有多个 Mod 联锁，取最小的权重作为整个组的启动权重
             group_base_weights[id(g)] = min(weights) if weights else 500
         # 3. 构建加权依赖图
         adj, edge_details = self._build_weighted_graph(groups, mod_map, mod_to_group)
@@ -432,7 +444,7 @@ class OrderSorter:
         # 如果 A(900) -> B(500)，根据拓扑序 A 必须在 B 前面，此时 A 的权重应被拉低到 500 甚至更低，以便在堆中优先弹出
         effective_weights = group_base_weights.copy()
         # 简单的传播算法：如果 u -> v，u 应该比 v 早。
-        # 在 Kahn 算法的 PriorityQueue 中，我们希望早出来的权重小。
+        # 在 Kahn 算法的 PriorityQueue 中，希望早出来的权重小。
         # 这里的 propagate 逻辑可以保留之前的，或者简化。
         # 原逻辑：child 的权重小于 parent，则 parent 权重降级。
         # adj[u] = {v: w} 表示 u -> v，即 u 在前。

@@ -1,3 +1,4 @@
+import mimetypes
 import os
 import socket
 import sys
@@ -5,6 +6,7 @@ import winreg
 import ctypes
 import webbrowser # 这个库用来打开浏览器
 from pathlib import Path
+from backend.settings import HOME_DIR, BASE_RESOURCE_DIR
 
 
 def is_port_available(host: str = "localhost", port: int = 5173, timeout: float = 0.5) -> bool:
@@ -23,6 +25,13 @@ def is_port_available(host: str = "localhost", port: int = 5173, timeout: float 
         # 超时/连接拒绝/系统错误，均视为端口不可用
         return False
 
+# 部分用户的 Windows 注册表中缺少 .js 或 .css 的 MIME 类型定义。
+# WebView2 处于安全考虑，如果收到的文件类型是 text/plain 而不是 application/javascript，会拒绝执行该脚本。
+def fix_mime_types():
+    # 强制让 Python 识别这些扩展名
+    mimetypes.add_type('application/javascript', '.js')
+    mimetypes.add_type('text/css', '.css')
+    mimetypes.add_type('image/svg+xml', '.svg')
 
 # 获取前端文件的路径
 def get_entrypoint():
@@ -30,40 +39,33 @@ def get_entrypoint():
     获取前端入口地址
     支持：开发模式、PyInstaller 标准模式、PyInstaller lib 归拢模式
     """
+    fix_mime_types()
     # 定义前端开发服务器地址
     dev_server = "http://localhost:5173"
     
     # 1. 获取程序根目录 (Base Directory)
-    if getattr(sys, 'frozen', False):
-        # --- 打包后的环境 ---
-        # sys.executable 指向 .exe 文件的绝对路径
-        base_dir = Path(sys.executable).parent
-        # 额外：处理 --contents-directory lib 情况
-        # 如果内部资源在 _MEIPASS 目录下 (即 lib 文件夹内)
-        meipass_dir = Path(getattr(sys, '_MEIPASS', base_dir))
-    else:
-        # __file__ 指向当前 main.py 的位置
-        base_dir = Path(__file__).parent.resolve()
-        meipass_dir = base_dir
-        if is_port_available("localhost", 5173):
-            print(f"[Debug] 开发服务器端口可用，使用: {dev_server}")
-            return dev_server
+    if not getattr(sys, 'frozen', False) and is_port_available("localhost", 5173):
+        print(f"[Debug] 开发服务器端口可用，使用: {dev_server}")
+        return dev_server
             
     # 2. 定义探测路径优先级
     # 优先级 1: PyInstaller 内部解压目录 (lib 文件夹内部)
-    path_internal = meipass_dir / "frontend" / "dist" / "index.html"
+    path_internal = BASE_RESOURCE_DIR / "frontend" / "dist" / "index.html"
     # 优先级 2: 外部根目录下的 dist (方便手动替换或更新)
-    path_external = base_dir / "frontend" / "dist" / "index.html"
+    path_external = HOME_DIR / "frontend" / "dist" / "index.html"
     # 优先级 3: EXE 同级目录 (如果打包时把 index.html 移动到了顶层)
-    path_root = base_dir / "index.html"
+    path_root = HOME_DIR / "index.html"
     
+    # 如果用户的 Windows 用户名包含中文、空格，或者软件安装路径包含特殊字符，
+    # WebView2 在解析本地 file:// 链接时可能会因为没有正确转义而失败。
+    # 使用 pathlib 的 as_uri() 方法强制转换为标准的 URI 格式。同时在vite.config.js中设置base: './'。
     # 3. 按优先级执行探测
     if path_internal.exists():
-        return str(path_internal)
+        return path_internal.absolute().as_uri()
     if path_root.exists():
         return str(path_root)
     if path_external.exists():
-        return str(path_external)
+        return path_external.absolute().as_uri() 
     # 4. 兜底回退：本地开发服务器
     from backend.utils.logger import logger 
     logger.debug(f"[Debug] Local assets not found. Searched in:\n - {path_external}\n - {path_internal}")
@@ -152,7 +154,7 @@ def validate_environment():
         sys.exit(1)
 
     # 2. 检测前端入口文件是否存在 (防止打包丢失资源)
-    # 这里假设你之前的 get_entrypoint 逻辑
+    # 这里假设之前的 get_entrypoint 逻辑
     entry = get_entrypoint()
     if not entry.startswith('http'):
         # 转换回普通路径进行检查

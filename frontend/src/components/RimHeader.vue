@@ -19,10 +19,18 @@
         测试
       </button>
 
+      <button @click="appStore.uiState.showWorkspace = true" v-tooltip="`库存管理中枢`"
+          class="px-4 py-1.5 rounded-xl bg-accent-special/10 hover:bg-accent-special/20 border border-accent-special/30 text-accent-special text-sm font-bold shadow-[0_0_10px_rgba(16,185,129,0.2)] transition-all flex items-center gap-2">
+        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        库存枢纽
+      </button>
+
       <button @click="appStore.toggleUiState('showAiReviewModal')" v-tooltip="`AI生成管理`" :class="{'opacity-30 pointer-events-none': !appStore.aiBatchResults.length}"
         class="p-2 rounded-full relative hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent cursor-pointer">
         <BotMessageSquare class="size-6" />
-        <span v-show="appStore.aiBatchResults.length > 0" class="absolute top-0 right-0 p-0.5 leading-none text-xs text-text-main font-bold rounded-full bg-accent-secondary/70">{{ appStore.aiBatchResults.length }}</span>
+        <span v-show="appStore.aiBatchResults.length > 0" class="absolute top-0 right-0 p-0.5 leading-none text-xs text-text-main font-bold rounded-full bg-accent-secondary/70 animate-pulse">
+          {{ appStore.aiBatchResults.length }}
+        </span>
       </button>
       
       <div v-tooltip="`打开文件夹`" class="p-2 rounded-full group/folder relative hover:bg-glow text-text-dim hover:text-text-main transition bg-transparent">
@@ -76,7 +84,7 @@
 import { useAppStore } from '../stores/appStore'
 import { useToast } from "vue-toastification";
 import ProfileSwitcher from './utils/ProfileSwitcher.vue';
-import { BotMessageSquare } from 'lucide-vue-next';
+import { BotMessageSquare, CloudCog } from 'lucide-vue-next';
 
 
 const toast = useToast();

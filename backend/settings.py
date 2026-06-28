@@ -8,30 +8,42 @@ import sys
 from typing import Dict, Any, List
 
 
+# 1. 资源目录：存放前端文件、内置工具 (对应开发时的项目根目录)
+if getattr(sys, 'frozen', False):
+    # 打包后，指向临时解压目录
+    BASE_RESOURCE_DIR = Path(getattr(sys, '_MEIPASS'))
+else:
+    # 开发时，指向当前文件所在目录的上一级（项目根目录）
+    BASE_RESOURCE_DIR = Path(__file__).resolve().parent.parent
+
 # 配置文件路径
 HOME_DIR = Path(os.getcwd())
 # 获取 exe 所在的真实目录
 if getattr(sys, 'frozen', False):
-    # PyInstaller 打包模式
+    # PyInstaller 打包模式 时，指向 exe 所在目录
     HOME_DIR = Path(sys.executable).parent
 else:
-    # 开发模式
+    # 开发模式, 指向当前文件所在目录的上一级（项目根目录）
     HOME_DIR = Path(__file__).resolve().parent.parent
 
-CONFIG_DIR = HOME_DIR / "data"
-CONFIG_FILE = CONFIG_DIR / "config.json"
-UPDATE_CACHE_DIR = HOME_DIR / "updates"
+DATA_DIR = HOME_DIR / "data"                # 数据目录
+CONFIG_PATH = DATA_DIR / "config.json"      # 配置文件路径
+UPDATE_DIR = HOME_DIR / "updates"     # 更新目录
+TOOLS_DIR = HOME_DIR / "tools"                # 工具目录
+MODS_DIR = HOME_DIR / "mods"                # 模组目录
+CACHE_DIR = HOME_DIR / "cache"                # 缓存目录
+BACKUP_DIR = HOME_DIR / "backups"                # 备份目录
+# 定义缓存目录
+GALLERY_CACHE_DIR = CACHE_DIR / "gallery"       # 定义画廊缓存目录
+THUMBNAIL_CACHE_DIR = CACHE_DIR / "thumbnails"  # 定义缩略图缓存目录
+# 规则存放路径
+RULES_DIR = DATA_DIR / "rules"
+USER_RULES_PATH = RULES_DIR / "user_rules.json"             # 用户规则路径
+COMMUNITY_RULES_PATH = RULES_DIR / "communityRules.json"    # 社区库规则路径
+# 外置数据库路径
+COMMUNITY_WORKSHOP_DB_PATH = DATA_DIR / "steamDB.json"         # 社区库数据库路径
+COMMUNITY_INSTEAD_DB_PATH = DATA_DIR / "replacements.json.gz"  # 替代Mod数据库路径
 
-# 定义缩略图缓存目录
-CACHE_DIR = HOME_DIR / "cache" / "thumbnails"
-# 规则文件存放路径
-RULES_DIR = HOME_DIR / "data" / "rules"
-USER_RULES_PATH = RULES_DIR / "user_rules.json"
-COMMUNITY_RULES_PATH = RULES_DIR / "communityRules.json"
-COMMUNITY_DB_PATH = RULES_DIR / "data" / "steamDB.json"
-COMMUNITY_INSTEAD_DB_PATH = RULES_DIR / "data" / "replacements.json"
-# 工具目录
-TOOLS_DIR = HOME_DIR / "tools"
 
 @dataclass
 class ProxyConfig:
@@ -52,6 +64,9 @@ class NetworkConfig:
     proxy: ProxyConfig = field(default_factory=ProxyConfig)
     # 自定义 Hosts (域名 -> IP 映射)
     hosts: Dict[str, str] = field(default_factory=dict) 
+    write_to_system_hosts: bool = False         # 是否将自定义 Hosts 写入系统 hosts 文件
+    use_proxy_on_steamcmd: bool = False         # SteamCMD 是否使用代理
+    use_proxy_on_ai: bool = False               # AI 是否使用代理
 
 @dataclass
 class AIConfig:
@@ -66,12 +81,6 @@ class AIConfig:
     max_concurrency: int = 3     # 最大并发请求数（避免被API封锁）
 
 @dataclass
-class SteamConfig:
-    steamcmd_path: str = str(TOOLS_DIR / "steamcmd" / "steamcmd.exe")
-    use_steam_client: bool = True  # 是否优先尝试使用 Steam 客户端
-    steam_appid: int = 294100      # RimWorld AppID
-
-@dataclass
 class UIConfig:
     theme: str = "system"       # light, dark, system
     font_size: int = 16
@@ -80,9 +89,17 @@ class UIConfig:
     show_mod_hover_panel: bool = True  # 是否显示 Mod 悬停面板
     double_click_active_mod: bool = True  # 是否双击启用/停用 Mod
     
-    show_mod_details_panel: bool = True  # 是否显示 Mod 详情面板
+    # 主界面布局配置
+    main_layout: List[Dict[str, Any]] = field(default_factory=lambda: [
+        { 'id': 'details', 'visible': True },
+        { 'id': 'library', 'visible': True },
+        { 'id': 'active', 'visible': True },
+        { 'id': 'sidebar', 'visible': True },
+    ])
+    
     show_icons_cloud: bool = True  # 是否显示动态图标云
     
+    # Mod 详情面板布局配置
     mod_details_layout: List[Dict[str, Any]] = field(default_factory=lambda: [
         { 'id': 'basic_info', 'visible': True }, # 包ID、作者、链接、路径
         { 'id': 'files_info', 'visible': True },
@@ -109,28 +126,30 @@ class AppConfig:
     在这里定义字段和默认值，类型安全且清晰。
     """
     # --- 路径设置 ---
-    game_install_path: str = ""
-    user_data_path: str = ""    # 用户数据文件夹
-    game_config_path: str = ""  # RimWorld 配置文件夹
-    game_saves_path: str = ""   # RimWorld 存档文件夹
-    game_dlc_path: str = ""     # RimWorld DLC 文件夹
-    local_mods_path: str = ""
-    workshop_mods_path: str = ""
-    use_workshop_mods: bool = True
-    steam_exe_path: str = ""
-    home_path: str = str(Path(os.getcwd())) # 本程序路径
+    game_install_path: str = ""    # RimWorld 安装路径
+    user_data_path: str = ""       # 用户数据文件夹
+    game_config_path: str = ""     # RimWorld 配置文件夹
+    game_saves_path: str = ""      # RimWorld 存档文件夹
+    game_dlc_path: str = ""        # RimWorld DLC 文件夹
+    local_mods_path: str = ""      # RimWorld 本地模组文件夹
+    workshop_mods_path: str = ""   # RimWorld 公共工坊模组文件夹
+    use_workshop_mods: bool = True  # 是否使用公共工坊模组
+    steam_path: str = ""          # Steam 安装路径
+    home_path: str = str(HOME_DIR) # 本程序路径
+    
+    # steamcmd 下载路径
+    steamcmd_path: str = str(TOOLS_DIR / "steamcmd")
+    steamcmd_mods_path: str = str(TOOLS_DIR / "steamcmd" / "steamapps" / "workshop" / "content" / "294100")
+    self_mods_path: str = str(MODS_DIR)  # 本程序默认模组路径
+    use_self_mods: bool = True          # 是否使用本程序模组
+    move_old_self_mods: bool = False    # 修改路径后是否移动原有模组
     
     # --- 游戏设置 ---
-    game_version: str = ""
+    game_version: str = ""               # RimWorld 版本
     current_profile_id: str = "default"   # 当前激活的环境ID
-    run_commands: List[str] = field(default_factory=list)
+    run_commands: List[str] = field(default_factory=list)   # 启动时运行的命令
     prefer_steam_launch: bool = True         # 是否通过 Steam 启动游戏
     
-    # --- 界面设置 ---
-    language: str = "ZH-cn"     # 默认语言
-    window_width: int = 1400
-    window_height: int = 900
-    ui: UIConfig = field(default_factory=UIConfig)
     
     # --- 高级设置 ---
     backup_retention_days: int = 30           # 备份保留天数
@@ -143,20 +162,13 @@ class AppConfig:
     coexist_mod_folder_name_type: str = "workshop_id" # 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: bool = True      # 是否显示共存Mod提示
     check_language_support: bool = True        # 是否检查语言支持
-    
-    
-    # --- 功能设置 ---
-    network: NetworkConfig = field(default_factory=NetworkConfig)
-    steam: SteamConfig = field(default_factory=SteamConfig)
-    ai: AIConfig = field(default_factory=AIConfig)
-    
     # --- 社区设置 ---
-    community_db_url: str = "https://github.com/RimSort/Steam-Workshop-Database/blob/main/steamDB.json"
-    community_db_path: str = str(COMMUNITY_DB_PATH)
-    community_rules_url: str = "https://github.com/RimSort/Community-Rules-Database/blob/main/communityRules.json"
-    community_rules_path: str = str(COMMUNITY_RULES_PATH)
+    community_workshop_db_url: str = "https://github.com/RimSort/Steam-Workshop-Database/blob/main/steamDB.json"
+    community_workshop_db_path: str = str(COMMUNITY_WORKSHOP_DB_PATH)
     community_instead_db_url: str = "https://github.com/emipa606/UseThisInstead/blob/main/replacements.json.gz"
     community_instead_db_path: str = str(COMMUNITY_INSTEAD_DB_PATH)
+    community_rules_url: str = "https://github.com/RimSort/Community-Rules-Database/blob/main/communityRules.json"
+    community_rules_path: str = str(COMMUNITY_RULES_PATH)
     user_rules_path: str = str(USER_RULES_PATH)
     
     # --- 开发与调试设置 ---
@@ -166,6 +178,19 @@ class AppConfig:
     enable_auto_update_check: bool = True  # 自动检查更新开关
     ignored_update_version: str = ""       # 跳过的版本号
     last_update_check_time: float = 0      # 上次检查时间（用于限流）
+    last_version: str = ""                 # 之前的版本号(用于判断是否更新过了)
+    last_run_time: float = 0               # 上次运行时间（用于判断Mod是否存在变动）
+    run_count: int = 0                     # 运行次数（用于判断是否需要重新扫描）
+    
+    # --- 界面设置 ---
+    language: str = "ZH-cn"     # 默认语言
+    window_width: int = 1400
+    window_height: int = 900
+    ui: UIConfig = field(default_factory=UIConfig)
+    
+    # --- 功能设置 ---
+    network: NetworkConfig = field(default_factory=NetworkConfig)
+    ai: AIConfig = field(default_factory=AIConfig)
     
 
 class SettingsManager:
@@ -179,19 +204,23 @@ class SettingsManager:
         return cls._instance
 
     def __init__(self):
-        if self._initialized:
-            return
-        
+        if self._initialized: return
         self._ensure_config_dir()
-        self.config: AppConfig = self._load() # 加载配置
+        # self.config: AppConfig = self._load() # 加载配置
+        
+        # 1. 先初始化一个空的配置对象，防止加载过程中访问 self.config 崩溃
+        self.config = AppConfig()
+        # 2. 执行加载（此时 _recursive_update 访问 self.config 就安全了）
+        self._load_to_config()
+        
         self._initialized = True
 
     def _ensure_config_dir(self):
         """ 确保配置目录存在 """
-        if not CONFIG_DIR.exists():
-            CONFIG_DIR.mkdir(parents=True)
+        if not DATA_DIR.exists():
+            DATA_DIR.mkdir(parents=True)
         # 确保日志目录存在
-        log_dir = Path(os.getcwd()) / "data" / "logs"
+        log_dir = DATA_DIR / "logs"
         if not log_dir.exists():
             log_dir.mkdir(parents=True)
             
@@ -206,69 +235,47 @@ class SettingsManager:
         
         for key, value in source_dict.items():
             # 1. 忽略未知字段 (配置文件里有，但代码里没有定义的)
-            if key not in target_fields:
-                continue
-            
+            if key not in target_fields: continue
             # 获取当前对象上的属性值
             current_attr = getattr(target_obj, key)
-            
             # 2. 判断是否需要递归
             # 如果当前属性是 dataclass 实例，且来源值是字典，则递归更新
             if is_dataclass(current_attr) and isinstance(value, dict):
                 self._recursive_update(current_attr, value)
-            
             # 3. 普通赋值
             else:
-                # 这里可以加一些简单的类型保护，比如防止把 str 赋给 int
-                # 但 Python 鸭子类型通常允许直接赋值，除非为了极高的健壮性
+                # 这里可以加一些简单的类型保护，比如防止把 str 赋给 int，但 Python 鸭子类型通常允许直接赋值，除非为了极高的健壮性
                 setattr(target_obj, key, value)
+                
 
-    def _load(self) -> AppConfig:
+    def _load_to_config(self):
         """
-        加载配置逻辑：
-        1. 创建全默认值的 AppConfig 对象
-        2. 读取 JSON
-        3. 递归将 JSON 的值覆盖到 AppConfig 对象上
+        将磁盘配置加载到现有的 self.config 中
         """
-        # 1. 如果文件不存在，直接返回全默认配置
-        if not CONFIG_FILE.exists():
-            return AppConfig()
-
+        if not CONFIG_PATH.exists(): return
         try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
-            # 2. 实例化默认配置 (这里已经包含了所有定义的默认值)
-            config = AppConfig()
-            
-            # 3. 递归更新 (核心逻辑)
-            self._recursive_update(config, data)
-
-            # 检查旧版配置位置
+            # 使用递归更新现有的 self.config
+            self._recursive_update(self.config, data)
+            # 加载完成后，手动同步一次衍生路径
+            self._sync_derived_paths()
+            # 检查旧版配置兼容性
             legacy_game_data = data.get('network', {}).get('game_data_path')
-            if not config.user_data_path and legacy_game_data:
-                config.user_data_path = legacy_game_data
-
-            return config
-
+            if not self.config.user_data_path and legacy_game_data:
+                self.config.user_data_path = legacy_game_data
         except Exception as e:
-            # 使用 logging.getLogger 避免循环导入
             print(f"Config load error: {e}")
-            # 出错时返回默认配置，保证程序能跑
-            return AppConfig()
-
-    def save(self):
-        """保存当前配置到磁盘"""
-        try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                # asdict 将 dataclass 转换为字典
-                json.dump(asdict(self.config), f, indent=4, ensure_ascii=False)
-            # print("Settings saved.")
-        except Exception as e:
-            print(f"Error saving settings: {e}")
-
-    # --- 便捷存取方法 ---
-
+    
+    def _sync_derived_paths(self):
+        """
+        统一管理所有依赖路径的计算逻辑。
+        """
+        # 根据 steamcmd_path 计算 steamcmd_mods_path
+        if self.config.steamcmd_path:
+            new_path = str(Path(self.config.steamcmd_path) / "steamapps" / "workshop" / "content" / "294100")
+            self.config.steamcmd_mods_path = new_path
+    
     def get(self, key: str) -> Any:
         """
         获取配置项。
@@ -280,29 +287,63 @@ class SettingsManager:
 
     def set(self, key: str, value: Any):
         """
-        设置配置项并自动保存。
-        支持: settings.set('language', 'en')
+        设置配置项并自动处理路径同步逻辑
         """
-        if hasattr(self.config, key):
-            # 类型校验（简单的做一下防止 int 变 str）
-            target_type = type(getattr(self.config, key))
-            if target_type != type(value) and target_type != str: # str比较宽松
-                # 尝试转换，或者打印警告
-                # value = target_type(value)
-                pass
-            # 如果设置的是 ai 字段，且传入的是字典，将其转换为 AIConfig 对象
-            if key == 'ai' and isinstance(value, dict):
-                from backend.settings import AIConfig
-                value = AIConfig(**value)
-            # 如果设置的是 network 字段，且传入的是字典
-            elif key == 'network' and isinstance(value, dict):
-                # 这里逻辑较深，可以根据需要递归转换，或者保持目前做法
-                pass 
-            
-            setattr(self.config, key, value)
-            self.save()
+        if not hasattr(self.config, key):
+            print(f"Warning: Unknown key {key}")
+            return
+        # 记录关键路径的旧值用于比对
+        old_self_mods_path = self.config.self_mods_path
+        old_steamcmd_path = self.config.steamcmd_path
+        current_attr = getattr(self.config, key)
+        if is_dataclass(current_attr) and isinstance(value, dict):
+            self._recursive_update(current_attr, value)
         else:
-            print(f"Warning: Attempted to set unknown setting key: {key}")
+            setattr(self.config, key, value)
+        # --- 逻辑触发区 ---
+        # 1. 重新计算衍生路径
+        self._sync_derived_paths()
+        # 2. 如果 self_mods_path 变了，触发同步
+        if key == 'self_mods_path' and old_self_mods_path != value:
+            from backend.managers.mgr_files import FileManager
+            FileManager.sync_steamcmd_root_link(
+                old_mods_path=old_self_mods_path,
+                move_old_data=self.config.move_old_self_mods
+            )
+        # 3. 如果 steamcmd_path 变了，也触发同步
+        if old_steamcmd_path != self.config.steamcmd_path:
+            from backend.managers.mgr_files import FileManager
+            FileManager.sync_steamcmd_root_link()
+        self.save()
+
+    def save(self):
+        """保存当前配置到磁盘"""
+        try:
+            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                # asdict 将 dataclass 转换为字典
+                json.dump(asdict(self.config), f, indent=4, ensure_ascii=False)
+            # print("Settings saved.")
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+
+    # 强烈建议新增这个方法供 api.save_all_settings 使用
+    def update_from_dict(self, data_dict: Dict[str, Any]):
+        """
+        全量更新，同样需要处理逻辑触发
+        """
+        old_self_mods_path = self.config.self_mods_path
+        old_steamcmd_path = self.config.steamcmd_path
+        self._recursive_update(self.config, data_dict)
+        self._sync_derived_paths()
+        # 检查并同步
+        if old_self_mods_path != self.config.self_mods_path or \
+           old_steamcmd_path != self.config.steamcmd_path:
+            from backend.managers.mgr_files import FileManager
+            FileManager.sync_steamcmd_root_link(
+                old_mods_path=old_self_mods_path,
+                move_old_data=self.config.move_old_self_mods
+            )
+        self.save()
 
     def update_paths(self, paths_dict: Dict[str, str]):
         """批量更新路径"""
@@ -319,7 +360,12 @@ class SettingsManager:
         from backend.managers.mgr_game import GameManager
         p1 = GameManager.detect_executable(self.config.game_install_path)
         p2 = self.config.game_config_path
-        
+        # 检测路径是否有效，无效则创建
+        if not os.path.exists(self.config.self_mods_path):
+            os.makedirs(os.path.dirname(self.config.self_mods_path), exist_ok=True)
+            from backend.managers.mgr_files import FileManager
+            FileManager.sync_steamcmd_root_link()
+            
         if p1 and os.path.exists(p1) and p2 and os.path.exists(p2):
             return True
         return False

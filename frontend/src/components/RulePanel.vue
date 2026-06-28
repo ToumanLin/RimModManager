@@ -6,7 +6,7 @@
 
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-md p-10" @click.self="appStore.uiState.showRuleDrawer = false">
         
-        <div class="flex w-full max-w-6xl h-full max-h-[90vh] bg-bg-deep/95 border border-text-main/10 rounded-2xl shadow-3xl overflow-hidden animate-scale-in">
+        <div class="flex w-full max-w-9/10 h-full max-h-[90vh] bg-bg-deep/95 border border-text-main/10 rounded-2xl shadow-3xl overflow-hidden animate-scale-in">
           
           <!-- ================= 左侧侧边栏 ================= -->
           <aside class="w-64 bg-black/20 border-r border-text-main/5 flex flex-col">
@@ -183,7 +183,7 @@
                 <div v-if="currentTab === 'community'" class="mb-4 p-4 rounded-xl bg-accent-secondary/10 border border-accent-secondary/20 flex justify-between items-center">
                   <div class="text-sm text-accent-secondary">
                     <p class="font-bold mb-1">社区规则库 (RimSort)</p>
-                    <p class="opacity-80">包含众多由社区维护的排序建议。此处仅展示与你已安装模组相关的条目。</p>
+                    <p class="opacity-80">包含众多由社区维护的排序建议。此处仅展示与已安装模组相关的条目。</p>
                   </div>
                   <div class="flex flex-col items-center gap-2">
                     <button @click="ruleStore.updateCommunity" class="px-3 py-1.5 bg-accent-secondary/20 hover:bg-accent-secondary/40 text-accent-secondary rounded-lg text-sm font-bold transition-all border border-accent-secondary/30">
@@ -197,7 +197,7 @@
                 </div>
 
                 <div v-for="item in filteredStaticRules" :key="item.id" 
-                  class="flex gap-4 p-2 rounded-xl bg-text-main/2 border border-text-main/5 hover:bg-text-main/5 transition-colors">
+                  class="flex gap-2 p-2 rounded-xl bg-text-main/2 border border-text-main/5 hover:bg-text-main/5 transition-colors">
                   
                   <!-- Mod 信息 -->
                   <div class="w-64 shrink-0 flex gap-3 items-start" v-preview="modStore.takeModById(item.id)">
@@ -205,43 +205,56 @@
                       <img v-if="item.icon" :src="item.icon" class="w-full h-full object-cover">
                       <div v-else class="text-xs text-text-dim">{{ item.id.substring(0,2) }}</div>
                     </div>
-                    <div class="min-w-0">
+                    <div class="min-w-0 flex flex-col gap-1"> 
                       <div class="text-sm font-bold text-text-main truncate">{{ item.name }}</div>
                       <div class="text-xs text-text-dim font-mono truncate opacity-60">{{ item.id }}</div>
+
+                      <span v-if="item.rules.loadTop?.value"
+                        v-tooltip="formatTooltip(item.id, item.rules.loadTop?.comment)"
+                        class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 w-fit bg-accent-tip/10 text-text-main text-[0.8rem] border border-accent-tip/20 truncate cursor-help">
+                        强制置顶
+                      </span>
+                      <span v-else-if="item.rules.loadBottom?.value"
+                        v-tooltip="formatTooltip(item.id, item.rules.loadBottom?.comment)"
+                        class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 w-fit bg-accent-highlight/10 text-text-main text-[0.8rem] border border-accent-highlight/20 truncate cursor-help">
+                        强制置底
+                      </span>
+
                     </div>
+
                   </div>
 
                   <!-- 规则详情 -->
-                  <div class="flex-1 space-y-2 border-l border-text-main/5 pl-4">
+                  <div class="flex-1 min-w-0 space-y-2 border-l border-text-main/5 pl-4">
                     <!-- Load After -->
-                    <div v-if="item.rules.loadAfter && Object.keys(item.rules.loadAfter).length" class="flex flex-wrap gap-2 items-start">
+                    <div v-if="item.rules.loadAfter && Object.keys(item.rules.loadAfter).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
                       <span class="text-xs font-bold text-accent-warn uppercase mt-0.5">前置:</span>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 w-full min-w-0">
                         <span v-for="(info, targetId) in item.rules.loadAfter" :key="targetId" 
                           v-tooltip="formatTooltip(targetId, info)"
-                          class="px-1.5 py-0.5 rounded bg-accent-warn/10 text-text-main text-[0.8rem] border border-accent-warn/20 truncate max-w-65 cursor-help">
+                          class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 bg-accent-warn/10 text-text-main text-[0.8rem] border border-accent-warn/20 truncate cursor-help">
                           {{ getDisplayName(targetId, info.name) }}
                         </span>
                       </div>
                     </div>
                     <!-- Load Before -->
-                    <div v-if="item.rules.loadBefore && Object.keys(item.rules.loadBefore).length" class="flex flex-wrap gap-2 items-start">
+                    <div v-if="item.rules.loadBefore && Object.keys(item.rules.loadBefore).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
                       <span class="text-xs font-bold text-accent-primary uppercase mt-0.5">后置:</span>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 w-full min-w-0 ">
                         <span v-for="(info, targetId) in item.rules.loadBefore" :key="targetId"
                           v-tooltip="formatTooltip(targetId, info)" 
-                          class="px-1.5 py-0.5 rounded bg-accent-primary/10 text-text-main text-[0.8rem] border border-accent-primary/20 truncate max-w-65 cursor-help">
+                          class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 bg-accent-primary/10 text-text-main text-[0.8rem] border border-accent-primary/20 truncate cursor-help">
                           {{ getDisplayName(targetId, info.name) }}
                         </span>
                       </div>
                     </div>
                     <!-- Incompatible -->
-                    <div v-if="item.rules.incompatibleWith && Object.keys(item.rules.incompatibleWith).length" class="flex flex-wrap gap-2 items-start">
+                    <div v-if="item.rules.incompatibleWith && Object.keys(item.rules.incompatibleWith).length" class="flex flex-wrap gap-2 w-full min-w-0 items-start">
                       <span class="text-xs font-bold text-accent-danger uppercase mt-0.5">冲突:</span>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="flex flex-wrap gap-1 w-full min-w-0 ">
                         <span v-for="(info, targetId) in item.rules.incompatibleWith" :key="targetId"
                           v-tooltip="formatTooltip(targetId, info)"
-                          class="px-1.5 py-0.5 rounded bg-accent-danger/10 text-text-main text-[0.8rem] border border-accent-danger/20 truncate max-w-65 cursor-help">
+                          class="px-1.5 py-0.5 rounded max-w-[49%] min-w-0 bg-accent-danger/10 text-text-main text-[0.8rem] border border-accent-danger/20 truncate cursor-help">
                           {{ getDisplayName(targetId, info.name) }}
                         </span>
                       </div>
@@ -249,7 +262,7 @@
                   </div>
 
                   <!-- 操作 (仅用户规则有删除) -->
-                  <div class="shrink-0 flex items-center">
+                  <div class="shrink-0 flex items-center flex-col">
                     <button @click="toggleModRule(item.id)" v-tooltip="isModExcluded(item.id) ? '启用规则' : '禁用规则'"
                       class="p-2 rounded-lg hover:bg-text-main/10" :class="!isModExcluded(item.id) ? 'text-accent-success' : 'text-accent-danger'">
                       <CircleCheckBig v-if="!isModExcluded(item.id)" class="w-4 h-4" />
@@ -312,8 +325,12 @@
                       <CommonSelect class="min-w-20" v-model="filter.field" :options="Object.entries(ruleStore.DYNAMIC_RULE_PROPS).map(([key, value]) => ({label: value, value: key}))"></CommonSelect>
                       
                       <CommonSelect class="min-w-30" v-model="filter.operator" :options="Object.entries(ruleStore.DYNAMIC_RULE_OPERATORS).map(([key, value]) => ({label: value, value: key}))"></CommonSelect>
-                      <!-- <input v-model="filter.value" placeholder="值..." class="flex-1 bg-text-main/5 border border-text-main/10 rounded px-3 py-1.5 text-sm text-text-main focus:border-accent-primary outline-none" /> -->
-                      <CommonInput v-model="filter.value" placeholder="值..." class="flex-1" />
+                      
+                      <div v-if="filter.field === 'package_id'" class="flex-1">
+                        <CommonSelect v-model="filter.value" :options="modIdList" editable ></CommonSelect>
+                      </div>
+                      <CommonInput v-else v-model="filter.value" placeholder="值..." class="flex-1" />
+                      
                       <button @click="editingRule.filters.splice(idx, 1)" class="p-1.5 text-text-dim hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"><Trash2 class="w-3.5 h-3.5"/></button>
                     </div>
                     <div v-if="editingRule.filters.length === 0" class="text-center py-2 text-sm text-text-dim italic">点击右上角添加筛选条件</div>

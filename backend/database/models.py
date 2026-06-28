@@ -16,6 +16,7 @@ class BaseModel(Model):
         database = db
         
 
+
 # 定义一个不转义中文的 JSONField
 class UTF8JSONField(Field):
     field_type = 'TEXT'  # 在 SQLite 中存为 TEXT
@@ -38,7 +39,6 @@ class GameProfile(BaseModel):
     """
     游戏环境配置方案
     """
-    
     id = cast(str, CharField(primary_key=True))                     # uuid
     name = cast(str, CharField())                                   # 显示名称，如 "Steam 1.5", "Local 1.4"
     description = cast(str, TextField(null=True))                   # 描述
@@ -48,7 +48,8 @@ class GameProfile(BaseModel):
     user_data_path = cast(str, CharField())                         # 【核心】自定义的数据存储路径 (-savedatafolder)
     # 策略配置
     run_commands = cast(list[str], UTF8JSONField(default=list))     # 运行命令，如 ["-batchmode", "-logFile", "log.txt"]
-    use_workshop_mods = cast(bool, BooleanField(default=True))      # 是否加载公共工坊 Mod
+    use_workshop_mods = cast(bool, BooleanField(default=False))      # 是否加载公共工坊 Mod
+    use_self_mods = cast(bool, BooleanField(default=True))          # 是否加载管理器 Mod
     is_steam = cast(bool, BooleanField(default=False))              # 是否为 Steam 版本
     # 状态
     last_played_time = cast(int, BigIntegerField(default=0))        # 最后一次活动时间
@@ -72,7 +73,8 @@ class ModAsset(BaseModel):
     # 路径与来源
     path = cast(str, CharField())                                    # 本地储存路径，绝对路径
     url = cast(str, CharField(null=True))                            # 网络地址，如 github 仓库地址、steam 创意工坊地址
-    source = cast(str, CharField(default='local'))                   # 来源，如 steam, local, git, dlc, other
+    source = cast(str, CharField(default='local'))                   # 来源，如 steam, local, git, dlc, other, self
+    store = cast(str, CharField(default='local'))                   # 存储位置，如 local, self, workshop
     icon_path = cast(str, CharField(null=True))                      # 图标路径
     preview_path = cast(str, CharField(null=True))                   # 预览图片路径
     gallery_paths = cast(list[str], UTF8JSONField(default=list))           # 画廊图片路径列表，包括本地或网络路径 ['img1.jpg', 'img2.jpg']
@@ -141,9 +143,45 @@ class GroupMod(BaseModel):
         # 联合主键，防止同一个 Mod 在同一个组里出现两次
         primary_key = CompositeKey('group_id', 'mod_id')
 
+class GithubModRecord(BaseModel):
+    """GitHub 模组订阅记录"""
+    repo_url = CharField(primary_key=True)    # 完整仓库地址 https://github.com/user/repo
+    owner = CharField()                       # 仓库作者
+    repo_name = CharField()                   # 仓库名
+    install_type = CharField(default="source")# 偏好类型: source(源码) 或 release(发行版)
+    installed_version = CharField(null=True)  # 当前安装的版本(Release的TagName 或 源码的CommitHash)
+    target_branch = CharField(default="main") # 绑定的分支(通常是 main 或 master)
+    local_folder = CharField(null=True)       # 实际解压到的物理文件夹名称
+    last_check_time = BigIntegerField(default=0)
+    
+class GithubTimeline(BaseModel):
+    """主动记录的 GitHub 操作时间线"""
+    repo_url = CharField(index=True)
+    time = BigIntegerField(default=current_ms)
+    action = CharField()  # subscribe, download, update, extract_ok, error
+    message = TextField()
+
+class SubscribedCollection(BaseModel):
+    """
+    用户收藏/订阅的合集名录
+    """
+    id = cast(str, CharField(primary_key=True)) # 合集的 Workshop ID
+    title = cast(str, CharField(null=True))
+    description = cast(str, TextField(null=True))
+    preview_url = cast(str, CharField(null=True))
+    # 统计快照
+    total = cast(int, IntegerField(default=0))
+    need_download = cast(int, IntegerField(default=0))
+    # 时间戳
+    time_updated = cast(int, BigIntegerField(default=0)) # 合集在 Steam 上的最后更新时间
+    created_time = cast(int, BigIntegerField(default=current_ms))
+
 class SystemInfo(BaseModel):
     key = cast(str, CharField(primary_key=True))
     value = cast(str, CharField())
+
+# 定义所有模型列表
+all_models = [SystemInfo, GroupMod, GroupData, UserModData, ModAsset, GameProfile, GithubTimeline, GithubModRecord, SubscribedCollection]
 
 def init_db(db_path):
     """初始化数据库"""
@@ -156,8 +194,6 @@ def init_db(db_path):
         }, timeout=30) # 增加 30 秒超时等待
         db.connect()    # 连接数据库
         
-        # 定义所有模型列表
-        all_models = [ModAsset, GameProfile, UserModData, GroupData, GroupMod, SystemInfo]
         # 1. 确保基础表存在
         db.create_tables(all_models, safe=True)
         # 2. 【核心】自动同步字段变动 (解决 no such column 报错)
@@ -187,13 +223,11 @@ def init_db(db_path):
             # 升级前建议备份 .db 文件
             import shutil
             shutil.copy2(db_path, db_path + ".bak")
-            
             # 执行迁移
             from backend.database.migrator import run_migrations
             run_migrations(old_v)
-            
             # 确保其他新加的表（如果迁移里没写的话）也能创建
-            db.create_tables([ModAsset, GameProfile, UserModData, GroupData, GroupMod], safe=True)
+            db.create_tables(all_models, safe=True)
             
         return True
     except Exception as e:
@@ -224,26 +258,22 @@ def clear_db():
         # 1. 确保连接是打开的
         if db.is_closed():
             db.connect()
-        
         # 2. 临时关闭外键约束 (防止删除顺序导致的报错)
         db.execute_sql('PRAGMA foreign_keys = OFF;')
-        
         # 3. 显式开启事务
         with db.atomic():
             # 删除所有表 (cascade=True 会处理外键依赖，但 SQLite 对 cascade 支持有限，
-            # 所以我们手动按依赖顺序删，或者直接 drop_tables)
+            # 所以手动按依赖顺序删，或者直接 drop_tables)
             # 注意顺序：先删依赖别人的(GroupMod, UserModData)，再删被依赖的(Mod, GroupData)
-            db.drop_tables([GroupMod, UserModData, GameProfile, ModAsset, GroupData])
-        
+            db.drop_tables(all_models[1:])
         # 4. 【关键】执行 VACUUM
         # 这会物理清除数据库文件中的所有数据页，重置所有自增 ID，
         # 并强制同步 WAL 文件。这相当于把 .db 文件变成了一个全新的空文件。
         # 注意：VACUUM 不能在事务块 (atomic) 内部执行。
         db.execute_sql('VACUUM;')
-        
         # 5. 重新创建表
         with db.atomic():
-            db.create_tables([ModAsset, GameProfile, UserModData, GroupData, GroupMod])
+            db.create_tables(all_models[1:], safe=True)
             from backend.settings import settings
             GameProfile.create(
                 id='default',
@@ -252,7 +282,6 @@ def clear_db():
                 game_install_path=settings.config.game_install_path or "", # 防止 None 报错
                 user_data_path=settings.config.user_data_path or "",
             )
-            
         # 6. 恢复外键约束
         db.execute_sql('PRAGMA foreign_keys = ON;')
         
@@ -295,5 +324,5 @@ def auto_upgrade_schema(db, models):
                 logger.info(f"表 {table_name} 结构同步成功")
             except Exception as e:
                 logger.error(f"表 {table_name} 结构同步失败: {e}")
-                
+    
 

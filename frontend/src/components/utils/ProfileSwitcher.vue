@@ -26,22 +26,25 @@
         class="absolute top-full mt-2 left-0 w-64 bg-bg-surface/90 backdrop-blur-xl border border-text-main/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-100">
         
         <div class="p-1 space-y-1">
-          <button v-for="p in profileStore.profiles" :key="p.id" @click="handleSwitch(p.id)"
+          <button v-for="p in profileStore.profiles" :key="p.id" @click="p.check ? handleSwitch(p.id) : null"
             class="w-full flex items-center gap-3 px-2 py-1 rounded-xl transition-all duration-200 group/item"
-            :class="p.id === profileStore.currentProfileId ? 'bg-accent-primary/10 border border-accent-primary/20' : 'hover:bg-text-main/5 border border-transparent'"
+            :class="p.check ? (p.id === profileStore.currentProfileId ? 'bg-accent-primary/10 border border-accent-primary/20 cursor-pointer' 
+            : 'hover:bg-text-main/5 border border-transparent cursor-pointer') 
+            : 'bg-accent-danger/10 border border-accent-danger/20 cursor-not-allowed'"
           >
             <component :is="p.use_workshop_mods ? SteamIcon : Folder" class="size-4" :class="p.id === profileStore.currentProfileId ? 'text-accent-primary' : 'text-text-dim'" />
             <div class="flex-1 text-left">
               <div class="text-sm font-bold" :class="p.id === profileStore.currentProfileId ? 'text-accent-primary' : 'text-text-main/80'">{{ p.name }}</div>
               <div class="text-[0.65rem] text-text-dim truncate max-w-50">{{ p.game_version || '未知版本' }}</div>
             </div>
-            <Quote v-if="p.description" v-tooltip="p.description" class="size-4 text-text-dim hover:text-accent-primary hover:scale-120 transition-all duration-300" />
-            <div :class="{'opacity-5':p.id !== profileStore.currentProfileId}" class="size-2 rounded-full bg-accent-primary shadow-[0_0_8px_#06b6d4]"></div>
+            <Quote v-if="p.description && p.check" v-tooltip="p.description" class="size-4 text-text-dim hover:text-accent-primary hover:scale-120 transition-all duration-300" />
+            <AlertOctagon v-if="!p.check" v-tooltip="`当前环境不可用：\n^^${p.msg}^^`" class="size-4 text-accent-danger hover:scale-120 transition-all duration-300 cursor-help" />
+            <div class="size-2 rounded-full bg-accent-primary shadow-[0_0_8px_#06b6d4]" :class="{'opacity-5':p.id !== profileStore.currentProfileId}"></div>
           </button>
         </div>
 
         <div class="p-1 border-t border-text-main/5 bg-text-main/2">
-          <button @click="openManager" class="w-full py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase text-text-dim hover:text-text-main hover:bg-accent-primary/20 transition-all">
+          <button @click="openManager" class="w-full py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase text-text-dim hover:text-text-main hover:bg-accent-primary/20 transition-all cursor-pointer">
             <Settings2 class="size-3" />
             管理环境中心
           </button>
@@ -53,7 +56,7 @@
 
 <script setup>
 import { ref, h } from 'vue'
-import { ChevronDown, Settings2, Folder, Quote } from 'lucide-vue-next'
+import { ChevronDown, Settings2, Folder, Quote, AlertOctagon } from 'lucide-vue-next'
 import { useProfileStore } from '../../stores/profileStore'
 import { useAppStore } from '../../stores/appStore'
 import { onClickOutside } from '@vueuse/core'

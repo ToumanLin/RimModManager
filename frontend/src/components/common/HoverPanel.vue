@@ -12,7 +12,7 @@
       :animate="{
         x: safeX,
         y: safeY,
-        rotate: rotation, // 文本模式下我们可以减小旋转幅度，或者直接设为0
+        rotate: rotation, // 文本模式下可以减小旋转幅度，或者直接设为0
         opacity: isVisible ? 1 : 0,
         scale: isVisible ? 1 : 0.9
       }"
@@ -376,6 +376,11 @@ const parseMarkup = (text) => {
     { 
       regex: /\[\[(.*?)\]\]/g, 
       repl: '<span class="text-accent-primary font-bold">$1</span>' 
+    },
+    // [Success/Green] ##text## -> text-green-400
+    { 
+      regex: /##(.*?)##/g, 
+      repl: '<span class="text-green-400 font-bold">$1</span>' 
     },
     // [Code/Mono] `text` -> bg-black/30 font-mono
     { 

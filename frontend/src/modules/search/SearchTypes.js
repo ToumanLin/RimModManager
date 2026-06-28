@@ -21,5 +21,8 @@ export const DEFAULT_FIELD_CONFIG = {
   nullValues: ['_', 'null', 'nil', 'none'], // 定义代表 null 的字符
   // getter: 动态判断 (高级用法)
   // getter: (mod) => modStore.activeIds.includes(mod.package_id)
-  getter:null
+  getter:null,
+  label_getter: null,
+  color_getter: null,
 };
+

@@ -10,7 +10,7 @@
     <!-- 主输入区域 -->
     <div class="relative group">
       <input ref="inputRef" type="text" :value="inputValue" :placeholder="placeholder" :readonly="!editable"
-        :class="[ 'input-glass bg-text-main/5 border border-text-main/10 rounded-lg text-sm text-text-main transition-all duration-200 focus:outline-none focus:border-accent-primary/50 focus:shadow-[0_0_15px_rgba(6,182,212,0.15)] placeholder:text-text-main/20 placeholder:italic',
+        :class="[ 'input-glass min-w-0 bg-text-main/5 border border-text-main/10 rounded-lg text-sm text-text-main transition-all duration-200 focus:outline-none focus:border-accent-primary/50 focus:shadow-[0_0_15px_rgba(6,182,212,0.15)] placeholder:text-text-main/20 placeholder:italic',
           mini ? 'py-1 px-2 text-xs' : 'w-full h-9 px-3',
           { 'cursor-pointer': !editable, 'cursor-text': editable }
         ]"

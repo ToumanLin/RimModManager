@@ -14,7 +14,8 @@
     
     <div :class="{' opacity-50 cursor-not-allowed pointer-events-none': readOnly}" class="flex items-center gap-1.5 group w-full">
       <!-- 路径显示区 -->
-      <div class="relative flex-1 h-9 input-glass overflow-hidden flex items-center px-3 cursor-help min-w-0" v-tooltip="modelValue || '未配置路径'" >
+      <div class="relative flex-1 h-9 input-glass overflow-hidden flex items-center px-3 cursor-help min-w-0" v-tooltip="checkMsg || (modelValue || '未配置路径')" 
+        :class="[ checkClassStyle ]">
         <!-- 固定前缀标签 -->
         <div class="shrink-0 mr-2 text-text-dim/40 italic text-xs font-mono uppercase select-none">Path</div>
         
@@ -50,15 +51,17 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAppStore } from '../../../stores/appStore'
 
 const props = defineProps({
   label: String,
+  fileType: String,
   modelValue: String,
   readOnly: Boolean,
   placeholder: String,
   description: String,
+  check: Object,
 })
 
 defineEmits(['browse', 'update:modelValue', 'blur'])
@@ -71,6 +74,29 @@ const openInExplorer = () => {
     appStore.openPath(props.modelValue)
   }
 }
+
+const checkMsg = computed(() => {
+  if (props.check) {
+    // console.log(props.check)
+    let msg = props.check['msg'] || ''
+    if (props.check['type'] === 'success') msg='##'+msg+'##'
+    else if (props.check['type'] === 'error') msg='!!'+msg+'\n请检查路径是否有效！'+'!!'
+    else if (props.check['type'] === 'warn') msg='^^'+msg+'\n请检查路径是否正确！'+'^^'
+    // console.log(msg)
+    return msg
+  }
+  return ''
+})
+
+const checkClassStyle = computed(() => {
+  if (props.check) {
+    if (props.check['type'] === 'success') return 'border border-accent-success/70'
+    else if (props.check['type'] === 'warn') return 'border border-accent-warn/80'
+    else if (props.check['type'] === 'error') return 'border border-accent-danger/90'
+  }
+  return ''
+})
+
 </script>
 
 <style scoped>
