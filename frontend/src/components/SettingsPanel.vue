@@ -289,22 +289,9 @@
                       
                     <!-- 2. 动态表单区 -->
                     <div class="p-4 rounded-xl bg-text-main/5 border border-text-main/10 space-y-5">
-                      <!-- 1. API 模式切换器 -->
-                      <div class="flex bg-black/40 p-1.5 rounded-lg border border-text-main/10 w-fit gap-1">
-                        <button @click="handleApiTypeChange('official')" 
-                          class="px-4 py-1 rounded-md text-sm font-bold transition-all duration-300"
-                          :class="formData.ai.api_type === 'official' ? 'bg-accent-special text-black shadow-[0_0_15px_rgba(var(--color-accent-special),0.4)]' : 'text-text-dim hover:text-text-main'">
-                          官方原生 API
-                        </button>
-                        <button @click="handleApiTypeChange('custom')" v-tooltip="'国产的大部分厂家模型都可以用这个选项，填写请求地址和模型即可。'"
-                          class="px-4 py-1 rounded-md text-sm font-bold transition-all duration-300"
-                          :class="formData.ai.api_type === 'custom' ? 'bg-accent-special text-black shadow-[0_0_15px_rgba(var(--color-accent-special),0.4)]' : 'text-text-dim hover:text-text-main'">
-                          自定义代理 / 本地部署
-                        </button>
-                      </div>
                       <div class="grid grid-cols-2 gap-3">
                         <!-- 厂商/协议选择 -->
-                        <CommonSelect :label="formData.ai.api_type === 'official' ? '服务提供商' : '接口协议标准'" 
+                        <CommonSelect label="接口协议标准" 
                           v-model="formData.ai.provider" :options="currentAiProviders" @change="handleProviderChange"/>
                         <!-- 模型选择 (带刷新动作) -->
                         <div class="relative flex items-end gap-2">
@@ -314,7 +301,7 @@
                               placeholder="下拉选择或手动输入模型名" @visible-change="(val) => val && fetchAiModels()"/>
                           </div>
                           <!-- 对于自定义模式，提供显式的刷新按钮让用户主动拉取 -->
-                          <button v-if="formData.ai.api_type === 'custom'" @click="fetchAiModels" v-tooltip="'重新从 Base URL 获取模型列表'" 
+                          <button @click="fetchAiModels" v-tooltip="'重新从 Base URL 获取模型列表'" 
                             class="h-9 px-3 bg-black/30 hover:bg-accent-special/20 text-accent-special border border-accent-special/30 rounded-lg flex items-center justify-center transition-colors">
                             <svg class="size-4" :class="{'animate-spin': appStore.aiState.isLoading}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
                           </button>
@@ -322,12 +309,12 @@
 
                         <!-- Base URL (自定义必填，官方高级选填) -->
                         <CommonInput label="Base URL" v-model="formData.ai.base_url" class="col-span-2" 
-                          :placeholder="formData.ai.api_type === 'custom' ? '例如: http://127.0.0.1:11434 或 https://api.deepseek.com/v1' : '默认官方地址，除非使用反代否则留空'" 
-                          :description="formData.ai.api_type === 'custom' ? '填写代理服务器或本地工具(如 LM Studio/Ollama)的地址。' : '高级选项：如果您使用了 Cloudflare Worker 等进行反代，请填入。'"
+                          placeholder="例如: http://127.0.0.1:11434 或 https://api.deepseek.com/v1" 
+                          description="填写官方请求接口或代理服务器或本地服务(如 LM Studio/Ollama)的地址。"
                         />
                         <!-- API Key -->
                         <CommonInput label="API Key" v-model="formData.ai.api_key" is-password class="col-span-2" 
-                        :placeholder="formData.ai.api_type === 'custom' ? '本地部署通常留空，中转 API 必填' : 'sk-...'" 
+                          placeholder="请求时需要的 API Key，本地部署通常留空。" 
                         />
                       </div>
 
@@ -338,6 +325,14 @@
                       <CommonNumber label="最大 Token 限制" v-model="formData.ai.max_tokens" :step="100" :min="500" />
                       <CommonNumber label="最大并发限制" v-model="formData.ai.max_concurrency" :step="1" :min="1" :max="100" description="同时处理的请求数，建议根据 API 限制设为 3-5 之间。" />
                       <CommonNumber label="输出随机性" v-model="formData.ai.temperature" :step="0.1" :min="0" :max="2.0" description="值 (Temperature) 越高创造性越强，越低越严谨。推荐0.7左右。" />
+                      <CommonSelect v-if="formData.ai.provider === 'openai_compatible'"
+                        label="端点模式" v-model="formData.ai.endpoint_mode"
+                        description="Auto 会自动在 chat.completions 和 responses 之间选择；排障时可以手动固定。"
+                        :options="[
+                          { label: '自动选择', value: 'auto' },
+                          { label: 'Chat Completions', value: 'chat_completions' },
+                          { label: 'Responses', value: 'responses' }
+                        ]" />
                       
                       <!-- 测试区 -->
                       <div class="col-span-2 pt-2 border-t border-text-main/5 flex gap-3">
@@ -500,7 +495,7 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
       await checkPaths()
       // 如果 AI 已启用，且面板刚打开，加载初始的厂商和模型列表
       if (formData.value.ai) {
-        await loadAiProviders(formData.value.ai.api_type)
+        await loadAiProviders()
         if (formData.value.ai.provider) {
           await fetchAiModels()
         }
@@ -597,26 +592,14 @@ const testModel = async () => {
   }
 }
 
-// 切换 API 模式 (Official <-> Custom)
-const handleApiTypeChange = async (type) => {
-  formData.value.ai.api_type = type
-  formData.value.ai.provider = '' // 清空原厂选择
-  formData.value.ai.model = ''    // 清空原模型
-  currentAiModels.value = []
-  await loadAiProviders(type)
-}
 // 切换厂商/协议时，如果是官方模式，立即获取模型；若是代理模式，清空让用户重新获取
 const handleProviderChange = async () => {
   formData.value.ai.model = ''
-  if (formData.value.ai.api_type === 'official') {
-    await fetchAiModels()
-  } else {
-    currentAiModels.value = [] // 代理模式需要base_url，等用户填好自己点下拉框获取
-  }
+  currentAiModels.value = [] // 代理模式需要base_url，等用户填好自己点下拉框获取
 }
 // 加载厂商列表
-const loadAiProviders = async (api_type) => {
-  const providers = await appStore.getAiProviders(api_type)
+const loadAiProviders = async () => {
+  const providers = await appStore.getAiProviders()
   currentAiProviders.value = providers || []
 }
 // 拉取模型列表 (兼容旧的，组装为 CommonSelect 接受的结构)
@@ -633,7 +616,6 @@ const fetchAiModels = async () => {
 const updateExternalDB = async (dbType) => {
   downloadState.value[dbType] = true
   await appStore.updateExternalDB(dbType)
-
   downloadState.value[dbType] = false
 }
 

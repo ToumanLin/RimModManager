@@ -19,6 +19,109 @@ from backend.utils.event_bus import EventBus
 
 # 确保缓存目录存在
 os.makedirs(UPDATE_DIR, exist_ok=True)
+
+# PyInstaller onefile 重启场景下，必须清理/重置这些运行时环境变量；
+# 否则新进程可能被误判为旧实例派生出的 worker，继承已失效的解包环境。
+PYINSTALLER_ENV_VARS_TO_CLEAR = (
+    "_MEIPASS",
+    "_MEIPASS2",
+    "_PYI_APPLICATION_HOME_DIR",
+    "_PYI_ARCHIVE_FILE",
+    "_PYI_PARENT_PROCESS_LEVEL",
+    "_PYI_SPLASH_IPC",
+    "PYI_EXPLODE_PATH",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYINSTALLER_SUPPRESS_SPLASH_SCREEN",
+    "PYINSTALLER_STRICT_UNPACK_MODE",
+)
+
+# updater 批处理和被重启的新程序只需要一份尽量干净的系统环境即可。
+RESTART_ENV_WHITELIST = (
+    "ALLUSERSPROFILE",
+    "APPDATA",
+    "CommonProgramFiles",
+    "CommonProgramFiles(x86)",
+    "CommonProgramW6432",
+    "COMSPEC",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "LOCALAPPDATA",
+    "NUMBER_OF_PROCESSORS",
+    "OS",
+    "PATH",
+    "PATHEXT",
+    "PROCESSOR_ARCHITECTURE",
+    "PROCESSOR_IDENTIFIER",
+    "PROCESSOR_LEVEL",
+    "PROCESSOR_REVISION",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "ProgramFiles(x86)",
+    "ProgramW6432",
+    "PUBLIC",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERNAME",
+    "USERPROFILE",
+    "WINDIR",
+)
+
+
+def _build_restart_environment() -> Dict[str, str]:
+    """
+    为更新完成后的批处理/重启进程构造一份尽量干净的环境变量。
+    关键点：
+    1. 清理 PyInstaller onefile 运行时残留变量。
+    2. 显式设置 PYINSTALLER_RESET_ENVIRONMENT=1，强制新实例重新解包。
+    3. 尽量只保留系统级必需变量，避免把当前进程的脏环境继续传下去。
+    """
+    clean_env: Dict[str, str] = {}
+
+    for key in RESTART_ENV_WHITELIST:
+        value = os.environ.get(key)
+        if value:
+            clean_env[key] = value
+
+    # 某些环境变量名大小写不一致，这里做一次兼容兜底。
+    if "COMSPEC" not in clean_env:
+        clean_env["COMSPEC"] = os.environ.get("ComSpec", r"C:\Windows\System32\cmd.exe")
+    if "SYSTEMROOT" not in clean_env:
+        clean_env["SYSTEMROOT"] = os.environ.get("SystemRoot", r"C:\Windows")
+    if "WINDIR" not in clean_env:
+        clean_env["WINDIR"] = os.environ.get("WINDIR", clean_env["SYSTEMROOT"])
+
+    clean_env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+
+    for key in PYINSTALLER_ENV_VARS_TO_CLEAR:
+        clean_env.pop(key, None)
+
+    return clean_env
+
+
+def _build_env_cleanup_commands() -> str:
+    """生成批处理中用于清理/重置运行时环境变量的命令。"""
+    lines = ['set "PYINSTALLER_RESET_ENVIRONMENT=1"']
+    lines.extend(f'set "{key}="' for key in PYINSTALLER_ENV_VARS_TO_CLEAR)
+    return "\n".join(lines)
+
+
+def _reset_windows_dll_directory():
+    """
+    恢复 Windows 默认 DLL 搜索路径。
+    PyInstaller onefile 在 Windows 下会调用 SetDllDirectoryW 指向临时解包目录，
+    这个状态会影响后续由当前进程拉起的 cmd.exe / robocopy / 新实例 exe。
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetDllDirectoryW(None)
+    except Exception as e:
+        logger.warning(f"Failed to reset Windows DLL directory before restart: {e}")
+
 @dataclass
 class UpdateInfo:
     has_update: bool
@@ -394,6 +497,7 @@ class UpdateManager:
                 pause_cmd = ""
                 del_self_cmd = '(goto) 2>nul & del "%~f0"'
                 exit_cmd = "exit"
+            env_cleanup_cmds = _build_env_cleanup_commands()
             # 1. chcp 65001 -> 处理 UTF-8 (Python 写入的文件)
             # 2. set "_MEIPASS=" -> 极其重要！清除单文件模式的临时路径变量，防止 DLL 加载错误
             # 3. taskkill -> 确保进程彻底杀掉
@@ -437,18 +541,14 @@ if exist "{extract_path}" (
 
 echo Update successful, cleaning up environment and restarting... 
 
-:: Clear PyInstaller environment remnants to prevent DLL not found errors 
-set _MEIPASS=
-set _MEIPASS2=
-set PYI_EXPLODE_PATH=
-set PYTHONPATH=
-set PYTHONHOME=
+:: Clear PyInstaller onefile runtime remnants and force a fresh top-level restart
+{env_cleanup_cmds}
 
 echo [DEBUG] Attempting to start: "{install_root}\\{exe_name}" 
 echo [DEBUG] Working Directory: "{install_root}" 
 
 :: Launch a new program 
-start "" /d "{install_root}" "{exe_name}" 
+start "" /d "{install_root}" "{install_root}\\{exe_name}" 
 
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Failed to restart application! 
@@ -460,20 +560,19 @@ if %ERRORLEVEL% NEQ 0 (
 {pause_cmd}
 {exit_cmd}
 """
-            clean_env = os.environ.copy()
-            for key in['_MEIPASS', '_MEIPASS2', 'PYI_EXPLODE_PATH', 'PYTHONPATH', 'PYTHONHOME']:
-                clean_env.pop(key, None)
+            clean_env = _build_restart_environment()
             # 写入批处理（注意编码）
-            with open(bat_path, "w", encoding="utf-8") as f:
+            with open(bat_path, "w", encoding="utf-8-sig") as f:
                 f.write(bat_content)
                 
             cmd_arg = "/k" if debug else "/c"
             
             # 6. 运行脚本
+            _reset_windows_dll_directory()
             subprocess.Popen(
                 ["cmd.exe", cmd_arg, bat_path],
                 cwd=install_root,
-                shell=not debug,
+                shell=False,
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
                 env=clean_env  # 传入清理后的干净环境变量
             )

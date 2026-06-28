@@ -920,6 +920,13 @@ class PathChecker:
         """
         if not path_str: return cls._format_res(False, msg="路径不能为空")
         path = Path(path_str)
+        # 文件路径只警告，检查其父路径是否存在
+        if len(os.path.splitext(path_str.strip())[1]) > 0:
+            if path.parent.exists():
+                if path.is_file(): return cls._format_res(True, data=str(path), msg=f"路径有效：{path}")
+                return cls._format_res(True, msg=f"父路径下不存在该文件，软件会按需生成该文件。", msg_type="warning")
+            return cls._format_res(False, msg=f"{path_str}\n父路径不存在！")
+        
         if not path.exists(): return cls._format_res(False, msg=f"{path_str}\n路径不存在！")
         return cls._format_res(True, data=str(path), msg=f"路径有效：{path}")
     

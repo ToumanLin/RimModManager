@@ -641,8 +641,9 @@ watch(selectedIds, (newIds) => {
 const selectionConfig = computed(() => ({
   data: filteredLogIds.value,     // 当前列表数据的全集 IDs
   selectedIds: selectedIds.value, // 当前已选中的 IDs
-  clickClass: 'swipe-trigger',   // 触发点击选择的区域
-  swipeClass: 'swipe-trigger',    // 触发滑动选择的区域
+  clickClass: 'swipe-trigger',    // 点击和拖拽都只在左侧复选框区域触发
+  swipeClass: 'swipe-trigger',    // 保持与 clickClass 同一区域，但由指令内部区分点击/拖拽
+  clickMode: 'toggle',            // 日志勾选更接近复选框语义：点击默认切换多选
   idAttribute: 'data-id',         // DOM 绑定的 ID 属性
   onSelect: (newSelectedIds, anchorId) => {
     selectedIds.value = newSelectedIds

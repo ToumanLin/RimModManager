@@ -91,14 +91,33 @@ def on_main_window_closed():
 
 
 def main():
-    # 0. 先校验环境，有问题直接弹原生框并退出
-    validate_environment()
-    
     # 1. Windows 打包后的多进程支持 (必须放在最前面)
     multiprocessing.freeze_support()
 
+    # 加载启动屏
+    try:
+        import pyi_splash # type: ignore
+    except ImportError:
+        pyi_splash = None
+
+    splash_state = {'module': pyi_splash}
+
+    def close_startup_splash():
+        """关闭启动屏，重复调用时自动忽略。"""
+        splash_module = splash_state.get('module')
+        if not splash_module:
+            return
+
+        try:
+            splash_module.close()
+        except Exception:
+            logger.debug("Close splash failed", exc_info=True)
+        finally:
+            splash_state['module'] = None
+
     # 2. 检测是否为 Steam Worker 模式
     if len(sys.argv) > 1 and sys.argv[1] == "--steam-worker":
+        close_startup_splash()
         # 此时是一个短命的子进程
         # 这里的 import 放在内部，避免影响主进程启动速度
         from backend.managers.mgr_steam import run_steam_worker
@@ -112,72 +131,71 @@ def main():
         
         # 干完活直接退出，不要启动 GUI
         sys.exit(0)
-        
-    # 加载启动屏
-    try:
-        import pyi_splash # type: ignore
-    except ImportError:
-        pyi_splash = None
 
-    # 只有主进程才会执行到这里，此时再导入 GUI 库
-    # 避免 Worker 进程加载浏览器内核，节省内存并防止冲突
-    import webview
-    from backend.api import API
-    
-    # 记录启动信息
-    logger.info(f"Starting RimModManager... Ver: {__version__ or 'Dev'}")
-    logger.debug(f"Debug Mode: {settings.config.debug_mode}")
-    
-    api = API()
-    window_width = int(settings.config.window_width)  # 默认1400px
-    window_height = int(settings.config.window_height)  # 默认900px
-    
-    # 获取代理参数
-    # Pywebview 目前对代理的直接支持有限，通常需要通过底层 flag 传递
-    # 对于 WebView2 (Windows)，可以通过 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS']
-    additional_args = []
-    proxy_args = get_webview_proxy_args()
-    if proxy_args:
-        if 'proxy_server' in proxy_args:
-            additional_args.append(f"--proxy-server={proxy_args['proxy_server']}")
-        if 'proxy_bypass_list' in proxy_args:
-            additional_args.append(f"--proxy-bypass-list={proxy_args['proxy_bypass_list']}")
-    
-    # [关键] 解决部分机器黑屏/闪退问题
-    # --disable-features=RendererCodeIntegrity: 解决部分杀毒软件注入导致渲染进程崩溃
-    # --disable-gpu: 最后的手段，解决显卡兼容性
-    # additional_args.append("--disable-features=RendererCodeIntegrity") 
-    # 某些环境下需要这个来允许本地文件交互
-    additional_args.append('--allow-file-access-from-files') 
-    
-    # 设置环境变量传给 WebView2
-    os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = " ".join(additional_args)
-    entrypoint = get_entrypoint()
-    
-    # 创建窗口
-    window = webview.create_window(
-        'RimModManager', 
-        url=entrypoint,
-        js_api=api,
-        width=window_width, # 读取记忆的窗口大小
-        height=window_height,
-        resizable=True,
-        background_color='#0f172a', # 与前端背景色一致，防止白屏闪烁
-        frameless=False, # 可以选择开启无边框模式来实现完全自定义标题栏
-    )
-    logger.info(f"Entrypoint: {entrypoint}")
-    if window: 
-        api.set_window(window)
-        window.events.resized += on_resized            # 窗口尺寸变化时触发
-        window.events.closed += api.cleanup
-        window.events.closed += on_main_window_closed  # 窗口关闭时退出应用
-    # 注册窗口到事件总线
-    EventBus.set_window(window) # type: ignore
-    # 捕获全局未处理异常
-    try: # 启动主窗口
-        if pyi_splash: pyi_splash.close()
-        webview.start(api.cleanup, debug=settings.config.debug_mode) # debug=True 允许在窗口里按 F12 看控制台
+    # 捕获启动阶段未处理异常，确保异常弹窗前启动屏已经关闭
+    try:
+        # 0. 先校验环境，有问题直接弹原生框并退出
+        validate_environment(on_error=close_startup_splash)
+
+        # 只有主进程才会执行到这里，此时再导入 GUI 库
+        # 避免 Worker 进程加载浏览器内核，节省内存并防止冲突
+        import webview
+        from backend.api import API
+        
+        # 记录启动信息
+        logger.info(f"Starting RimModManager... Ver: {__version__ or 'Dev'}")
+        logger.debug(f"Debug Mode: {settings.config.debug_mode}")
+        
+        api = API()
+        window_width = int(settings.config.window_width)  # 默认1400px
+        window_height = int(settings.config.window_height)  # 默认900px
+        
+        # 获取代理参数
+        # Pywebview 目前对代理的直接支持有限，通常需要通过底层 flag 传递
+        # 对于 WebView2 (Windows)，可以通过 os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS']
+        additional_args = []
+        proxy_args = get_webview_proxy_args()
+        if proxy_args:
+            if 'proxy_server' in proxy_args:
+                additional_args.append(f"--proxy-server={proxy_args['proxy_server']}")
+            if 'proxy_bypass_list' in proxy_args:
+                additional_args.append(f"--proxy-bypass-list={proxy_args['proxy_bypass_list']}")
+        
+        # [关键] 解决部分机器黑屏/闪退问题
+        # --disable-features=RendererCodeIntegrity: 解决部分杀毒软件注入导致渲染进程崩溃
+        # --disable-gpu: 最后的手段，解决显卡兼容性
+        # additional_args.append("--disable-features=RendererCodeIntegrity") 
+        # 某些环境下需要这个来允许本地文件交互
+        additional_args.append('--allow-file-access-from-files') 
+        
+        # 设置环境变量传给 WebView2
+        os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = " ".join(additional_args)
+        entrypoint = get_entrypoint()
+        
+        # 创建窗口
+        window = webview.create_window(
+            'RimModManager', 
+            url=entrypoint,
+            js_api=api,
+            width=window_width, # 读取记忆的窗口大小
+            height=window_height,
+            resizable=True,
+            background_color='#0f172a', # 与前端背景色一致，防止白屏闪烁
+            frameless=False, # 可以选择开启无边框模式来实现完全自定义标题栏
+        )
+        logger.info(f"Entrypoint: {entrypoint}")
+        if window: 
+            api.set_window(window)
+            window.events.loaded += close_startup_splash
+            window.events.resized += on_resized            # 窗口尺寸变化时触发
+            window.events.closed += api.cleanup
+            window.events.closed += on_main_window_closed  # 窗口关闭时退出应用
+        # 注册窗口到事件总线
+        EventBus.set_window(window) # type: ignore
+        # 捕获全局未处理异常
+        webview.start(debug=settings.config.debug_mode) # debug=True 允许在窗口里按 F12 看控制台
     except Exception as e:
+        close_startup_splash()
         logger.critical("Application crashed!", exc_info=True)
         raise e
 

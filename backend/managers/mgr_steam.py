@@ -487,6 +487,9 @@ class SteamManager:
                 cmd.append(str(BASE_RESOURCE_DIR / "main.py"))
             cmd.extend(["--steam-worker", action, payload])
             try:
+                current_env = os.environ.copy()
+                # 对 PyInstaller 子进程显式禁用 splash，避免 worker 闪出启动屏。
+                current_env["_PYI_SPLASH_IPC"] = "0"
                 # 统一使用隐藏窗口启动
                 si = None
                 if platform.system() == "Windows":
@@ -494,7 +497,7 @@ class SteamManager:
                     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 result = subprocess.run(
                     cmd, cwd=self.agent_dir, capture_output=True, 
-                    text=True, startupinfo=si, encoding='utf-8'
+                    text=True, startupinfo=si, encoding='utf-8', env=current_env
                 )
                 if "SUCCESS" not in result.stdout:
                     logger.error(f"Steam Agent Error: {result.stdout}")

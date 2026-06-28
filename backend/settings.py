@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass, asdict, field, fields, is_dataclass
 from pathlib import Path
 import sys
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 # 1. 资源目录：存放前端文件、内置工具 (对应开发时的项目根目录)
@@ -72,12 +72,13 @@ class NetworkConfig:
 @dataclass
 class AIConfig:
     enabled: bool = False
-    api_type: str = "custom"  # 可选值: 'official' 或 'custom'
-    provider: str = "openai"  # openai, anthropic, google
+    provider: str = "openai_compatible"  # openai, anthropic, google
+    # OpenAI-compatible 的 endpoint 选择策略
+    endpoint_mode: str = "auto"     # auto / chat_completions / responses
     base_url: str = "https://api.openai.com/v1"  # 允许自定义，如 DeepSeek, LocalAI
     api_key: str = ""
     model: str = "gpt-3.5-turbo"
-    temperature: float = 0.7     # 温度参数（控制输出随机性）
+    temperature: Optional[float] = 0.7     # 温度参数（控制输出随机性）允许“不传”
     max_tokens: int = 5000       # 最大令牌数（限制模型输出长度）
     max_concurrency: int = 3     # 最大并发请求数（避免被API封锁）
 
@@ -158,7 +159,7 @@ class AppConfig:
     backup_retention_days: int = 30           # 备份保留天数
     enable_auto_scan: bool = True             # 启动时自动扫描
     enable_file_size_scan: bool = True         # 扫描时是否检查文件大小
-    delete_missing_mods_data: bool = True     # 是否删除数据库中缺失的 Mod 数据
+    delete_missing_mods_data: bool = False     # 是否删除数据库中缺失的 Mod 数据
     open_url_on_system: bool = False          # 是否在系统默认浏览器打开链接
     sort_mods_by: str = "name"                # 排序方式: name, id, alias
     auto_activate_dependencies: bool = False   # 是否在排序时自动激活依赖项
