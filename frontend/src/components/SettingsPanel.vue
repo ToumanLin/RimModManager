@@ -63,7 +63,7 @@
               <!-- 路径设置 (Paths) -->
               <section v-if="currentTab === 'paths'" class="animate-in fade-in slide-in-from-right-4">
                 <div class="flex items-center justify-between mb-6">
-                  <h3 class="text-lg font-bold text-text-main">路径配置
+                  <h3 class="text-lg font-bold text-text-main">环境与路径配置
                     <label v-tooltip="'此处会直接修改当前环境的路径配置'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                     <label class="ml-5 text-xs py-0.5 px-2 text-accent-cool bg-accent-cool/20 rounded-md" v-tooltip="`当前环境：${profileStore?.currentProfile?.name}\n说明：${profileStore?.currentProfile?.description}`">
                       {{ profileStore?.currentProfile?.name }}
@@ -78,10 +78,14 @@
                     :check="formData.check_info?.game_install_path"
                     :description="'游戏安装目录即游戏主程序所在的目录，默认安装目录一般位于：\nC:/Program Files (x86)/Steam/steamapps/common/RimWorld'" 
                     @blur="checkPath('game_install_path', formData.game_install_path)"/>
-                  <CommonPathInput label="游戏配置目录" v-model="formData.game_config_path" @browse="handleBrowse('game_config_path')" 
+                  <CommonPathInput label="用户数据目录" v-model="formData.user_data_path" @browse="handleBrowse('user_data_path')" 
+                    :check="formData.check_info?.user_data_path"
+                    :description="'用户数据目录即游戏数据及存档所在的目录，默认配置目录一般位于：\nC:/Users/{用户名}/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios'" 
+                    @blur="checkPath('user_data_path', formData.user_data_path)"/>
+                  <!-- <CommonPathInput label="游戏配置目录" v-model="formData.game_config_path" @browse="handleBrowse('game_config_path')" 
                     :check="formData.check_info?.game_config_path"
                     :description="'游戏配置目录即排序文件（ModsConfig.xml）所在的目录，默认配置目录一般位于：\nC:/Users/{用户名}/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config'" 
-                    @blur="checkPath('game_config_path', formData.game_config_path)"/>
+                    @blur="checkPath('game_config_path', formData.game_config_path)"/> -->
                   <CommonPathInput label="创意工坊目录" v-model="formData.workshop_mods_path" @browse="handleBrowse('workshop_mods_path')" 
                     :check="formData.check_info?.workshop_mods_path"
                     :description="'创意工坊目录即创意工坊下载的模组所在的目录，该设置所有环境通用'" 
@@ -111,7 +115,11 @@
 
               <!-- 常规设置 (General) -->
               <section v-if="currentTab === 'general'" class="animate-in fade-in slide-in-from-right-4">
-                <h3 class="text-lg font-bold text-text-main mb-6">界面与环境</h3>
+                <h3 class="text-lg font-bold text-text-main mb-6 flex items-center justify-between">界面与布局
+                  <button @click="guideStore.resetAllGuides()" v-tooltip="'重置界面引导，将界面引导重置为默认值'" class="px-3 py-1 bg-accent-warn/10 hover:bg-accent-warn/20 border border-accent-warn/30 rounded text-xs font-bold text-accent-warn transition-all">
+                    重置界面引导
+                  </button>
+                </h3>
                 <div class="space-y-6">
                   <div class="grid grid-cols-2 gap-4 aria-disabled:pointer-events-none aria-disabled:opacity-50" :aria-disabled="true">
                     <CommonSelect label="界面语言" v-model="formData.language" :options="[{label:'简体中文', value:'ZH-cn'}, {label:'English', value:'EN'}]" />
@@ -143,8 +151,8 @@
 
                     <div class="col-span-2 p-2 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-2 gap-2">
                       <CommonSwitch class="col-span-2" mini label="Mod 详情面板" v-model="getDataById('details', formData.ui.main_layout).visible" description="可关闭Mod详情栏。" />
-                      <CommonSwitch class="col-span-2" :disabled="!getDataById('details', formData.ui.main_layout).visible" label="动态图标云" v-model="formData.ui.show_icons_cloud" description="控制详情页闲置时的动态图标云显示。" />
-                      
+                      <CommonSwitch :disabled="!getDataById('details', formData.ui.main_layout).visible" label="动态图标云" v-model="formData.ui.show_icons_cloud" description="控制详情页闲置时的动态图标云显示。" />
+                      <CommonNumber label="详情页加载延迟" description="控制 Mod 详情页加载的延迟时间，单位是毫秒，默认值为 200 毫秒。" v-model="formData.ui.detail_delay" :step="10" :min="0" :max="5000" />
                       <span class="col-span-2 text-xs ml-2 mt-2">Mod 详情布局
                         <label v-tooltip="'可拖动切换布局顺序'" class="text-text-dim ml-1 cursor-help italic underline hover:text-text-main">?</label>
                       </span>
@@ -189,6 +197,7 @@
                     <CommonSelect class="col-span-1" label="共存Mod文件夹生成方式" v-model="formData.coexist_mod_folder_name_type" showBottom
                       description="影响创建共存Mod时的文件夹名称，处理优先级是 别名>原名>包名>工坊ID，所以即使Mod没有别名，也能按原名创建文件夹。" 
                       :options="[{label:'按工坊ID', value:'workshop_id'},{label:'按包名', value:'package_id'},{label:'按原名', value:'name'},{label:'按别名', value:'alias_name'}]" />
+                    <CommonSwitch class="col-span-1" label="使用原始 Mod ID" v-model="formData.use_raw_ids" description="开启后，将使用 Mod 的原始 ID 写入排序文件，而不是标准化的小写。" />
                     <CommonNumber class="col-span-1" label="自动备份保留天数" description="管理自动备份的最长保留时间，手动备份不受影响。" v-model="formData.backup_retention_days" :step="1" :min="0" :max="365" />
                   </div>
                 </div>
@@ -196,10 +205,15 @@
 
               <!-- 社区设置 -->
               <section v-if="currentTab === 'community'" class="animate-in fade-in slide-in-from-right-4">
-                <h3 class="text-lg font-bold text-text-main mb-6">社区配置管理</h3>
+                <h3 class="text-lg font-bold text-text-main mb-6 flex items-center justify-between">社区配置管理
+                  
+                  <button @click="resetToDefaultCommunityPaths" v-tooltip="'将社区配置相关路径重置为默认值'" class="px-3 py-1 bg-accent-warn/10 hover:bg-accent-warn/20 border border-accent-warn/30 rounded text-xs font-bold text-accent-warn transition-all">
+                    重置为默认路径
+                  </button>
+                </h3>
                 <div class="space-y-6">
-                  <CommonPathInput label="SteamCMD 路径" v-model="formData.steamcmd_path" @browse="handleBrowse('steamcmd_path')" :check="formData.check_info?.steamcmd_path" />
-                  <div class="flex items-end gap-1.5">
+                  <CommonPathInput label="SteamCMD 路径" v-model="formData.steamcmd_path" @browse="handleBrowse('steamcmd_path')" @blur="checkPath('steamcmd_path', formData.steamcmd_path)" :check="formData.check_info?.steamcmd_path" />
+                  <div class="flex items-end gap-1.5" description="用于管理器下载模组的外置工具，路径中不能包含中文。">
                     <CommonInput label="社区规则 URL" v-model="formData.community_rules_url" />
                     <button @click="ruleStore.updateCommunity()" v-tooltip="'下载更新 社区规则'" :class="{'opacity-50 cursor-not-allowed pointer-events-none' :ruleStore.isLoading }"
                       class="shrink-0 h-9 w-9 bg-accent-tip/10 hover:bg-accent-tip text-accent-tip hover:text-text-main border border-accent-tip/30 rounded-lg flex items-center justify-center transition-colors">
@@ -243,10 +257,11 @@
                       <div class="col-span-6">
                           <CommonTagInput label="不走代理的域名" v-model="formData.network.proxy.bypass_list" />
                       </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                      <CommonSwitch label="是否为 SteamCMD 使用代理" v-model="formData.network.use_proxy_on_steamcmd" :description="'SteamCMD 是否使用代理服务器。\n\n如果启用，SteamCMD 下载、更新、安装等操作将通过代理服务器进行。'" />
-                      <CommonSwitch label="是否为 AI请求 使用代理" v-model="formData.network.use_proxy_on_ai" :description="'如果启用，AI 将通过代理服务器进行。已经是国内代理后的端口不用开此选项。'" />
+
+                      <div class="col-span-6 grid grid-cols-2 gap-3">
+                        <CommonSwitch label="是否为 SteamCMD 使用代理" v-model="formData.network.use_proxy_on_steamcmd" :description="'SteamCMD 是否使用代理服务器。\n\n如果启用，SteamCMD 下载、更新、安装等操作将通过代理服务器进行。'" />
+                        <CommonSwitch label="是否为 AI请求 使用代理" v-model="formData.network.use_proxy_on_ai" :description="'如果启用，AI 将通过代理服务器进行。已经是国内代理后的端口不用开此选项。'" />
+                      </div>
                     </div>
                   </div>
                   
@@ -281,7 +296,7 @@
                           :class="formData.ai.api_type === 'official' ? 'bg-accent-special text-black shadow-[0_0_15px_rgba(var(--color-accent-special),0.4)]' : 'text-text-dim hover:text-text-main'">
                           官方原生 API
                         </button>
-                        <button @click="handleApiTypeChange('custom')" 
+                        <button @click="handleApiTypeChange('custom')" v-tooltip="'国产的大部分厂家模型都可以用这个选项，填写请求地址和模型即可。'"
                           class="px-4 py-1 rounded-md text-sm font-bold transition-all duration-300"
                           :class="formData.ai.api_type === 'custom' ? 'bg-accent-special text-black shadow-[0_0_15px_rgba(var(--color-accent-special),0.4)]' : 'text-text-dim hover:text-text-main'">
                           自定义代理 / 本地部署
@@ -357,16 +372,24 @@
                         <span class="text-sm font-bold text-text-main">软件版本</span>
                         <span class="text-xs text-text-dim">当前版本: v{{ appStore.appVersion }}</span>
                       </div>
-                      <button 
-                        @click="appStore.checkUpdate(true)" 
-                        :disabled="appStore.updateState.isChecking"
-                        class="px-4 py-1.5 bg-text-main/5 hover:bg-text-main/10 border border-text-main/10 rounded-lg text-xs font-bold transition-all"
-                      >
-                        <span v-if="appStore.updateState.isChecking" class="flex items-center gap-2">
-                          <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24">...</svg>检查中
-                        </span>
-                        <span v-else>立即检查更新</span>
-                      </button>
+
+                      <div class="flex items-center justify-between gap-1">
+                        <button @click="appStore.showChangelog()"
+                          class="px-2 py-1.5 bg-accent-tip/15 hover:bg-accent-tip/30 border border-accent-tip/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
+                          <span class="flex items-center gap-2">
+                            更新日志
+                          </span>
+                        </button>
+                        <button @click="appStore.checkUpdate(true)" :disabled="appStore.updateState.isChecking"
+                          class="px-4 py-1.5 bg-text-main/5 hover:bg-text-main/10 border border-text-main/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
+                          <span v-if="appStore.updateState.isChecking" class="flex items-center gap-2">
+                            <LoaderCircle class="animate-spin h-3 w-3" />
+                            检查中
+                          </span>
+                          <span v-else>立即检查更新</span>
+                        </button>
+                      </div>
+
                     </div>
                     <CommonSelect label="日志等级" v-model="formData.log_level" :options="[{label:'DEBUG', value:'DEBUG'},{label:'INFO', value:'INFO'},{label:'WARNING', value:'WARNING'}]" />
                     <CommonNumber label="日志保留天数" v-model="formData.log_retention_days" :step="1" :min="0" :max="365" />
@@ -401,7 +424,7 @@
 
 <script setup>
 import { ref, watch, onMounted, nextTick, h } from 'vue'
-import { FolderTree, AppWindow, Globe, Cpu, Terminal, Search, Component, Settings, Drama, Download } from 'lucide-vue-next'
+import { FolderTree, AppWindow, Globe, Cpu, Terminal, Search, Component, Settings, Drama, Download, LoaderCircle } from 'lucide-vue-next'
 import { createToastInterface } from 'vue-toastification'
 import { flashComponent, shakeComponent } from '../utils/uiHelper'
 import { VueDraggable } from 'vue-draggable-plus'
@@ -420,12 +443,14 @@ import { useRuleStore } from '../stores/ruleStore'
 import { useAppStore } from '../stores/appStore'
 import { useConfirmStore } from '../stores/confirmStore'
 import { useProfileStore } from '../stores/profileStore'
+import { useGuideStore } from '../stores/guideStore'
 
 const toast = createToastInterface()
 const appStore = useAppStore()
 const ruleStore = useRuleStore()
 const confirmStore = useConfirmStore()
 const profileStore = useProfileStore()
+const guideStore = useGuideStore()
 
 const currentTab = ref('paths')
 const formData = ref({})
@@ -458,15 +483,21 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
     // 利用 requestAnimationFrame 或 setTimeout
     // 让浏览器先渲染出弹窗的“背景”和“动画第一帧”，然后再去塞数据
     requestAnimationFrame(async () => {
-      // 使用 structuredClone (Node 17+ / 现代浏览器均支持，速度更快)
+      // 使用 structuredClone (Node 17+ / 现代浏览器均支持，速度更快)，将全局 Settings 和 当前 Context 捏合成一个对象给表单用
       // 如果环境不支持，保留原来的 JSON 方式，但放在 requestAnimationFrame 里依然能解决卡顿
       try {
-        formData.value = structuredClone(appStore.settings)
+        formData.value = {
+          ...structuredClone(appStore.settings),
+          ...structuredClone(profileStore.activeContext) // 覆盖/合并上下文路径
+        }
       } catch (e) {
-        // 降级兼容
-        formData.value = JSON.parse(JSON.stringify(appStore.settings))
+        formData.value = { 
+          ...JSON.parse(JSON.stringify(appStore.settings)),
+          ...JSON.parse(JSON.stringify(profileStore.activeContext))
+        }
       }
-
+      // 检测所有路径是否有效
+      await checkPaths()
       // 如果 AI 已启用，且面板刚打开，加载初始的厂商和模型列表
       if (formData.value.ai) {
         await loadAiProviders(formData.value.ai.api_type)
@@ -474,8 +505,6 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
           await fetchAiModels()
         }
       }
-      // 检测所有路径是否有效
-      checkPaths()
     })
   }
 })
@@ -484,9 +513,9 @@ watch(() => appStore.uiState.showSettingsPanel, (val) => {
 const changeTab = (tab) => {
   currentTab.value = tab
   // 检测所有路径是否有效
-  if (['paths','community'].includes(tab)) {
-    checkPaths()
-  }
+  // if (['paths','community'].includes(tab)) {
+  //   checkPaths()
+  // }
 }
 
 // 通过ID获取数据项
@@ -499,8 +528,14 @@ const autoDetect = async () => {
   const paths = await appStore.autoDetectPaths(false)
   if (paths) Object.assign(formData.value, paths)
 }
+const resetToDefaultCommunityPaths = async () => {
+  const paths = await appStore.getDefaultCommunityPaths()
+  if (paths) Object.assign(formData.value, paths)
+}
+
 // 检查游戏路径是否有效
 const checkPath = async (type, path) => {
+  console.log('checkPath:', type, path)
   const res = await appStore.checkPath(type, path)
   if (!formData.value['check_info']) {
     formData.value['check_info'] = {};
@@ -515,6 +550,7 @@ const checkPaths = async () => {
       paths_data[key] = formData.value[key]
     }
   }
+  // console.log('检查路径', paths_data)
   const res = await appStore.checkPaths(paths_data)
   if (res) {
     formData.value['check_info'] = res
@@ -533,24 +569,17 @@ const handleGameBrowse = async () => {
 }
 // 手动选择其他路径
 const handleBrowse = async (pathKey, fileTypes) => {
-  // 处理嵌套路径 (如 'steamcmd_path')
-  const keys = pathKey.split('.')
-  let current = formData.value
-  for (let i = 0; i < keys.length - 1; i++) {
-    current = current[keys[i]]
-  }
-  const lastKey = keys[keys.length - 1]
   console.log('路径选择',pathKey, fileTypes)
   let res
   if (fileTypes) {
-    res = await appStore.getFilePath(current[lastKey], fileTypes)
+    res = await appStore.getFilePath(pathKey, fileTypes)
   } else {
-    res = await appStore.getFolderPath(current[lastKey])
+    res = await appStore.getFolderPath(pathKey)
   }
   if (res) {
-    current[lastKey] = res
+    formData.value[pathKey] = res
     // 自动检查路径是否有效
-    checkPath(lastKey, res)
+    await checkPath(pathKey, res)
   }
 }
 
@@ -614,8 +643,14 @@ const handleReset = async () => {
   if (ok) appStore.resetDatabase()
 }
 
-const save = () => {
-  appStore.applySettings(formData.value)
+const save = async () => {
+  // 校验拦截
+  // const hasError = Object.values(formData.value.check_info || {}).some(info => info && !info.pass)
+  // if (hasError) {
+  //   toast.error("存在无效路径，请修正后再保存！")
+  //   return
+  // }
+  await appStore.applySettings(formData.value)
 }
 </script>
 

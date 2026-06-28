@@ -2,6 +2,8 @@ import os
 import shutil
 import glob
 import datetime
+from pathlib import Path
+from backend.managers.mgr_profile import ProfileContext
 from backend.utils.logger import logger
 
 # --- 模块测试准备 ---
@@ -18,7 +20,7 @@ if __name__ == "__main__":
         sys.path.insert(0, str(project_root))
 
 from backend.managers.mgr_files import FileManager
-from backend.settings import BACKUP_DIR, settings
+from backend.settings import settings
 from lxml import html
 etree = html.etree
 
@@ -32,22 +34,26 @@ class LoadOrderManager:
     4. 兜底：永远保留最新的一份备份。
     """
     
-    def __init__(self):
+    def __init__(self, context: ProfileContext):
         # 从全局配置获取路径
-        self.config_dir = settings.config.game_config_path
-        self.mods_config_file = ''
-        
-        if self.config_dir:
-            self.mods_config_file = os.path.join(self.config_dir, "ModsConfig.xml")
-            self._init_backup_dirs()
+        self.context = context
+        self._ensure_dirs()
+        # self.config_dir = settings.config.game_config_path
+        # self.mods_config_file = ''
+
+    def _ensure_dirs(self):
+        # 强制建立当前环境所需的目录，彻底解决 os.path.exists 导致的无法赋值 Bug
+        os.makedirs(self.context.game_config_path, exist_ok=True)
+        os.makedirs(self.context.backup_dir, exist_ok=True)
+        self._init_backup_dirs()
 
     def _init_backup_dirs(self):
         """初始化备份目录结构"""
         # 在软件目录下用 backups 文件夹存储备份
-        self.backup_root = str(BACKUP_DIR)
-        self.today_dir = str(BACKUP_DIR / "today")
-        self.earlier_dir = str(BACKUP_DIR / "earlier")
-        self.other_dir = str(BACKUP_DIR / "other")
+        self.backup_root = str(Path(self.context.backup_dir))
+        self.today_dir = str(Path(self.context.backup_dir) / "today")
+        self.earlier_dir = str(Path(self.context.backup_dir) / "earlier")
+        self.other_dir = str(Path(self.context.backup_dir) / "other")
         
         # 创建目录
         os.makedirs(self.today_dir, exist_ok=True)
@@ -63,7 +69,7 @@ class LoadOrderManager:
         :return: [package_id, package_id, ...]
         """
         if not mods_config_file_path:
-            mods_config_file_path = self.mods_config_file
+            mods_config_file_path = self.context.mods_config_file
         if not mods_config_file_path or not os.path.exists(mods_config_file_path):
             logger.warning(f"ModsConfig.xml not found: {mods_config_file_path}")
             return {
@@ -95,16 +101,41 @@ class LoadOrderManager:
             'modify_time': modify_time
         }
 
-    def save_active_mods(self, active_ids, target_path=None, trigger_dialog=False):
+    def save_active_mods(self, active_ids, target_path=None, trigger_dialog=False, is_dirty=True, use_raw_ids=False):
         """
         保存加载顺序。
         :param active_ids: Mod ID 列表
         :param target_path: 指定保存路径（绝对路径）。如果不传，默认覆盖游戏配置。
         :param trigger_dialog: 是否触发系统弹窗让用户选择保存位置。
         """
-        # 1. 确定最终写入路径
-        write_path = self.mods_config_file
+        # 1. 建立 逻辑ID -> 原始ID 的映射表
+        from backend.database.models import ModAsset
+        # 一次性从数据库查询所有已安装 Mod 的 ID 映射
+        # 这里使用 package_id (小写) 作为键
+        id_map = {}
+        try:
+            # 使用 in_ 子句缩小查询范围
+            active_ids_lower = [pid.lower() for pid in active_ids]
+            query = ModAsset.select(ModAsset.package_id, ModAsset.package_id_raw).where(
+                ModAsset.package_id.in_(active_ids_lower) # type: ignore
+            )
+            for m in query:
+                if m.package_id_raw: id_map[m.package_id] = m.package_id_raw
+        except Exception as e:
+            logger.warning(f"保存时获取原始大小写包名失败(可能是数据库被锁): {e}")
+            # 就算查库失败，也不要阻断保存，直接使用前端传来的小写 ID 即可
+            pass
+        # 2. 准备最终要写入 XML 的 ID 列表
+        final_raw_ids = []
+        for pid in active_ids:
+            # 如果数据库里存了原始大小写，就用原始的；否则用现在的（兜底）
+            raw_id = id_map.get(pid.lower(), pid)
+            # 如果 use_raw_ids 为 True，直接使用原始 ID
+            if not use_raw_ids: raw_id = pid
+            final_raw_ids.append(raw_id)
         
+        # 1. 确定最终写入路径
+        write_path = self.context.mods_config_file
         if trigger_dialog:
             # 弹出对话框选择路径
             # 默认文件名带上时间戳或有意义的名字
@@ -132,18 +163,18 @@ class LoadOrderManager:
 
         if not write_path: raise Exception("未指定有效保存路径")
 
-        # 2. 只有在覆盖默认配置时，才需要自动备份旧文件
+        # 2. 只有在覆盖默认配置时并且 is_dirty 为 True 时，才需要自动备份旧文件
         # 如果是另存为，没必要备份目标文件（通常目标文件不存在）
-        if write_path == self.mods_config_file and os.path.exists(self.mods_config_file):
+        if write_path == self.context.mods_config_file and is_dirty:
             self._create_backup()
 
         # 3. 准备 XML 结构 (逻辑保持不变)
-        current_version = settings.config.game_version
+        current_version = self.context.game_version
         try:
             # 尝试保留原有的 knownExpansions 等信息
             parser = etree.XMLParser(remove_blank_text=True)
-            if os.path.exists(self.mods_config_file):
-                tree = etree.parse(self.mods_config_file, parser)
+            if os.path.exists(self.context.mods_config_file):
+                tree = etree.parse(self.context.mods_config_file, parser)
                 root = tree.getroot()
             else:
                 # 如果文件不存在，创建基本骨架
@@ -164,14 +195,14 @@ class LoadOrderManager:
             active_node.clear()
             
             # 写入新列表
-            for mod_id in active_ids:
+            for mod_id in final_raw_ids:
                 li = etree.SubElement(active_node, "li")
                 li.text = mod_id # 注意：写入时可能需要恢复原始大小写，但RimWorld通常不敏感
 
             # 4. 格式化写入
             tree.write(write_path, pretty_print=True, xml_declaration=True, encoding="utf-8")
             # 同步备份到 backup_root
-            tree.write(os.path.join(self.backup_root, f'Latest_ModsConfig_{settings.config.current_profile_id}.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
+            tree.write(os.path.join(self.backup_root, f'Latest_ModsConfig.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
             logger.info(f"成功保存 {len(active_ids)} 个模组到: {write_path}")
             return True
             
@@ -181,11 +212,14 @@ class LoadOrderManager:
 
     def _create_backup(self):
         """创建当前时刻的备份"""
+        if not self.context.mods_config_file or not os.path.exists(self.context.mods_config_file):
+            logger.warning("No ModsConfig.xml to backup.")
+            return
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"ModsConfig_{timestamp}.xml"
         dest = os.path.join(self.today_dir, filename)
         try:
-            shutil.copy2(self.mods_config_file, dest)
+            shutil.copy2(self.context.mods_config_file, dest)
         except Exception as e:
             logger.error(f"Backup failed: {e}")
 
@@ -267,6 +301,8 @@ class LoadOrderManager:
 
 
 if __name__ == "__main__":
-    mgr = LoadOrderManager()
-    a = mgr.read_active_mods(r"C:\Users\Administrator\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Saves\林亚.rws")
-    print(a)
+    # mgr = LoadOrderManager()
+    # a = mgr.read_active_mods(r"C:\Users\Administrator\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Saves\林亚.rws")
+    # print(a)
+    
+    pass

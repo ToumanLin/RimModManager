@@ -164,7 +164,7 @@ const loadFile = async (filename) => {
   selectedFile.value = filename
   try {
     const res = await window.pywebview.api.read_game_log(filename)
-    if (appS) {
+    if (res) {
       // 后端已经做好了去重和分块，直接使用
       logs.value = res.data.blocks.map(b => ({
         ...b,

@@ -128,6 +128,17 @@ class WorkshopDBManager:
                 "message": f"发现接力版本：推荐使用 {rule.new_name} 替代当前模组。"
             }
         return None
+    
+    def get_workshopdb_version(self):
+        """获取当前数据库版本"""
+        return SystemInfo.get_or_none(SystemInfo.key == 'steamdb_version').value
+    def get_insteaddb_version(self):
+        """获取替代方案数据库版本"""
+        return SystemInfo.get_or_none(SystemInfo.key == 'instead_version').value
+    
+    def get_replacements(self):
+        """获取替代方案"""
+        return ModReplacement.select().dicts()
 
     def get_missing_dependencies(self, workshop_id: str, local_installed_package_ids: set):
         """一键查找缺失的前置依赖"""

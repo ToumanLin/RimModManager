@@ -2,7 +2,7 @@
   <div class="flex flex-col relative h-full bg-bg-surface/40 backdrop-blur-sm shadow-2xl"
        :class="`border-2 rounded-2xl border-accent-${listColor}/20 overflow-hidden`">
     <!-- 标题栏 -->
-    <div :class="`px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-accent-${listColor}/10`">
+    <div :data-tour="listId=='active'?'list-header':null" :class="`px-3 h-8 border-b rounded-t-2xl border-text-main/5 flex justify-between items-center bg-accent-${listColor}/10`">
       <span :class="`text-sm font-bold text-accent-${listColor} uppercase tracking-wider flex items-center gap-1`">
         <div :class="`w-1.5 h-1.5 mr-1 rounded-full bg-accent-${listColor} shadow-lg shadow-accent-primary`"></div>
         <span class="mr-1">{{ title }}</span>
@@ -43,7 +43,7 @@
     </div>
     
     <!-- 工具栏 (搜索 & 筛选) -->
-    <div class="px-2 py-1 w-full flex flex-col gap-1 shadow-xl bg-bg-deep/20 z-50">
+    <div :data-tour="listId=='active'?'list-toolbar':null" class="px-2 py-1 w-full flex flex-col gap-1 shadow-xl bg-bg-deep/20 z-50">
       <div class="flex items-center justify-center gap-1 relative">
         <!-- 搜索定位 (Find) -->
         <TagsSearch :list-color="listColor" v-model="searchQuery" v-model:logic="searchLogic" ref="searchTagsRef"
@@ -121,7 +121,7 @@
 	      @click.self="modStore.clearSelection()">
       
       <!-- 左侧辅助功能区( @wheel.passive 监听滚轮事件) -->
-      <div v-if="hasSidebar && appStore.settings.ui.show_dependency_graph" class="w-[55px] h-full flex-none"
+      <div v-if="hasSidebar && appStore.settings.ui.show_dependency_graph" :data-tour="listId=='active'?'list-dependency':null" class="w-[55px] h-full flex-none"
         @wheel.passive="vListRef?.scrollToOffset(vListRef.getOffset()+$event.deltaY)">
         <DependencyGraph v-if="allowSort || filterByLine" 
           :listIds="lineData" :isFilter="filterByLine.length>0"
@@ -131,7 +131,7 @@
         />
       </div>
       <!-- 列表主体部分 -->
-      <div @click.self="modStore.clearSelection()" class="flex-1 h-full pl-1 pr-1 min-w-0 relative">
+      <div @click.self="modStore.clearSelection()" class="flex-1 h-full pl-1 pr-1 min-w-0 relative" :data-tour="listId=='active'?'list-modItem':null">
         <!-- 列表为空时的提示 -->
         <div v-show="modelValue.length === 0" class="absolute flex rounded-lg top-0 bottom-0 left-0 right-0 m-1 items-center justify-center border-2 border-dashed border-text-dim/60 text-gray-600 text-xs bg-bg-deep/90 select-none pointer-events-none">
             可拖拽模组到此
@@ -145,13 +145,17 @@
           :group="{ name: 'mods', pull:'clone', put: allowSort ? ['mods','groups']:false, revertDrag: true }" :animation="150" 
           :size="itemHeight"
           @drop="updateChildren" @drag="startDrag"
-          @keydown.up.prevent="handleKeyNav(-1)"
-          @keydown.down.prevent="handleKeyNav(1)"
           @click="focusContainer"
           v-selectable-list="{ 
             data: displayList, 
+            selectedIds: modStore.selectedIds, 
+            onSelect: (ids, anchor) => modStore.selectMods(ids, anchor),
+            onClear: () => modStore.clearSelection(),
+            enableKeyboardNav: true,
+            onNavigate: handleDirectiveNavigate,
             clickClass: 'select-trigger',
-            swipeClass: 'swipe-trigger'
+            swipeClass: 'swipe-trigger',
+            idAttribute: 'data-id'
           }">
           <template v-slot:item="{ record, index, dataKey }">
             <ModItem :item_id="dataKey" :index="index" :key="dataKey" :list-color="listColor" 
@@ -167,6 +171,30 @@
         </VirtualList>
 
         <div class="absolute bottom-2 right-2 flex items-center justify-end gap-2">
+          <!-- 一键订阅缺失的模组 -->
+          <div v-if="missingModIds.length > 0" @click.stop="appStore.subscribePackageIds(missingModIds)" 
+            v-tooltip="`[[一键订阅共计 ${missingModIds.length} 个缺失的模组]]\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+            class="px-1 py-1 group relative bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
+            <Flag />
+
+            <button @click.stop="appStore.downloadPackageIds(missingModIds)" 
+              v-tooltip="`##一键下载共计 ${missingModIds.length} 个缺失的模组##\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+              class="px-1 py-1 right-1/2 translate-x-1/2 absolute bottom-full mb-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all duration-200" >
+              <Download />
+            </button>
+          </div>
+          <!-- 一键订阅缺失的依赖项 -->
+          <div v-if="missingDependencies.length > 0" @click.stop="appStore.subscribePackageIds(missingDependencies)" 
+            v-tooltip="`[[一键订阅共计 ${missingDependencies.length} 个缺失的依赖项]]\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+            class="px-1 py-1 group relative bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all" >
+            <Flag />
+
+            <button @click.stop="appStore.downloadPackageIds(missingDependencies)" 
+              v-tooltip="`##一键下载共计 ${missingDependencies.length} 个缺失的依赖项##\n^^注意：部分创意工坊已经下架的模组将自动忽略！^^`"
+              class="px-1 py-1 right-1/2 translate-x-1/2 absolute bottom-full mb-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 bg-accent-danger/80 text-text-main/50 rounded-md hover:bg-accent-danger hover:text-text-main transition-all duration-200" >
+              <Download />
+            </button>
+          </div>
           <!-- 添加未启用的依赖项 -->
           <button v-if="inactiveDependenciesToAdd.length > 0" @click="addInactiveMods(inactiveDependenciesToAdd)" 
             v-tooltip="`^^一键添加共计 ${inactiveDependenciesToAdd.length} 个未启用的依赖项^^`"
@@ -206,8 +234,10 @@ import { ISSUE_TITLE_MAP, ISSUE_TYPE } from '../utils/constants';
 import ModItem from './utils/ModItem.vue';
 import TagsSearch from './common/TagsSearch/TagsSearch.vue';
 import DependencyGraph from './utils/DependencyGraph.vue'
-import { GitPullRequestCreate, Megaphone, MegaphoneOff, MessageSquarePlus, SearchAlert, Trash2 } from 'lucide-vue-next';
+import { Download, Flag, GitPullRequestCreate, Megaphone, MegaphoneOff, MessageSquarePlus, SearchAlert, Trash2 } from 'lucide-vue-next';
 import { useContextMenuStore } from '../stores/contextMenuStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useGuideStore } from '../stores/guideStore';
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
@@ -303,6 +333,18 @@ const searchHelpText = computed(() => {
   if (!engine.value) return 'Loading...';
   // 这里可以做一层缓存，避免每次 render 都生成字符串
   return generateHtmlHelp(engine.value);
+})
+
+// 提取缺失模组列表
+const missingModIds = computed(() => {
+  const missingModIdsByPath = modStore.getIssusTargetIds(props.modelValue, ISSUE_TYPE.ERROR_MISSING_FILE)
+  const missingModIdsByOrder = props.modelValue.filter(package_id => !modStore.allModsMap.has(package_id.toLowerCase()))
+  return [...missingModIdsByPath, ...missingModIdsByOrder]  
+})
+// 提取完全缺失的依赖项列表
+const missingDependencies = computed(() => {
+  if (!issuesSummary.value.stats[ISSUE_TYPE.ERROR_MISSING_DEPENDENCY]?.length) return []
+  return modStore.getIssusTargetIds(props.modelValue, ISSUE_TYPE.ERROR_MISSING_DEPENDENCY)
 })
 // 提取真正需要被添加的、去重后的依赖项列表
 const inactiveDependenciesToAdd = computed(() => {
@@ -658,6 +700,7 @@ const updateChildren = async (e) => {
   await nextTick()
   isSortAsc.value=!isSortAsc.value
 }
+
 // 添加缺失的依赖项
 const addInactiveMods = async (missingIds) => {
   if (missingIds.length === 0) return
@@ -812,6 +855,26 @@ const handleKeyNav = (direction) => {
   }
 }
 
+const handleDirectiveNavigate = (nextId, nextIndex, direction) => {
+  const vList = vListRef.value
+  if (vList) {
+    const currentOffset = vList.getOffset()
+    // 策略 A: 保持相对位置不变的无缝滚动（推荐，因为 itemHeight 计算精确）
+    vList.scrollToOffset(currentOffset + (direction * itemHeight.value))
+    // 如果你喜欢系统原生那种“到底部才滚动页面”的感觉，可以使用策略 B：
+    /*
+    const viewHeight = vList.$el.clientHeight
+    const itemTop = nextIndex * itemHeight.value
+    const itemBottom = itemTop + itemHeight.value
+    
+    if (itemTop < currentOffset) {
+      vList.scrollToOffset(itemTop)
+    } else if (itemBottom > currentOffset + viewHeight) {
+      vList.scrollToOffset(itemBottom - viewHeight)
+    }
+    */
+  }
+}
 
 // --- 记录滚动位置 ---
 // v-if 切换到 loading 时，该组件内部的 v-else 块会触发卸载
@@ -847,6 +910,7 @@ watch(() => appStore.isLoading, async (loading) => {
     // 加载完成：等待 DOM 渲染
     await nextTick();
     restorePosition();
+    const guideStore = useGuideStore();
   }
 });
 const restorePosition = () => {

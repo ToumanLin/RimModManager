@@ -19,10 +19,12 @@ export const useAppStore = defineStore('app', () => {
   const appVersion = ref('')     // 应用版本号
   const buildMode = ref('')      // 构建模式
   const isLoading = ref(false)   // 加载状态
+  const isGameRunning = ref(false) // 新增：全局游戏运行状态
   
   // UI 状态
   const uiState = reactive({
     showSettingsPanel: false,    // 是否显示设置面板
+    showUpdateModal: false,      // 是否显示更新弹窗
     showDiffDrawer: false,       // 是否显示差异抽屉
     showLogDrawer: false,        // 是否显示日志抽屉
     showTestDrawer: false,       // 是否显示测试抽屉
@@ -64,12 +66,23 @@ export const useAppStore = defineStore('app', () => {
   })
   const aiBatchResults = ref([]) // 存储实时返回的 AI 数据
 
+  const upgradeContext = ref({}); // 升级上下文
+
   const taskPool = reactive(new Map());
   // 下载任务
   const downloadTasks = ref(new Map()) // 使用 Map 存储 {id: taskObject}
   // 存储任务回调的 Map
   // Key: task_id, Value: { resolve, reject, timeout }
   const downloadCallbacks = new Map()
+
+  // 定义侧边栏标签配置 (ID 与 标题绑定)
+  const SIDEBAR_TABS = [
+    { id: 'temp', title: '临时' },
+    { id: 'group', title: '分组' },
+    { id: 'backup', title: '备份' }
+  ]
+  // 响应式状态：当前选中的标签 ID
+  const activeSidebarTab = ref('temp')
 
   // 定义默认布局配置
   const DEFAULT_DETAILS_LAYOUT = [
@@ -104,24 +117,12 @@ export const useAppStore = defineStore('app', () => {
   // 全局设置
   const settings = ref({
     // --- 路径 (Paths) ---
-    game_install_path: '',
-    user_data_path: '',
-    game_saves_path: '',
-    game_config_path: '',
-    game_dlc_path: '',
-    local_mods_path: '',
-
-    workshop_mods_path: '',
-    use_workshop_mods: true,
-
-    run_commands: [],
+    home_path: '',
     steam_path: '',
     prefer_steam_launch: true,           // 是否优先通过 Steam 启动游戏
-
-    home_path: '',
     steamcmd_mods_path: '',
+    workshop_mods_path: '',
     self_mods_path: '',
-    use_self_mods: true,
     move_old_self_mods: false,
 
     user_rules_path: '',
@@ -132,13 +133,14 @@ export const useAppStore = defineStore('app', () => {
     community_instead_db_url: '',
     community_instead_db_path: '',
     
-    game_version: '',
     current_profile_id: 'default',
+    asset_port: 0,
 
     // --- 系统 ---
     language: 'ZH-cn',
     window_width: 1400,
     window_height: 900,
+    completed_guides: [],
     open_url_on_system: false,
 
     // --- 界面（UI） ---
@@ -146,6 +148,7 @@ export const useAppStore = defineStore('app', () => {
       theme: 'system',
       font_size: 14,
       drag_delay: 30,            // 拖动判定延迟 (毫秒)
+      detail_delay: 300,          // 详情页加载延迟 (毫秒)
       tooltip_hover_time: 1000,  // 鼠标悬停显示提示时间 (毫秒)
       show_mod_hover_panel: true,  // 是否显示 Mod 悬停面板
       double_click_active_mod: true,  // 是否双击启用/停用 Mod
@@ -164,7 +167,6 @@ export const useAppStore = defineStore('app', () => {
       show_group_icon: true,  // 是否显示分组图标
 
     },
-
 
     // --- 网络 (Network) - 深度嵌套 ---
     network: {
@@ -206,6 +208,7 @@ export const useAppStore = defineStore('app', () => {
     coexist_mod_folder_name_type: "workshop_id", // 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: true,       // 是否显示共存Mod提示
     check_language_support: true,        // 是否检查语言支持
+    use_raw_ids: false,               // 是否使用原始 Mod ID
 
     // --- 调试 (Debug) ---
     debug_mode: true,
@@ -283,12 +286,27 @@ export const useAppStore = defineStore('app', () => {
       // 注册事件监听
       setupEventListeners()
 
-      // 先获取 Profile 列表和当前 ID
-      const profileStore = useProfileStore()
-      await profileStore.fetchProfiles()
-
       // 获取初始数据 (这里包含 settings, version 等)
       await refreshData(true)
+      let scanForce = false
+      // 只有当版本真的发生过变动，且有待处理任务时才触发
+      if (upgradeContext.value.version_changed) {
+          console.log("检测到版本升级:", upgradeContext.value.old_version, "->", upgradeContext.value.new_version);
+          
+          // 1. 处理展示更新日志弹窗
+          if (upgradeContext.value.pending_actions.includes('show_update_news')) {
+            // handleUpdate(upgradeContext.value.changelog);
+          }
+          // 2. 强制刷新数据
+          if (upgradeContext.value.pending_actions.includes('recommend_scan')) {
+            scanForce = true
+          }
+          // 3. 处理静默通知 (Toast 告知用户后端干了什么)
+          if (upgradeContext.value.actions_taken.length > 0) {
+            toast.info(`升级完成: ${upgradeContext.value.actions_taken.join(', ')}`);
+          }
+      }
+      const profileStore = useProfileStore()
       // 同步当前 Profile ID 到 profileStore
       if (settings.value.current_profile_id) {
         profileStore.currentProfileId = settings.value.current_profile_id
@@ -306,11 +324,11 @@ export const useAppStore = defineStore('app', () => {
         }
       }
       // 界面渲染完毕后，根据设置决定是否启动后台扫描
-      if (settings.value.enable_auto_scan !== false && settings.value.game_install_path) {
+      if (settings.value.enable_auto_scan !== false) {
         console.log("自动扫描开始...")
         toast.info("自动扫描开始...", {timeout: 1000})
         const modStore = useModStore()
-        modStore.scanMods()
+        modStore.scanMods(null, scanForce)
       }
       // 检查 Steam 工具
       checkSteamTools()
@@ -333,12 +351,30 @@ export const useAppStore = defineStore('app', () => {
         // 覆盖更新 Settings，以后端属性为主 (仅初始化时，避免覆盖用户未保存的修改)
         if (isInit && res.data.settings) {
           settings.value = res.data.settings
+          settings.value.asset_port = res.data.asset_port || 0
+          upgradeContext.value = res.data.upgrade_context;
         }else{
           Object.assign(settings.value, res.data.settings)
         }
-        // console.log('allmods', res.data.is_first_db_init , res.data.paths_configured , !res.data.all_mods||res.data.all_mods?.length==0)
-        if (res.data.is_first_db_init && res.data.paths_configured && (!res.data.all_mods||res.data.all_mods?.length==0)) {
+        // console.log('allmods', res.data.is_first_db_init , res.data.context_healthy , !res.data.all_mods||res.data.all_mods?.length==0)
+        if (res.data.is_first_db_init && res.data.context_healthy && (!res.data.all_mods||res.data.all_mods?.length==0)) {
           toast.warning("数据库正在进行首次初始化，此过程可能需要您等待一段时间，请您耐心等候。",{position: "top-center",timeout: 10000})
+        }
+        // 更新软件信息
+        appVersion.value = res.data.app_version || 'Unknown'  // 版本
+        buildMode.value = res.data.build_mode || ''           // 构建模式
+        const profileStore = useProfileStore()
+        profileStore.fetchProfiles()
+        if (res.data.active_context) {
+          profileStore.activeContext = res.data.active_context
+          // 触发健康哨兵拦截 (阻止初始化继续)
+          // 检查路径 (主要路径无效则打开设置)
+          if (!profileStore.activeContext.is_healthy) {
+            toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
+            uiState.showSettingsPanel = true
+            // profileStore.checkHealthSentinel()
+            return // 提早退出，不加载 Mod 列表
+          }
         }
         // 更新 Groups (防止分组内的 Mod 被删了但分组里还有 ID)
         const groupStore = useGroupStore()
@@ -346,20 +382,14 @@ export const useAppStore = defineStore('app', () => {
         // 更新 Active列表 (防止外部修改 Active列表 导致的状态不一致)
         const modStore = useModStore()
         modStore.setMods(res.data)
-        // 更新软件信息
-        appVersion.value = res.data.app_version || 'Unknown'  // 版本
-        buildMode.value = res.data.build_mode || ''           // 构建模式
-        // 检查路径 (主要路径无效则打开设置)
-        if (!res.data.paths_configured) {
-          toast.warning("未配置游戏路径，请先配置游戏路径。",{position: "top-center",timeout: 5000})
-          uiState.showSettingsPanel = true
-        }
+        // 刷新动态规则
+        const ruleStore = useRuleStore()
+        ruleStore.fetchRules()
+        const workspaceStore = useWorkspaceStore()
+        workspaceStore.initData()
+        const orderStore = useOrderStore()
+        orderStore.getBackups()
       }
-      // 刷新动态规则
-      const ruleStore = useRuleStore()
-      ruleStore.fetchRules()
-      const workspaceStore = useWorkspaceStore()
-      await workspaceStore.initData()
     } catch (e) {
       toast.error(`刷新数据失败: \n${e.message}`)
     } finally {
@@ -509,6 +539,11 @@ export const useAppStore = defineStore('app', () => {
       if (scanProgress.scanning) scanProgress.scanning = false;
       // 3. 可以在这里做最后的自动保存
     });
+    // 监听游戏状态变化
+    window.addEventListener('game-status-changed', (e) => {
+      isGameRunning.value = e.detail.running
+    })
+    // 通用进度更新
     window.addEventListener('global-progress', (e) => {
       const task = e.detail;
       taskPool.set(task.id, task);
@@ -553,18 +588,21 @@ export const useAppStore = defineStore('app', () => {
     try {
       const res = await window.pywebview.api.save_all_settings(newSettings)
       if (checkResult(res, "应用设置")) {
+        const profileStore = useProfileStore()
         // 更新本地 store
-        Object.assign(settings.value, newSettings)
+        Object.assign(settings.value, res.data.settings)
+        profileStore.activeContext = res.data.active_context
+
         // 如果路径变了，可能需要重新扫描
         closeSettingsPanel()
-        // 如果启用了自动扫描且路径有变化，触发扫描
-        if (newSettings.game_install_path && settings.value.enable_auto_scan) {
-          // const modStore = useModStore()
-          // modStore.scanMods()
-          await initialize()
-        }else{
+
+        if (settings.value.enable_auto_scan && profileStore.activeContext.is_healthy) {
+          const modStore = useModStore()
+          await modStore.scanMods(null, false)
+        } else{
           await refreshData()
         }
+        // await initialize()
       }
     } catch (e) {
       console.error("应用设置异常:", e)
@@ -617,46 +655,48 @@ export const useAppStore = defineStore('app', () => {
   const getScroll = (listId) => {
     return scrollRegistry.value.get(listId) || 0;
   };
-  
+  // 设置侧边栏选中标签
+  const setSidebarTab = (tabId) => {
+    if (SIDEBAR_TABS.some(t => t.id === tabId)) {
+      activeSidebarTab.value = tabId
+    }
+  }
   // === 系统操作 ===
   // 启动游戏
   const launchGame = async (profile_id=null) => {
     const orderStore = useOrderStore()
     const res = await orderStore.saveLoadOrder()
     if (!res) return
-    // if(settings.value.prefer_steam_launch && (!profile_id || profile_id === 'default') && settings.value.game_install_path?.includes("SteamLibrary\\steamapps\\common")){
-    //   // 通过 steam 启动游戏
-    //   window.open("steam://run/294100", '_blank')
-    //   // window.open("steam://rungameid/294100", '_blank')
-    //   toast.success("正在通过 steam 启动游戏……")
-    //   console.log("通过 steam 启动游戏")
-    // }else 
-    if(profile_id || settings.value.game_install_path){
-      if (!window.pywebview) return
-      // 直接启动游戏
-      const res = await window.pywebview.api.game_launch(profile_id)
-      if (checkResult(res, "直接启动游戏程序")) {
-        toast.success("直接启动游戏程序成功！")
-      } else {
-        console.error("直接启动游戏程序异常:", res.message)
-        toast.error(`直接启动游戏程序异常: \n${res.message}`)
-      }
+    if (!window.pywebview) return
+    // 直接启动游戏
+    const gameRes = await window.pywebview.api.game_launch(profile_id)
+    if (checkResult(gameRes, "启动游戏程序")) {
+      toast.success(gameRes.message)
     }
-    else{
-      console.error("启动游戏异常:")
-      toast.error(`启动游戏出现异常！`)
+  }
+  // 触发睡眠 API
+  const enterSleepMode = () => {
+    if (window.pywebview) {
+      window.pywebview.api.monitor_force_sleep()
     }
   }
   // 自动检测路径
   const autoDetectPaths = async (updateStore=true) => {
     if(!window.pywebview) return
     const res = await window.pywebview.api.auto_detect_paths(false)
-    if (checkResult(res, "自动检测路径") && res.data.paths) {
+    if (checkResult(res, "自动检测路径",true) && res.data.paths) {
        // 更新本地 setting store
       if(updateStore) {
         Object.assign(settings.value, res.data.paths)
         toast.success("路径已更新")
       }
+      return res.data.paths
+    }
+  }
+  const getDefaultCommunityPaths = async () => {
+    if(!window.pywebview) return
+    const res = await window.pywebview.api.get_default_community_paths()
+    if (checkResult(res, "获取默认社区路径",true) && res.data.paths) {
       return res.data.paths
     }
   }
@@ -707,7 +747,7 @@ export const useAppStore = defineStore('app', () => {
     }
   }
   // 删除文件/文件夹
-  const deletePath = async (path) => {
+  const deletePath = async (path, reScan=true) => {
     if(!window.pywebview) return
     const confirmStore = useConfirmStore()
     const confirm = await confirmStore.confirmAction(
@@ -718,9 +758,11 @@ export const useAppStore = defineStore('app', () => {
     const res = await window.pywebview.api.path_delete(path)
     if (checkResult(res, "删除文件/文件夹")) {
       toast.success(`已删除: \n${path}`)
-      // 刷新Mod列表
-      const modStore = useModStore()
-      modStore.scanMods()
+      if(reScan){
+        // 刷新Mod列表
+        const modStore = useModStore()
+        modStore.scanMods()
+      }
       return true
     }
   }
@@ -807,6 +849,32 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  
+  // 比如在 get_initial_data 中返回：asset_server_port: 54321
+  const getAssetBaseUrl = () => `http://127.0.0.1:${settings.value.asset_port}`
+
+  // 生成列表缩略图 URL
+  const getThumbUrl = (packageId, rawPath) => {
+    if (!rawPath) return ''
+    const safePath = encodeURIComponent(rawPath)
+    return `${getAssetBaseUrl()}/thumb?id=${packageId}&path=${safePath}`
+  }
+
+  // 生成详情页本地大图 URL
+  const getLocalUrl = (rawPath) => {
+    if (!rawPath) return ''
+    const safePath = encodeURIComponent(rawPath)
+
+    return `${getAssetBaseUrl()}/local?path=${safePath}`
+  }
+  
+  // 生成网络代理图 URL (如 Steam 截图)
+  const getRemoteUrl = (remoteUrl) => {
+    if (!remoteUrl) return ''
+    const safeUrl = encodeURIComponent(remoteUrl)
+    return `${getAssetBaseUrl()}/remote?url=${safeUrl}`
+  }
+
   // === Steam客户端交互 ===
   // 检查Steam工具
   const checkSteamTools = async () => {
@@ -831,27 +899,97 @@ export const useAppStore = defineStore('app', () => {
       window.open(steamUrl, '_blank')
     }
   }
+  // 根据包名下载Mod
+  const downloadPackageIds = async (packageIds) => {
+    if (!packageIds) return false
+    const workshopStore = useWorkspaceStore()
+    const workshopIdsMap = await workshopStore.getWorkshopIdsByPackageIdsMap(packageIds)
+    if (!workshopIdsMap) return false
+    // {zetrith.prepatcher: '2934420800'}
+    const workshopIds = Object.values(workshopIdsMap)
+    // 调用下载函数
+    await downloadWorkshopItems(workshopIds)
+    return true
+  }
+  // 根据包名订阅Mod
+  const subscribePackageIds = async (packageIds) => {
+    if (!packageIds) return false
+    const workshopStore = useWorkspaceStore()
+    const workshopIdsMap = await workshopStore.getWorkshopIdsByPackageIdsMap(packageIds)
+    if (!workshopIdsMap) return false
+    const workshopIds = Object.values(workshopIdsMap)
+    // 调用订阅函数
+    await subscribeMod(workshopIds)
+    return true
+  }
   // 订阅模组
   const subscribeMod = async (workshop_ids) => {
     if (!window.pywebview) return
-    if(!workshop_ids) return
+    if (!workshop_ids || workshop_ids.length === 0) return
     const res = await window.pywebview.api.steam_subscribe(workshop_ids)
     if (checkResult(res, `订阅 ${workshop_ids.length} 个创意工坊项目`)) {
       toast.success(`订阅 ${workshop_ids.length} 个创意工坊项目成功，正在下载中...`)
+      return true
+    }
+    else if (res.data && res.data.action === "need_start_steam") {
+      const confirmStore = (await import('./confirmStore')).useConfirmStore()
+      const ok = await confirmStore.confirmAction(
+        'Steam 未运行', 
+        '调用官方 API 订阅模组需要启动 Steam 客户端。\n是否现在启动 Steam？', 
+        { type: 'warning', confirmText: '立即启动 Steam' }
+      )
+      if (ok) {
+        const launchRes = await window.pywebview.api.steam_launch_client()
+        if (checkResult(launchRes, "启动 Steam 客户端")) {
+          // 因为 Steam 启动并登录账号通常需要 10-30 秒，建议提示用户等待后再操作
+          toast.info("Steam 正在启动...\n请在登录完毕后，再次点击订阅按钮！", { timeout: 8000 })
+        } else {
+          toast.error(launchRes.message)
+        }
+      }
+      return false
+    } 
+    // 其它常规报错
+    else {
+      toast.error(`订阅失败: ${res.message}`)
+      return false
     }
   }
   // 取消订阅模组
   const unsubscribeMod = async (workshop_ids) => {
     if (!window.pywebview) return false
-    if(!workshop_ids) return false
+    if (!workshop_ids || workshop_ids.length === 0) return
     // const modStore = useModStore()
     // const workshop_ids = modStore.takeModListByIds(mod_ids).filter(m => m.workshop_id).map(m => m.workshop_id)
     const res = await window.pywebview.api.steam_unsubscribe(workshop_ids)
     if (checkResult(res, `取消订阅 ${workshop_ids.length} 个创意工坊项目`,true)) {
       // if(delete_file) workshop_ids.forEach(id => deletePath(modStore.takeModById(id).path))
+      toast.success(`已发送取消订阅请求`)
       return true
     }
-    return false
+    else if (res.data && res.data.action === "need_start_steam") {
+      const confirmStore = (await import('./confirmStore')).useConfirmStore()
+      const ok = await confirmStore.confirmAction(
+        'Steam 未运行', 
+        '调用官方 API 取消订阅需要启动 Steam 客户端。\n是否现在启动 Steam？', 
+        { type: 'warning', confirmText: '立即启动 Steam' }
+      )
+      
+      if (ok) {
+        const launchRes = await window.pywebview.api.steam_launch_client()
+        if (launchRes.status === 'success') {
+          toast.info("Steam 正在启动...\n请在登录完毕后，再次执行取消订阅操作！", { timeout: 8000 })
+        } else {
+          toast.error(launchRes.message)
+        }
+      }
+      return false
+    } 
+    // 其它常规报错
+    else {
+      toast.error(`取消订阅失败: ${res.message}`)
+      return false
+    }
   }
   // 获取订阅合集列表
   const getCollectionItems = async (collection_id) => {
@@ -894,6 +1032,9 @@ export const useAppStore = defineStore('app', () => {
   // 获取AI模型 temp_config: {provider, base_url, api_key}
   const getAiModels = async (temp_config) => {
     if (!window.pywebview) return
+    if (!settings.value.ai.enabled || !temp_config || !temp_config.provider) {
+      return
+    }
     const res = await window.pywebview.api.ai_get_models(temp_config)
     if (checkResult(res, "获取AI模型")) {
       aiState.isLoading = false
@@ -1027,6 +1168,24 @@ export const useAppStore = defineStore('app', () => {
       updateState.isChecking = false
     }
   }
+  const showChangelog = async () => {
+    // 1. 如果当前没有日志数据（比如是从设置面板点进来的），主动从后端拉取
+    if (!upgradeContext.value.changelog || upgradeContext.value.changelog.length === 0) {
+      isLoading.value = true // 开启加载动画
+      try {
+        const res = await window.pywebview.api.get_changelog()
+        if (res.status === 'success') {
+          upgradeContext.value.changelog = res.data
+        }
+      } catch (e) {
+          console.error("无法获取更新日志:", e)
+      } finally {
+          isLoading.value = false
+      }
+    }
+    // 2. 显示弹窗
+    uiState.showUpdateModal = true
+  }
   const _showInstallPrompt = async (data) => {
     const confirmStore = useConfirmStore()
     const ok = await confirmStore.confirmAction(
@@ -1073,7 +1232,7 @@ export const useAppStore = defineStore('app', () => {
         const task_id = res.data.task_id
         const filePath = await waitForDownload(task_id)
         // 重新获取数据
-        // await fetchRules() 
+        await refreshData() 
       }
     } catch (error) {
       toast.error("更新社区库失败: " + error.message)
@@ -1081,13 +1240,15 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, updateState, 
-    aiState, aiBatchResults, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS,
-    initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll,
+    appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, updateState,
+    aiState, aiBatchResults, DEFAULT_DETAILS_LAYOUT, DETAILS_LAYOUT_MAPS, DEFAULT_MAIN_LAYOUT, MAIN_LAYOUT_MAPS, SIDEBAR_TABS, activeSidebarTab, isGameRunning, upgradeContext,
+    initialize, checkResult, refreshData, toggleUiState, scalePx, performDatabaseCleanup, recordScroll, getScroll, enterSleepMode,
+    getThumbUrl, getLocalUrl, getRemoteUrl,
     // 游戏相关
-    checkPath, checkPaths, launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
-    startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems,
-    saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase,
+    checkPath, checkPaths, launchGame, autoDetectPaths, getDefaultCommunityPaths, openPath, getFilePath, getFolderPath, deletePath, deletePaths, openUrl, 
+    startDownload, waitForDownload, downloadWorkshopItems, getCollectionItems, downloadPackageIds, subscribePackageIds,
+    saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, showChangelog, setSidebarTab,
+    
     checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod, checkUpdate, updateExternalDB,
     // AI处理
     getAiConfig, saveAIConfig, getAiProviders, getAiModels, useAI, chatWithAI, startAiBatchTask, 

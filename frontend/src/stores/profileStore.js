@@ -17,6 +17,28 @@ export const useProfileStore = defineStore('profile', () => {
   const orphanedProfiles = ref([]) // 磁盘上存在但数据库没记录的配置
   const isLoading = ref(false)   // 环境列表加载状态
 
+  // 当前激活的严格上下文 (Active Context)
+  const activeContext = ref({
+    profile_id: '',
+    game_install_path: '',
+    user_data_path: '',
+    game_version: '',
+    use_workshop_mods: false,
+    use_self_mods: false,
+    run_commands: [],
+
+    local_mods_path: '',
+    game_dlc_path: '',
+    game_config_path: '',
+    game_saves_path: '',
+    mods_config_file: '',
+    backup_dir: '',
+    
+    // 健康哨兵状态
+    is_healthy: true,
+    health_report: {}
+  })
+
   // === Getters ===
   const currentProfile = computed(() => 
     profiles.value.find(p => p.id === currentProfileId.value) || null
@@ -116,7 +138,7 @@ export const useProfileStore = defineStore('profile', () => {
   }
 
   return {
-    profiles, currentProfileId, orphanedProfiles, currentProfile, isLoading,
+    profiles, currentProfileId, orphanedProfiles, currentProfile, isLoading, activeContext,
     fetchProfiles, createProfile, switchProfile, updateProfile, deleteProfile,
     scanOrphans, importOrphan
   }

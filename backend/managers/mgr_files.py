@@ -11,9 +11,10 @@ import platform
 import time
 from typing import Any, Dict, List
 from urllib.parse import unquote, quote
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image
 import requests
+import urllib.parse
 import webview # 引入 webview 库
 from send2trash import send2trash
 from backend.managers.mgr_game import GameManager
@@ -24,111 +25,115 @@ from backend.utils.logger import logger
 
 class LocalAssetHandler(SimpleHTTPRequestHandler):
     """
-    内部类：HTTP 请求处理器
-    拦截 /image?path=... 请求并返回文件流
+    统一动态资源处理器：
+    1. /local?path=...  -> 读取本地原图
+    2. /thumb?id=...&path=... -> 动态生成并返回缩略图
+    3. /remote?url=... -> 代理下载缓存网络图片
     """
+    
     def do_GET(self):
-        # 只处理 /image 路径
-        if self.path.startswith('/image?path='):
-            try:
-                # 1. 解析参数
-                query_part = self.path.split('path=', 1)[1]
-                local_path = unquote(query_part) # 解码 URL
-                # 2. 安全与存在性检查
-                if os.path.exists(local_path) and os.path.isfile(local_path):
-                    self.send_response(200)
-                    # 3. 设置 MIME 类型
-                    ext = os.path.splitext(local_path)[1].lower()
-                    ctype = 'application/octet-stream'
-                    if ext == '.png': ctype = 'image/png'
-                    elif ext in ['.jpg', '.jpeg']: ctype = 'image/jpeg'
-                    elif ext == '.webp': ctype = 'image/webp'
-                    elif ext == '.gif': ctype = 'image/gif'
-                    self.send_header('Content-type', ctype)
-                    self.send_header('Access-Control-Allow-Origin', '*') # 允许跨域
-                    self.send_header('Cache-Control', 'max-age=604800') # 强缓存7天(本地文件很少变)
-                    self.end_headers()
-                    # 4. 写入文件流 (零拷贝传输)
-                    with open(local_path, 'rb') as f:
-                        # shutil.copyfileobj(f, self.wfile) # 这种方式更高效
-                        self.wfile.write(f.read())
-                    return
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            # --- 路由 1：获取本地原图 ---
+            if parsed.path == '/local':
+                local_path = urllib.parse.unquote(qs.get('path', [''])[0])
+                if os.path.isfile(local_path):
+                    self._serve_local_file(local_path)
                 else:
                     self.send_error(404, "File not found")
+                return
+            # --- 路由 2：动态生成缩略图 (核心重构) ---
+            elif parsed.path == '/thumb':
+                pkg_id = qs.get('id', [''])[0]
+                src_path = urllib.parse.unquote(qs.get('path', [''])[0])
+                if not pkg_id or not os.path.isfile(src_path):
+                    self.send_error(404, "Source not found")
                     return
-            # 忽略连接中断错误 ---
-            except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
-                # 客户端断开了连接（通常是列表快速滚动导致的），无需处理，直接返回
+                target_path = os.path.join(THUMBNAIL_CACHE_DIR, f"{pkg_id}.webp")
+                # 检查缓存是否有效
+                need_generate = True
+                if os.path.exists(target_path):
+                    if os.path.getmtime(src_path) <= os.path.getmtime(target_path):
+                        need_generate = False
+                # 即时生成
+                if need_generate:
+                    try:
+                        with Image.open(src_path) as img:
+                            if img.mode not in ('RGB', 'RGBA'):
+                                img = img.convert('RGBA')
+                            img.thumbnail((64, 64), Image.Resampling.LANCZOS)
+                            img.save(target_path, 'WEBP', quality=80)
+                    except Exception as e:
+                        logger.warning(f"Thumbnail gen failed for {pkg_id}, serving original. Error: {e}")
+                        self._serve_local_file(src_path) # 生成失败，直接降级返回原图
+                        return
+                self._serve_local_file(target_path)
                 return
-            except Exception as e:
-                # 在控制台打印详细中文错误方便调试
-                logger.error(f"Asset Server Error ({local_path if 'local_path' in locals() else 'unknown'}): {e}")
-                # 发送给客户端的必须是 ASCII 字符，不要发送 str(e) 因为可能包含中文
-                try:
-                    self.send_error(500, "Internal Server Error")
-                except:
-                    pass # 如果发送错误信息时连接也断了，就彻底忽略
-                return
-        
-        # 处理 /gallery 请求
-        # 格式: /gallery?wid=123&url=https://...
-        if self.path.startswith('/gallery?'):
-            try:
-                # 1. 解析参数
-                from urllib.parse import urlparse, parse_qs
-                query = parse_qs(urlparse(self.path).query)
-                wid = query.get('wid', ['unknown'])[0]
-                remote_url = query.get('url', [None])[0]
+            # --- 路由 3：代理缓存网络图片 (完美降级) ---
+            elif parsed.path == '/remote':
+                remote_url = urllib.parse.unquote(qs.get('url', [''])[0])
                 if not remote_url:
                     self.send_error(400, "Missing URL")
                     return
-                # 2. 生成本地缓存路径
-                # 按照 workshop_id 分文件夹，文件名使用 URL 的 MD5 以防冲突
+                # MD5 生成缓存文件名
                 url_hash = hashlib.md5(remote_url.encode('utf-8')).hexdigest()
-                save_dir = GALLERY_CACHE_DIR / wid
-                save_dir.mkdir(parents=True, exist_ok=True)
-                # 简单判断后缀，默认为 jpg
-                ext = ".jpg"
-                if ".png" in remote_url.lower(): ext = ".png"
-                local_path = save_dir / f"{url_hash}{ext}"
-                # 3. 检查缓存：如果没有则下载
-                if not local_path.exists():
-                    logger.debug(f"Downloading gallery image to cache: {local_path}")
-                    resp = requests.get(remote_url, timeout=15)
-                    if resp.status_code == 200:
-                        with open(local_path, 'wb') as f:
-                            f.write(resp.content)
-                    else:
-                        self.send_error(404, "Remote image not found")
+                ext = ".png" if ".png" in remote_url.lower() else ".jpg"
+                cache_path = os.path.join(GALLERY_CACHE_DIR, f"{url_hash}{ext}")
+                # 如果没有缓存，则尝试下载
+                if not os.path.exists(cache_path):
+                    try:
+                        # 加上超时限制，避免阻塞线程
+                        resp = requests.get(remote_url, timeout=5)
+                        if resp.status_code == 200:
+                            # 写入缓存
+                            with open(cache_path, 'wb') as f:
+                                f.write(resp.content)
+                        else:
+                            self._fallback_to_browser(remote_url)
+                            return
+                    except Exception as e:
+                        logger.debug(f"Proxy download failed, fallback to original URL: {e}")
+                        self._fallback_to_browser(remote_url)
                         return
-                # 4. 复用已有的文件发送逻辑
-                self._serve_file(str(local_path))
+                self._serve_local_file(cache_path)
+                return
+            else:
+                self.send_error(404, "Invalid route")
                 
-            except Exception as e:
-                logger.error(f"Gallery Proxy Error: {e}")
-                self.send_error(500)
-            return
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            pass # 忽略前端快速滚动取消请求的错误
+        except Exception as e:
+            logger.error(f"Asset Handler Error: {e}")
+            try: self.send_error(500)
+            except: pass
 
-        self.send_error(404)
+    def _fallback_to_browser(self, original_url):
+        """【神级降级】：告诉浏览器我下载失败了，你自己去直接请求原网址吧"""
+        self.send_response(302) # Found / Redirect
+        self.send_header('Location', original_url)
+        self.end_headers()
 
-    def log_message(self, format, *args):
-        # 重写此方法以屏蔽控制台日志输出，保持清爽
-        pass
-    
-    def _serve_file(self, local_path):
-        """通用文件发送逻辑（抽取自原 do_GET）"""
-        ext = os.path.splitext(local_path)[1].lower()
-        ctype = 'image/jpeg'
+    def _serve_local_file(self, file_path):
+        """发送本地文件流并设置强缓存"""
+        ext = os.path.splitext(file_path)[1].lower()
+        ctype = 'application/octet-stream'
         if ext == '.png': ctype = 'image/png'
+        elif ext in ['.jpg', '.jpeg']: ctype = 'image/jpeg'
         elif ext == '.webp': ctype = 'image/webp'
+        elif ext == '.gif': ctype = 'image/gif'
         
         self.send_response(200)
         self.send_header('Content-type', ctype)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Cache-Control', 'max-age=2592000') # 缓存 30 天
+        self.send_header('Cache-Control', 'max-age=2592000') # 让浏览器缓存 30 天
         self.end_headers()
-        with open(local_path, 'rb') as f:
+        
+        with open(file_path, 'rb') as f:
             self.wfile.write(f.read())
+
+    def log_message(self, format, *args):
+        pass # 屏蔽控制台刷屏
 
 
 
@@ -164,7 +169,8 @@ class FileManager:
         """在后台线程启动极简 HTTP 服务器"""
         try:
             # 端口设为 0，让 OS 自动分配空闲端口
-            server = HTTPServer(('127.0.0.1', 0), LocalAssetHandler)
+            # server = HTTPServer(('127.0.0.1', 0), LocalAssetHandler)
+            server = ThreadingHTTPServer(('127.0.0.1', 0), LocalAssetHandler)   # 使用多线程服务器，避免阻塞主线程
             self._port = server.server_address[1]
             
             self._server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -173,6 +179,10 @@ class FileManager:
         except Exception as e:
             logger.error(f"File Manager: Failed to start asset server: {e}")
 
+    def get_port(self):
+        """返回当前 HTTP 服务器端口"""
+        return self._port
+    
     def get_asset_url(self, local_path):
         """
         将本地绝对路径转换为前端可访问的 HTTP URL
@@ -582,14 +592,13 @@ class FileManager:
         """判断链接是否有效且指向正确"""
         try:
             # lexists 用于检测路径是否存在（包括断头链接）
-            if not os.path.lexists(link_path): 
-                return False
+            if not os.path.lexists(link_path): return False
             # samefile 会抛出异常如果路径不存在，所以这里必须配合 try
             # 它能跨越斜杠差异和大小写差异判断物理底层是否一致
             return os.path.samefile(link_path, expected_src)
         except:
             return False
-
+    
     @staticmethod
     def _remove_entries_windows_batch(paths: list):
         """
@@ -677,24 +686,26 @@ class FileManager:
             with os.scandir(local_mods_path) as it:
                 for entry in it:
                     if not entry.name.startswith(FileManager.LINK_PREFIX): continue
-                    
-                    name_lower = entry.name.lower()
-                    # 判定 A: 在目标清单中？
-                    if name_lower not in target_map.keys():
-                        # 指向错误、或者是多余的链接，加入删除队列
-                        to_delete_paths.append(entry.path)
-                        continue
-                    # 判定 B: 链接指向是否正确？(使用无 IO 开销的 readlink)
-                    expected_src = target_map.get(name_lower, {}).get('src_path')
-                    if not expected_src:
-                        # 目标清单中不存在此链接，加入删除队列
-                        to_delete_paths.append(entry.path)
-                        continue
-                    if not FileManager._is_link_correct(entry.path, expected_src):
-                        to_delete_paths.append(entry.path)
-                        continue
+                    to_delete_paths.append(entry.path)
+                    continue
+                
+                    # name_lower = entry.name.lower()
+                    # # 判定 A: 在目标清单中？
+                    # if name_lower not in target_map.keys():
+                    #     # 指向错误、或者是多余的链接，加入删除队列
+                    #     to_delete_paths.append(entry.path)
+                    #     continue
+                    # # 判定 B: 链接指向是否正确？(使用无 IO 开销的 readlink)
+                    # expected_src = target_map.get(name_lower, {}).get('src_path')
+                    # if not expected_src:
+                    #     # 目标清单中不存在此链接，加入删除队列
+                    #     to_delete_paths.append(entry.path)
+                    #     continue
+                    # if not FileManager._is_link_correct(entry.path, expected_src):
+                    #     to_delete_paths.append(entry.path)
+                    #     continue
                         
-                    existing_valid_keys.add(name_lower)
+                    # existing_valid_keys.add(name_lower)
                 
         except OSError as e:
             from backend.utils.logger import logger
@@ -706,7 +717,7 @@ class FileManager:
                 dst_path = os.path.join(local_mods_path, info['raw_name'])
                 links_to_create.append((info['src_path'], dst_path))
         
-        logger.info(f"Delete links: {to_delete_paths}")
+        # logger.info(f"Delete links: {to_delete_paths}")
         # 4. 执行极速删除 (os.rmdir 对于 Junction 是瞬间且安全的，不会删除原文件)
         for path in to_delete_paths:
             try:
@@ -716,7 +727,7 @@ class FileManager:
             except Exception:
                 pass # 忽略占用等特殊情况
 
-        logger.info(f"Create links: {links_to_create}")
+        # logger.info(f"Create links: {links_to_create}")
         # 5. 执行极速创建
         if links_to_create:
             FileManager._create_links_fast(links_to_create)
@@ -763,6 +774,9 @@ class FileManager:
         real_storage_path = os.path.normpath(os.path.abspath(settings.config.self_mods_path))
         # SteamCMD 期望的下载路径 (Link Location, 通常是 .../294100)
         steamcmd_link_path = os.path.normpath(os.path.abspath(settings.config.steamcmd_mods_path))
+        
+        os.makedirs(os.path.dirname(steamcmd_link_path), exist_ok=True)
+        os.makedirs(real_storage_path, exist_ok=True)
 
         logger.info(f"Redirecting SteamCMD: {steamcmd_link_path} -> {real_storage_path}")
 
@@ -883,8 +897,8 @@ class FileManager:
     
 class PathChecker:
 
-    @staticmethod
-    def _format_res(is_pass: bool, data: Any = None, msg: str = "", msg_type: str = "success"):
+    @classmethod
+    def _format_res(cls, is_pass: bool, data: Any = None, msg: str = "", msg_type: str = "success"):
         """统一返回格式"""
         return {
             'pass': is_pass,
@@ -893,8 +907,8 @@ class PathChecker:
             'msg': msg
         }
     
-    @staticmethod
-    def check_normal_path(path_str: str) -> Dict:
+    @classmethod
+    def check_normal_path(cls, path_str: str) -> Dict:
         """
         检查普通路径是否有效
         返回：{
@@ -904,13 +918,13 @@ class PathChecker:
             'msg': ''
         }
         """
-        if not path_str: return PathChecker._format_res(False, msg="路径不能为空")
+        if not path_str: return cls._format_res(False, msg="路径不能为空")
         path = Path(path_str)
-        if not path.exists(): return PathChecker._format_res(False, msg=f"{path_str}\n路径不存在！")
-        return PathChecker._format_res(True, data=str(path), msg=f"路径有效：{path}")
+        if not path.exists(): return cls._format_res(False, msg=f"{path_str}\n路径不存在！")
+        return cls._format_res(True, data=str(path), msg=f"路径有效：{path}")
     
-    @staticmethod
-    def check_install_path(path_str: str) -> Dict:
+    @classmethod
+    def check_install_path(cls, path_str: str) -> Dict:
         """
         检查游戏安装路径是否有效
         返回：{
@@ -920,34 +934,41 @@ class PathChecker:
             'msg': ''
         }
         """
-        if not path_str: return PathChecker._format_res(False, msg="安装路径不能为空")
+        if not path_str: return cls._format_res(False, msg="安装路径不能为空")
         path = Path(path_str)
-        if not path.exists(): return PathChecker._format_res(False, msg="游戏安装路径不存在！")
-
+        if not path.exists(): return cls._format_res(False, msg="游戏安装路径不存在！")
         res = {}
         # 1. 检查执行文件
         exe = GameManager.detect_executable(str(path))
         if exe:
-            res = PathChecker._format_res(True, data={}, msg=f"游戏安装路径: {path}")
+            res = cls._format_res(True, data={}, msg=f"游戏安装路径: {path}")
             res['data']["game_exe"] = str(exe)
         else:
-            res = PathChecker._format_res(False, msg="无法检测到游戏程序")
+            res = cls._format_res(False, msg="无法检测到游戏程序")
             return res
-
         # 2. 检查版本
         version = GameManager.get_game_version(str(path))
         res['data']["game_version"] = version if version else "未知"
-
         # 3. Steam 判定 (优化判定逻辑)
         is_steam = "steamapps" in path.parts and "common" in path.parts
         res['data']["is_steam"] = is_steam
-        
         res['msg'] = f"游戏本体：{exe}\n游戏版本：{version}\n{'是' if is_steam else '非'}Steam版"
         
         return res
-
-    @staticmethod
-    def check_mods_config(path_str: str) -> Dict:
+    
+    @classmethod
+    def check_user_data_path(cls, path_str:str) -> Dict:
+        if not path_str: return cls._format_res(False, msg="用户数据路径不能为空")
+        # 哪怕目录不存在，只要父目录存在且有写入权限，我们就认为合法（因为我们可以创建它）
+        parent_dir = os.path.dirname(path_str)
+        if parent_dir and not os.path.exists(parent_dir):
+            return cls._format_res(False, msg=f"父目录不存在: {parent_dir}")
+        if parent_dir and not os.access(parent_dir, os.W_OK):
+            return cls._format_res(False, msg="目录无写入权限，请以管理员身份运行或更换路径")
+        return cls._format_res(True, msg="校验通过")
+    
+    @classmethod
+    def check_mods_config(cls, path_str: str) -> Dict:
         """
         检查 Mods 配置文件是否存在
         返回：{
@@ -959,11 +980,11 @@ class PathChecker:
         """
         path = Path(path_str) / "ModsConfig.xml"
         if path.exists():
-            return PathChecker._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
-        return PathChecker._format_res(False, msg="未找到 ModsConfig.xml", msg_type="warn")
+            return cls._format_res(True, data=str(path), msg=f"Mods 配置文件：{path}")
+        return cls._format_res(False, msg="未找到 ModsConfig.xml", msg_type="warn")
 
-    @staticmethod
-    def check_workshop_path(path_str: str) -> Dict:
+    @classmethod
+    def check_workshop_path(cls, path_str: str) -> Dict:
         """
         检查 Workshop 路径是否有效
         返回：{
@@ -974,15 +995,15 @@ class PathChecker:
         }
         """
         if not path_str or not Path(path_str).exists():
-            return PathChecker._format_res(False, msg="Workshop 路径不存在")
+            return cls._format_res(False, msg="Workshop 路径不存在")
         
         is_valid = "steamapps" in Path(path_str).parts and "workshop" in Path(path_str).parts
-        return PathChecker._format_res(is_valid, data=path_str, 
+        return cls._format_res(is_valid, data=path_str, 
                                msg=f"Workshop 路径：{path_str}" if is_valid else "路径不在 Steam 库中",
                                msg_type="success" if is_valid else "warn")
         
-    @staticmethod
-    def check_steam_path(path_str: str) -> Dict:
+    @classmethod
+    def check_steam_path(cls, path_str: str) -> Dict:
         """
         检查 Steam 客户端路径是否有效
         返回：{
@@ -992,14 +1013,36 @@ class PathChecker:
             'msg': ''
         }
         """
-        if not path_str: return PathChecker._format_res(False, msg="未指定 Steam 路径")
+        if not path_str: return cls._format_res(False, msg="未指定 Steam 路径")
         exe_path = Path(path_str) / "steam.exe"
         if exe_path.exists():
-            return PathChecker._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
-        return PathChecker._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
+            return cls._format_res(True, data=path_str, msg=f"Steam 客户端：{exe_path}")
+        return cls._format_res(False, msg="路径下未找到 steam.exe", msg_type="warn")
+    
+    @classmethod
+    def check_steamcmd_path(cls, path_str: str) -> Dict:
+        """
+        检查 SteamCMD 路径是否有效
+        返回：{
+            'pass': True,
+            'data': {},
+            'type': 'success',
+            'msg': ''
+        }
+        """
+        if not path_str: return cls._format_res(False, msg="未指定 SteamCMD 路径")
+        # 中文路经检查，steamcmd路径不能包含任何中文
+        pattern = re.compile(r'[\u4e00-\u9fff]')
+        result = pattern.search(path_str)
+        if result: return cls._format_res(False, msg="SteamCMD 路径不能包含中文")
         
-    @staticmethod
-    def paths_check(paths_data: Dict[str, str]) -> Dict:
+        exe_path = Path(path_str) / "steamcmd.exe"
+        if exe_path.exists():
+            return cls._format_res(True, data=path_str, msg=f"SteamCMD 客户端：{exe_path}")
+        return cls._format_res(False, msg="路径下未找到 steamcmd.exe", msg_type="warn")
+        
+    @classmethod
+    def paths_check(cls, paths_data: Dict[str, str]) -> Dict:
         """
         主入口：支持全量检测
         """
@@ -1008,24 +1051,24 @@ class PathChecker:
         try:
             # 1. 安装路径相关 (包含 exe, version, steam 判定)
             if "game_install_path" in paths_data:
-                results["game_install_path"] = PathChecker.check_install_path(paths_data["game_install_path"])
-            
+                results["game_install_path"] = cls.check_install_path(paths_data["game_install_path"])
             # 2. 配置文件 
             if "game_config_path" in paths_data:
-                results["game_config_path"] = PathChecker.check_mods_config(paths_data["game_config_path"])
-
+                results["game_config_path"] = cls.check_mods_config(paths_data["game_config_path"])
             # 3. Workshop
             if "workshop_mods_path" in paths_data:
-                results["workshop_mods_path"] = PathChecker.check_workshop_path(paths_data["workshop_mods_path"])
-
+                results["workshop_mods_path"] = cls.check_workshop_path(paths_data["workshop_mods_path"])
             # 4. Steam 主程序
             if "steam_path" in paths_data:
-                results["steam_path"] = PathChecker.check_steam_path(paths_data["steam_path"])
-            
+                results["steam_path"] = cls.check_steam_path(paths_data["steam_path"])
+            if "steamcmd_path" in paths_data:
+                results["steamcmd_path"] = cls.check_steamcmd_path(paths_data["steamcmd_path"])
+            if "user_data_path" in paths_data:
+                results["user_data_path"] = cls.check_user_data_path(paths_data["user_data_path"])
             # 5. 其他路径
             for key, path in paths_data.items():
-                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path"]: continue
-                results[key] = PathChecker.check_normal_path(path)
+                if key in ["game_install_path", "game_config_path", "workshop_mods_path", "steam_path", "steamcmd_path", "user_data_path"]: continue
+                results[key] = cls.check_normal_path(path)
 
             return results
         except Exception as e:
@@ -1034,3 +1077,6 @@ class PathChecker:
         
     
 file_mgr = FileManager()
+
+
+

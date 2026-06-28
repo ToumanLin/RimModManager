@@ -4,12 +4,12 @@
     <div class="w-full aspect-video opacity-90 backdrop-blur-sm bg-black/40 rounded-xl overflow-hidden relative border border-text-main/10 shadow-lg group">
       
       <!-- 图片 (优先显示大图，没有大图时回退显示 store 中的缩略图，防止留白) -->
-      <Transition name="fade">
+      <Transition :name="appStore.settings.ui.detail_delay ?'fade': ''">
         <!-- 这里的 key Mod ID，变动时触发动画 -->
-        <img v-if="selectedMod.preview_url" :key="selectedMod.package_id" :src="selectedMod.preview_url" 
-          class="absolute inset-0 w-full h-full object-cover"/>
+        <img v-if="selectedMod.preview_path" :key="selectedMod.package_id" :src="appStore.getLocalUrl(selectedMod.preview_path)" 
+          class="absolute inset-0 w-full h-full object-cover" loading="lazy"/>
         <!-- 文字提示兜底 -->
-        <div v-else-if="!selectedMod.preview_url" class="absolute inset-0 flex items-center justify-center text-gray-600 bg-bg-surface">
+        <div v-else class="absolute inset-0 flex items-center justify-center text-gray-600 bg-bg-surface">
           <div class="text-center">
             <div class="text-4xl mb-2 opacity-20">IMG</div>
             <div class="text-xs">图片不存在</div>
@@ -41,7 +41,7 @@
       <!-- 包ID -->
       <div class="px-2 text-xs flex items-center gap-1 text-text-dim tracking-wider border-b border-text-main/5 pb-1" v-tooltip="selectedMod.package_id">
         <svg class="size-4" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M44 14L24 4L4 14V34L24 44L44 34V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M4 14L24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 44V24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 14L24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M34 9L14 19" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="truncate flex-1 min-w-0">{{ selectedMod.package_id }}</span>
+        <span class="truncate flex-1 min-w-0">{{ selectedMod.package_id_raw }}</span>
       </div>
       <!-- 遍历布局配置 -->
       <template v-for="block in layoutConfig" :key="block.id">
@@ -531,6 +531,7 @@ import LampEffect from './utils/LampEffect.vue';
 import LuxBreatheIcon from './utils/LuxBreatheIcon.vue'
 import { ChevronDown, ChevronUp, Copy } from 'lucide-vue-next'
 import FixedPopover from './common/FixedPopover.vue'
+import { useProfileStore } from '../stores/profileStore'
 
 // 随机选30个Mod的图标URL
 const imageUrls = computed(() => Array.from(modStore.allModsMap.values())
@@ -559,6 +560,7 @@ const StatItem = {
 const appStore = useAppStore()
 const modStore = useModStore()
 const groupStore = useGroupStore()
+const profileStore = useProfileStore()
 const userTags = ref([])
 const userAliasName = ref('')
 const userNotes = ref('')
@@ -587,8 +589,8 @@ const expandTextarea = ref(false)
 const rawSelectedMod = computed(() => modStore.lastSelectedMod)
 
 // 2. 创建一个防抖的引用
-// 含义：当 rawSelectedMod 变化时，debouncedMod 会等待 300ms 且无新变化后才更新
-const selectedMod = refDebounced(rawSelectedMod, 200) 
+// 含义：当 rawSelectedMod 变化时，debouncedMod 会等待 200ms 且无新变化后才更新
+const selectedMod = refDebounced(rawSelectedMod, appStore.settings.ui.detail_delay) 
 const modType = computed(() => modStore.displayModType(selectedMod.value))
 
 
@@ -712,7 +714,7 @@ const displayNameById = (id) => {
 // 检查版本是否兼容
 const versionIsCompatible = (version) => {
   // 截取版本号（只保留主版本号，如 1.2.3 截取为 1.2）
-  const game_version = appStore.settings.game_version.match(/^\d+\.\d+/)?.[0] || ''
+  const game_version = profileStore.activeContext.game_version.match(/^\d+\.\d+/)?.[0] || ''
   // 转为浮点数比较版本号，返回 true 表示兼容，false 表示不兼容
   return parseFloat(version) >= parseFloat(game_version)
 }

@@ -42,7 +42,7 @@
 
         <!-- 背景层：图片 + 模糊 + 渐变 -->
         <div class="absolute inset-0 overflow-hidden rounded-xl bg-bg-deep m-0.5">
-          <img v-if="hoverStore.data.preview_url" :src="hoverStore.data.preview_url" 
+          <img v-if="hoverStore.data.preview_path" :src="appStore.getLocalUrl(hoverStore.data.preview_path)" 
               class="absolute inset-0 w-full h-full object-cover opacity-90 blur-xs scale-100" />
           <!-- 渐变遮罩：底部更黑以显示文字 -->
           <div class="absolute inset-0 bg-linear-to-t from-bg-deep via-bg-deep/70 to-bg-deep/30"></div>

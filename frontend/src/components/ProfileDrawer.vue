@@ -25,7 +25,7 @@
                   环境<span class="text-accent-primary">管理</span>
                 </h2>
               </div>
-              <button @click="openCreate" v-tooltip="'创建新环境'"
+              <button @click="openCreate" v-tooltip="'创建新环境'" data-tour="profile-create"
                 class="p-2 rounded-xl bg-accent-primary/10 text-accent-primary hover:bg-accent-primary hover:text-black transition-all">
                 <Plus class="size-5" />
               </button>
@@ -33,13 +33,13 @@
           </header>
 
           <!-- 列表区 -->
-          <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+          <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar" data-tour="profile-list">
             <!-- 当前激活标识 -->
             <div class="px-2 text-[0.65rem] font-bold text-text-dim uppercase tracking-tighter opacity-60">已记录环境</div>
             
             <div v-for="p in profileStore.profiles" :key="p.id"
               @click="p.check ? profileStore.switchProfile(p.id) : null" 
-              class="group relative p-2 rounded-xl border transition-all duration-300 overflow-hidden"
+              class="group relative p-2 rounded-xl border transition-all duration-300 overflow-hidden profile-item"
               :class="[p.check ? (p.id === profileStore.currentProfileId 
                 ? 'bg-accent-primary/15 border-accent-primary/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] cursor-pointer' 
                 : 'bg-text-dim/15 border-text-main/5 hover:border-text-main/20 hover:bg-text-main/5 cursor-pointer')
@@ -93,6 +93,10 @@
                     <span class="text-[0.7rem] px-1 text-text-dim font-mono opacity-50 truncate">{{ p.user_data_path }}</span>
                   </span>
 
+                  <div class=" w-fit bg-accent-special/70 backdrop-blur-xl px-1 py-0.5 rounded-sm text-[0.65rem] text-text-main">
+                    上次运行：{{ p.last_played_time ? formatDate(p.last_played_time) : '未运行' }}
+                  </div>
+
                 </div>
 
               </div>
@@ -144,7 +148,7 @@
           <button @click="showModal = false" class="text-text-dim hover:text-text-main"><X class="size-5" /></button>
         </header>
 
-        <div class="p-6 space-y-5">
+        <div class="p-6 space-y-3">
           <CommonInput label="显示名称" v-model="form.name" placeholder="例如: 1.5 中世纪" />
           <CommonInput label="环境描述" v-model="form.description" placeholder="这里可以写一些关于这个环境的说明..." />
           <CommonPathInput label="游戏执行目录" v-model="form.game_install_path" @browse="browsePath('game_install_path')" 
@@ -189,6 +193,7 @@ import CommonPathInput from './common/input/CommonPathInput.vue'
 import CommonSwitch from './common/input/CommonSwitch.vue'
 import CommonTagInput from './common/input/CommonTagInput.vue'
 import { RUN_COMMAND_TAGS } from '../utils/constants'
+import { formatDate } from '../utils/uiHelper'
 
 const toast = createToastInterface()
 const profileStore = useProfileStore()

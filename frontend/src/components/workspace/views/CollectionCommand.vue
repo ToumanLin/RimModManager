@@ -10,7 +10,7 @@
           <!-- 信息区 -->
           <div class="flex items-center gap-3">
             <div class="size-12 shrink-0 rounded-lg bg-accent-warn/20 flex items-center justify-center overflow-hidden border border-accent-warn/30">
-              <img v-if="wsStore.collections.activeDetails.preview_url" :src="wsStore.collections.activeDetails.preview_url" class="w-full h-full object-cover" />
+              <img v-if="wsStore.collections.activeDetails.preview_url" :src="appStore.getRemoteUrl(wsStore.collections.activeDetails.preview_url)" class="w-full h-full object-cover" />
               <Layers v-else class="size-6 text-accent-warn" />
             </div>
             <div class="flex-1 min-w-0">
@@ -26,6 +26,10 @@
           </div>
           <!-- 全局动作区 (一键操作) -->
           <div class="flex gap-2 w-full">
+            <button @click="handleUnsubscribeAll" v-tooltip="'将整个合集从 Steam 订阅队列中移除'"
+              class="flex-1 py-1.5 min-w-0 bg-accent-danger/20 hover:bg-accent-danger text-accent-danger hover:text-black text-xs font-black rounded-lg border border-accent-danger/30 transition-all flex items-center justify-center gap-1">
+              <Flag class="size-3.5" /> 取订全部
+            </button>
             <button @click="handleSubscribeAll" v-tooltip="'将整个合集添加到 Steam 订阅队列'"
               class="flex-1 py-1.5 min-w-0 bg-accent-primary/20 hover:bg-accent-primary text-accent-primary hover:text-black text-xs font-black rounded-lg border border-accent-primary/30 transition-all flex items-center justify-center gap-1">
               <Flag class="size-3.5" /> 订阅全部
@@ -40,7 +44,7 @@
             </button>
           </div>
         </div>
-        <!-- 阵列列表 -->
+        <!-- 内容列表 -->
         <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1.5 relative">
           <!-- 遮罩加载 -->
           <div v-if="wsStore.collections.isChildrenLoading" class="absolute inset-0 bg-bg-deep/50 backdrop-blur-sm z-20 flex items-center justify-center">
@@ -49,30 +53,32 @@
           <!-- 单个子 Mod 卡片 -->
           <div v-for="mod in wsStore.collections.activeChildren" :key="mod.workshop_id"
             class="flex items-center gap-3 p-2 rounded-xl border transition-all group hover:bg-text-main/5"
-            :class="mod.is_installed ? 'border-text-main/10 bg-text-main/2' : 'border-accent-danger/30 bg-accent-danger/5 opacity-80'">
+            :class="(mod.is_workshop || mod.is_self || mod.is_local) ? 'border-text-main/10 bg-text-main/2' : 'border-accent-danger/30 bg-accent-danger/5 opacity-80'">
             
-            <img v-if="mod.preview_url" :src="mod.preview_url" class="size-10 rounded-lg object-cover border border-text-main/10 shadow-sm" />
+            <img v-if="mod.preview_url" :src="appStore.getRemoteUrl(mod.preview_url)" class="size-10 rounded-lg object-cover border border-text-main/10 shadow-sm" />
             <div v-else class="size-10 rounded-lg bg-black/50 border border-text-main/10 flex items-center justify-center"><Package class="size-4 text-text-dim"/></div>
             
             <div class="flex-1 min-w-0">
-              <div class="text-xs font-bold truncate" :class="mod.is_installed ? 'text-text-main' : 'text-accent-danger'">{{ mod.title }}</div>
+              <div class="text-xs font-bold truncate" :class="(mod.is_workshop || mod.is_self || mod.is_local) ? 'text-text-main' : 'text-accent-danger'">{{ mod.title }}</div>
               <div class="text-[0.6rem] font-mono text-text-dim opacity-60 flex gap-2">
                 <span>ID: {{ mod.workshop_id }}</span>
-                <span v-if="!mod.is_installed" class="text-accent-danger animate-pulse">待补充</span>
+                <span v-if="(!mod.is_workshop && !mod.is_self && !mod.is_local)" class="text-accent-danger animate-pulse">待补充</span>
               </div>
             </div>
             
             <!-- 状态及单项动作组 (Hover 显示操作) -->
-            <div class="shrink-0 flex items-center pr-1">
+            <div class="shrink-0 flex items-center pr-1 gap-1">
               <!-- 已安装标志，平常显示，hover 隐藏给操作按钮让位 -->
-              <CircleCheck v-if="mod.is_installed" class="size-5 text-accent-success drop-shadow-md group-hover:hidden" />
-              <AlertCircle v-else class="size-5 text-accent-danger opacity-50 group-hover:hidden" />
+              <Flag v-if="mod.is_workshop" class="size-5 text-accent-success drop-shadow-md group-hover:hidden" />
+              <DownloadCloud v-if="mod.is_self" class="size-5 text-accent-success drop-shadow-md group-hover:hidden" />
+              <FolderDot v-if="mod.is_local" class="size-5 text-accent-success drop-shadow-md group-hover:hidden" />
+              <AlertCircle v-if="(!mod.is_workshop && !mod.is_self && !mod.is_local)" class="size-5 text-accent-danger opacity-50 group-hover:hidden" />
 
               <!-- 操作按钮组 (Hover 显示) -->
               <div class="hidden group-hover:flex items-center gap-1 bg-bg-surface/80 p-1 rounded-lg backdrop-blur-md border border-text-main/10 shadow-lg">
-                <button @click="handleSubscribeSingle(mod.workshop_id)" v-tooltip="'Steam 订阅'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-black transition-colors"><Flag class="size-3.5" /></button>
-                <button v-if="mod.is_installed" @click="handleUnsubscribeSingle(mod.workshop_id)" v-tooltip="'取消订阅'" class="p-1.5 rounded-md hover:bg-accent-danger text-text-dim hover:text-black transition-colors"><FlagOff class="size-3.5" /></button>
-                <button @click="handleDownloadSingle(mod.workshop_id)" v-tooltip="'SteamCMD 下载'" class="p-1.5 rounded-md hover:bg-accent-success text-text-dim hover:text-black transition-colors"><Download class="size-3.5" /></button>
+                <button v-if="mod.is_workshop" @click="handleUnsubscribeSingle(mod.workshop_id)" v-tooltip="'取消订阅'" class="p-1.5 rounded-md hover:bg-accent-danger text-text-dim hover:text-black transition-colors"><FlagOff class="size-3.5" /></button>
+                <button v-else @click="handleSubscribeSingle(mod.workshop_id)" v-tooltip="'Steam 订阅'" class="p-1.5 rounded-md hover:bg-accent-primary text-text-dim hover:text-black transition-colors"><Flag class="size-3.5" /></button>
+                <button v-if="!mod.is_self" @click="handleDownloadSingle(mod.workshop_id)" v-tooltip="'SteamCMD 下载'" class="p-1.5 rounded-md hover:bg-accent-success text-text-dim hover:text-black transition-colors"><Download class="size-3.5" /></button>
               </div>
             </div>
           </div>
@@ -82,12 +88,12 @@
       <!-- 未选中时的默认骨架屏 -->
       <div v-else class="flex-1 flex flex-col items-center justify-center opacity-20 pointer-events-none select-none">
         <BoxSelect class="size-32 mb-4" />
-        <span class="text-sm font-black uppercase tracking-widest">选择右侧指挥名录以查看阵列详情</span>
+        <span class="text-sm font-black uppercase tracking-widest">选择右侧合集以查看详情</span>
       </div>
     </div>
 
 
-    <!-- ==================== 右侧：合集名录 (55%) ==================== -->
+    <!-- ==================== 右侧：合集 (55%) ==================== -->
     <div class="w-[55%] flex flex-col gap-4">
       
       <!-- 搜索/添加栏 -->
@@ -115,7 +121,7 @@
             :class="wsStore.collections.activeId === coll.id ? 'border-accent-warn ring-1 ring-accent-warn shadow-[0_0_25px_rgba(234,179,8,0.2)]' : 'border-text-main/10 hover:border-accent-warn/50 hover:shadow-[0_8px_20px_rgba(0,0,0,0.5)]'">
             
             <!-- 背景图 -->
-            <img v-if="coll.preview_url" :src="coll.preview_url" class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-50 group-hover:opacity-70" />
+            <img v-if="coll.preview_url" :src="appStore.getRemoteUrl(coll.preview_url)" class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-50 group-hover:opacity-70" />
             <div class="absolute inset-0 bg-linear-to-t from-bg-deep/95 via-bg-deep/60 to-transparent"></div>
             <h4 class="absolute inset-2 text-sm font-black text-text-main truncate text-shadow-lg drop-shadow-md leading-tight mb-1" v-tooltip="tooltipFormat(coll)">{{ coll.title || '未知合集' }}</h4>
             <!-- 右上角悬浮动作：删除 -->
@@ -123,6 +129,8 @@
               <Trash2 class="size-4" />
             </button>
 
+            <span class="absolute -bottom-0.5 right-3 text-[0.6rem] font-mono text-text-dim px-1.5 py-0.5 rounded">上传: {{ coll.time_updated ? formatDate(coll.time_updated) : '未知' }}</span>
+                
             <!-- 底部信息 -->
             <div class="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end z-10 pointer-events-none">
               <span class="text-xs font-black text-text-main/80 text-shadow-lg drop-shadow-md leading-tight mb-1">{{ coll.description || '暂无说明' }}</span>
@@ -160,12 +168,13 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { Layers, Plus, CircleCheck, Download, DownloadCloud, BoxSelect, Package, Trash2, ListOrdered, Flag, FlagOff, AlertCircle, FolderArchive } from 'lucide-vue-next'
+import { Layers, Plus, CircleCheck, Download, DownloadCloud, BoxSelect, Package, Trash2, ListOrdered, Flag, FlagOff, AlertCircle, FolderArchive, FolderDot } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 import { useWorkspaceStore } from '../../../stores/workspaceStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useModStore } from '../../../stores/modStore'
 import { useConfirmStore } from '../../../stores/confirmStore'
+import { formatDate } from '../../../utils/uiHelper'
 
 const toast = useToast()
 const wsStore = useWorkspaceStore()
@@ -177,10 +186,10 @@ const confirmStore = useConfirmStore()
 const newCollectionInput = ref('')
 
 // 计算当前合集的缺失数量
-const missingCount = computed(() => wsStore.collections.activeChildren.filter(c => !c.is_installed).length)
+const missingCount = computed(() => wsStore.collections.activeChildren.filter(c => (!c.is_workshop && !c.is_self && !c.is_local)).length)
 
 const tooltipFormat = (coll) => {
-  return `**${coll.title || '未知合集'}**\n\n${coll.description || '暂无说明'}\n\n[[共 ${coll.total || 0} 个模组]] | ^^需要下载: ${coll.need_download}^^`
+  return `**${coll.title || '未知合集'}**\n\n${coll.description || '暂无说明'}\n\n[[共 ${coll.total || 0} 个模组]] | ^^需要订阅: ${coll.need_download}^^`
 }
 
 // --- 动作：添加与删除合集 ---
@@ -204,10 +213,17 @@ const handleSubscribeAll = () => {
   if (!wids.length) return
   appStore.subscribeMod(wids) // 调用 appStore 的统一方法
 }
+// 2. 取订全部
+const handleUnsubscribeAll = () => {
+  const wids = wsStore.collections.activeChildren.map(m => String(m.workshop_id))
+  if (!wids.length) return
+  appStore.unsubscribeMod(wids) // 调用 appStore 的统一方法
+}
+
 
 // 2. 仅下载缺失项 (SteamCMD)
 const handleDownloadMissing = () => {
-  const wids = wsStore.collections.activeChildren.filter(m => !m.is_installed).map(m => String(m.workshop_id))
+  const wids = wsStore.collections.activeChildren.filter(m => (!m.is_workshop && !m.is_self && !m.is_local)).map(m => String(m.workshop_id))
   if (!wids.length) {
     toast.info("所有模组均已就绪，无需下载！")
     return

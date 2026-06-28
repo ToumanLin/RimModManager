@@ -112,7 +112,8 @@ export const useModStore = defineStore('mods', () => {
       package_id: id,
       name: `⚠ ${defaultName} (${id})`,
       path: null,
-      description: '该模组在本地未找到，可能未下载，或已被手动删除。'
+      description: '该模组在本地未找到，可能未下载，或已被手动删除。',
+      isMissing: true,
     }
   }
   // 获取 Mod 对象列表
@@ -329,12 +330,11 @@ export const useModStore = defineStore('mods', () => {
 
   // --- 扫描处理 ---
   // 扫描 Mod 文件
-  const scanMods = async (path, forced_update=false) => {
+  const scanMods = async (path_list=null, forced_update=false) => {
     if (appStore.scanProgress.scanning || !window.pywebview) return
     try {
-      const paths = path ? [path] : null
       // 调用 API，会立即返回 { status: 'started' }
-      const res = await window.pywebview.api.scan_mods(paths, forced_update)
+      const res = await window.pywebview.api.scan_mods(path_list, forced_update)
       if (res.status !== 'success' && res.status !== 'started') {
         console.error("启动扫描失败:", res)
         toast.error(`扫描启动失败: \n${res.message}`)
@@ -370,8 +370,6 @@ export const useModStore = defineStore('mods', () => {
     // 扫描结束后，主动拉取一次最新数据刷新界面
     console.log("扫描统计:", detail)
     await appStore.refreshData()
-    const profileStore = useProfileStore()
-    await profileStore.fetchProfiles()
     // 状态注入
     if (coexistenceList.value.length > 0){
       // 处理可共存Mod，标记为 is_coexistence = true
@@ -403,9 +401,10 @@ export const useModStore = defineStore('mods', () => {
           })
           toast.warning(warningMessages,{position: "top-center",timeout: 5000})
           if (warnModRule.length > 0) {
+            console.log("自动排序警告:",warnModRule)
             let msg = '请检查以下Mod规则是否正确：\n'
             warnModRule.forEach(item => {
-              msg += `${displayModName(item.mod_id)} 的 ${getSourceText(item.type.name)}规则 可能存在问题：（${displayModName(item.target_id)}）\n`
+              msg += `${displayModName(item.mod_id)} 的 ${item.type.name} 规则 可能存在问题：（${displayModName(item.target_id)}）\n`
             })
             toast.warning(msg,{position: "top-center",timeout: 10000})
           }
@@ -419,24 +418,27 @@ export const useModStore = defineStore('mods', () => {
     return false
   }
   // 创建本地共存
-  const localizeSelectedMods = async () => {
+  const localizeSelectedMods = async (store='workshop') => {
     if (selectedIds.value.length === 0) return;
     // 过滤出选中的工坊模组（如果是本地模组则没必要转换）
     const workshopIds = selectedMods.value
-      .filter(m => m.source === 'workshop')
+      .filter(m => m.store === store)
       .map(m => m.package_id);
     if (workshopIds.length === 0) {
       toast.info("选中的模组中没有来自工坊的项");
       return;
     }
+    await localizeMods(workshopIds, store)
+  }
+  const localizeMods = async (workshopIds, store='workshop') => {
     const confirm = await confirmStore.confirmAction(
       '本地化确认',
-      `确定要将选中的 ${workshopIds.length} 个工坊模组复制到本地目录吗？\n复制后将独立占用磁盘空间，Steam 的更新将不再影响这些本地副本。`,
+      `确定要将选中的 ${workshopIds.length} 个${store}模组复制到本地目录吗？\n复制后将独立占用磁盘空间，Steam / 管理器 的更新将不再影响这些本地副本。`,
       { type: 'info' }
     );
     if (confirm) {
       appStore.isLoading = true;
-      const res = await window.pywebview.api.localize_workshop_mods(workshopIds);
+      const res = await window.pywebview.api.localize_workshop_mods(workshopIds, store);
       if (appStore.checkResult(res, '模组本地化')) {
         // 成功后会在完成时刷新数据
       }
@@ -710,6 +712,7 @@ export const useModStore = defineStore('mods', () => {
   const modIssues = computed(() => {
     const issuesMap = new Map() // Key: modId, Value: Array<Issue>
     dataVersion.value // 依赖触发器
+    const profileStore = useProfileStore()
 
     // 辅助函数：添加问题
     const _add = (id, type, level, message, targetId = null) => {
@@ -729,14 +732,14 @@ export const useModStore = defineStore('mods', () => {
       const id = mod.package_id.toLowerCase()
 
       // A. 文件缺失
-      if (!mod.path) {
-        _add(id, ISSUE_TYPE.ERROR_MISSING_FILE, ISSUE_LEVEL.ERROR, '本地文件缺失或无法解析')
+      if (!mod.path || mod.isMissing) {
+        _add(id, ISSUE_TYPE.ERROR_MISSING_FILE, ISSUE_LEVEL.ERROR, '本地文件缺失或无法解析', id)
         continue // 文件都没了，没必要查别的
       }
 
       // B. 版本支持检查
-      if (appStore.settings.game_version) {
-        const gameVerMajor = appStore.settings.game_version.substring(0, 3)
+      if (profileStore.activeContext.game_version) {
+        const gameVerMajor = profileStore.activeContext.game_version.substring(0, 3)
         if (mod.supported_versions && mod.supported_versions.length > 0 && !mod.supported_versions.includes(gameVerMajor)) {
           _add(id, ISSUE_TYPE.WARN_VERSION_MISMATCH, ISSUE_LEVEL.WARN, 
             `^^${ISSUE_TITLE_MAP[ISSUE_TYPE.WARN_VERSION_MISMATCH]}^^：不支持当前游戏版本··[[${gameVerMajor}]]·· \n __(支持: ··${(mod.supported_versions || []).join('··, ··')}··)__`)
@@ -992,6 +995,21 @@ export const useModStore = defineStore('mods', () => {
       }
     }
   }
+  // 获取问题项目目标ID
+  const getIssusTargetIds = (targetIds, issueType) => {
+    const toActivate = new Set()
+    targetIds.forEach(id => {
+      const issues = modIssues.value.get(id.toLowerCase())
+      if (issues) {
+        issues.forEach(issue => {
+          if (issue.type === issueType && issue.targetId) {
+            toActivate.add(issue.targetId)
+          }
+        })
+      }
+    })
+    return Array.from(toActivate)
+  }
   // 提取当前列表所有未启用的有效依赖项 ID
   const getMissingLocalDependencies = (targetIds) => {
     const toActivate = new Set()
@@ -1153,7 +1171,7 @@ export const useModStore = defineStore('mods', () => {
     })
     return result
   }
-
+  
 
   return {
     // State
@@ -1167,9 +1185,9 @@ export const useModStore = defineStore('mods', () => {
     // Actions
     setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, 
     updateInactiveIds, takeInactiveIds, removeIdsOnAllList, selectMods, clearSelection, changeModsActive,
-    scanMods, scanComplete, autoSortMods, localizeSelectedMods, disableMods,
+    scanMods, scanComplete, autoSortMods, localizeSelectedMods, localizeMods, disableMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, batchUpdateModsUserData,
     setModsColor, setModsType, addModsTags, removeModsTags, selectModsTag, selectModsGroup, 
-    getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getMissingLocalDependencies, getMissingLanguagePacks,
+    getModIssueState, ignoreIssue, batchIgnoreIssues, getListIssues, getIssusTargetIds, getMissingLocalDependencies, getMissingLanguagePacks, 
   }
 })

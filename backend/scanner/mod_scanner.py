@@ -5,6 +5,7 @@ import re
 import time
 import concurrent.futures
 from backend.managers.mgr_game_logs import GameLogManager
+from backend.managers.mgr_profile import ProfileContext
 from backend.utils.tools import generate_path_hash, get_folder_size
 from backend.database.models import db
 
@@ -32,7 +33,8 @@ from backend.utils.logger import logger # 引入日志
 from backend.utils.event_bus import EventBus # 引入事件总线
 
 class ModScanner:
-    def __init__(self):
+    def __init__(self, context: ProfileContext):
+        self.context = context
         # DLCParser 不在 init 初始化，因为要看扫描路径里有没有 DLC 目录
         self.dlc_parser = None
         self.xml_parser = ModXMLParser()
@@ -90,8 +92,7 @@ class ModScanner:
                 self._finish_scan({'error': '没有有效路径'})
                 return
             # 初始化 DLC Parser
-            dlc_dir = next((p for p in valid_paths if os.path.basename(p).lower() == 'data'), None)
-            dlc_parser = DLCParser(dlc_dir) if dlc_dir else None
+            dlc_parser = DLCParser(self.context.game_dlc_path)
             existing_snapshots = ModDAO.get_mod_snapshots()   # 从数据库获取已存在的 Mod 时间戳及大小
             # --- 1. 快速搜集所有待扫描文件夹 (用于计算进度总数) ---
             EventBus.emit('scan-progress', {'stage': 'indexing', 'message': '正在索引文件...'})
@@ -171,7 +172,7 @@ class ModScanner:
             workshop_paths_for_deploy = []
 
             # 获取本地 Mods 根目录 (用于判定是否同级冲突)
-            local_mods_root = settings.config.local_mods_path
+            local_mods_root = self.context.local_mods_path
             if local_mods_root: 
                 local_mods_root = os.path.normpath(local_mods_root).lower()
             
@@ -205,18 +206,6 @@ class ModScanner:
                 # 按父目录分组
                 by_parent = defaultdict(list)
                 for mod in entries:
-                    # 如果是 skipped 的，为了入库数据的完整性，这里其实应该强制重读一次完整数据
-                    # 但为了性能，如果只是位置冲突判断，路径就够了。如果决定入库，则必须保证数据完整。
-                    if mod.get('_skipped'):
-                        # 触发重读 (这里为了代码简洁，简略处理，实际建议封装 recover 方法)
-                        # 实际上，如果发生冲突（多个实例），其中一个是 skipped，只要涉及多实例判定，强制全部重读，确保 source/path 准确。
-                        full_mod = self._process_single_mod(
-                            mod['path'], (os.path.basename(os.path.dirname(mod['path'])).lower() == 'data'),
-                            existing_snapshots, dlc_parser, forced_update=True
-                        )
-                        if full_mod:
-                            mod.update(full_mod) # 更新为完整数据
-                            del mod['_skipped']
                     parent_dir = os.path.dirname(mod['path']).lower()
                     by_parent[parent_dir].append(mod)
 
@@ -233,9 +222,14 @@ class ModScanner:
                             'type': 'same_directory' # 标记类型：同级目录冲突
                         })
                 if has_hard_conflict:
-                    # 发生硬冲突，暂时都不入库，让用户去修
+                    # 发生硬冲突，同样入库
                     logger.warning(f"Hard conflict detected for {pid}")
-                    # continue
+                    # 强制将硬冲突也加入待更新列表，否则数据库里没数据
+                    for mod in entries:
+                        if not mod.get('_skipped'): mods_to_upsert.append(mod)
+                        # 硬冲突通常不执行部署(Deploy)，所以跳过 _classify_for_deploy
+                    continue # 结束当前这组的后续软冲突逻辑
+                
                 # --- 检查软冲突 (跨目录遮蔽/共存) ---
                 # 走到这里说明 len(entries) > 1 且没有硬冲突
                 final_coexistences.append({
@@ -249,26 +243,27 @@ class ModScanner:
                 # 数据库会存储多条记录 (path不同，path_hash不同，主键不冲突)
                 # 查询时由 DAO 根据 Profile 过滤，部署时由下方逻辑过滤
                 for mod in entries:
-                    mods_to_upsert.append(mod)
+                    # 优化：跳过未变动的 Mod，避免无意义的数据库重写
+                    if not mod.get('_skipped'): mods_to_upsert.append(mod)
                     self._classify_for_deploy(mod, local_mods_root,self_mods_root, workshop_mods_root, 
                         local_mod_ids_for_deploy, self_mods_paths_for_deploy, workshop_paths_for_deploy)
 
             # --- 4. 批量入库 ---
             # 这是数据安全最关键的一步
-            with db.atomic() as txn:
-                try:
-                    if mods_to_upsert: 
-                        ModDAO.batch_upsert_mods(mods_to_upsert)
-                except Exception as e:
-                    txn.rollback() # 万一出错，回滚所有改动
-                    raise e
+            try:
+                if mods_to_upsert: 
+                    ModDAO.batch_upsert_mods(mods_to_upsert)
+            except Exception as e:
+                # txn.rollback() # 万一出错，回滚所有改动
+                logger.error(f"批量入库失败: {e}", exc_info=True)
+                raise e
             
             
             # --- 6. 自动部署链接 (Deployment) ---
             deploy_msg = "跳过链接部署"
-            logger.debug(f"Skip deployment: {settings.config.use_workshop_mods} and {settings.config.use_self_mods}, current_profile {settings.config.current_profile_id != 'default'}")
+            logger.debug(f"Skip deployment: use_workshop_mods={self.context.use_workshop_mods}, use_self_mods={self.context.use_self_mods}, current_profile_not_default={self.context.profile_id != 'default'}")
             final_links_to_create = []
-            if settings.config.use_self_mods and local_mods_root and os.path.exists(local_mods_root):
+            if self.context.use_self_mods and local_mods_root and os.path.exists(local_mods_root):
                 # 遮蔽策略：过滤掉 ID 已经在 Local 存在的 Workshop Mod
                 for w_path, w_id in self_mods_paths_for_deploy:
                     if w_id not in local_mod_ids_for_deploy:
@@ -277,7 +272,7 @@ class ModScanner:
                         # 被本地遮蔽，忽略
                         pass
             
-            if settings.config.use_workshop_mods and settings.config.use_self_mods and settings.config.current_profile_id != 'default' \
+            if self.context.use_workshop_mods and self.context.profile_id != 'default' \
                 and local_mods_root and os.path.exists(local_mods_root):
                 # 遮蔽策略：过滤掉 ID 已经在 Local 和 self 存在的 Workshop Mod
                 self_mods_ids_for_deploy = [w_id for w_path, w_id in self_mods_paths_for_deploy]
@@ -318,10 +313,10 @@ class ModScanner:
                 'deploy_message': deploy_msg
             }
             self._finish_scan(result)
-            logger.info(f"Scan finished. {stats}. {deploy_msg}")
 
             duration = time.time() - start_time
-            logger.info(f"Scan finished in {duration:.2f}s. Added: {stats['added']}, Updated: {stats['updated']}")
+            logger.info(f"Scan finished in {duration:.2f}s. Added: {stats['added']}, Updated: {stats['updated']}, Skipped: {stats['skipped']}, \
+                        Removed: {stats['removed']}, Conflicts: {len(final_conflicts)}, Coexistences: {len(final_coexistences)}. {deploy_msg}")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -330,6 +325,8 @@ class ModScanner:
         finally:
             self._is_scanning = False
             self._stop_requested = False # 清理状态
+            # 释放线程绑定的数据库连接
+            if not db.is_closed(): db.close()
 
     def _handle_interruption(self):
         """处理中断后的清理和通知"""
@@ -342,7 +339,6 @@ class ModScanner:
 
     def _finish_scan(self, result):
         """扫描结束，通知前端并发送最终统计"""
-        logger.info(f"Scan finished: {result['stats']}")
         # 获取最新全量数据，或者让前端自己再调一次 get_all_mods
         # 建议直接通知前端 "scan-complete"，让前端决定是否刷新列表
         
@@ -352,23 +348,21 @@ class ModScanner:
         """
         辅助函数：将 Mod 分类以便后续部署。
         """
-        if not mod_data.get('path'): return
+        mod_path = mod_data.get('path')
+        if not mod_path: return
         
-        mod_path = os.path.normpath(mod_data['path']).lower()
+        mod_path_norm = os.path.normpath(mod_path).lower()
         pid = mod_data['package_id'].lower()
         
         # 判断 Local
-        if local_root and local_root in mod_path:
+        if local_root and mod_path_norm.startswith(local_root):
             local_ids_set.add(pid)
-            return
         # 判断 Self Mod
-        if self_mods_root and self_mods_root in mod_path:
-            self_mods_paths_list.append((mod_data['path'], pid))
-            return
+        elif self_mods_root and mod_path_norm.startswith(self_mods_root):
+            self_mods_paths_list.append((mod_path, pid)) # 保留原大小写路径用于部署
         # 判断 Workshop (如果是 DLC 也不需要部署)
-        if workshop_root and workshop_root in mod_path:
-            # 记录 (路径, ID) 元组
-            workshop_paths_list.append((mod_data['path'], pid))
+        elif workshop_root and mod_path_norm.startswith(workshop_root):
+            workshop_paths_list.append((mod_path, pid))
         
     def _process_single_mod(self, mod_path, is_dlc_dir, existing_snapshots, dlc_parser: DLCParser | None, forced_update=False):
         """
@@ -405,15 +399,7 @@ class ModScanner:
 
         # 如果快照存在且被禁用，直接跳过
         if snapshot and is_disabled:
-            return {
-                '_skipped': True, 
-                'path_hash': path_hash,
-                'package_id': snapshot['package_id'],
-                'path': mod_path, 
-                'mtime': mtime,
-                'file_size': snapshot['size'], # 复用旧大小
-                'disabled': is_disabled
-            }
+            return self._build_skipped_result(snapshot, path_hash, mod_path, mtime, snapshot['size'], is_disabled)
             
         disabled_change = not(snapshot and snapshot['disabled'] is is_disabled)
         
@@ -428,27 +414,11 @@ class ModScanner:
                 current_size = get_folder_size(mod_path)
                 if snapshot['size'] > 0 and snapshot['size'] == current_size:
                     # 时间和大小都一致，判定为没变，跳过解析
-                    return {
-                        '_skipped': True, 
-                        'path_hash': path_hash,
-                        'package_id': snapshot['package_id'],
-                        'path': mod_path, 
-                        'mtime': mtime,
-                        'file_size': current_size,
-                        'disabled': is_disabled
-                    }
+                    return self._build_skipped_result(snapshot, path_hash, mod_path, mtime, current_size, is_disabled)
                 # 走到这里说明大小变了，需要继续向下解析
             else:
                 # 如果没开大小检测，且修改时间没变，直接视为跳过
-                return {
-                    '_skipped': True, 
-                    'path_hash': path_hash,
-                    'package_id': snapshot['package_id'],
-                    'path': mod_path, 
-                    'mtime': mtime,
-                    'file_size': snapshot['size'], # 复用旧大小
-                    'disabled': is_disabled
-                }
+                return self._build_skipped_result(snapshot, path_hash, mod_path, mtime, snapshot['size'], is_disabled)
         
         # 解析 XML (CPU 密集)
         # parser 内部如果处理异常会返回默认空结构，这里直接调
@@ -458,9 +428,11 @@ class ModScanner:
         # DLC 兜底 ID
         if is_dlc_dir and not pkg_id:
             folder = os.path.basename(mod_path)
-            if folder.lower() == 'core': pkg_id = 'ludeon.rimworld'
-            else: pkg_id = f'ludeon.rimworld.{folder.lower()}'
-            mod_data['package_id'] = pkg_id
+            if folder.lower() == 'core': 
+                mod_data['package_id_raw'] = 'Ludeon.RimWorld'
+            else: 
+                mod_data['package_id_raw'] = f'Ludeon.RimWorld.{folder.capitalize()}'
+            mod_data['package_id'] = mod_data['package_id_raw'].lower()
 
         if not pkg_id: return None
         
@@ -492,7 +464,7 @@ class ModScanner:
         # 路径标准化 (用于 Python 端比对，统一转小写)
         # 标准化路径用于严格匹配 (增加结尾分隔符确保匹配精确)
         def norm(p): return os.path.normpath(p).lower() + os.sep if p else ""
-        L_PATH = norm(os.path.normpath(settings.config.local_mods_path).lower())
+        L_PATH = norm(self.context.local_mods_path)
         W_PATH = norm(settings.config.workshop_mods_path)
         S_PATH = norm(settings.config.self_mods_path)
         # 补充 store
@@ -506,7 +478,7 @@ class ModScanner:
         
         # 补充 supported_versions
         if mod_data.get('source','').lower() == 'core':
-            mod_data['supported_versions'] = [settings.config.game_version[:3]] if settings.config.game_version else 'Unknown'  # Core 补充支持版本
+            mod_data['supported_versions'] = [self.context.game_version[:3]] if self.context.game_version else 'Unknown'  # Core 补充支持版本
 
         # 图片
         preview_path, icon_path = self._resolve_images(mod_path, mod_data.get('icon_path', ''))
@@ -538,11 +510,27 @@ class ModScanner:
         })
 
         # 缩略图生成 (耗时操作，线程池内执行)
-        if mod_data.get('preview_path'):
-            from backend.managers.mgr_files import file_mgr
-            file_mgr.ensure_thumbnail(pkg_id, mod_data['preview_path'])
+        # if mod_data.get('preview_path'):
+        #     from backend.managers.mgr_files import file_mgr
+        #     file_mgr.ensure_thumbnail(pkg_id, mod_data['preview_path'])
             
         return mod_data
+    
+    def _build_skipped_result(self, snapshot: dict, path_hash, mod_path, mtime, current_size, is_disabled):
+        return {
+            '_skipped': True, 
+            'path_hash': path_hash,
+            'package_id': snapshot['package_id'],
+            'workshop_id': snapshot.get('workshop_id', ''),
+            'name': snapshot.get('name', ''),                         
+            'version': snapshot.get('version', ''),
+            'store': snapshot.get('store', 'local'),                 
+            'supported_versions': snapshot.get('supported_versions', []), 
+            'path': mod_path, 
+            'mtime': mtime,
+            'file_size': current_size,
+            'disabled': is_disabled
+        }
 
     def _resolve_workshop_id(self, mod_path):
         """

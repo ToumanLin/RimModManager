@@ -68,7 +68,7 @@ VSVersionInfo(
         print(f"生成版本文件失败: {e}")
         return None
 
-def packApplication(main_file="main.py", icon_path="", name="", version="1.0.0", company=""):
+def packApplication(main_file="main.py", icon_path="", name="", splash_path="", version="1.0.0", company=""):
     """
     使用 PyInstaller 打包应用程序
     Args:
@@ -103,8 +103,10 @@ def packApplication(main_file="main.py", icon_path="", name="", version="1.0.0",
             "--add-data", "frontend/dist;frontend/dist", # 注意：Windows下通常用分号; Linux用冒号:
             "--collect-binaries", "steamworks",
             "--collect-data", "litellm",
+            
             # 排除一些可能导致问题的模块
             "--exclude-module", "setuptools",  # 排除这个模块， 避免打包时出现问题
+            # "--exclude-module", "_distutils_hack.override",
             "--exclude-module", "pkg_resources", # 通常这两个是一起出现的，建议一并排除
             
             "--clean",  # 清理旧构建文件
@@ -115,6 +117,9 @@ def packApplication(main_file="main.py", icon_path="", name="", version="1.0.0",
 
         if icon_path and os.path.exists(icon_path):
             cmd.extend(["-i", icon_path])
+        
+        if splash_path and os.path.exists(splash_path):
+            cmd.extend(["--splash", splash_path])
         
         if version_file_path:
             cmd.extend(["--version-file", version_file_path])
@@ -250,10 +255,11 @@ if __name__ == "__main__":
     APP_VERSION = __version__  # 在这里修改版本号
     APP_COMPANY = 'Inky Feather'
     ICON_PATH = 'icon.ico'
+    SPLASH_PATH = 'splash.png'
     os.environ["SETUPTOOLS_USE_DISTUTILS"] = "local"
     # 1. 执行打包
     print(f'=== 开始打包 {APP_NAME} v{APP_VERSION} ===')
-    packApplication(APP_MAIN, ICON_PATH, APP_NAME, version=APP_VERSION, company=APP_COMPANY)
+    packApplication(main_file=APP_MAIN, icon_path=ICON_PATH, name=APP_NAME, splash_path=SPLASH_PATH, version=APP_VERSION, company=APP_COMPANY)
     
     # 2. 生成目录树
     print('\n=== 生成项目目录树 ===')

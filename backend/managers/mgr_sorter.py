@@ -2,6 +2,7 @@ from typing import List, Dict, Optional, Set, Tuple, Any
 import heapq
 from collections import deque, defaultdict
 from backend.database.dao import ModDAO
+from backend.managers.mgr_profile import ProfileContext
 from backend.utils.logger import logger
 from backend.settings import settings
 from backend.managers.mgr_rules import RuleManager
@@ -26,9 +27,9 @@ class OrderSorter:
         'user_dynamic': 10,
         'unknown': 1
     }
-    def __init__(self):
-        self.dao = ModDAO()
-        self.rule_mgr = RuleManager()
+    def __init__(self, context: ProfileContext):
+        self.context = context
+        self.rule_mgr = RuleManager(context)
         self.SPECIAL_WEIGHTS = {
             'brrainz.harmony': 0,
             'ludeon.rimworld': 50,
@@ -46,7 +47,7 @@ class OrderSorter:
         # 1. 获取所有 Mod 的联锁数据
         # 注意：为了性能，一次性查出所有涉及到的 Mod 数据
         # 即使有的 Mod 不在 active_ids 里，只要它被联锁引用了，也要查
-        all_mods_data = ModDAO.get_profile_mods()
+        all_mods_data = ModDAO.get_profile_mods(self.context)
         mod_map = {m['package_id'].lower(): m for m in all_mods_data}
         active_set = set(id.lower() for id in active_ids)
         visited = set()
@@ -321,7 +322,7 @@ class OrderSorter:
         最终排序：原子组 -> 权重修正 -> 依赖构图 -> 权重传播 -> 拓扑排序 (带名称稳定性)
         """
         logger.info(f"Starting sort for {len(active_ids)} mods...")
-        all_mods_data = ModDAO.get_profile_mods()
+        all_mods_data = ModDAO.get_profile_mods(self.context)
         mod_map = {m['package_id'].lower(): m for m in all_mods_data}
         # --- 0. 依赖项自动修补 (受开关控制) ---
         active_set = set(id.lower() for id in active_ids)

@@ -63,6 +63,7 @@ class ModAsset(BaseModel):
     path_hash = cast(str, CharField(primary_key=True))               # 路径哈希值，主键
     # 核心标识，指定 collation='NOCASE'，SQLite 内部对比时将忽略大小写
     package_id = cast(str, CharField(index=True, collation='NOCASE')) # 包名，如 "ludeon.rimworld" (全小写)
+    package_id_raw = cast(str, CharField(null=True))                 # 原始包名，如 "Ludeon.RimWorld" (保持大小写)
     workshop_id = cast(str, CharField(null=True))                    # 创意工坊ID
     name = cast(str, CharField())                                    # 名称
     author = cast(list[str], UTF8JSONField(default=list))            # 作者，可能为多人
@@ -152,7 +153,9 @@ class GithubModRecord(BaseModel):
     installed_version = CharField(null=True)  # 当前安装的版本(Release的TagName 或 源码的CommitHash)
     target_branch = CharField(default="main") # 绑定的分支(通常是 main 或 master)
     local_folder = CharField(null=True)       # 实际解压到的物理文件夹名称
-    last_check_time = BigIntegerField(default=0)
+    online_info_cache = cast(dict, UTF8JSONField(default=dict))
+    last_sync_time = cast(int, BigIntegerField(default=0)) # 上次刷新时间
+    
     
 class GithubTimeline(BaseModel):
     """主动记录的 GitHub 操作时间线"""
@@ -163,7 +166,7 @@ class GithubTimeline(BaseModel):
 
 class SubscribedCollection(BaseModel):
     """
-    用户收藏/订阅的合集名录
+    用户收藏/订阅的合集
     """
     id = cast(str, CharField(primary_key=True)) # 合集的 Workshop ID
     title = cast(str, CharField(null=True))
@@ -175,6 +178,10 @@ class SubscribedCollection(BaseModel):
     # 时间戳
     time_updated = cast(int, BigIntegerField(default=0)) # 合集在 Steam 上的最后更新时间
     created_time = cast(int, BigIntegerField(default=current_ms))
+    # 存储子项数据的快照：JSON 数组格式
+    # 结构: [{"workshop_id": "...", "package_id": "...", "title": "...", "preview_url": "...", "is_installed": bool}]
+    children = cast(list, UTF8JSONField(default=list))
+    
 
 class SystemInfo(BaseModel):
     key = cast(str, CharField(primary_key=True))
@@ -274,13 +281,17 @@ def clear_db():
         # 5. 重新创建表
         with db.atomic():
             db.create_tables(all_models[1:], safe=True)
-            from backend.settings import settings
             GameProfile.create(
                 id='default',
-                name='Default Profile',
-                game_version=settings.config.game_version or "", # 防止 None 报错
-                game_install_path=settings.config.game_install_path or "", # 防止 None 报错
-                user_data_path=settings.config.user_data_path or "",
+                name='Default',
+                description='Default Profile',
+                user_data_path='',
+                game_install_path='',
+                game_version='',
+                is_steam=False,
+                use_workshop_mods=True, # 默认非Steam版不加载工坊
+                use_self_mods=False,    # 默认不加载 Self Mod
+                run_commands=[]
             )
         # 6. 恢复外键约束
         db.execute_sql('PRAGMA foreign_keys = ON;')

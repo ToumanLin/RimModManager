@@ -4,13 +4,15 @@ import re
 import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from backend.managers.mgr_profile import ProfileContext
 from backend.utils.logger import logger
 from backend.database.dao import ModDAO, GroupDAO
+from backend.database.models_ext import WorkshopMeta 
 from backend.settings import RULES_DIR, USER_RULES_PATH, settings
 from backend.utils.tools import current_ms
 from backend._version import __version__
 
-RULE_SOURCES = ["user", "native", "community", "dynamic"]
+RULE_SOURCES = ["user", "native", "community", "dynamic", "workshop"]
 
 class RuleActionType:
     WEIGHT_SET = "weight_set"       # 强制设置权重 (0-1000)
@@ -19,19 +21,25 @@ class RuleActionType:
     LOAD_BEFORE = "load_before"     # 必须在某ID前
     TOP = "top"                     # 置顶 (权重设为0)
     BOTTOM = "bottom"               # 置底 (权重设为1000)
+    
 class RuleManager:
-    def __init__(self):
+    def __init__(self, context: ProfileContext):
         # 内存中的规则缓存
         self.community_rules: Dict[str, Any] = {}
         self.community_rules_update_time: int = 0
         self.user_mod_rules: Dict[str, Any] = {}
         self.user_dynamic_rules: List[Dict[str, Any]] = []
+        self.workshop_rules_cache: Dict[str, List[str]] = {} 
+        self.context = context
         self.settings = {
             "community_mod_rules_enabled": True,    # 全局社区规则总开关
             "user_mod_rules_enabled": True,         # 全局用户单项规则总开关
             "dynamic_rules_enabled": True,          # 全局动态规则总开关
+            "workshop_mod_rules_enabled": True,         # 工坊外置规则总开关
+            "workshop_rules_as_dependency": False,  # True: 作为强依赖(触发自动补全) | False: 作为普通前置依赖
             "excluded_community_mods": [],          # 被禁用的社区 Mod ID 列表 (黑名单)
             "excluded_user_mods": [],               # 被禁用的用户 Mod ID 列表 (黑名单)
+            "excluded_workshop_mods": [],           # 被禁用的工坊 Mod ID 列表 (黑名单)
             # 规则优先级配置：索引越小，优先级越高 (默认: 用户 > 原生 > 社区 > 动态)
             "rule_source_priority": RULE_SOURCES 
         }
@@ -62,6 +70,9 @@ class RuleManager:
                     self.settings.update(data.get("settings", {}))
                     if set(self.settings["rule_source_priority"]) != set(RULE_SOURCES):
                         self.settings["rule_source_priority"] = RULE_SOURCES
+            
+            # 加载工坊规则缓存
+            self.build_workshop_rules()
         except Exception as e:
             logger.error(f"Failed to load rules: {e}")
             # 出错时保持空状态，不中断启动
@@ -78,6 +89,70 @@ class RuleManager:
                 json.dump(data, f, indent=4, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Failed to save user rules: {e}")
+    
+    def build_workshop_rules(self):
+        """
+        精准构建工坊依赖缓存：仅针对本地已安装/存在的 Mod 构建规则。
+        """
+        from backend.database.models_ext import ext_db, WorkshopMeta
+        from backend.database.models import ModAsset
+        if ext_db.database is None: return
+        try:
+            if not WorkshopMeta.table_exists(): return
+            # 1. 【核心过滤】从主数据库获取所有已安装/存在的 package_id (去重且转小写)
+            # 只有这些 Mod 才需要我们去查询它们的依赖关系
+            installed_pids = [
+                m.package_id.lower() 
+                for m in ModAsset.select(ModAsset.package_id).distinct() 
+                if m.package_id
+            ]
+            if not installed_pids:
+                self.workshop_rules_cache = {}
+                return
+            # 2. 从外置库中查询这些 Package ID 对应的元数据 (获取它们的原始依赖列表)
+            # WHERE package_id IN (...)
+            active_metas = list(WorkshopMeta.select(
+                WorkshopMeta.package_id, 
+                WorkshopMeta.dependencies_mods
+            ).where(WorkshopMeta.package_id << installed_pids).dicts())
+            if not active_metas:
+                self.workshop_rules_cache = {}
+                return
+            # 3. 收集这些依赖中涉及到的所有目标 Workshop ID
+            # 我们需要把这些 Workshop ID 转换回 Package ID，排序引擎才能识别
+            all_target_wids = set()
+            for row in active_metas:
+                if row['dependencies_mods']:
+                    # 依赖格式: {"2891845502": "Name"}
+                    all_target_wids.update(row['dependencies_mods'].keys())
+            if not all_target_wids:
+                self.workshop_rules_cache = {}
+                return
+            # 4. 仅查询这部分目标 Workshop ID 对应的 Package ID
+            # 这样避免了全量加载 wid_to_pid 映射
+            wid_to_pid_map = {
+                str(m.workshop_id): m
+                for m in WorkshopMeta.select(WorkshopMeta.workshop_id, WorkshopMeta.name, WorkshopMeta.package_id)
+                                    .where(WorkshopMeta.workshop_id << list(all_target_wids))
+                if m.package_id
+            }
+            # 5. 组装最终缓存
+            new_cache = {}
+            for row in active_metas:
+                source_pid = row['package_id'].lower()
+                raw_deps = row['dependencies_mods'] # dict
+                if not raw_deps: continue
+                resolved_target_pids = []
+                for target_wid in raw_deps.keys():
+                    target_mod = wid_to_pid_map.get(str(target_wid))
+                    if target_mod:
+                        resolved_target_pids.append((target_mod.package_id.lower(), target_mod.name))
+                if resolved_target_pids:
+                    new_cache[source_pid] = resolved_target_pids
+            self.workshop_rules_cache = new_cache
+            logger.info(f"Workshop rules cache built. Active: {len(new_cache)} mods.")
+        except Exception as e:
+            logger.error(f"Failed to build workshop rules cache: {e}", exc_info=True)
     
     # =========================================================================
     # 0. 开关控制逻辑 (Professional Toggle Logic)
@@ -121,6 +196,17 @@ class RuleManager:
         self.save_user_rules()
         return True
     
+    def toggle_workshop_mod_exclusion(self, package_id: str, exclude: bool):
+        """将某个 Mod 加入/移出工坊规则黑名单"""
+        pid = package_id.lower().strip()
+        excluded_list = self.settings["excluded_workshop_mods"]
+        if exclude and pid not in excluded_list:
+            excluded_list.append(pid)
+        elif not exclude and pid in excluded_list:
+            excluded_list.remove(pid)
+        self.save_user_rules()
+        return True
+    
     def _is_version_compatible(self, requirements: list) -> bool:
         """
         检查规则是否适用于当前游戏版本
@@ -133,7 +219,7 @@ class RuleManager:
         
         # 获取当前游戏版本 (例如 "1.5.4100" -> "1.5")
         # 注意：settings.config.game_version 可能为空，需兜底
-        current_ver = settings.config.game_version
+        current_ver = self.context.game_version
         if not current_ver:
             return True # 无法确定版本时，默认放行，或者可以选择严格模式 return False
             
@@ -377,18 +463,18 @@ class RuleManager:
                         alternatives=rule.get('alternatives', []),
                         detail={"versions": rule.get('version_requirement')}
                     )
-
+        
         # 2. Community Rules
         # 受全局开关和黑名单控制
         if self.settings.get("community_mod_rules_enabled", True) and \
            mid_l not in self.settings.get("excluded_community_mods", []):
             comm = self.community_rules.get(mid_l, {})
             for t, info in comm.get("loadAfter", {}).items():
-                _merge_rule("load_after", t, "community", "社区规则", detail=info)
+                _merge_rule("load_after", t, "community", "社区前置", detail=info)
             for t, info in comm.get("loadBefore", {}).items():
-                _merge_rule("load_before", t, "community", "社区规则", detail=info)
+                _merge_rule("load_before", t, "community", "社区后置", detail=info)
             for t, info in comm.get("incompatibleWith", {}).items():
-                _merge_rule("incompatible", t, "community", "社区规则", detail=info)
+                _merge_rule("incompatible", t, "community", "社区冲突", detail=info)
             # 解析 loadTop 和 loadBottom
             # 格式例如: "loadBottom": {"value": True, "comment": "必须置底"}
             isTop = comm.get("loadTop", {}).get("value") 
@@ -406,11 +492,11 @@ class RuleManager:
             rules = user.get("rules", user) # 兼容旧格式
             if isinstance(rules, dict):
                 for t, info in rules.get("loadAfter", {}).items():
-                    _merge_rule("load_after", t, "user", "用户规则", detail=info)
+                    _merge_rule("load_after", t, "user", "用户前置", detail=info)
                 for t, info in rules.get("loadBefore", {}).items():
-                    _merge_rule("load_before", t, "user", "用户规则", detail=info)
+                    _merge_rule("load_before", t, "user", "用户后置", detail=info)
                 for t, info in rules.get("incompatibleWith", {}).items():
-                    _merge_rule("incompatible", t, "user", "用户规则", detail=info)
+                    _merge_rule("incompatible", t, "user", "用户冲突", detail=info)
                 # 解析 loadTop 和 loadBottom
                 # 格式例如: "loadBottom": {"value": True, "comment": "必须置底"}
                 isTop = comm.get("loadTop", {}).get("value") 
@@ -431,6 +517,23 @@ class RuleManager:
                     _merge_rule("load_after", act.get("value"), "dynamic", rule_name)
                 elif act.get("type") == "load_before":
                     _merge_rule("load_before", act.get("value"), "dynamic", rule_name)
+                    
+        
+        # 5. Workshop External Rules (工坊外置依赖规则)
+        if self.settings.get("workshop_mod_rules_enabled", True) and \
+            mid_l not in self.settings.get("excluded_workshop_mods", []):
+            deps = self.workshop_rules_cache.get(mid_l, [])
+            is_strict = self.settings.get("workshop_rules_as_dependency", False)
+            # 根据开关决定作为 强依赖(dependencies) 还是 弱前置(load_after)
+            cat = "dependencies" if is_strict else "load_after"
+            source_name = "工坊依赖数据" if is_strict else "工坊前置数据"
+            for dep_pid, name in deps:
+                _merge_rule(
+                    category=cat,
+                    target_id=dep_pid,
+                    source_type="workshop",
+                    source_name=source_name,
+                )
 
         # 5. 格式化输出
         final_result = {
@@ -452,7 +555,37 @@ class RuleManager:
             final_result["weight_override"] = []
         
         return final_result
-    
+
+    def get_workshop_rules(self, package_id: str = '') -> Dict[str, Any]:
+        """
+        获取工坊依赖规则的标准格式。
+        如果提供 package_id，返回该 Mod 的规则；否则返回所有已构建的工坊规则。
+        返回格式等同于 self.community_rules。
+        """
+        # 内部转换逻辑：将 [id1, id2] 转换为 {"loadAfter": {"id1": {...}, "id2": {...}}}
+        is_strict = self.settings.get("workshop_rules_as_dependency", False)
+        def _transform(mod: List[str]):
+            rules = {
+                pid: {"comment": "来自工坊元数据", "name": name} 
+                for pid, name in mod
+            }
+            return {
+                "dependencies": rules if is_strict else {},
+                "loadAfter": rules if not is_strict else {},
+                "loadBefore": {},
+                "incompatibleWith": {}
+            }
+        # 情况 1：获取单个 Mod 的规则
+        if package_id:
+            pid_l = package_id.lower().strip()
+            mod = self.workshop_rules_cache.get(pid_l)
+            return _transform(mod) if mod else {}
+        # 情况 2：获取全量已生成的工坊规则
+        all_rules = {}
+        for pid, mod in self.workshop_rules_cache.items():
+            all_rules[pid] = _transform(mod)
+            
+        return all_rules
     
     # =========================================================================
     # 3. 导入导出 (Bundle)

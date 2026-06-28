@@ -1,15 +1,36 @@
+
 try:
     import pip_system_certs
     # 该模块一旦被导入，就会自动为 ssl, requests, httpx, urllib3 打补丁
 except ImportError:
     pass
 
-import multiprocessing
 import sys
+import ctypes
+
+def enable_dpi_awareness():
+    """强制开启 Windows DPI 感知，防止多屏缩放导致的窗口拉伸"""
+    if sys.platform == 'win32':
+        try:
+            # 适用于 Windows 10/11
+            ctypes.windll.shcore.SetProcessDpiAwareness(1) # PROCESS_SYSTEM_DPI_AWARE
+        except Exception:
+            try:
+                # 适用于老版本 Windows
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+            
+# 必须在创建任何窗口前调用
+enable_dpi_awareness()
+
+import multiprocessing
 import os
+from backend._version import __version__
 from backend.utils.logger import logger 
 from backend.settings import settings, BASE_RESOURCE_DIR, HOME_DIR
 from backend.utils.event_bus import EventBus
+from backend.utils.tools import current_ms
 from validate_environment import get_entrypoint, validate_environment
 
 from icecream import ic
@@ -41,18 +62,14 @@ else:
 def get_webview_proxy_args():
     """生成 WebView2 的启动参数"""
     cfg = settings.config.network.proxy
-    if not cfg.enabled:
-        return {}
-    
+    if not cfg.enabled: return {}
     # 构造代理服务器字符串
     # WebView2 (Chromium) 格式: --proxy-server="http://user:pass@1.2.3.4:8080"
     # 注意：Chromium 对带密码的代理支持有限，通常建议本地无密码代理
     proxy_str = f"{cfg.type}://{cfg.host}:{cfg.port}"
-    
     # 构造 bypass 规则
     # Chromium 格式: --proxy-bypass-list="foobar.com;*baz.com"
     bypass_str = ";".join(cfg.bypass_list)
-    
     return {
         "proxy_server": proxy_str,
         "proxy_bypass_list": bypass_str
@@ -67,6 +84,9 @@ def on_resized(width, height):
     
 def on_main_window_closed():
     """窗口关闭时触发"""
+    settings.set('last_run_time', current_ms())
+    settings.set('run_count', settings.get('run_count') + 1)
+    settings.set('last_version', __version__)
     settings.save()  # 保存配置
 
 
@@ -92,6 +112,12 @@ def main():
         
         # 干完活直接退出，不要启动 GUI
         sys.exit(0)
+        
+    # 加载启动屏
+    try:
+        import pyi_splash # type: ignore
+    except ImportError:
+        pyi_splash = None
 
     # 只有主进程才会执行到这里，此时再导入 GUI 库
     # 避免 Worker 进程加载浏览器内核，节省内存并防止冲突
@@ -99,7 +125,7 @@ def main():
     from backend.api import API
     
     # 记录启动信息
-    logger.info(f"Starting RimModManager... Ver: {settings.config.game_version or 'Dev'}")
+    logger.info(f"Starting RimModManager... Ver: {__version__ or 'Dev'}")
     logger.debug(f"Debug Mode: {settings.config.debug_mode}")
     
     api = API()
@@ -147,7 +173,8 @@ def main():
     # 注册窗口到事件总线
     EventBus.set_window(window) # type: ignore
     # 捕获全局未处理异常
-    try: # 启动
+    try: # 启动主窗口
+        if pyi_splash: pyi_splash.close()
         webview.start(api.cleanup, debug=settings.config.debug_mode) # debug=True 允许在窗口里按 F12 看控制台
     except Exception as e:
         logger.critical("Application crashed!", exc_info=True)

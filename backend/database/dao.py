@@ -6,8 +6,9 @@ import re
 from typing import Any, Dict, List, cast
 import uuid
 from peewee import chunked, fn, JOIN
-from backend.database.models import GameProfile, SubscribedCollection, db, ModAsset, UserModData, GroupData, GroupMod
+from backend.database.models import SubscribedCollection, db, ModAsset, UserModData, GroupData, GroupMod
 from backend.managers.mgr_files import file_mgr
+from backend.managers.mgr_profile import ProfileContext
 from backend.settings import settings
 from backend.utils.logger import logger
 
@@ -22,7 +23,7 @@ class ModDAO:
     """
 
     @staticmethod
-    def get_profile_mods(profile_id: str = ''):
+    def get_profile_mods(context: ProfileContext|None):
         """
         根据当前环境获取模组列表。
         实现了 Context Filtering (环境过滤) 和 Shadowing Strategy (遮蔽策略)。
@@ -30,24 +31,13 @@ class ModDAO:
         :return: List[Dict] 处理后的模组列表
         """
         # 1. 解析环境上下文 (Context Resolution)
-        if not profile_id:
-            profile_id = settings.config.current_profile_id
+        if not context: return [] # 空上下文直接返回空列表
 
         # 获取环境配置
-        # 兜底逻辑：如果 ID 是 default 或者 库里没查到，就用 settings 的全局配置
-        profile = GameProfile.get_or_none(GameProfile.id == profile_id)
-        
-        if profile:
-            local_root = os.path.join(profile.game_install_path, "Mods")
-            data_root = os.path.join(profile.game_install_path, "Data")
-            use_workshop_mods = profile.use_workshop_mods
-            use_self_mods = profile.use_self_mods
-        else:
-            # Default 环境兜底
-            local_root = os.path.join(settings.config.game_install_path, "Mods")
-            data_root = os.path.join(settings.config.game_install_path, "Data")
-            use_workshop_mods = settings.config.use_workshop_mods
-            use_self_mods = settings.config.use_self_mods
+        local_root = context.local_mods_path
+        dlc_root = context.game_dlc_path
+        use_workshop_mods = context.use_workshop_mods
+        use_self_mods = context.use_self_mods
             
         workshop_root = settings.config.workshop_mods_path
         self_mods_root = settings.config.self_mods_path
@@ -57,7 +47,7 @@ class ModDAO:
         def norm(p): return os.path.normpath(p).lower() + os.sep if p else ""
         
         L_PATH = norm(local_root)
-        D_PATH = norm(data_root)
+        D_PATH = norm(dlc_root)
         W_PATH = norm(workshop_root)
         S_PATH = norm(self_mods_root)
 
@@ -72,7 +62,7 @@ class ModDAO:
         if use_self_mods and S_PATH: conditions.append(ModAsset.path.startswith(S_PATH))
         
         if local_root: local_root = os.path.normpath(local_root).lower()
-        if data_root: data_root = os.path.normpath(data_root).lower()
+        if dlc_root: dlc_root = os.path.normpath(dlc_root).lower()
         if workshop_root: workshop_root = os.path.normpath(workshop_root).lower()
         if self_mods_root: self_mods_root = os.path.normpath(self_mods_root).lower()
             
@@ -146,7 +136,7 @@ class ModDAO:
         return list(merged_map.values())
 
     @staticmethod
-    def get_triple_domain_assets():
+    def get_triple_domain_assets(context: ProfileContext|None):
         """
         全量获取三域 Mod 资产，不进行 Profile 遮蔽过滤。
         返回格式: { 'workshop': [], 'manager': [], 'local': [] }
@@ -158,17 +148,9 @@ class ModDAO:
         result = {'workshop': [], 'self': [], 'local': [], 'missing': [], 'unknown': []}
         
         # # 1. 解析环境上下文 (Context Resolution)
-        profile_id = settings.config.current_profile_id
-        # 获取环境配置
-        # 兜底逻辑：如果 ID 是 default 或者 库里没查到，就用 settings 的全局配置
-        profile = GameProfile.get_or_none(GameProfile.id == profile_id)
-        if profile:
-            local_root = os.path.join(profile.game_install_path, "Mods")
-            dlc_root = os.path.join(profile.game_install_path, "Data")
-        else:
-            # Default 环境兜底
-            local_root = os.path.join(settings.config.game_install_path, "Mods")
-            dlc_root = os.path.join(settings.config.game_install_path, "Data")
+        
+        local_root = context.local_mods_path if context else ''
+        dlc_root = context.game_dlc_path if context else ''
         
         # # 获取管理器和工坊的基准路径 (用于判断来源)
         # manager_root = os.path.normpath(settings.config.self_mods_path).lower()
@@ -179,15 +161,17 @@ class ModDAO:
         for asset in all_assets:
             path = os.path.normpath(asset['path']).lower()
             # 1. 尝试获取已生成的缩略图路径 (物理路径)
-            thumb_path = file_mgr.get_thumbnail_path(asset['package_id'])
-            # 2. 决定列表图标 (优先用缩略图，没有则用原图)
-            list_thumb_path = thumb_path if thumb_path else asset['preview_path']
-            # 3. 转换为 HTTP URL
-            asset['thumb_url'] = file_mgr.get_asset_url(list_thumb_path) if list_thumb_path else None
-            # 4. 详情页大图 URL
-            asset['preview_url'] = file_mgr.get_asset_url(asset['preview_path']) if asset['preview_path'] else None
-            # 5. 图标 URL
-            asset['icon_url'] = file_mgr.get_asset_url(asset['icon_path']) if asset['icon_path'] else None
+            # thumb_path = file_mgr.get_thumbnail_path(asset['package_id'])
+            # # 2. 决定列表图标 (优先用缩略图，没有则用原图)
+            # list_thumb_path = thumb_path if thumb_path else asset['preview_path']
+            # # 3. 转换为 HTTP URL
+            # asset['thumb_url'] = file_mgr.get_asset_url(list_thumb_path) if list_thumb_path else None
+            
+            # asset['thumb_url'] = file_mgr.get_asset_url(asset['preview_path']) # 直接把原图发过去，提高效率
+            # # 4. 详情页大图 URL
+            # asset['preview_url'] = file_mgr.get_asset_url(asset['preview_path']) if asset['preview_path'] else None
+            # # 5. 图标 URL
+            # asset['icon_url'] = file_mgr.get_asset_url(asset['icon_path']) if asset['icon_path'] else None
             
             # # 分流逻辑
             # if workshop_root and workshop_root in path:
@@ -243,7 +227,9 @@ class ModDAO:
         Value: { mtime, size, package_id }
         """
         # 需要 package_id，以便在跳过 XML 解析时依然能告诉扫描器这个 Mod 是谁
-        query = ModAsset.select( ModAsset.path_hash, ModAsset.file_modify_time, ModAsset.file_size, ModAsset.package_id, ModAsset.disabled ).dicts()
+        query = ModAsset.select( ModAsset.path_hash, ModAsset.file_modify_time, ModAsset.file_size, 
+                                ModAsset.package_id, ModAsset.workshop_id, ModAsset.disabled, ModAsset.name, ModAsset.version, 
+                                ModAsset.store, ModAsset.supported_versions ).dicts()
         
         snapshots = {}
         for row in query:
@@ -252,7 +238,12 @@ class ModDAO:
                 'mtime': row['file_modify_time'] or 0,
                 'size': row['file_size'] or 0,
                 'package_id': row['package_id'].lower(), # 缓存 ID
-                'disabled': row['disabled']
+                'workshop_id': row['workshop_id'],
+                'disabled': row['disabled'],
+                'name': row.get('name', ''),
+                'version': row.get('version', ''),
+                'store': row.get('store', 'local'),
+                'supported_versions': row.get('supported_versions', [])
             }
         return snapshots
 
@@ -440,7 +431,7 @@ class ModDAO:
         with db.atomic():
             # 1. 查出已有的记录
             existing_records = UserModData.select().where(cast(Any, UserModData.mod_id).in_(mod_ids))
-            existing_map = {r.mod_id_id: r for r in existing_records} # Peewee 中外键ID属性常带_id后缀
+            existing_map = {r.mod_id: r for r in existing_records} # Peewee 中外键ID属性常带_id后缀
             batch_data = []
             for mid in mod_ids:
                 record = existing_map.get(mid)
@@ -471,18 +462,13 @@ class ModDAO:
         with db.atomic():
             # 1. 查出已有的记录（只查涉及的 Mod）
             existing_records = UserModData.select().where(cast(Any, UserModData.mod_id).in_(mod_ids))
-            existing_map = {r.mod_id_id: r for r in existing_records}
-            
+            existing_map = {r.mod_id: r for r in existing_records}
             batch_data = []
             for mid in mod_ids:
                 record = existing_map.get(mid)
-                
                 # 如果数据库里没记录，或者记录里没标签，直接跳过（不用更新）
-                if not record or not record.tags:
-                    continue
-                
+                if not record or not record.tags: continue
                 current_tags = record.tags # 这是一个 list
-                
                 # 过滤逻辑：保留不在 remove_set 中的标签
                 # 使用列表推导式保持原有顺序（虽然 Tag 顺序通常不重要，但保持更好）
                 new_tags = [t for t in current_tags if t not in remove_set]
@@ -855,16 +841,22 @@ class CollectionDAO:
         return list(SubscribedCollection.select().order_by(SubscribedCollection.created_time.desc()).dicts()) # type: ignore
 
     @staticmethod
-    def upsert_collection(coll_id: str, data: dict, total: int, need_download: int):
-        """保存或更新合集快照"""
+    def get_collection_by_id(coll_id: str):
+        """获取单个合集的完整缓存"""
+        return SubscribedCollection.get_or_none(SubscribedCollection.id == str(coll_id))
+
+    @staticmethod
+    def upsert_collection(coll_id: str, meta: dict, children: list, total: int, need_download: int):
+        """持久化合集及其子项的所有元数据"""
         return SubscribedCollection.insert(
             id=str(coll_id),
-            title=data.get('title'),
-            description=data.get('description'),
-            preview_url=data.get('preview_url'),
+            title=meta.get('title'),
+            description=meta.get('description'),
+            preview_url=meta.get('preview_url'),
+            children=children, # 存入完整的子项列表快照
             total=total,
             need_download=need_download,
-            time_updated=data.get('time_updated', 0)
+            time_updated=meta.get('time_updated', 0)
         ).on_conflict_replace().execute()
 
     @staticmethod

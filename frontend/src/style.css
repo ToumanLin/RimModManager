@@ -434,3 +434,51 @@ button:focus-visible {
   animation: highlight-pulse 2s infinite;
   border-radius: 4px;
 }
+
+
+
+/* =========================================
+  Driver.js 赛博朋克暗黑主题覆盖
+========================================= */
+.driver-overlay {
+  z-index: 99998 !important; 
+}
+.driver-popover {
+  --driver-popover-bg: rgba(30, 41, 59, 0.95); /* bg-bg-surface 颜色 */
+  --driver-popover-text: #e2e8f0; /* text-main */
+  --driver-popover-border: rgba(59, 130, 246, 0.3); /* accent-primary/30 */
+  --driver-popover-btn-bg: rgba(0, 0, 0, 0.4);
+  --driver-popover-btn-text: #94a3b8;
+  --driver-popover-btn-hover-bg: rgba(59, 130, 246, 0.2);
+  --driver-popover-btn-hover-text: #38bdf8;
+  --driver-popover-title-text: #38bdf8; /* 标题用高亮色 */
+  z-index: 99999 !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--driver-popover-border) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(59, 130, 246, 0.1) !important;
+  border-radius: 12px !important;
+}
+
+/* 箭头颜色也要改 */
+.driver-popover-arrow-top { border-bottom-color: var(--driver-popover-bg) !important; }
+.driver-popover-arrow-bottom { border-top-color: var(--driver-popover-bg) !important; }
+.driver-popover-arrow-left { border-right-color: var(--driver-popover-bg) !important; }
+.driver-popover-arrow-right { border-left-color: var(--driver-popover-bg) !important; }
+
+/* 突出显示下一步按钮 */
+.driver-popover-next-btn {
+  background-color: rgba(59, 130, 246, 0.8) !important;
+  color: #000 !important;
+  font-weight: bold !important;
+  text-shadow: none !important;
+}
+.driver-popover-next-btn:hover {
+  background-color: rgba(59, 130, 246, 1) !important;
+  color: #000 !important;
+}
+/* 如果元素被高亮时，z-index没有被拉上来，可以用这个强制拉高 */
+
+.driver-active-element {
+  z-index: 99999 !important;
+  /* position: relative;  */
+}

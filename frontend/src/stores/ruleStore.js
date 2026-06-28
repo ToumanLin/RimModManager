@@ -45,15 +45,19 @@ export const useRuleStore = defineStore('rules', () => {
   const communityModRules = ref({}) // { pkg_id: { loadAfter: ... } }
   const communityRulesUpdateTime = ref(0)
   const userModRules = ref({})   // { pkg_id: { loadAfter: ... } }
+  const workshopModRules = ref({}) // { pkg_id: [dep_pid1, dep_pid2, ...] }
   const userDynamicRules = ref([])
   const settings = ref({
     community_mod_rules_enabled: true,    // 全局社区规则总开关
     user_mod_rules_enabled: true,         // 全局用户单项规则总开关
     dynamic_rules_enabled: true,          // 全局动态规则总开关
+    workshop_mod_rules_enabled: true,     // 工坊外置规则总开关
+    workshop_rules_as_dependency: false,  // True: 作为强依赖(触发自动补全) | False: 作为普通前置依赖
     excluded_community_mods: [],          // 被禁用的社区 Mod ID 列表 (黑名单)
     excluded_user_mods: [],               // 被禁用的用户 Mod ID 列表 (黑名单)
+    excluded_workshop_mods: [],           // 被禁用的工坊 Mod ID 列表 (黑名单)
     // 规则优先级配置：索引越小，优先级越高 (默认: 用户 > 原生 > 社区 > 动态)
-    rule_source_priority: ["user", "native", "community", "dynamic"]
+    rule_source_priority: ["user", "native", "community", "dynamic", "workshop"]
   })
 
   const currentId = ref(null)
@@ -73,6 +77,7 @@ export const useRuleStore = defineStore('rules', () => {
         communityModRules.value = res.data.community_rules
         communityRulesUpdateTime.value = res.data.community_rules_update_time
         userModRules.value = res.data.user_mod_rules
+        workshopModRules.value = res.data.workshop_rules
         userDynamicRules.value = res.data.user_dynamic_rules
         settings.value = res.data.settings
       }
@@ -117,6 +122,13 @@ export const useRuleStore = defineStore('rules', () => {
         result.loadBefore.push({ id, source: 'user' }))
       Object.keys(user.incompatibleWith || {}).forEach(id => 
         result.incompatible.push({ id, source: 'user' }))
+    }
+
+    // 4. Workshop Rules
+    const workshop = workshopModRules.value[pid]
+    if (workshop) {
+      Object.keys(user.loadAfter || {}).forEach(id => 
+        result.loadAfter.push({ id, source: 'workshop' }))
     }
 
     // (动态规则比较复杂，暂不在此展示，以免混淆“手动编辑”的概念)
@@ -256,36 +268,43 @@ export const useRuleStore = defineStore('rules', () => {
       'community':'community_mod_rules_enabled',
       'user':'user_mod_rules_enabled',
       'dynamic':'dynamic_rules_enabled',
+      'workshop':'workshop_mod_rules_enabled',
+      'workshop_dependencies':'workshop_rules_as_dependency',
     }
     if (!window.pywebview) return
     settings.value[type[key]] = enabled
     const res = await window.pywebview.api.rule_global_enable(type[key], enabled)
     if (!appStore.checkResult(res, '全局规则开关')) fetchRules()
+    if (key === 'workshop_dependencies') {
+      fetchRules()
+    }
   }
-  // 切换社区规则排除开关
-  const toggleCommunityModRule = async (package_id) => {
+  // 切换规则开关
+  const toggleModRule = async (rule_type, package_id) => {
     if (!window.pywebview) return
     const pid = package_id.toLowerCase()
+    let excludedMods = []
+    if (rule_type === 'user') {
+      excludedMods = settings.value.excluded_user_mods
+    } else if (rule_type === 'community') {
+      excludedMods = settings.value.excluded_community_mods
+    } else if (rule_type === 'workshop') {
+      excludedMods = settings.value.excluded_workshop_mods
+    } else {
+      return
+    }
     // 乐观更新
-    const { excluded_community_mods: excludedMods } = settings.value;
     const excludedSet = new Set(excludedMods);
     excludedSet.has(pid) ? excludedSet.delete(pid) : excludedSet.add(pid);
     // 转回数组赋值（保持数据结构一致）
-    settings.value.excluded_community_mods = Array.from(excludedSet);
-    const res = await window.pywebview.api.rule_toggle_community_mod(pid, excludedSet.has(pid))
-    if (!appStore.checkResult(res, '社区规则开关')) fetchRules()
-  }
-  // 切换用户规则开关
-  const toggleUserModRule = async (package_id) => {
-    if (!window.pywebview) return
-    const pid = package_id.toLowerCase()
-    // 乐观更新
-    const { excluded_user_mods: excludedMods } = settings.value;
-    const excludedSet = new Set(excludedMods);
-    excludedSet.has(pid) ? excludedSet.delete(pid) : excludedSet.add(pid);
-    // 转回数组赋值（保持数据结构一致）
-    settings.value.excluded_user_mods = Array.from(excludedSet);
-    const res = await window.pywebview.api.rule_toggle_user_mod(pid, excludedSet.has(pid))
+    if (rule_type === 'user') {
+      settings.value.excluded_user_mods = Array.from(excludedSet);
+    } else if (rule_type === 'community') {
+      settings.value.excluded_community_mods = Array.from(excludedSet);
+    } else if (rule_type === 'workshop') {
+      settings.value.excluded_workshop_mods = Array.from(excludedSet);
+    }
+    const res = await window.pywebview.api.rule_toggle_mod(rule_type, pid, excludedSet.has(pid))
     if (!appStore.checkResult(res, '用户规则开关')) fetchRules()
   }
 
@@ -336,6 +355,12 @@ export const useRuleStore = defineStore('rules', () => {
       isLoading.value = false
     }
   }
+  // 更新创意工坊库
+  const updateWorkshop = async () => {
+    isLoading.value = true
+    const res = await appStore.updateExternalDB('workshop_db')
+    isLoading.value = false
+  }
   // 导出规则
   const handleExport = async () => {
     const ids = userDynamicRules.value.map(r => r.rule_id)
@@ -354,12 +379,12 @@ export const useRuleStore = defineStore('rules', () => {
   }
   
   return {
-    communityModRules, communityRulesUpdateTime, userModRules, userDynamicRules, currentId, isLoading,
+    communityModRules, communityRulesUpdateTime, workshopModRules, userModRules, userDynamicRules, currentId, isLoading,
     targetId, currentConstraints, settings, DYNAMIC_RULE_PROPS, DYNAMIC_RULE_ACTIONS, DYNAMIC_RULE_OPERATORS,
     fetchRules, addUserModRule, removeUserModRuleItem, deleteUserModRule, updateComment,
     getAbsolutePosition, setAbsolutePosition,
     toggleDynamicRule, deleteDynamicRule, updateCommunity, handleExport, handleImport,
     saveDynamicRules, changeRuleSourcePriority,
-    setGlobalEnable, toggleCommunityModRule, toggleUserModRule,
+    setGlobalEnable, toggleModRule,
   }
 })

@@ -35,6 +35,7 @@ from backend.settings import BASE_RESOURCE_DIR, HOME_DIR, TOOLS_DIR, settings
 from backend.managers.mgr_network import network_mgr
 from backend.utils.event_bus import EventBus
 from backend.managers.mgr_download import TaskStatus
+from backend.managers.mgr_steamcmd_core import SteamCMDController
 
 # RimWorld App ID
 RIMWORLD_APP_ID = "294100"
@@ -145,6 +146,14 @@ class SteamManager:
         self._monitor_lock = threading.Lock()
         self._active_tasks = {}          # 存放所有正在执行的任务 { task_id: dict }
         self._monitor_running = False    # 标记主监控线程是否存活
+        # 添加内存缓存
+        self._cached_ws_map = None
+        self._last_ws_log_mtime = 0
+        self._last_ws_acf_mtime = 0
+        # 添加内存缓存
+        self._cached_cmd_map = None
+        self._last_cmd_log_mtime = 0
+        self._last_cmd_acf_mtime = 0
         
         # 准备环境 (只复制 DLL 和 txt，不再生成 py 脚本)
         self._ensure_agent_environment()
@@ -242,6 +251,21 @@ class SteamManager:
             
             tid = download_mgr.add_task(url, self.steamcmd_dir, "steamcmd_package.zip")
             tasks.append({"type": "steamcmd", "id": tid})
+            
+        is_initialized = (Path(settings.config.steamcmd_path) / "public").exists()
+        
+        if os.path.exists(self.steamcmd_exe) and not is_initialized:
+            controller = SteamCMDController(self.steamcmd_exe)
+            
+            def on_progress(percent, msg):
+                # 将进度推给前端
+                from backend.utils.event_bus import EventBus
+                EventBus.emit('steamcmd-init-progress', {'percent': percent, 'msg': msg})
+                
+            success, msg = controller.initialize_steamcmd(on_progress)
+            if not success:
+                logger.error(f"SteamCMD 初始化彻底失败: {msg}")
+            
         return tasks
     
     def post_download_setup(self, task_type, file_path):
@@ -258,6 +282,59 @@ class SteamManager:
             except Exception as e:
                 logger.error(f"Failed to extract SteamCMD: {e}")
 
+    def is_steam_running(self) -> bool:
+        """跨平台检测 Steam 进程是否存活"""
+        try:
+            sys_name = platform.system()
+            if sys_name == "Windows":
+                # 隐藏控制台窗口
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                # 使用内置 tasklist 过滤，/NH 去掉表头提升解析速度
+                res = subprocess.run(
+                    ['tasklist', '/FI', 'IMAGENAME eq steam.exe', '/NH'], 
+                    capture_output=True, text=True, startupinfo=si
+                )
+                return 'steam.exe' in res.stdout.lower()
+            elif sys_name == "Darwin": # MacOS
+                res = subprocess.run(['ps', '-A'], capture_output=True, text=True)
+                return 'steam.app' in res.stdout.lower()
+            else: # Linux
+                res = subprocess.run(['ps', '-A'], capture_output=True, text=True)
+                return 'steam' in res.stdout.lower()
+        except Exception as e:
+            logger.error(f"Check steam process failed: {e}")
+            return False
+
+    def start_steam(self) -> bool:
+        """尝试启动 Steam 客户端"""
+        if self.is_steam_running():
+            return True
+            
+        steam_exe = str(self.steam_exe) if self.steam_exe else None
+        
+        # 找不到执行文件时的兜底策略：使用系统协议唤醒
+        if not steam_exe or not os.path.exists(steam_exe):
+            try:
+                if platform.system() == "Windows":
+                    os.startfile("steam://open/main")
+                    return True
+            except:
+                pass
+            return False
+            
+        try:
+            # 独立进程启动，绝不阻塞当前程序的运行
+            if platform.system() == "Windows":
+                subprocess.Popen([steam_exe])
+            else:
+                subprocess.Popen([steam_exe])
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start Steam: {e}")
+            return False
+    
+    
     # =========================================================
     #  2. SteamCMD 功能
     # =========================================================
@@ -458,10 +535,8 @@ class SteamManager:
 
         # 1. 发送 Steam 指令 (过滤掉已经完美的项)
         data_dict = self.workshop_merged_data()
-        
         to_action =[]
         ws_base_path = settings.config.workshop_mods_path
-        
         for mid in target_ids:
             item = data_dict.get(mid)
             folder_exists = bool(ws_base_path and os.path.exists(os.path.join(ws_base_path, mid)))
@@ -471,7 +546,9 @@ class SteamManager:
                 if not is_perfect:
                     to_action.append(mid)
             else: # unsubscribe
-                if item and item.get('is_installed') or folder_exists:
+                # 【核心修复】：只要物理存在、ACF记录存在、或者日志说它还订阅着，都要去退订！
+                is_sub = item.get('is_subscribed') if item else False
+                if folder_exists or (item and item.get('is_installed')) or is_sub:
                     to_action.append(mid)
 
         if to_action:
@@ -530,12 +607,9 @@ class SteamManager:
                     self._monitor_running = False
                     break
                 current_tasks = dict(self._active_tasks)
-
             try:
                 data_dict = self.workshop_merged_data()
-                
                 tasks_to_remove =[]
-
                 for tid, task in current_tasks.items():
                     targets = task["targets"]
                     total = task["total"]
@@ -563,12 +637,21 @@ class SteamManager:
                                     
                             elif action == "unsubscribe":
                                 is_installed_acf = item.get('is_installed') if item else False
+                                is_subscribed = item.get('is_subscribed') if item else False
                                 # 条件1：完美移除 (物理消失 + Steam记录消失)
                                 if not is_installed_acf and not folder_exists:
                                     finished_count += 1
                                 # 条件2：容错放行 (物理已经消失，且指令发出了超过 3 秒)
                                 # 对付手动删文件导致 Steam 装死不更新 ACF 的情况
                                 elif not folder_exists and (time.time() - start_time > 3):
+                                    finished_count += 1
+                                # 条件3：日志明确表示已经退订 
+                                # (应对 Steam 延迟删文件，或游戏运行中锁定文件的情况)
+                                elif item and is_subscribed is False:
+                                    finished_count += 1
+                                # 条件4：兜底超时放行 
+                                # (如果向 Steam 发出退订指令超过 10 秒，强行认定完成，防止卡 0%)
+                                elif time.time() - start_time > 10:
                                     finished_count += 1
 
                         # 计算独立进度
@@ -768,7 +851,6 @@ class SteamManager:
         for item_id in all_item_ids:
             inst = installed.get(item_id, {})
             det = details.get(item_id, {})
-            
             parsed_acf[item_id] = {
                 "workshop_id": item_id,
                 "size_bytes": int(inst.get("size", 0)),
@@ -776,16 +858,14 @@ class SteamManager:
                 "local_manifest": inst.get("manifest") or det.get("manifest"),
                 # 线上(或缓存的最新)目标清单ID
                 "remote_manifest": det.get("latest_manifest", det.get("manifest")),
-                
                 # 模组作者发布版本的真实时间
                 "installed_version_time": format_timestamp(inst.get("timeupdated") or det.get("timeupdated")),
                 "latest_version_time": format_timestamp(det.get("latest_timeupdated") or det.get("timeupdated")),
-                
                 # Steam客户端最后一次检查该Mod状态的时间
                 "last_checked_time": format_timestamp(det.get("timetouched")),
-                
                 # 是否确实安装在硬盘上
-                "is_installed": item_id in installed
+                "is_installed": item_id in installed,
+                "is_subscribed": item_id in details 
             }
             # 衍生判断：是否需要更新 (本地与线上清单不一致，且都存在)
             loc_man = parsed_acf[item_id]["local_manifest"]
@@ -932,7 +1012,7 @@ class SteamManager:
             # 构建合理的最终字典
             merged_item = {
                 "workshop_id": item_id,
-                "is_subscribed": item_log.get("is_subscribed"),    # 从日志推断的订阅状态
+                "is_subscribed": item_acf.get("is_subscribed"),    # 从日志推断的订阅状态
                 "is_installed": item_acf.get("is_installed", False), # 文件是否真实存在
                 "needs_update": item_acf.get("needs_update", False), # 是否有更新等待下载
                 "has_error": bool(item_log.get("log_last_error")),   # 下载/校验是否报错
@@ -940,7 +1020,6 @@ class SteamManager:
                 
                 # --- 物理信息 (以 ACF 为准) ---
                 "size_bytes": item_acf.get("size_bytes", 0),
-
                 "local_manifest": item_acf.get("local_manifest") or item_log.get("log_last_manifest"),
                 "remote_manifest": item_acf.get("remote_manifest"),
 
@@ -1007,19 +1086,43 @@ class SteamManager:
         ]
         """
         # 获取分别解析后的字典结构
+        log_path = self._get_steam_log_path()
+        acf_path = self._get_acf_path()
+        # 获取文件的最新修改时间 (os.path.getmtime 非常快)
+        log_mtime = os.path.getmtime(log_path) if log_path and os.path.exists(log_path) else 0
+        acf_mtime = os.path.getmtime(acf_path) if acf_path and os.path.exists(acf_path) else 0
+        # 命中缓存，直接返回内存数据 (0 开销！)
+        if self._cached_ws_map is not None and \
+           log_mtime == self._last_ws_log_mtime and \
+           acf_mtime == self._last_ws_acf_mtime:
+            return self._cached_ws_map
+        # 只有文件真变了，才去跑耗时的正则和 JSON 解析
         log_data = self.parse_workshop_log()
         acf_json = self.get_acf_json()
         acf_data = self.parse_acf_data(acf_json)
-        # 合并数据
-        return self._merge_acf_and_log(acf_data, log_data)
+        
+        self._cached_ws_map = self._merge_acf_and_log(acf_data, log_data)
+        self._last_ws_log_mtime = log_mtime
+        self._last_ws_acf_mtime = acf_mtime
+        
+        return self._cached_ws_map
         
     def steamcmd_merged_data(self) -> dict:
         """
         获取 steamcmd 下载的创意工坊模组的ACF数据
         返回格式与 workshop_merged_data 相同
         """
-        steamcmd_acf_path = Path(self.steamcmd_dir) / "steamapps" / "workshop" / f"appworkshop_{RIMWORLD_APP_ID}.vdf"
+        steamcmd_acf_path = Path(self.steamcmd_dir) / "steamapps" / "workshop" / f"appworkshop_{RIMWORLD_APP_ID}.acf"
         steamcmd_log_path = Path(self.steamcmd_dir) / "logs" / "workshop_log.txt"
+        
+        # 获取文件的最新修改时间 (os.path.getmtime 非常快)
+        log_mtime = os.path.getmtime(steamcmd_log_path) if steamcmd_log_path and os.path.exists(steamcmd_log_path) else 0
+        acf_mtime = os.path.getmtime(steamcmd_acf_path) if steamcmd_acf_path and os.path.exists(steamcmd_acf_path) else 0
+        # 命中缓存，直接返回内存数据 (0 开销！)
+        if self._cached_cmd_map is not None and \
+           log_mtime == self._last_cmd_log_mtime and \
+           acf_mtime == self._last_cmd_acf_mtime:
+            return self._cached_cmd_map
         if steamcmd_acf_path.exists():
             acf_json = self.get_acf_json(steamcmd_acf_path)
             acf_data = self.parse_acf_data(acf_json)
@@ -1029,9 +1132,13 @@ class SteamManager:
             log_data = self.parse_workshop_log(log_path=steamcmd_log_path)
         else:
             log_data = {}
+        # 合并数据
+        self._cached_cmd_map = self._merge_acf_and_log(acf_data, log_data)
+        self._last_cmd_log_mtime = log_mtime
+        self._last_cmd_acf_mtime = acf_mtime
         
         # 合并数据
-        return self._merge_acf_and_log(acf_data, log_data)
+        return self._cached_cmd_map
     
     def get_item_timeline(self, workshop_id: str, is_steamcmd: bool = False) -> list:
         """
@@ -1146,9 +1253,13 @@ class SteamManager:
     
 if __name__ == "__main__":
     steam_mgr = SteamManager()
-    # data = steam_mgr.workshop_merged_data()
-    # if data:
-    #     print(f"Total items: {len(data)} First item:\n", data)
+    data = steam_mgr.workshop_merged_data()
+    installed_mods = { id: da for id, da in data.items() if da.get('is_installed') }
+    not_installed_mods = { id: da for id, da in data.items() if not da.get('is_installed') }
+    if data:
+        # print(f"Total items: {len(data)} First item:\n", data)
+        print(f"Total items: {len(data)} Installed items: {len(installed_mods)} Uninstall items: {len(not_installed_mods)}")
+        print(not_installed_mods)
     # data2 = steam_mgr.steamcmd_merged_data()
     # if data2:
     #     print(f"Total items: {len(data2)} First item:\n", data2)

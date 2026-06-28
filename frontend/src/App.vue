@@ -14,24 +14,24 @@
           <div class="h-full p-1 transition-opacity relative" :style="{ width: (colWidths[index] || 0) + 'px' }" >
             <!-- 1. 详情 (Details) -->
             <div v-if="col.id === 'details'" class="h-full rounded-2xl overflow-hidden bg-bg-surface/40 backdrop-blur-sm border border-text-main/5 shadow-2xl">
-              <ModDetails />
+              <ModDetails data-tour="details-column" />
             </div>
 
             <!-- 2. 待选库 (Library) -->
             <div v-else-if="col.id === 'library'" class="h-full">
-              <ModList v-model="modStore.inactiveIds" title="未启用" listColor="primary" listId="inactive" />
+              <ModList v-model="modStore.inactiveIds" title="未启用" listColor="primary" listId="inactive" data-tour="inactive-list" />
             </div>
 
             <!-- 3. 启用/排序 (Active) - 包含规则编辑器逻辑 -->
             <div v-else-if="col.id === 'active'" class="h-full">
-              <ModList v-model="modStore.activeIds" title="启用" :hasSidebar="true" listColor="success" listId="active" />
+              <ModList v-model="modStore.activeIds" title="启用" :hasSidebar="true" listColor="success" listId="active" data-tour="active-list" />
             </div>
 
             <!-- 4. 辅助/分组 (Sidebar Tabs) -->
             <div v-else-if="col.id === 'sidebar'" class="h-full">
               <!-- 这里保留原有的逻辑：如果有规则ID，显示编辑器，否则显示列表 -->
               <ModRuleEditor v-if="ruleStore.currentId" title="规则" listColor="warn" />
-              <div v-else class="h-full flex flex-col relative">
+              <div v-else class="h-full flex flex-col relative" data-tour="sidebar-column">
                 <div class="flex-1 overflow-hidden grid grid-cols-1 grid-rows-1">
                   <Transition
                     enter-active-class="transition-opacity duration-300 ease-out"
@@ -41,21 +41,21 @@
                     leave-from-class="opacity-100"
                     leave-to-class="opacity-0">
                     <KeepAlive>
-                      <ModList v-if="activeTab === tabs[0]" v-model="modStore.tempIds" title="临时" listColor="warning" listId="temp" class="rounded-b-none col-start-1 row-start-1 w-full"/>
-                      <GroupList v-else-if="activeTab === tabs[1]" v-model="groupStore.groupList" title="分组" listColor="special" class="rounded-b-none col-start-1 row-start-1 w-full"/>
-                      <BackupList v-else-if="activeTab === tabs[2]" class="rounded-b-none col-start-1 row-start-1 w-full"/>
+                      <ModList v-if="appStore.activeSidebarTab === 'temp'" v-model="modStore.tempIds" title="临时" listColor="warning" listId="temp" class="rounded-b-none col-start-1 row-start-1 w-full"/>
+                      <GroupList v-else-if="appStore.activeSidebarTab === 'group'" v-model="groupStore.groupList" title="分组" listColor="special" class="rounded-b-none col-start-1 row-start-1 w-full"/>
+                      <BackupList v-else-if="appStore.activeSidebarTab === 'backup'" class="rounded-b-none col-start-1 row-start-1 w-full"/>
                     </KeepAlive>
                   </Transition>
                 </div>
                 
                 <!-- 标签页切换 -->
-                <div class="absolute left-5.5 top-0.5 p-0.5 h-8 flex text-sm font-bold">
+                <div class="absolute left-5.5 top-0.5 p-0.5 h-8 flex text-sm font-bold" data-tour="sidebar-tab">
                   <!-- <FocusTabs v-model="activeTab" :tabs="tabs" :blurAmount="3" borderColor="#059669" class="top-0 opacity-100"/> -->
-                  <SegmentedTabs v-model="activeTab" :options="tabs" />
+                  <SegmentedTabs v-model="appStore.activeSidebarTab" :options="appStore.SIDEBAR_TABS" />
                 </div>
 
                 <!-- 底部按钮组 -->
-                <div class="p-3 rounded-b-2xl grid grid-cols-3 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-text-main/5">
+                <div class="p-3 rounded-b-2xl grid grid-cols-3 gap-2 bg-bg-surface/80 shadow-2xl backdrop-blur-md border-t border-text-main/5" data-tour="base-button-group">
             
                   <!-- 刷新按钮 -->
                   <div :class="{'scan': appStore.scanProgress.scanning}" v-tooltip="'默认增量扫描文件，只扫描存在变动的文件'"
@@ -129,7 +129,35 @@
         </template>
         
       </div>
+
     </div>
+
+    <!-- 游戏运行中的临时浮动指示器 -->
+    <Transition
+      enter-active-class="transition-all duration-500 ease-out"
+      enter-from-class="-translate-y-full opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition-all duration-300 ease-in"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="-translate-y-full opacity-0"
+    >
+      <div v-if="appStore.isGameRunning" 
+        class="fixed top-5 left-1/2 -translate-x-1/2 z-9999 flex items-center bg-black/80 backdrop-blur-md border border-accent-tip/30 p-1.5 pl-4 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
+        
+        <div class="flex items-center gap-2 mr-4 text-sm font-bold text-text-main">
+          <span class="relative flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-tip opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-accent-tip shadow-[0_0_10px_#eab308]"></span>
+          </span>
+          游戏正在后台运行
+        </div>
+
+        <button @click="appStore.enterSleepMode()"
+          class="px-4 py-1.5 bg-accent-primary/20 hover:bg-accent-tip text-accent-tip hover:text-black rounded-full text-xs font-bold transition-all border border-accent-tip/30">
+          恢复低功耗休眠
+        </button>
+      </div>
+    </Transition>
 
     <!-- 列表对比抽屉 -->
     <Teleport to="body">
@@ -218,6 +246,9 @@
 
     <!-- 环境管理抽屉 -->
     <ProfileDrawer /> 
+
+    <!-- 引导中心浮动按钮 -->
+    <GuideCenter />
     
     <!-- 设置弹窗 -->
     <SettingsModal />
@@ -227,6 +258,9 @@
 
     <!-- 确认弹窗 -->
     <Confirm />
+
+    <!-- 更新弹窗 -->
+    <UpdateModal />
 
     <!-- 右键菜单 -->
     <ContextMenu />
@@ -246,6 +280,7 @@ import { useAppStore } from './stores/appStore'
 import { useRuleStore } from './stores/ruleStore'
 import { useGroupStore } from './stores/groupStore'
 import { useOrderStore } from './stores/orderStore'
+import { useGuideStore } from './stores/guideStore'
 import RimHeader from './components/RimHeader.vue'
 import ModDetails from './components/ModDetails.vue'
 import ModList from './components/ModList.vue'
@@ -269,14 +304,17 @@ import Test from './components/temp/test.vue'
 import AiReviewModal from './components/AiReviewModal.vue'
 import PromptManager from './components/PromptManager.vue'
 import WorkspaceOverlay from './components/workspace/WorkspaceOverlay.vue'
+import UpdateModal from './components/UpdateModal.vue'
+import GuideCenter from './components/GuideCenter.vue'
 
-
+const updateModal = ref(null);
 
 const appStore = useAppStore()
 const modStore = useModStore()
 const ruleStore = useRuleStore()
 const groupStore = useGroupStore()
 const orderStore = useOrderStore()
+const guideStore = useGuideStore()
 
 const tabs = ['临时', '分组', '备份']
 const activeTab = ref(tabs[0])
@@ -380,13 +418,36 @@ const stopResize = () => {
   document.body.style.userSelect = ''
 }
 
+// 处理更新弹窗
+function handleUpdate(changelog) {
+  // updateModal.value.show(changelog); // 注意要加 .value
+}
+
 // 生命周期与自适应
 let resizeObserver = null
-
 onMounted(() => {
   console.log("应用已启动，正在初始化存储……")
-  appStore.initialize()  // 初始化存储（加载数据）
-  
+  // 确保 API 存在
+  if (window.pywebview) {
+    window.pywebview.api.monitor_frontend_ready()
+  } else {
+    window.addEventListener('pywebviewready', () => {
+      window.pywebview.api.monitor_frontend_ready()
+    })
+  }
+  // 确保数据初始化
+  appStore.initialize()
+
+  // 监听后端传递过来的升级上下文
+  watch(() => appStore.upgradeContext, (ctx) => {
+    if (ctx && ctx.version_changed) {
+      if (ctx.pending_actions && ctx.pending_actions.includes('show_update_news')) {
+        // 直接通过状态控制弹窗显示，不传参，组件内部会自己读 context
+        appStore.uiState.showUpdateModal = true
+      }
+    }
+  }, { immediate: true }) // 立即执行一次以防数据已经加载
+
   // === 动态尺寸调整 ===
   distributeEvenly()  // 初始平均分配宽度
   // 监听容器尺寸变化
@@ -402,12 +463,10 @@ onMounted(() => {
           distributeEvenly()
           return
         }
-
         // 按比例缩放所有列
         const scale = newTotalWidth / currentTotalWidth
         // 避免除以0或无效缩放
         if (!isFinite(scale) || scale === 0) return 
-
         colWidths.value = colWidths.value.map(w => w * scale)
       }
     })

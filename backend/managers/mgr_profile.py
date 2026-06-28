@@ -1,27 +1,108 @@
-from datetime import datetime
-from email.policy import default
-import json
+
 import os
-from pathlib import Path
-from typing import Any, Dict
+import json
 import uuid
 import shutil
-import subprocess
+from pathlib import Path
+from typing import Any, Dict
+from datetime import datetime
+from dataclasses import asdict, dataclass, field
 from playhouse.shortcuts import model_to_dict
 from send2trash import send2trash
-from backend.database.dao import ModDAO
 from backend.database.models import GameProfile, db
 from backend.managers.mgr_files import PathChecker
 from backend.managers.mgr_game import GameManager
-from backend.settings import settings, DATA_DIR
+from backend.settings import BACKUP_DIR, settings, DATA_DIR
 from backend.utils.logger import logger 
 
 
+# @dataclass
+@dataclass(frozen=True) # 使用 frozen=True 让其不可变，防止运行时被意外篡改
+class ProfileContext:
+    profile_id: str
+    game_version: str
+    game_install_path: str
+    user_data_path: str
+    use_workshop_mods: bool
+    use_self_mods: bool
+    
+    is_healthy: bool = True
+    health_report: dict = field(default_factory=dict) 
+    
+    # 动态计算出来的绝对路径（初始化时即确定，拒绝中途修改）
+    @property
+    def local_mods_path(self): return str(Path(self.game_install_path) / "Mods")
+    @property
+    def game_dlc_path(self): return str(Path(self.game_install_path) / "Data")
+    @property
+    def game_config_path(self): return str(Path(self.user_data_path) / "Config")
+    @property
+    def game_saves_path(self): return str(Path(self.user_data_path) / "Saves")
+    @property
+    def mods_config_file(self): return str(Path(self.game_config_path) / "ModsConfig.xml")
+    @property
+    def backup_dir(self): 
+        result = str(BACKUP_DIR / "profile" / self.profile_id) # 强隔离：备份跟环境走！
+        if self.profile_id == "default": result = str(BACKUP_DIR)
+        return result
+
+    def ensure_directories(self):
+        """生命周期钩子：激活此环境时，强制校验并创建必需的目录"""
+        try:
+            os.makedirs(self.game_config_path, exist_ok=True)
+            os.makedirs(self.game_saves_path, exist_ok=True)
+            os.makedirs(self.backup_dir, exist_ok=True)
+            os.makedirs(os.path.join(self.backup_dir, "today"), exist_ok=True)
+            os.makedirs(os.path.join(self.backup_dir, "earlier"), exist_ok=True)
+            os.makedirs(os.path.join(self.backup_dir, "other"), exist_ok=True)
+        except Exception as e:
+            logger.error(f"无法初始化环境目录 {self.profile_id}: {e}")
+    
+    def validate_health(self):
+        """生命周期钩子：装载上下文时的绝对防御"""
+        report = {
+            "game_install_path": PathChecker.check_install_path(self.game_install_path),
+            "user_data_path": PathChecker.check_user_data_path(self.user_data_path)
+        }
+        # 强制绕过 frozen 限制
+        object.__setattr__(self, 'health_report', report)
+        # 只要有一项核心检查没过，健康度就为 False
+        value = all(res["pass"] for res in report.values())
+        object.__setattr__(self, 'is_healthy', value)
+        # self.is_healthy = all(res["pass"] for res in self.health_report.values())
+        
+        if self.is_healthy: self.ensure_directories() # 健康的话，才去创建配置和备份目录
+    
+    def to_dict(self):
+        data = asdict(self) # 拿到基础字段
+        # 手动注入动态属性
+        data.update({
+            "local_mods_path": self.local_mods_path,
+            "game_dlc_path": self.game_dlc_path,
+            "game_config_path": self.game_config_path,
+            "game_saves_path": self.game_saves_path,
+            "mods_config_file": self.mods_config_file,
+            "backup_dir": self.backup_dir,
+        })
+        return data
+
+
 class ProfileManager:
+    # 定义属于环境数据的字段白名单
+    PROFILE_KEYS = {
+        'name',
+        'description',
+        'game_install_path', 
+        'user_data_path', 
+        'use_workshop_mods', 
+        'use_self_mods', 
+        'run_commands'
+    }
+    
     def __init__(self):
+        self._ensure_default_profile()
         self.current_profile = GameProfile.get_or_none(GameProfile.id == settings.config.current_profile_id)
         self.update_version()
-        self._ensure_default_profile()
 
     def _ensure_default_profile(self):
         """确保至少有一个默认 Profile (通常是当前设置的 Steam 版)"""
@@ -32,15 +113,15 @@ class ProfileManager:
                     id='default',
                     name='Default',
                     description='Default Profile',
-                    user_data_path=settings.config.user_data_path,
-                    game_install_path=settings.config.game_install_path,
-                    game_version=GameManager.get_game_version(settings.config.game_install_path),
-                    use_workshop_mods="steamlibrary" in settings.config.game_install_path.lower(), # 默认非Steam版不加载工坊
-                    use_self_mods=True, # 默认加载 Self Mod
+                    game_install_path='',
+                    user_data_path='',
+                    game_version='',
+                    is_steam=False,
+                    use_workshop_mods=True, # 默认非Steam版不加载工坊
+                    use_self_mods=False,    # 默认不加载 Self Mod
+                    run_commands=[]
                 )
             self.activate_profile('default')  # 切换到默认环境
-        else:
-            self._update_paths(self.current_profile)    # 更新默认profile的路径
 
     def create_profile(self, data: Dict[str, Any], copy_current_data: bool = False):
         """
@@ -50,13 +131,10 @@ class ProfileManager:
         # 验证游戏安装路径是否存在
         if not GameManager.detect_executable(data.get('game_install_path')):
             raise ValueError(f"Game executable not found: {data.get('game_install_path')}")
-        
         profile_id = uuid.uuid4().hex
-        
         # 规划数据隔离目录 (例如存放在 data/profiles/<id>)
         # 注意：这里使用绝对路径
         data_dir = data.get('user_data_path') or str(DATA_DIR / "profiles" / profile_id)
-        
         # 检测路径是否存在，然后初始化目录结构
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
@@ -71,7 +149,7 @@ class ProfileManager:
         
         # 如果需要继承数据
         if copy_current_data:
-            self._clone_user_data(settings.config.game_config_path, data_dir)
+            self._clone_user_data(self.current_profile.game_config_path, data_dir)
         
         with db.atomic():
             profile = GameProfile.create(
@@ -79,8 +157,8 @@ class ProfileManager:
                 name=data.get('name', 'Profile'),
                 description=data.get('description', ''),
                 user_data_path=data_dir,
-                game_install_path=data.get('game_install_path', settings.config.game_install_path),
-                game_version=GameManager.get_game_version(data.get('game_install_path', settings.config.game_install_path)),
+                game_install_path=data.get('game_install_path'),
+                game_version=GameManager.get_game_version(data.get('game_install_path')),
                 use_workshop_mods=data.get('use_workshop_mods', False),
                 use_self_mods=data.get('use_self_mods', False), # 默认不加载 Self Mod
                 is_steam=isSteam,
@@ -97,27 +175,30 @@ class ProfileManager:
         # 验证 Profile 是否在数据库中
         if profile_id not in [p.id for p in GameProfile.select()]: 
             raise ValueError(f"Profile not found: {profile_id}")
+        # 过滤掉非环境字段
+        clean_data = {k: v for k, v in data.items() if k in self.PROFILE_KEYS}
+        if not clean_data: return False
         # 验证字段有效性
-        valid_field_names = set(GameProfile._meta.fields.keys()) # type: ignore
-        clear_data = {k: v for k, v in data.items() if k in valid_field_names}
-        if 'id' in clear_data: del clear_data['id']
-        clear_data['game_version'] = GameManager.get_game_version(clear_data.get('game_install_path', settings.config.game_install_path))
-        clear_data['is_steam'] = os.path.normpath(clear_data.get('game_install_path', settings.config.game_install_path)).lower().rfind(os.path.join('steamapps', 'common')) != -1
+        # valid_field_names = set(GameProfile._meta.fields.keys()) # type: ignore
+        # clean_data = {k: v for k, v in data.items() if k in valid_field_names}
+        # if 'id' in clean_data: del clean_data['id']
+        clean_data['game_version'] = GameManager.get_game_version(clean_data.get('game_install_path'))
+        clean_data['is_steam'] = os.path.normpath(clean_data.get('game_install_path','')).lower().rfind(os.path.join('steamapps', 'common')) != -1
+        clean_data['use_workshop_mods'] = True if profile_id =='default' else clean_data.get('use_workshop_mods', False)
         
         path_fields = ['user_data_path', 'game_install_path']
         # 验证路径有效性
         for field in path_fields:
-            if field in clear_data:
-                if not os.path.exists(clear_data[field]):
-                    raise ValueError(f"Path not found: {clear_data[field]}")
-                clear_data[field] = os.path.normpath(clear_data[field])
+            if field in clean_data:
+                if not os.path.exists(clean_data[field]):
+                    raise ValueError(f"Path not found: {clean_data[field]}")
+                clean_data[field] = os.path.normpath(clean_data[field])
                 
-        query = GameProfile.update(**clear_data).where(GameProfile.id == profile_id)
+        query = GameProfile.update(**clean_data).where(GameProfile.id == profile_id)
         query.execute()
         # 获取更新后的对象并同步到磁盘
         profile = GameProfile.get_or_none(GameProfile.id == profile_id)
-        if profile:
-            self._sync_profile_to_disk(profile)
+        if profile: self._sync_profile_to_disk(profile)
         return True
 
     def update_version(self):
@@ -188,7 +269,7 @@ class ProfileManager:
                 
         return res
     
-    def activate_profile(self, profile_id):
+    def activate_profile(self, profile_id) -> ProfileContext:
         """
         切换当前环境
         这会影响：
@@ -198,49 +279,35 @@ class ProfileManager:
         """
         if not profile_id: profile_id = 'default'
         profile = GameProfile.get_or_none(GameProfile.id == profile_id)
-        if not profile: return False    # 检测环境数据是否存在
+        if not profile: raise ValueError("环境不存在")   # 检测环境数据是否存在
         # 验证游戏安装路径是否有效
         check_install = PathChecker.check_install_path(profile.game_install_path)
         # 验证用户数据路径是否有效
         check_data = PathChecker.check_normal_path(profile.user_data_path)
-        if not check_install['pass'] or not check_data['pass']: 
+        if (not check_install['pass'] or not check_data['pass']) and profile_id != 'default': 
             self.activate_profile('default')
             msg = f"""{check_install['msg'] if not check_install['pass'] else ""}\n{check_data['msg'] if not check_data['pass'] else ''}"""
             raise ValueError(msg.strip())
         
         self.current_profile = profile
         self.update_version()
-        self._update_paths(profile)
-        return True
+        settings.set('current_profile_id', profile.id)
         
-    def _update_paths(self, profile):
-        # 动态更新全局设置中的路径，指向隔离区
-        settings.config.current_profile_id = profile.id
+        # 2. 实例化沙盒上下文
+        context = ProfileContext(
+            profile_id=profile.id,
+            game_version=profile.game_version,
+            game_install_path=profile.game_install_path,
+            user_data_path=profile.user_data_path,
+            use_workshop_mods=profile.use_workshop_mods,
+            use_self_mods=profile.use_self_mods
+        )
+        # 3. 校验健康度，强制建立物理目录
+        context.validate_health()
         
-        # 指向隔离环境的 Config 目录
-        settings.config.game_version = profile.game_version
-        # 更新游戏安装目录（用于扫描 mod
-        settings.config.game_install_path = profile.game_install_path
-        settings.config.local_mods_path = os.path.join(profile.game_install_path, "Mods")
-        settings.config.game_dlc_path = os.path.join(profile.game_install_path, "Data")
-        # RimWorld 的结构是: <Root>/Config, <Root>/Saves
-        settings.config.user_data_path = profile.user_data_path
-        # 检测路径是否存在
-        if os.path.exists(profile.user_data_path):
-            settings.config.game_config_path = os.path.join(profile.user_data_path, "Config")
-            if not os.path.exists(settings.config.game_config_path):
-                os.makedirs(settings.config.game_config_path)
-            settings.config.game_saves_path = os.path.join(profile.user_data_path, "Saves")
-            if not os.path.exists(settings.config.game_saves_path):
-                os.makedirs(settings.config.game_saves_path)
-        # 控制是否扫描工坊
-        settings.config.use_workshop_mods = profile.use_workshop_mods if profile.id != 'default' else True
-        settings.config.use_self_mods = profile.use_self_mods   # 控制是否扫描 Self Mod
-        # 合并自定义参数
-        settings.config.run_commands = profile.run_commands if profile.run_commands else []
-        # 强制持久化到 config.json
-        settings.save()
+        return context
         
+    
     def get_launch_args(self, profile_id: str = ''):
         """
         获取启动参数

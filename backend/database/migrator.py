@@ -144,15 +144,19 @@ def _2to3(old_version):
             db.create_tables([
                 ModAsset, GameProfile, UserModData, GroupData, GroupMod
             ], safe=True)
-
+            game_install_path = ""
+            game_data_path = ""
+            if(hasattr(settings.config, 'game_install_path') and hasattr(settings.config, 'user_data_path')):
+                game_install_path = settings.config.game_install_path or "" # type: ignore
+                game_data_path = settings.config.user_data_path or "" # type: ignore
             # 2.4 初始化默认 Profile
             # 因为新版本必须有 Profile，迁移时自动创建一个
             if GameProfile.select().count() == 0:
                 GameProfile.create(
                     id='default',
                     name='Default Profile',
-                    game_install_path=settings.config.game_install_path or "", # 防止 None 报错
-                    user_data_path=settings.config.user_data_path or "",
+                    game_install_path=game_install_path, # 防止 None 报错
+                    user_data_path=game_data_path,
                 )
 
             # ---------------------------------------------------------
