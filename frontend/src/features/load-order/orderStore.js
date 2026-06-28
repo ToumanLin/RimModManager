@@ -736,10 +736,10 @@ export const useOrderStore = defineStore('order', () => {
     appStore.openPath(backupProfileDir.value || [appStore.settings.home_path,"backups"].join("/"))
   }
   // 获取所有备份文件路径 {today: [], earlier: [], other: []}
-  const getBackups = async (profile_id=null) => {
+  const getBackups = async (profile_id=null, { silent = false } = {}) => {
     if(!window.pywebview) return
     const res = await window.pywebview.api.backups_get_all(profile_id)
-    if (checkResult(res, "获取备份文件")) {
+    if (checkResult(res, "获取备份文件", false, { silent })) {
       const payload = res.data || {}
       const files = {
         today: payload.today || [],

@@ -137,7 +137,11 @@
 ├── ·[data]
 ├── ·[frontend]
 │   ├── ·[public]
+│   │   ├── ·[project-assets]
+│   │   │   └──  donate-qr.png
+│   │   │   
 │   │   ├──  icon.svg
+│   │   ├──  project-meta.json
 │   │   └──  vite.svg
 │   │   
 │   ├── ·[src]
@@ -274,6 +278,11 @@
 │   │       ├── ·[assets]
 │   │       │   └──  vue.svg
 │   │       │   
+│   │       ├── ·[branding]
+│   │       │   ├── ·[private-assets]
+│   │       │   ├──  brandProfile.js
+│   │       │   └──  BrandSignature.vue
+│   │       │   
 │   │       ├── ·[commands]
 │   │       │   ├──  commandRegistry.js
 │   │       │   ├──  commandStore.js
@@ -315,6 +324,7 @@
 │   │           ├──  domEffects.js
 │   │           ├──  format.js
 │   │           ├──  markdown.js
+│   │           ├──  startupPerf.js
 │   │           ├──  text.js
 │   │           └──  translationDetection.js
 │   │           

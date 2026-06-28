@@ -117,7 +117,7 @@
 import { ref, watch, h, computed } from 'vue'
 import { FolderTree, AppWindow, Globe, Cpu, Terminal, Component, Settings, Keyboard, Info } from 'lucide-vue-next'
 import { shakeComponent } from '../../shared/lib/domEffects'
-import { toast } from '../../shared/lib/common'
+import { deepClone, toast } from '../../shared/lib/common'
 import { createDefaultKeybindingConfig } from '../../shared/commands/keybindingConflicts'
 
 // 导入 Common UI
@@ -142,6 +142,7 @@ const currentTab = ref('paths')
 const formData = ref({})
 const steamLaunchTouched = ref(false)
 const saving = ref(false)
+
 const Steam = h('svg', { viewBox: "0 0 448 512", fill: "currentColor" }, 
   [ h('path', { d: "M273.5 177.5a61 61 0 1 1 122 0 61 61 0 1 1 -122 0zm174.5 .2c0 63-51 113.8-113.7 113.8L225 371.3c-4 43-40.5 76.8-84.5 76.8-40.5 0-74.7-28.8-83-67L0 358 0 250.7 97.2 290c15.1-9.2 32.2-13.3 52-11.5l71-101.7C220.7 114.5 271.7 64 334.2 64 397 64 448 115 448 177.7zM203 363c0-34.7-27.8-62.5-62.5-62.5-4.5 0-9 .5-13.5 1.5l26 10.5c25.5 10.2 38 39 27.7 64.5-10.2 25.5-39.2 38-64.7 27.5-10.2-4-20.5-8.3-30.7-12.2 10.5 19.7 31.2 33.2 55.2 33.2 34.7 0 62.5-27.8 62.5-62.5zM410.5 177.7a76.4 76.4 0 1 0 -152.8 0 76.4 76.4 0 1 0 152.8 0z" })]
 )
@@ -169,62 +170,50 @@ const currentTabLabel = computed(() => (
   tabs.find(item => item.id === currentTab.value)?.label || currentTab.value
 ))
 
-// 数据同步：打开时深度拷贝
-watch(() => appStore.uiState.showSettingsPanel, (val) => {
-  if (val) {
-    const openVersion = ++settingsPanelOpenVersion
-    steamLaunchTouched.value = false
-    // 利用 requestAnimationFrame 或 setTimeout
-    // 让浏览器先渲染出弹窗的“背景”和“动画第一帧”，然后再去塞数据
-    requestAnimationFrame(async () => {
-      if (openVersion !== settingsPanelOpenVersion || !appStore.uiState.showSettingsPanel) return
-      // 使用 structuredClone (Node 17+ / 现代浏览器均支持，速度更快)，将全局 Settings 和 当前 Context 捏合成一个对象给表单用
-      // 如果环境不支持，保留原来的 JSON 方式，但放在 requestAnimationFrame 里依然能解决卡顿
-      try {
-      formData.value = {
-          ...structuredClone(appStore.settings),
-          ...structuredClone(profileStore.activeContext) // 覆盖/合并上下文路径
-        }
-      } catch (e) {
-        formData.value = { 
-          ...JSON.parse(JSON.stringify(appStore.settings)),
-          ...JSON.parse(JSON.stringify(profileStore.activeContext))
-        }
-      }
-      if (formData.value.ui && formData.value.ui.smooth_list_target_scroll === undefined) {
-        formData.value.ui.smooth_list_target_scroll = true
-      }
-      if (formData.value.ui && !Array.isArray(formData.value.ui.hidden_dependency_graph_source_ids)) {
-        formData.value.ui.hidden_dependency_graph_source_ids = []
-      }
-      if (formData.value.ui && !formData.value.ui.keybindings) {
-        // 兼容旧配置文件：默认键位由前端命令注册表决定，设置里只保存用户覆盖项。
-        formData.value.ui.keybindings = createDefaultKeybindingConfig()
-      }
-      if (formData.value.skip_language_pack_alias_generation === undefined) {
-        formData.value.skip_language_pack_alias_generation = true
-      }
-      if (!formData.value.translation || typeof formData.value.translation !== 'object') {
-        formData.value.translation = {}
-      }
-      formData.value.translation = appStore.normalizeTranslationSettings(formData.value.translation)
-      markSavedSecretsPreserved(formData.value)
-      showSecretStorageWarning(formData.value)
-      // 如果当前上下文不健康，自动检测路径
-      const autoDetected = !profileStore.activeContext || profileStore.activeContext.is_healthy === false
-      if (autoDetected) {
-        await autoDetect(false)
-        if (openVersion !== settingsPanelOpenVersion || !appStore.uiState.showSettingsPanel) return
-      }
-      // 检测所有路径是否有效
-      await checkPaths()
-    })
-  } else {
-    settingsPanelOpenVersion += 1
-    if (!appStore.themeEditor.isOpen) applyTheme(appStore.currentTheme)
-    clearFormSecrets(formData.value)
+const normalizeLayoutList = (list, maps) => {
+  const source = Array.isArray(list) ? list : []
+  const normalized = []
+  const usedIds = new Set()
+  for (const item of source) {
+    const id = String(item?.id || '').trim()
+    if (!id || !maps?.[id] || usedIds.has(id)) continue
+    normalized.push({ id, visible: item.visible !== false })
+    usedIds.add(id)
   }
+  Object.keys(maps || {}).forEach((id) => {
+    if (!usedIds.has(id)) normalized.push({ id, visible: true })
+  })
+  return normalized
+}
+
+const mergeObject = (base, patch) => ({
+  ...(base && typeof base === 'object' ? base : {}),
+  ...(patch && typeof patch === 'object' ? patch : {}),
 })
+
+const buildSettingsFormData = () => {
+  const settings = deepClone(appStore.settings || {})
+  const context = deepClone(profileStore.activeContext || {})
+  const target = { ...settings, ...context }
+
+  target.ui = mergeObject(settings.ui, target.ui)
+  target.ui.main_layout = normalizeLayoutList(target.ui.main_layout, appStore.MAIN_LAYOUT_MAPS)
+  target.ui.mod_details_layout = normalizeLayoutList(target.ui.mod_details_layout, appStore.DETAILS_LAYOUT_MAPS)
+  if (!Array.isArray(target.ui.hidden_dependency_graph_source_ids)) target.ui.hidden_dependency_graph_source_ids = []
+  if (!target.ui.keybindings || typeof target.ui.keybindings !== 'object') {
+    target.ui.keybindings = createDefaultKeybindingConfig()
+  }
+  target.network = mergeObject(settings.network, target.network)
+  target.network.proxy = mergeObject(settings.network?.proxy, target.network.proxy)
+  if (!Array.isArray(target.network.proxy.bypass_list)) target.network.proxy.bypass_list = []
+  if (!target.network.hosts || typeof target.network.hosts !== 'object') target.network.hosts = {}
+  target.ai = mergeObject(settings.ai, target.ai)
+  target.texture_opt = mergeObject(settings.texture_opt, target.texture_opt)
+  if (target.skip_language_pack_alias_generation === undefined) target.skip_language_pack_alias_generation = true
+  target.translation = appStore.normalizeTranslationSettings(target.translation)
+  return target
+}
+
 watch(() => !!formData.value?.prefer_steam_launch, (enabled) => {
   if (enabled && formData.value) {
     formData.value.use_workshop_mods = false
@@ -261,8 +250,7 @@ const markSteamLaunchTouched = () => {
 
 const getSteamLaunchProblem = (installCheck, steamCheck) => {
   if (!installCheck?.pass) return `游戏安装目录无效：${installCheck?.msg || '请重新选择游戏安装目录'}`
-  if (!installCheck?.data?.is_steam) return `当前游戏本体未识别为 Steam 版，无法使用 Steam 启动。
-${installCheck?.msg || '请确认游戏文件完整，或重新选择 Steam 版游戏目录。'}`
+  if (!installCheck?.data?.is_steam) return `当前游戏本体未识别为 Steam 版，无法使用 Steam 启动。\n${installCheck?.msg || '请确认游戏文件完整，或重新选择 Steam 版游戏目录。'}`
   if (!steamCheck?.pass) return `Steam 程序路径无效：${steamCheck?.msg || '请重新选择 Steam.exe 所在目录'}`
   return ''
 }
@@ -432,6 +420,30 @@ const showSecretStorageWarning = (target) => {
   if (!target?._secret_storage_warning) return
   toast.warning(target._secret_storage_warning, { timeout: 9000 })
 }
+
+// 数据同步：打开时立即生成表单副本；路径检测只在后台补充 check_info，不阻塞设置页渲染。
+watch(() => appStore.uiState.showSettingsPanel, (val) => {
+  if (val) {
+    const openVersion = ++settingsPanelOpenVersion
+    steamLaunchTouched.value = false
+    formData.value = buildSettingsFormData()
+    markSavedSecretsPreserved(formData.value)
+    showSecretStorageWarning(formData.value)
+    void (async () => {
+      if (openVersion !== settingsPanelOpenVersion || !appStore.uiState.showSettingsPanel) return
+      const autoDetected = !profileStore.activeContext || profileStore.activeContext.is_healthy === false
+      if (autoDetected) {
+        await autoDetect(false)
+        if (openVersion !== settingsPanelOpenVersion || !appStore.uiState.showSettingsPanel) return
+      }
+      await checkPaths()
+    })()
+  } else {
+    settingsPanelOpenVersion += 1
+    if (!appStore.themeEditor.isOpen) applyTheme(appStore.currentTheme)
+    clearFormSecrets(formData.value)
+  }
+}, { immediate: true })
 
 // 手动选择其他路径
 const handleBrowse = async (pathKey, fileTypes, checkTarget = undefined) => {

@@ -538,7 +538,7 @@
 </template>
 
 <script setup >
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, defineAsyncComponent, ref, watch, nextTick } from 'vue'
 import { refDebounced, onClickOutside, useDebounceFn } from '@vueuse/core' // 引入防抖函数
 import { MOD_SIGN_COLOR_MAP, MOD_TYPE_MAP, SOURCE_TYPE_MAP, MOD_TYPE_ICON_MAP } from '../../shared/lib/constants'
 import { useModStore } from './stores/modStore'
@@ -556,7 +556,6 @@ import StatItem from '../../shared/components/StatItem.vue'
 import { ChevronDown, ChevronUp, CircleX, Copy, Crosshair, SquareArrowOutUpRight } from 'lucide-vue-next'
 import FixedPopover from '../../shared/components/popover/FixedPopover.vue'
 import { useProfileStore } from '../profiles/profileStore'
-import { ColorPicker } from 'vue3-colorpicker'
 import { imageViewerOptions } from '../../shared/lib/domEffects'
 import { sortByDisplayName, sortTextByName } from '../../shared/lib/common'
 import { useToast } from 'vue-toastification'
@@ -568,6 +567,11 @@ const searchStore = useSearchStore()
 const groupStore = useGroupStore()
 const profileStore = useProfileStore()
 const toast = useToast()
+const ColorPicker = defineAsyncComponent(async () => {
+  await import('vue3-colorpicker/style.css')
+  const module = await import('vue3-colorpicker')
+  return module.ColorPicker
+})
 
 const resolveModIconUrl = (mod) => {
   if (!mod) return ''

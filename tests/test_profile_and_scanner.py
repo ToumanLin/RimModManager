@@ -1990,6 +1990,17 @@ class TestProfileConflictAnalysis(unittest.TestCase):
         self.assertEqual(mods[0]["coexist_sync_diff"]["signals"], ["size", "file_stats"])
 
 class TestApiScanMods(unittest.TestCase):
+    def test_scan_core_refresh_decision_ignores_noop_scans(self):
+        base_stats = {
+            'added': 0, 'updated': 0, 'skipped': 20, 'removed': 0,
+            'external_enabled': 0, 'strict_restored_disabled': 0, 'strict_restore_failed': 0,
+            'about_conflict_cleaned': 0, 'shadow_path_cleaned': 0,
+        }
+
+        self.assertFalse(ModScanner._should_refresh_core_after_scan(base_stats, forced_update=False))
+        self.assertTrue(ModScanner._should_refresh_core_after_scan({**base_stats, 'updated': 1}, forced_update=False))
+        self.assertTrue(ModScanner._should_refresh_core_after_scan(base_stats, forced_update=True))
+
     def test_scan_mods_always_scans_all_configured_domains_for_inventory_sync(self):
         api = API.__new__(API)
         api.active_context = SimpleNamespace(
@@ -2025,7 +2036,6 @@ class TestApiScanMods(unittest.TestCase):
             forced_update=False,
             size_check_override=None,
             size_check_paths=None,
-            residue_active_tokens=[],
             residue_scan_enabled=True,
         )
 
@@ -2063,7 +2073,6 @@ class TestApiScanMods(unittest.TestCase):
             forced_update=False,
             size_check_override=True,
             size_check_paths=None,
-            residue_active_tokens=[],
             residue_scan_enabled=True,
         )
 
@@ -2083,8 +2092,7 @@ class TestApiScanMods(unittest.TestCase):
             forced_update=False,
             size_check_override=None,
             size_check_paths=["D:/Mods/123456"],
-            residue_active_tokens=[],
-            residue_scan_enabled=True,
+            residue_scan_enabled=False,
         )
 
     def test_scan_mods_returns_warning_when_scanner_is_busy(self):
@@ -2099,6 +2107,44 @@ class TestApiScanMods(unittest.TestCase):
 
         self.assertEqual(res["status"], "warning")
         self.assertEqual(res["data"]["details"]["status"], "busy")
+
+    def test_startup_inventory_summary_refreshes_missing_state_before_reading_matrix(self):
+        api = API.__new__(API)
+        api.active_context = SimpleNamespace(is_healthy=True)
+        api.steam_mgr = Mock()
+        api.steam_mgr.workshop_merged_data.return_value = {
+            "123456789": {"is_subscribed": True, "time_last_sync": 200},
+            "987654321": {"is_subscribed": False, "time_last_sync": 300},
+        }
+        calls = []
+
+        def fake_find_missing(delete, subscribed_workshop_ids):
+            calls.append(("find_missing", list(subscribed_workshop_ids)))
+
+        def fake_get_matrix(context):
+            calls.append(("get_matrix", context))
+            return {
+                "workshop": [{
+                    "store": "workshop",
+                    "workshop_id": "123456789",
+                    "path_hash": "hash-1",
+                    "path": "D:/Mods/123456789",
+                    "name": "Changed Mod",
+                    "last_scanned_at": 100,
+                    "state": MOD_ASSET_STATE_PRESENT,
+                }],
+                "self": [],
+                "local": [],
+            }
+
+        with patch("backend.api.ModMaintenanceDAO.find_missing_mods", side_effect=fake_find_missing), \
+             patch("backend.api.ModDAO.get_triple_domain_assets", side_effect=fake_get_matrix):
+            res = API.workspace_get_startup_inventory_summary(api)
+
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(calls[0], ("find_missing", ["123456789"]))
+        self.assertEqual(calls[1][0], "get_matrix")
+        self.assertEqual(res["data"]["counts"]["changed"], 1)
 
     def test_workspace_classification_treats_current_local_self_path_as_local_only(self):
         scope = _ProfilePathScope(

@@ -886,9 +886,9 @@ export const useAiStore = defineStore('ai', () => {
     })
   }
 
-  const initialize = async () => {
+  const initialize = async (options = {}) => {
     setupEventListeners()
-    return await getAiConfig()
+    return await getAiConfig(options)
   }
 
   const getToolDefinitions = () => normalizedToolDefinitions.value || {}
