@@ -1,9 +1,7 @@
 import os
-import sys
 import winreg
 import subprocess
 import platform
-from pathlib import Path
 
 class GameManager:
     """

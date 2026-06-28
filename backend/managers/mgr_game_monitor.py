@@ -1,6 +1,4 @@
-import json
 import os
-import socket
 import time
 import threading
 import psutil

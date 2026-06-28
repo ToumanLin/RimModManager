@@ -1,4 +1,5 @@
 from .detector import detect_load_order_format
+from .import_check import build_import_check_report
 from .models import (
     FORMAT_MODLIST,
     FORMAT_MODSCONFIG,
@@ -25,5 +26,6 @@ __all__ = [
     "FORMAT_WORKSHOP_IDS",
     "ParsedLoadOrderData",
     "detect_load_order_format",
+    "build_import_check_report",
     "parse_load_order_file",
 ]

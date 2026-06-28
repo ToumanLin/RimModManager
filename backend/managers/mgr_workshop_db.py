@@ -1,15 +1,13 @@
 # backend/managers/mgr_workshop_db.py
 import json
 import gzip
-import os
 from pathlib import Path
 from peewee import chunked
-from dateutil import parser
 
 from backend.utils.logger import logger
 from backend.settings import settings
 from backend.database.models_ext import ext_db, WorkshopMeta, ModReplacement, init_ext_db
-from backend.database.models import SystemInfo, db as main_db
+from backend.database.models import SystemInfo
 
 class WorkshopDBManager:
     def __init__(self):

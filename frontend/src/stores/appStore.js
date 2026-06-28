@@ -205,6 +205,7 @@ export const useAppStore = defineStore('app', () => {
     enable_auto_scan: true,
     enable_file_size_scan: true,         // 扫描时是否检查文件大小
     delete_missing_mods_data: false,
+    auto_sort_strategy: "classic_sort_logic",  // 自动排序策略
     sort_mods_by: "name",                 // 自动排序排列方式: name, id, alias
     auto_activate_dependencies: false,     // 是否在排序时自动激活依赖项
     coexist_mod_folder_name_type: "workshop_id", // 共存Mod生成方式: workshop_id, package_id, name, alias

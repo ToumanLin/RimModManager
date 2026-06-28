@@ -4,11 +4,9 @@ import re
 import os
 import zipfile
 import shutil
-import time
 from backend.utils.logger import logger
-from backend.settings import DATA_DIR, HOME_DIR, settings
+from backend.settings import HOME_DIR, settings
 from backend.database.models import GithubModRecord, GithubTimeline, db
-from backend.managers.mgr_download import TaskStatus
 from backend.utils.tools import current_ms
 
 class GithubManager:

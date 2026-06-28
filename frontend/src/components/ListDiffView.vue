@@ -122,12 +122,53 @@
                 <!-- 右侧列表 (List B) -->
                 <div class="flex-1 flex flex-col min-w-0" ref="listBRef">
                   <template v-for="item in displayListB" :key="item.uiKey">
-                    <div v-if="!item.isPlaceholder" :data-id="item.id" class="flex items-center h-7 px-2 border-b border-x border-text-main/5 transition-colors relative"
+                    <div v-if="!item.isPlaceholder" :data-id="item.id" @click="targetItem(item.id)"
+                        class="group/import flex items-center h-7 px-2 border-b border-x border-text-main/5 transition-colors relative cursor-pointer"
                         :style="{ backgroundColor: getBgColor(item) }">
                       <div v-if="shouldShowIndicator(item)" class="absolute left-0 top-0 bottom-0 w-0.5" :style="{ backgroundColor: getRenderColor(item) }"></div>
                       <span class="w-6 text-xs font-mono text-text-main text-right mr-2 select-none shrink-0 opacity-80">{{ item.originalIndex + 1 }}</span>
-                      <div class="flex-1 truncate text-sm font-medium" :class="getTextClass(item)" v-tooltip="displayNameById(item.id, 'b')">
-                        {{ displayNameById(item.id, 'b') }}
+
+                      <div class="min-w-0 flex-1 pr-22">
+                        <div class="truncate text-sm font-medium" :class="getTextClass(item)" v-tooltip="getImportTooltip(item.id) || displayNameById(item.id, 'b')">
+                          {{ displayNameById(item.id, 'b') }}
+                        </div>
+                      </div>
+
+                      <div v-if="getImportStatusMeta(item.id)" v-tooltip="getImportTooltip(item.id)" class="mr-1 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold"
+                        :class="getImportStatusMeta(item.id).badgeClass">
+                        {{ getImportStatusMeta(item.id).label }}
+                      </div>
+
+                      <div v-if="shouldShowImportActions(item.id)"
+                        class="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/import:opacity-100">
+                        <button
+                          v-if="canSubscribeImportItem(item.id)"
+                          @click.stop="subscribeImportItem(item.id)"
+                          v-tooltip="'订阅该导入项对应的工坊项目'"
+                          class="rounded-full bg-accent-primary/85 p-1 text-black transition-transform hover:scale-105">
+                          <Flag class="size-3" />
+                        </button>
+                        <button
+                          v-if="canDownloadImportItem(item.id)"
+                          @click.stop="downloadImportItem(item.id)"
+                          v-tooltip="'下载该导入项对应的工坊项目到管理器'"
+                          class="rounded-full bg-accent-success/85 p-1 text-black transition-transform hover:scale-105">
+                          <Download class="size-3" />
+                        </button>
+                        <button
+                          v-if="canOpenImportWorkshop(item.id)"
+                          @click.stop="openImportWorkshop(item.id)"
+                          v-tooltip="'打开工坊页面'"
+                          class="rounded-full bg-accent-special/85 p-1 text-black transition-transform hover:scale-105">
+                          <Link class="size-3" />
+                        </button>
+                        <button
+                          v-if="canRemoveImportItem(item.id)"
+                          @click.stop="removeImportItem(item.id)"
+                          v-tooltip="'从当前导入序列中移除该项'"
+                          class="rounded-full bg-accent-danger/85 p-1 text-black transition-transform hover:scale-105">
+                          <X class="size-3" />
+                        </button>
                       </div>
                     </div>
 
@@ -151,14 +192,38 @@
           </div>
   
           <!-- 底部动作栏 -->
-          <div class="p-2 px-5 bg-black/20 flex items-center justify-between border-t border-text-main/5">
+          <div class="p-2 px-5 bg-black/20 flex items-center justify-between gap-3 border-t border-text-main/5">
             <div class="min-w-0">
               <h2 class="text-text-main/80 font-bold">Mod序列对比</h2>
             </div>
-            <div class="flex items-center gap-2">
-              <button v-if="orderStore.missingBackupSubscribableCount > 0" @click="orderStore.subscribeMissingBackupMods()" class="px-3 py-1.5 rounded-lg bg-accent-warn/12 hover:bg-accent-warn/25 text-accent-warn border border-accent-warn/30 text-xs font-bold transition-all">
-                订阅缺失项 ({{ orderStore.missingBackupSubscribableCount }})
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <button v-if="orderStore.importCheckSummary.missing > 0" @click="orderStore.subscribeImportCheckItems(['missing'])" class="px-3 py-1.5 rounded-lg bg-accent-primary/12 hover:bg-accent-primary/25 text-accent-primary border border-accent-primary/30 text-xs font-bold transition-all">
+                订阅缺失项 ({{ orderStore.importCheckSummary.missing }})
               </button>
+              <button v-if="orderStore.importCheckSummary.missing > 0" @click="orderStore.downloadImportCheckItems(['missing'])" class="px-3 py-1.5 rounded-lg bg-accent-tip/12 hover:bg-accent-tip/25 text-accent-tip border border-accent-tip/30 text-xs font-bold transition-all">
+                下载缺失项 ({{ orderStore.importCheckSummary.missing }})
+              </button>
+              <button v-if="orderStore.importCheckSummary.missing > 0" @click="orderStore.removeImportCheckItems(['missing'])" class="px-3 py-1.5 rounded-lg bg-accent-warning/10 hover:bg-accent-warning/20 text-accent-warning border border-text-main/10 text-xs font-bold transition-all">
+                移除缺失项 ({{ orderStore.importCheckSummary.missing }})
+              </button>
+              <button v-if="orderStore.actionableReplacementImportItems.length > 0" @click="orderStore.subscribeImportCheckItems(['replacement'])" class="px-3 py-1.5 rounded-lg bg-accent-cool/12 hover:bg-accent-cool/25 text-accent-cool border border-accent-cool/30 text-xs font-bold transition-all">
+                订阅替代项 ({{ orderStore.actionableReplacementImportItems.length }})
+              </button>
+              <button v-if="orderStore.actionableReplacementImportItems.length > 0" @click="orderStore.downloadImportCheckItems(['replacement'])" class="px-3 py-1.5 rounded-lg bg-accent-cool/12 hover:bg-accent-cool/25 text-accent-cool border border-accent-cool/30 text-xs font-bold transition-all">
+                下载替代项 ({{ orderStore.actionableReplacementImportItems.length }})
+              </button>
+              <button v-if="orderStore.importCheckSummary.other_version > 0" @click="orderStore.subscribeImportCheckItems(['other_version'])" class="px-3 py-1.5 rounded-lg bg-accent-warn/12 hover:bg-accent-warn/25 text-accent-warn border border-accent-warn/30 text-xs font-bold transition-all">
+                订阅其它版本 ({{ orderStore.importCheckSummary.other_version }})
+              </button>
+              <button v-if="orderStore.importCheckSummary.other_version > 0" @click="orderStore.downloadImportCheckItems(['other_version'])" class="px-3 py-1.5 rounded-lg bg-accent-warn/12 hover:bg-accent-warn/25 text-accent-warn border border-accent-warn/30 text-xs font-bold transition-all">
+                下载其它版本 ({{ orderStore.importCheckSummary.other_version }})
+              </button>
+              <button v-if="orderStore.importCheckSummary.unknown > 0" @click="orderStore.removeImportCheckItems(['unknown'])" class="px-3 py-1.5 rounded-lg bg-text-main/8 hover:bg-text-main/15 text-text-dim border border-text-main/10 text-xs font-bold transition-all">
+                移除未知项 ({{ orderStore.importCheckSummary.unknown }})
+              </button>
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              
               <button @click="orderStore.applyBackup()" class="px-3 py-1.5 rounded-lg bg-accent-success/20 hover:bg-accent-success/40 text-accent-success border border-accent-success/30 text-xs font-bold transition-all">应用文件序列</button>
               <button @click="appStore.uiState.showDiffDrawer = false" class="px-3 py-1.5 rounded-lg bg-accent-danger/10 hover:bg-accent-danger/20 text-text-dim border border-text-main/10 text-xs font-bold transition-all">关闭</button>
             </div>
@@ -190,6 +255,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { getTailwindColorHex, hexToRgba } from '../utils/colorDeal'
 import { useOrderStore } from '../stores/orderStore'
 import { useAppStore } from '../stores/appStore'
+import { Download, Flag, Link, X } from 'lucide-vue-next'
 
 
 // 抽屉的显隐和底部操作继续复用现有 store，避免迁移后行为变化。
@@ -227,15 +293,74 @@ const COLOR_ADDED = getTailwindColorHex('accent-success')
 const COLOR_MOVED = getTailwindColorHex('accent-warn') 
 const COLOR_MOVED_GRAY = getTailwindColorHex('text-dim')
 
+const IMPORT_STATUS_META = {
+  replacement: { label: '替代', badgeClass: 'border-accent-cool/30 bg-accent-cool/10 text-accent-cool' },
+  other_version: { label: '其它版本', badgeClass: 'border-accent-warn/30 bg-accent-warn/10 text-accent-warn' },
+  missing: { label: '缺失', badgeClass: 'border-accent-warn/30 bg-accent-warn/10 text-accent-warn' },
+  unknown: { label: '未知', badgeClass: 'border-accent-danger/30 bg-accent-danger/10 text-accent-danger' },
+}
+
 
 const displayNameById = (id, side = 'a') => {
   // 右侧导入列表中的缺失项可能不在本地 modStore，需要用导入文件自带名称兜底显示。
   const lowerId = String(id || '').toLowerCase()
-  if (lowerId && modStore.allModsMap.has(lowerId)) {
+  if (lowerId && modStore.hasRealModById(lowerId)) {
     return modStore.displayModName(lowerId)
   }
+  const importCheckItem = side === 'b' ? orderStore.getImportCheckItem(lowerId) : null
+  if (importCheckItem?.name) return importCheckItem.name
   const fallbackMap = side === 'b' ? props.nameMapB : props.nameMapA
   return fallbackMap?.[lowerId] || modStore.displayModName(id)
+}
+const isProblemImportStatus = (status) => ['missing', 'replacement', 'other_version', 'unknown'].includes(status)
+const getImportCheckItem = (rowKey) => orderStore.getImportCheckItem(rowKey)
+const getImportStatusMeta = (rowKey) => {
+  const item = getImportCheckItem(rowKey)
+  if (!item) return null
+  if (item.status === 'replacement' && item.installed_via_replacement) {
+    return {
+      label: '已安装替代',
+      badgeClass: 'border-accent-cool/30 bg-accent-cool/15 text-accent-cool',
+    }
+  }
+  return IMPORT_STATUS_META[item.status] || null
+}
+const getImportTooltip = (rowKey) => {
+  const item = getImportCheckItem(rowKey)
+  if (!item) return ''
+  return item.reason_text || item.warning || ''
+}
+const shouldShowImportActions = (rowKey) => {
+  const item = getImportCheckItem(rowKey)
+  if (!item) return false
+  return isProblemImportStatus(item.status)
+}
+const canSubscribeImportItem = (rowKey) => {
+  const item = getImportCheckItem(rowKey)
+  return !!item?.target_workshop_id && ['missing', 'replacement', 'other_version'].includes(item.status) && !item?.installed_via_replacement
+}
+const canDownloadImportItem = (rowKey) => {
+  const item = getImportCheckItem(rowKey)
+  return !!item?.target_workshop_id && ['missing', 'replacement', 'other_version'].includes(item.status) && !item?.installed_via_replacement
+}
+const canOpenImportWorkshop = (rowKey) => {
+  return !!getImportCheckItem(rowKey)?.target_workshop_id
+}
+const canRemoveImportItem = (rowKey) => {
+  const item = getImportCheckItem(rowKey)
+  return ['missing', 'unknown'].includes(item?.status)
+}
+const subscribeImportItem = async (rowKey) => {
+  await orderStore.subscribeImportCheckItems([], [rowKey])
+}
+const downloadImportItem = async (rowKey) => {
+  await orderStore.downloadImportCheckItems([], [rowKey])
+}
+const openImportWorkshop = (rowKey) => {
+  orderStore.openImportCheckWorkshop(rowKey)
+}
+const removeImportItem = async (rowKey) => {
+  await orderStore.removeImportCheckItems([], [rowKey])
 }
 const displayListA = computed(() => foldList(analysis.value.resA))  // 左侧列表 (List A)，经过折叠处理
 const displayListB = computed(() => foldList(analysis.value.resB))   // 右侧列表 (List B)，经过折叠处理

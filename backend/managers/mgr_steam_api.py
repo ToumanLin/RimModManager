@@ -1,7 +1,6 @@
 # backend/managers/mgr_steam_api.py
 from pathlib import Path
 import re
-from urllib import response
 import requests
 import time
 

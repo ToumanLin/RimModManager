@@ -127,6 +127,14 @@ export const useModStore = defineStore('mods', () => {
       isMissing: true,
     }
   }
+  const hasRealModById = (id) => {
+    if (!id) return false
+    const lowerId = String(id).toLowerCase()
+    if (!allModsMap.value.has(lowerId)) return false
+    const mod = allModsMap.value.get(lowerId)
+    // ghost 项虽然会被塞进 allModsMap，但它们不应该被当成“真实已安装模组”。
+    return !!mod && !mod.isMissing && !!mod.path
+  }
   // 获取 Mod 对象列表
   const takeModListByIds = (ids) => {
     return Array.from(allModsMap.value.values()).filter(mod => ids.includes(mod.package_id))
@@ -195,7 +203,7 @@ export const useModStore = defineStore('mods', () => {
     // 3. 将 "旧 Mod" 按照 savedInactiveIds 中的原始顺序排列
     const oldModIds = savedInactiveIds.value.filter(id => {
       const pid = id.toLowerCase()
-      return !activeSet.has(pid) && !tempSet.has(pid) && allModsMap.value.has(pid)
+      return !activeSet.has(pid) && !tempSet.has(pid) && hasRealModById(pid)
     })
     // 4. 基础合并
     const baseInactive = [...newModIds, ...oldModIds]
@@ -1024,7 +1032,7 @@ export const useModStore = defineStore('mods', () => {
             
             if (!baseMod) {
               // 主包不在本地，找找备选包在不在本地！
-              const localAlt = alts.find(alt => allModsMap.value.has(alt.toLowerCase()))
+              const localAlt = alts.find(alt => hasRealModById(alt))
               if (localAlt) {
                 _add(currentId, ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY, ISSUE_LEVEL.ERROR, 
                   `!!${ISSUE_TITLE_MAP[ISSUE_TYPE.ERROR_INACTIVE_DEPENDENCY]}!!：未启用备选前置模组 [[${displayModName(localAlt)}]]`, localAlt.toLowerCase())
@@ -1409,7 +1417,7 @@ export const useModStore = defineStore('mods', () => {
     isDirty, selectedMods, selectedStats, allModTags, modIssues, allModWorkshopIds, allModPackageIds,
 
     // Actions
-    setMods, reset, takeModById, takeModListByIds, displayModName, displayModType, displayModIcon, fetchAndCacheGhostMods,
+    setMods, reset, takeModById, hasRealModById, takeModListByIds, displayModName, displayModType, displayModIcon, fetchAndCacheGhostMods,
     updateInactiveIds, takeInactiveIds, removeIdsOnAllList, selectMods, clearSelection, changeModsActive, getModInterlockChain, loadInterlockDetails,
     scanMods, scanComplete, autoSortMods, localizeSelectedMods, localizeMods, disableMods, deleteMods, smartInsertMods,
     updateModUserData, updateModTime, linkMods, unlinkMods, healInterlock, getInterlockMissingDetails, batchUpdateModsUserData,

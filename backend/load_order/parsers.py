@@ -82,6 +82,45 @@ def _parse_text_node(root: ET.Element, *xpaths: str) -> str:
     return ""
 
 
+def _dedupe_parsed_data(parsed: ParsedLoadOrderData) -> ParsedLoadOrderData:
+    """
+    统一去重入口。
+
+    规则：
+    - package_id 以第一次出现为准
+    - package 行对应的名称 / workshop_id 也跟随第一次出现
+    - “纯 workshop id”条目单独去重，不混入 package 行
+    """
+
+    dedup_package_ids: list[str] = []
+    dedup_mod_names: list[str] = []
+    dedup_workshop_ids: list[str] = []
+    seen_package_ids: set[str] = set()
+
+    for index, package_id in enumerate(parsed.package_ids):
+        normalized_package_id = _normalize_package_id(package_id)
+        if not normalized_package_id or normalized_package_id in seen_package_ids:
+            continue
+        seen_package_ids.add(normalized_package_id)
+        dedup_package_ids.append(normalized_package_id)
+        dedup_mod_names.append(str(parsed.mod_names[index]).strip() if index < len(parsed.mod_names) else "")
+        dedup_workshop_ids.append(str(parsed.workshop_ids[index]).strip() if index < len(parsed.workshop_ids) else "")
+
+    dedup_loose_workshop_ids: list[str] = []
+    seen_workshop_ids: set[str] = set()
+    for workshop_id in parsed.workshop_ids[len(parsed.package_ids):]:
+        normalized_workshop_id = _normalize_workshop_id(workshop_id)
+        if not normalized_workshop_id or normalized_workshop_id in seen_workshop_ids:
+            continue
+        seen_workshop_ids.add(normalized_workshop_id)
+        dedup_loose_workshop_ids.append(normalized_workshop_id)
+
+    parsed.package_ids = dedup_package_ids
+    parsed.mod_names = dedup_mod_names
+    parsed.workshop_ids = dedup_workshop_ids + dedup_loose_workshop_ids
+    return parsed
+
+
 def _parse_modsconfig_xml(path: Path) -> ParsedLoadOrderData:
     root = ET.fromstring(_read_text(path))
     package_ids = _parse_list_node(root, "./activeMods", ".//activeMods")
@@ -422,19 +461,22 @@ def parse_load_order_file(file_path: str | Path) -> ParsedLoadOrderData:
     format_name = detect_load_order_format(path)
 
     if format_name == FORMAT_MODSCONFIG:
-        return _parse_modsconfig_xml(path)
-    if format_name == FORMAT_MODLIST:
-        return _parse_modlist_xml(path)
-    if format_name == FORMAT_RML:
-        return _parse_rml_file(path)
-    if format_name == FORMAT_SAVEGAME:
-        return _parse_savegame_xml(path)
-    if format_name == FORMAT_RIMPY_XML:
-        return _parse_rimpy_xml(path)
-    if format_name == FORMAT_RIMSORT_JSON:
-        return _parse_rimsort_json(path)
-    if format_name == FORMAT_RMM_JSON:
-        return _parse_rmm_json(path)
-    if format_name == FORMAT_WORKSHOP_IDS:
-        return _parse_workshop_ids(path)
-    return _parse_plain_text(path)
+        parsed = _parse_modsconfig_xml(path)
+    elif format_name == FORMAT_MODLIST:
+        parsed = _parse_modlist_xml(path)
+    elif format_name == FORMAT_RML:
+        parsed = _parse_rml_file(path)
+    elif format_name == FORMAT_SAVEGAME:
+        parsed = _parse_savegame_xml(path)
+    elif format_name == FORMAT_RIMPY_XML:
+        parsed = _parse_rimpy_xml(path)
+    elif format_name == FORMAT_RIMSORT_JSON:
+        parsed = _parse_rimsort_json(path)
+    elif format_name == FORMAT_RMM_JSON:
+        parsed = _parse_rmm_json(path)
+    elif format_name == FORMAT_WORKSHOP_IDS:
+        parsed = _parse_workshop_ids(path)
+    else:
+        parsed = _parse_plain_text(path)
+
+    return _dedupe_parsed_data(parsed)

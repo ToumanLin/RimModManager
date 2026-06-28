@@ -3,11 +3,13 @@ import { ref, computed } from 'vue'
 import { createToastInterface } from 'vue-toastification'
 import { useModStore } from './modStore'
 import { useAppStore } from './appStore'
+import { useConfirmStore } from './confirmStore'
 
 export const useOrderStore = defineStore('order', () => {
   const toast = createToastInterface()
   const appStore = useAppStore()
   const modStore = useModStore()
+  const confirmStore = useConfirmStore()
   const checkResult = appStore.checkResult
   
   // === State ===
@@ -24,6 +26,7 @@ export const useOrderStore = defineStore('order', () => {
   const currentBackupWorkshopIds = ref([]) // 文件中直接给出的 workshop id 列表
   const currentBackupWarnings = ref([]) // 解析时的非致命提示
   const currentBackupErrors = ref([])   // 解析时的错误信息
+  const currentImportCheck = ref({ summary: {}, items: [] }) // 后端返回的导入检查分类报告
 
   const backupNameMap = computed(() => {
     // 记录“包名 -> 导入文件中的显示名称”，供差异视图在本地缺失时兜底显示。
@@ -33,38 +36,46 @@ export const useOrderStore = defineStore('order', () => {
         .filter(([packageId]) => packageId)
     )
   })
-  const missingBackupMods = computed(() => {
-    // 只要本地库里不存在，就视为“导入文件中缺失的模组”。
-    return backupMods.value.filter(mod => {
-      const packageId = String(mod.package_id || '').toLowerCase()
-      return packageId && !modStore.allModsMap.has(packageId)
-    })
+  const importCheckItems = computed(() => currentImportCheck.value?.items || [])
+  const importCheckSummary = computed(() => ({
+    exact_match: currentImportCheck.value?.summary?.exact_match || 0,
+    package_match: currentImportCheck.value?.summary?.package_match || 0,
+    replacement: currentImportCheck.value?.summary?.replacement || 0,
+    other_version: currentImportCheck.value?.summary?.other_version || 0,
+    missing: currentImportCheck.value?.summary?.missing || 0,
+    unknown: currentImportCheck.value?.summary?.unknown || 0,
+  }))
+  const importCheckMap = computed(() => {
+    return new Map(
+      importCheckItems.value.map(item => [String(item.row_key || item.package_id || '').trim().toLowerCase(), item])
+    )
   })
-  const missingBackupWorkshopIds = computed(() => {
-    // 优先使用结构化 mod 明细中的 workshop_id。
-    const idsFromMods = [...new Set(
-      missingBackupMods.value
-        .map(mod => String(mod.workshop_id || '').trim())
-        .filter(Boolean)
-    )]
-
-    // 对于“只有工坊 ID、没有 package_id”的导入文件，也要保留这些显式 ID。
-    return [...new Set([...currentBackupWorkshopIds.value, ...idsFromMods])]
-  })
-  const missingBackupPackageIds = computed(() => {
-    // 没有 workshop_id 的缺失项保留 package_id，后面再向后端静默反查。
-    return [...new Set(
-      missingBackupMods.value
-        .filter(mod => !mod.workshop_id)
-        .map(mod => String(mod.package_id || '').toLowerCase())
-        .filter(Boolean)
-    )]
-  })
-  const missingBackupSubscribableCount = computed(() => {
-    return new Set([
-      ...missingBackupWorkshopIds.value.map(id => `w:${id}`),
-      ...missingBackupPackageIds.value.map(id => `p:${id}`)
-    ]).size
+  const problemImportItems = computed(() =>
+    importCheckItems.value.filter(item => ['missing', 'replacement', 'other_version', 'unknown'].includes(item.status))
+  )
+  const missingImportItems = computed(() =>
+    importCheckItems.value.filter(item => item.status === 'missing')
+  )
+  const replacementImportItems = computed(() =>
+    importCheckItems.value.filter(item => item.status === 'replacement')
+  )
+  const actionableReplacementImportItems = computed(() =>
+    replacementImportItems.value.filter(item => !item.installed_via_replacement)
+  )
+  const otherVersionImportItems = computed(() =>
+    importCheckItems.value.filter(item => item.status === 'other_version')
+  )
+  const unknownImportItems = computed(() =>
+    importCheckItems.value.filter(item => item.status === 'unknown')
+  )
+  const nonImportableImportItems = computed(() =>
+    importCheckItems.value.filter(item => item.origin_kind === 'workshop_only')
+  )
+  const backupDisplayIds = computed(() => {
+    if (importCheckItems.value.length > 0) {
+      return importCheckItems.value.map(item => String(item.row_key || item.package_id || '').trim()).filter(Boolean)
+    }
+    return backupIds.value
   })
 
   const setBackupOrder = (order = {}, fallbackPath = '') => {
@@ -79,6 +90,7 @@ export const useOrderStore = defineStore('order', () => {
     currentBackupWorkshopIds.value = order.workshop_ids || []
     currentBackupWarnings.value = order.warnings || []
     currentBackupErrors.value = order.errors || []
+    currentImportCheck.value = order.import_check || { summary: {}, items: [] }
   }
   const clearBackupOrder = () => {
     setBackupOrder({}, '')
@@ -95,6 +107,8 @@ export const useOrderStore = defineStore('order', () => {
   const getLoadOrder = async (mods_config_file_path=null, source_profile_id='') => {
     const order = await getFileOrder(mods_config_file_path, source_profile_id)
     if (order) {
+      const shouldContinue = await confirmImportStripping(order.import_check)
+      if (!shouldContinue) return false
       // 后端现在统一返回 modify_time。
       // active_load_modify_time 保留兼容旧数据结构，优先兼容旧接口，缺失时回退到新字段。
       modStore.activeIds = order.active_ids || []
@@ -104,7 +118,9 @@ export const useOrderStore = defineStore('order', () => {
       // 加载外部存档文件时解析未知项
       modStore.fetchAndCacheGhostMods(modStore.activeIds)
       toast.success("Mod序列已加载")
+      return true
     }
+    return false
   }
   // 获取备份加载顺序
   const getBackupOrder = async (mods_config_file_path=null, source_profile_id='') => {
@@ -113,10 +129,6 @@ export const useOrderStore = defineStore('order', () => {
       // 除了 active_ids 之外，还要把格式、列表名和结构化明细一起缓存下来，
       // 后面 diff 抽屉显示标题、名称和一键订阅都依赖这些字段。
       setBackupOrder(order, mods_config_file_path)
-      // 这里统一使用 active_ids；旧字段 activeIds 容易在重构时漏掉。
-      if ((order.active_ids || []).length > 0) {
-        modStore.fetchAndCacheGhostMods(order.active_ids)
-      }
 
       // 解析器已经把“可读但不致命”的问题放在 warnings 里，这里直接提示用户。
       if ((order.warnings || []).length > 0) {
@@ -132,18 +144,22 @@ export const useOrderStore = defineStore('order', () => {
         workshop_ids: [...currentBackupWorkshopIds.value],
         warnings: [...currentBackupWarnings.value],
         errors: [...currentBackupErrors.value],
+        import_check: currentImportCheck.value,
       }
       // toast.success("备份Mod序列已加载")
     }
   }
   // 应用备份列表
-  const applyBackup = () => {
-    if (!backupIds.value) return
+  const applyBackup = async () => {
+    const shouldContinue = await confirmImportStripping(currentImportCheck.value, backupIds.value)
+    if (!shouldContinue) return false
+    if (!backupIds.value) return false
     modStore.activeIds = backupIds.value
     modStore.updateInactiveIds()
     // 加载外部存档文件时解析未知项
     modStore.fetchAndCacheGhostMods(modStore.activeIds)
     toast.success("已应用Mod序列")
+    return true
   }
   // 保存停用列表顺序
   const saveInactiveOrder = async () => {
@@ -224,30 +240,126 @@ export const useOrderStore = defineStore('order', () => {
       return res.data
     }
   }
-  // 一键订阅导入文件中缺失的工坊模组
-  const subscribeMissingBackupMods = async () => {
-    // 先收集文件里已经明确给出的 workshop_id。
-    const workshopIds = new Set(missingBackupWorkshopIds.value)
-    const fallbackPackageIds = missingBackupPackageIds.value
+  const getImportCheckItem = (rowKeyOrPackageId) => {
+    const key = String(rowKeyOrPackageId || '').trim().toLowerCase()
+    if (!key) return null
+    return importCheckMap.value.get(key) || importCheckMap.value.get(`wid:${key}`) || null
+  }
+  const confirmImportStripping = async (importCheck = currentImportCheck.value, importableIds = backupIds.value) => {
+    const items = importCheck?.items || []
+    const workshopOnlyItems = items.filter(item => item.origin_kind === 'workshop_only')
+    if (workshopOnlyItems.length === 0) return true
 
-    if (fallbackPackageIds.length > 0 && window.pywebview) {
-      // 对没有 workshop_id 的缺失项，再按 package_id 向后端补查一次。
-      const res = await window.pywebview.api.get_workshop_ids_by_package_ids_map(fallbackPackageIds)
-      if (res?.status === 'success' && res.data) {
-        Object.values(res.data).forEach(id => {
-          if (id) workshopIds.add(String(id))
-        })
-      }
-    }
-
-    // 最终统一走已有订阅接口，复用 Steam 启动检测和提示逻辑。
-    const finalWorkshopIds = [...workshopIds]
-    if (finalWorkshopIds.length === 0) {
-      toast.info("导入列表中没有可订阅的缺失工坊 Mod")
+    if ((items || []).length > 0 && (importableIds || []).length === 0) {
+      await confirmStore.open({
+        title: '无法直接导入',
+        message: `该文件包含 ${workshopOnlyItems.length} 个纯 WorkshopID 条目。\n游戏加载序列只识别包名，这些条目会被自动剔除。\n剔除后当前没有可导入的包名项，请先在对比列表里处理订阅/下载。`,
+        mode: 'alert',
+        type: 'warning',
+        confirmText: '知道了',
+      })
       return false
     }
 
-    return await appStore.subscribeWorkshopIds(finalWorkshopIds)
+    return await confirmStore.open({
+      title: '导入提示',
+      message: `该文件包含 ${workshopOnlyItems.length} 个纯 WorkshopID 条目。\n这些条目只会用于对比和订阅/下载提示，不会写入游戏加载序列。\n继续时将自动剔除它们，是否继续？`,
+      mode: 'confirm',
+      type: 'warning',
+    })
+  }
+  const takeImportCheckItems = (statuses = [], rowKeys = []) => {
+    const statusSet = new Set((statuses || []).map(status => String(status || '').trim()))
+    const rowKeySet = new Set((rowKeys || []).map(key => String(key || '').trim().toLowerCase()))
+    return importCheckItems.value.filter(item => {
+      const rowKey = String(item.row_key || '').trim().toLowerCase()
+      if (rowKeySet.size > 0 && !rowKeySet.has(rowKey)) return false
+      if (statusSet.size > 0 && !statusSet.has(item.status)) return false
+      return true
+    })
+  }
+  const collectImportCheckWorkshopIds = (items = []) => {
+    return [...new Set(
+      items
+        .map(item => String(item.target_workshop_id || '').trim())
+        .filter(Boolean)
+    )]
+  }
+  const openImportCheckWorkshop = (rowKeyOrPackageId) => {
+    const item = getImportCheckItem(rowKeyOrPackageId)
+    if (item?.target_workshop_id) {
+      appStore.openSteamWorkshopById(item.target_workshop_id)
+    }
+  }
+  const subscribeImportCheckItems = async (statuses = [], rowKeys = []) => {
+    const items = takeImportCheckItems(statuses, rowKeys).filter(item => !item.installed_via_replacement)
+    const workshopIds = collectImportCheckWorkshopIds(items)
+    if (workshopIds.length === 0) {
+      toast.info("当前筛选结果中没有可订阅的工坊项目")
+      return false
+    }
+    return await appStore.subscribeWorkshopIds(workshopIds)
+  }
+  const downloadImportCheckItems = async (statuses = [], rowKeys = []) => {
+    const items = takeImportCheckItems(statuses, rowKeys).filter(item => !item.installed_via_replacement)
+    const workshopIds = collectImportCheckWorkshopIds(items)
+    if (workshopIds.length === 0) {
+      toast.info("当前筛选结果中没有可下载的工坊项目")
+      return false
+    }
+    await appStore.downloadWorkshopItems(workshopIds)
+    return true
+  }
+  const _rebuildImportCheckSummary = (items = []) => {
+    return items.reduce((summary, item) => {
+      const key = item.status
+      if (Object.prototype.hasOwnProperty.call(summary, key)) {
+        summary[key] += 1
+      }
+      return summary
+    }, {
+      exact_match: 0,
+      package_match: 0,
+      replacement: 0,
+      other_version: 0,
+      missing: 0,
+      unknown: 0,
+    })
+  }
+  const removeImportCheckItems = async (statuses = [], rowKeys = []) => {
+    const items = takeImportCheckItems(statuses, rowKeys)
+    if (items.length === 0) return false
+
+    const rowKeySet = new Set(items.map(item => String(item.row_key || '').trim().toLowerCase()))
+    const packageIdSet = new Set(
+      items
+        .map(item => String(item.package_id || '').trim().toLowerCase())
+        .filter(Boolean)
+    )
+    const workshopOnlyRowSet = new Set(
+      items
+        .filter(item => !item.package_id && item.import_workshop_id)
+        .map(item => String(item.import_workshop_id || '').trim())
+    )
+
+    backupIds.value = backupIds.value.filter(id => !packageIdSet.has(String(id || '').toLowerCase()))
+    backupMods.value = backupMods.value.filter(mod => !packageIdSet.has(String(mod.package_id || '').toLowerCase()))
+    currentBackupWorkshopIds.value = currentBackupWorkshopIds.value.filter(wid => !workshopOnlyRowSet.has(String(wid || '').trim()))
+
+    const nextItems = importCheckItems.value.filter(item => {
+      const rowKey = String(item.row_key || '').trim().toLowerCase()
+      return !rowKeySet.has(rowKey)
+    })
+    currentImportCheck.value = {
+      summary: _rebuildImportCheckSummary(nextItems),
+      items: nextItems,
+    }
+    toast.success(`已移除 ${items.length} 个导入项`)
+    return true
+  }
+  // 兼容旧调用入口：缺失项一键订阅现在复用新的 import_check 分类结果。
+  const subscribeMissingBackupMods = async () => {
+    return await subscribeImportCheckItems(['missing'])
   }
   // 打开备份目录
   const openBackupPath = async () => {
@@ -282,8 +394,10 @@ export const useOrderStore = defineStore('order', () => {
 
   return {
     backups, backupProfileId, backupProfileDir, backupIds, backupMods, currentBackupFile, backupLoadModifyTime, currentBackupFormat, currentBackupName, currentBackupSourceProfileId, currentBackupWorkshopIds, currentBackupWarnings, currentBackupErrors,
-    backupNameMap, missingBackupMods, missingBackupWorkshopIds, missingBackupPackageIds, missingBackupSubscribableCount,
+    backupNameMap, backupDisplayIds, currentImportCheck, importCheckItems, importCheckSummary, importCheckMap, problemImportItems, missingImportItems, replacementImportItems, actionableReplacementImportItems, otherVersionImportItems, unknownImportItems, nonImportableImportItems,
     getLoadOrder, getBackupOrder, applyBackup, saveInactiveOrder, saveLoadOrder, exportLoadOrder,
-    getFileOrder, subscribeMissingBackupMods, setBackupOrder, clearBackupOrder, setBackupProfile, openBackupPath, getBackups,
+    getFileOrder, subscribeMissingBackupMods, getImportCheckItem, takeImportCheckItems, collectImportCheckWorkshopIds, openImportCheckWorkshop,
+    subscribeImportCheckItems, downloadImportCheckItems, removeImportCheckItems, confirmImportStripping,
+    setBackupOrder, clearBackupOrder, setBackupProfile, openBackupPath, getBackups,
   }
 })

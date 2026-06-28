@@ -206,6 +206,47 @@ https://steamcommunity.com/sharedfiles/filedetails/?id=1234567890
         self.assertEqual(parsed.package_ids, ["brrainz.harmony", "ludeon.rimworld"])
         self.assertEqual(parsed.mod_names, ["Harmony", "Core"])
 
+    def test_duplicate_package_ids_keep_first_occurrence(self):
+        path = self._write(
+            "duplicate_modlist.xml",
+            """<?xml version="1.0" encoding="utf-8"?>
+<ModList>
+  <Name>Duplicate List</Name>
+  <modIds>
+    <li>brrainz.harmony</li>
+    <li>brrainz.harmony</li>
+    <li>ludeon.rimworld</li>
+  </modIds>
+  <modNames>
+    <li>Harmony A</li>
+    <li>Harmony B</li>
+    <li>Core</li>
+  </modNames>
+  <modSteamWorkshopIds>
+    <li>2009463077</li>
+    <li>9999999999</li>
+    <li>0</li>
+  </modSteamWorkshopIds>
+</ModList>""",
+        )
+        parsed = parse_load_order_file(path)
+        self.assertEqual(parsed.package_ids, ["brrainz.harmony", "ludeon.rimworld"])
+        self.assertEqual(parsed.mod_names, ["Harmony A", "Core"])
+        self.assertEqual(parsed.workshop_ids[:2], ["2009463077", "0"])
+
+    def test_duplicate_workshop_ids_keep_first_occurrence(self):
+        path = self._write(
+            "duplicate_workshop.txt",
+            """2009463077
+2009463077
+2873415404
+2873415404
+""",
+        )
+        parsed = parse_load_order_file(path)
+        self.assertEqual(parsed.format, FORMAT_WORKSHOP_IDS)
+        self.assertEqual(parsed.workshop_ids, ["2009463077", "2873415404"])
+
 
 if __name__ == "__main__":
     unittest.main()

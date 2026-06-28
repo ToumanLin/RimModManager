@@ -1031,6 +1031,7 @@ class API:
             "workshop_ids": res.get('workshop_ids', []),
             "warnings": res.get('warnings', []),
             "errors": res.get('errors', []),
+            "import_check": res.get('import_check', {"summary": {}, "items": []}),
         })
     
     @log_api_call
@@ -1075,6 +1076,7 @@ class API:
             "workshop_ids": res.get('workshop_ids', []),
             "warnings": res.get('warnings', []),
             "errors": res.get('errors', []),
+            "import_check": res.get('import_check', {"summary": {}, "items": []}),
             "source_profile_id": source_profile_id,
             "source_profile_name": profile.name if source_profile_id else '',
         }
@@ -2596,11 +2598,15 @@ class API:
         根据 PackageID 获取对应的 WorkshopID 映射
         """
         if not package_ids: return ApiResponse.error("无效的 PackageID")
-        meta_map = WorkshopMeta.select(WorkshopMeta.package_id, WorkshopMeta.workshop_id).where(WorkshopMeta.package_id.in_(package_ids)).dicts()
-        if not meta_map: return ApiResponse.error("未找到对应的 WorkshopID")
-        return ApiResponse.success(
-            { meta['package_id']: meta['workshop_id'] for meta in meta_map }
-        )
+        current_game_version = self.active_context.game_version if self.active_context else ""
+        details = ExtDAO.get_workshop_details_by_package_ids(package_ids, current_game_version=current_game_version)
+        if not details:
+            return ApiResponse.error("未找到对应的 WorkshopID")
+        return ApiResponse.success({
+            package_id: detail["workshop_id"]
+            for package_id, detail in details.items()
+            if detail.get("workshop_id")
+        })
     
     @log_api_call
     def get_workshop_details_by_package_ids(self, package_ids: list):
@@ -2608,8 +2614,8 @@ class API:
         批量获取包名对应的缓存信息（完全离线，无网络请求）
         """
         try:
-            from backend.database.dao_ext import ExtDAO
-            res = ExtDAO.get_workshop_details_by_package_ids(package_ids)
+            current_game_version = self.active_context.game_version if self.active_context else ""
+            res = ExtDAO.get_workshop_details_by_package_ids(package_ids, current_game_version=current_game_version)
             return ApiResponse.success(res)
         except Exception as e:
             logger.error(f"get_workshop_details_by_package_ids failed: {e}", exc_info=True)

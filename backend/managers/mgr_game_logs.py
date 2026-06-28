@@ -6,13 +6,11 @@ import re
 from datetime import datetime
 import threading
 import time
-from typing import List, Dict, Any
 
 from backend.managers.mgr_load_order import LoadOrderManager
 from backend.managers.mgr_profile import ProfileContext
 from backend.utils.event_bus import EventBus
 from backend.utils.logger import BaseLogReader, generate_log_id, logger
-from backend.settings import DATA_DIR
 
 
 class LogAnalyzer:

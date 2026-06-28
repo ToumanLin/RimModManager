@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import os
 from pathlib import Path
@@ -9,9 +8,9 @@ import threading
 import subprocess
 import platform
 import time
-from typing import Any, Dict, List
-from urllib.parse import unquote, quote
-from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Dict
+from urllib.parse import quote
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image
 import requests
 import urllib.parse
