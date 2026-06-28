@@ -31,6 +31,7 @@ from backend.managers.mgr_network import NetworkManager
 from backend.managers.mgr_download import DownloadManager
 from backend.managers.mgr_steam import SteamManager
 from backend.managers.mgr_sub_browser import SubBrowserManager
+from backend.managers.mgr_ai import AIManager
 
 
 def log_api_call(func):
@@ -119,6 +120,7 @@ class API:
         self.network_mgr = NetworkManager()
         self.download_mgr = DownloadManager()
         self.steam_mgr = SteamManager()
+        self.ai_mgr = AIManager()
         self.browser_window = SubBrowserManager(self)
         logger.info("API Layer Ready.")
 
@@ -1064,6 +1066,69 @@ class API:
             return ApiResponse.error(str(e))
     
     
-    
+    # =========================================================================
+    #  13. AI 功能 (AI Features) - 新增
+    # =========================================================================
+
+    @log_api_call
+    def ai_get_config(self):
+        """获取当前 AI 配置和 Prompt 列表"""
+        from backend.settings import AIConfig
+        ai_cfg = settings.config.ai
+        # 如果是字典，先转成对象，方便统一调用 asdict
+        if isinstance(ai_cfg, dict):
+            ai_cfg = AIConfig(**ai_cfg)
+        return ApiResponse.success({
+            "config": asdict(ai_cfg),
+            "prompts": self.ai_mgr.prompts # 返回 prompt 定义，供前端生成动态表单
+        })
+
+    @log_api_call
+    def ai_save_config(self, config_data: dict):
+        """保存 AI 配置"""
+        try:
+            # 增量更新设置
+            current_ai = settings.config.ai
+            for k, v in config_data.items():
+                if hasattr(current_ai, k):
+                    setattr(current_ai, k, v)
+            settings.save()
+            return ApiResponse.success(message="AI 配置已保存")
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def ai_fetch_models(self, temp_config: dict):
+        """
+        获取模型列表 (用于配置页面的下拉菜单)
+        :param temp_config: 前端表单中的临时配置 {provider, base_url, api_key}
+        """
+        try:
+            models = self.ai_mgr.fetch_available_models(temp_config)
+            return ApiResponse.success(models)
+        except Exception as e:
+            return ApiResponse.error(f"连接失败: {str(e)}")
+
+    @log_api_call
+    def ai_chat(self, message: str):
+        """简单的自由对话"""
+        try:
+            # 使用 'chat' 模板
+            result = self.ai_mgr.execute_task('chat', {'message': message})
+            return ApiResponse.success(result)
+        except Exception as e:
+            return ApiResponse.error(str(e))
+
+    @log_api_call
+    def ai_execute_task(self, task_key: str, params: dict):
+        """
+        执行特定任务 (翻译、日志分析等)
+        前端调用示例: ai_execute_task('translation', {content: 'About RimWorld', target_lang: 'Chinese'})
+        """
+        try:
+            result = self.ai_mgr.execute_task(task_key, params)
+            return ApiResponse.success(result)
+        except Exception as e:
+            return ApiResponse.error(str(e))
     
     

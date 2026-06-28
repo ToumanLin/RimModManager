@@ -28,7 +28,7 @@
 import { ref, computed } from 'vue'
 import { JsonViewer } from "vue3-json-viewer"
 import "vue3-json-viewer/dist/vue3-json-viewer.css";
-import { useAppStore } from '@/stores/appStore';
+import { useAppStore } from '../stores/appStore';
 import { useModStore } from '../stores/modStore'
 import { useGroupStore } from '../stores/groupStore'
 import { useHoverStore } from '../stores/hoverStore'

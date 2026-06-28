@@ -1,3 +1,5 @@
+// stores/appStore.js
+
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { createToastInterface } from 'vue-toastification'
@@ -99,7 +101,6 @@ export const useAppStore = defineStore('app', () => {
       
       // 级联初始化其他 Store
       const modStore = useModStore()
-      const orderStore = useOrderStore()
       
       // 获取初始数据 (这里包含 settings, version 等)
       await refreshData(true) 
@@ -419,11 +420,45 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  // === AI 交互 ===
+  // 获取AI设置
+  const getAiConfig = async () => {
+    if (!window.pywebview) return
+    const res = await window.pywebview.api.ai_get_config()
+    if (checkResult(res, "获取AI配置")) {
+      res.data.config
+      res.data.prompts
+    } else {
+      console.error("获取AI配置异常:", res.message)
+    }
+  }
+  // 保存AI设置
+  const saveAIConfig = async (config_data) => {
+    if (!window.pywebview) return
+    const res = await window.pywebview.api.ai_save_config(config_data)
+    if (checkResult(res, "保存AI配置",true)) {
+      return true
+    } else {
+      console.error("保存AI配置异常:", res.message)
+    }
+  }
+  // 使用AI功能
+  const useAI = async (task_key, params) => {
+    if (!window.pywebview) return
+    const res = await window.pywebview.api.ai_execute_task(task_key, params)
+    if (checkResult(res, `使用AI ${task_key}`)) {
+      return JSON.parse(res.data)
+    } else {
+      console.error(`使用AI ${task_key} 异常:"`, res.message)
+    }
+  }
+
   return {
     appVersion, buildMode, uiState, scanProgress, settings, isLoading, isDownloading, downloadTasks, activeDownloadTask, 
     initialize, checkResult, refreshData, toggleUiState,
     launchGame, autoDetectPaths, openPath, getFilePath, getFolderPath, deletePath, openUrl, startDownload, 
     saveSetting, applySettings, openSettingsPanel, closeSettingsPanel, resetDatabase, 
-    checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod
+    checkSteamTools, openSteamWorkshopUrl, unsubscribeMod, subscribeMod,
+    getAiConfig, saveAIConfig, useAI
   }
 })

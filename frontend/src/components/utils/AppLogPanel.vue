@@ -68,7 +68,7 @@
             <span class="shrink-0 text-text-dim/50 select-none w-[60px]">{{ formatTime(log.timestamp) }}</span>
             
             <!-- 级别标记 -->
-            <span class="shrink-0 w-10 font-bold" :class="getLevelColorClass(log.level)">
+            <span class="shrink-0 w-12 font-bold" :class="getLevelColorClass(log.level)">
               {{ log.level }}
             </span>
             <!-- 内容主体 -->

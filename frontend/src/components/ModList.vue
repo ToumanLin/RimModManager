@@ -165,10 +165,10 @@ import { Motion } from 'motion-v';
 import { useModStore } from '../stores/modStore';
 import { useSearchStore } from '../stores/searchStore';
 import { generateHtmlHelp } from '../modules/search/SearchHelp'
+import { ISSUE_TITLE_MAP } from '../utils/constants';
 import ModItem from './utils/ModItem.vue';
 import TagsSearch from './common/TagsSearch/TagsSearch.vue';
 import DependencyGraph from './utils/DependencyGraph.vue'
-import { ISSUE_TITLE_MAP } from '@/utils/constants';
 
 // 这里 modelValue 接收纯 ID 数组
 const props = defineProps({
