@@ -1713,8 +1713,8 @@ class PathChecker:
         """
         检查 Workshop 路径是否有效。
 
-        这里不再只看 `steamapps/workshop`，而是要求命中 RimWorld 对应的
-        RimWorld 工坊内容目录，避免把其它游戏或中间目录误判为有效。
+        优先要求命中 RimWorld 对应的工坊内容目录；如果 294100 目录尚未生成，
+        但上级 Steam Workshop 内容目录存在，则允许保存并给出提醒。
         返回：{
             'pass': True,
             'data': {},
@@ -1722,15 +1722,25 @@ class PathChecker:
             'msg': ''
         }
         """
-        if not path_str or not Path(path_str).exists():
+        if not path_str:
             return cls._format_res(False, msg="Workshop 路径不存在")
 
+        path = Path(path_str)
         normalized_parts = [part.lower() for part in Path(os.path.normpath(path_str)).parts]
         workshop_parts = [part.lower() for part in RIMWORLD_WORKSHOP_CONTENT_PARTS]
         is_valid = any(
             normalized_parts[index:index + 4] == workshop_parts
             for index in range(max(0, len(normalized_parts) - 3))
         )
+        if is_valid and not path.exists() and path.parent.exists():
+            return cls._format_res(
+                True,
+                data=path_str,
+                msg=f"RimWorld 工坊目录尚未生成：{path_str}\n订阅或下载工坊内容后通常会自动出现。",
+                msg_type="warn",
+            )
+        if not path.exists():
+            return cls._format_res(False, msg="Workshop 路径不存在")
         return cls._format_res(is_valid, data=path_str, 
                                msg=f"Workshop 路径：{path_str}" if is_valid else f"路径不在 Steam Workshop {RIMWORLD_STEAM_APP_ID_STR} 目录中",
                                msg_type="success" if is_valid else "warn")

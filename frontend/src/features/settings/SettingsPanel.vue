@@ -62,7 +62,6 @@
               <SettingsPathsTab
                 v-if="currentTab === 'paths'"
                 :form-data="formData"
-                :mark-steam-launch-touched="markSteamLaunchTouched"
                 :validate-steam-launch-enable="validateSteamLaunchEnable"
                 :validate-workshop-mods-enable="validateWorkshopModsEnable"
                 :auto-detect="autoDetect"
@@ -140,7 +139,6 @@ const profileStore = useProfileStore()
 
 const currentTab = ref('paths')
 const formData = ref({})
-const steamLaunchTouched = ref(false)
 const saving = ref(false)
 
 const Steam = h('svg', { viewBox: "0 0 448 512", fill: "currentColor" }, 
@@ -225,33 +223,9 @@ const changeTab = (tab) => {
   currentTab.value = tab
 }
 
-const shouldPreferSteamLaunch = () => {
-  const checkInfo = formData.value?.check_info || {}
-  const installCheck = checkInfo.game_install_path || {}
-  const steamCheck = checkInfo.steam_path || {}
-  return !!(
-    installCheck.pass
-    && installCheck.data?.is_steam
-    && steamCheck.pass
-    && !formData.value?.use_workshop_mods
-  )
-}
-
-const applySteamLaunchDefault = () => {
-  if (steamLaunchTouched.value || !formData.value) return
-  if (shouldPreferSteamLaunch() && !formData.value.prefer_steam_launch) {
-    formData.value.prefer_steam_launch = true
-  }
-}
-
-const markSteamLaunchTouched = () => {
-  steamLaunchTouched.value = true
-}
-
 const getSteamLaunchProblem = (installCheck, steamCheck) => {
-  if (!installCheck?.pass) return `游戏安装目录无效：${installCheck?.msg || '请重新选择游戏安装目录'}`
-  if (!installCheck?.data?.is_steam) return `当前游戏本体未识别为 Steam 版，无法使用 Steam 启动。\n${installCheck?.msg || '请确认游戏文件完整，或重新选择 Steam 版游戏目录。'}`
-  if (!steamCheck?.pass) return `Steam 程序路径无效：${steamCheck?.msg || '请重新选择 Steam.exe 所在目录'}`
+  if (!installCheck?.pass) return `游戏安装目录可能无法用于 Steam 启动：${installCheck?.msg || '请重新选择游戏安装目录'}`
+  if (!steamCheck?.pass) return `Steam 程序路径可能无法使用：${steamCheck?.msg || '请重新选择 Steam.exe 所在目录'}`
   return ''
 }
 
@@ -259,19 +233,22 @@ const validateSteamLaunchEnable = async () => {
   const installPath = String(formData.value?.game_install_path || '').trim()
   const steamPath = String(formData.value?.steam_path || '').trim()
   if (!installPath) {
-    toast.warning('请先填写游戏安装目录')
+    toast.warning('未填写游戏安装目录，Steam 启动可能无法使用')
     return false
   }
   if (!steamPath) {
-    toast.warning('请先填写 Steam 程序路径')
+    toast.warning('未填写 Steam 程序路径，Steam 启动可能无法使用')
     return false
   }
   const installCheck = await checkPath('game_install_path', installPath, { force: true })
   const steamCheck = await checkPath('steam_path', steamPath)
   const problem = getSteamLaunchProblem(installCheck, steamCheck)
   if (problem) {
-    toast.warning(problem)
+    toast.warning(`${problem}\n此开关会按你的选择保留，启动失败时请回到这里修正路径。`)
     return false
+  }
+  if (!installCheck?.data?.is_steam) {
+    toast.warning('未能确认当前游戏本体是否为 Steam 版，仍会优先尝试通过 Steam 启动；如果启动失败，可改为直接启动。')
   }
   return true
 }
@@ -279,33 +256,29 @@ const validateSteamLaunchEnable = async () => {
 const validateWorkshopModsEnable = async () => {
   const workshopPath = String(formData.value?.workshop_mods_path || '').trim()
   if (!workshopPath) {
-    toast.warning('请先填写创意工坊目录')
+    toast.warning('未填写创意工坊目录，工坊 Mod 可能无法加载')
     return false
   }
   const workshopCheck = await checkPath('workshop_mods_path', workshopPath)
+  if (workshopCheck?.pass && workshopCheck?.type === 'warn') {
+    toast.warning(workshopCheck.msg || '创意工坊目录当前还不完整，保存后可能需要等 Steam 下载完成。')
+  }
   if (!workshopCheck?.pass) {
-    toast.warning(`创意工坊目录无效：${workshopCheck?.msg || '请重新选择创意工坊目录'}`)
+    toast.warning(`创意工坊目录可能无法使用：${workshopCheck?.msg || '请重新选择创意工坊目录'}\n此开关会按你的选择保留，加载失败时请回到这里修正路径。`)
     return false
   }
   return true
 }
 
 const validateEnabledLaunchOptions = async () => {
+  let valid = true
   if (formData.value?.prefer_steam_launch) {
-    const ok = await validateSteamLaunchEnable()
-    if (!ok) {
-      formData.value.prefer_steam_launch = false
-      return false
-    }
+    valid = (await validateSteamLaunchEnable()) && valid
   }
   if (formData.value?.use_workshop_mods) {
-    const ok = await validateWorkshopModsEnable()
-    if (!ok) {
-      formData.value.use_workshop_mods = false
-      return false
-    }
+    valid = (await validateWorkshopModsEnable()) && valid
   }
-  return true
+  return valid
 }
 
 // 自动检测路径
@@ -337,9 +310,6 @@ const checkPath = async (type, path, options = {}) => {
   if (res?.pass && res?.data && type === 'ripgrep_path') {
     formData.value.ripgrep_path = res.data
   }
-  if (['game_install_path', 'steam_path'].includes(type)) {
-    applySteamLaunchDefault()
-  }
   return res
 }
 // 检查全部路径
@@ -358,7 +328,6 @@ const checkPaths = async () => {
   const res = await appStore.checkPaths(paths_data)
   if (res) {
     formData.value['check_info'] = res
-    applySteamLaunchDefault()
   }
 }
 
@@ -425,7 +394,6 @@ const showSecretStorageWarning = (target) => {
 watch(() => appStore.uiState.showSettingsPanel, (val) => {
   if (val) {
     const openVersion = ++settingsPanelOpenVersion
-    steamLaunchTouched.value = false
     formData.value = buildSettingsFormData()
     markSavedSecretsPreserved(formData.value)
     showSecretStorageWarning(formData.value)
@@ -469,7 +437,7 @@ const save = async () => {
   if (saving.value) return
   saving.value = true
   try {
-    if (!(await validateEnabledLaunchOptions())) return
+    await validateEnabledLaunchOptions()
     // 校验拦截
     // const hasError = Object.values(formData.value.check_info || {}).some(info => info && !info.pass)
     // if (hasError) {

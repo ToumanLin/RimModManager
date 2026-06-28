@@ -279,6 +279,7 @@ class TestProfileManager(unittest.TestCase):
 
         with patch("backend.managers.mgr_profile.GameProfile.select", return_value=[SimpleNamespace(id="default")]), \
              patch.object(manager, "get_profile", return_value=profile), \
+             patch("backend.managers.mgr_profile.GameManager.detect_executable", return_value=str(install_root / "RimWorldWin64.exe")), \
              patch("backend.managers.mgr_profile.GameManager.get_game_version", return_value="1.5.4100"), \
              patch("backend.managers.mgr_profile.GameProfile.update", side_effect=lambda **kwargs: update_payload.update(kwargs) or _UpdateQuery()), \
              patch("backend.managers.mgr_profile.GameProfile.get_or_none", return_value=profile):
@@ -291,6 +292,48 @@ class TestProfileManager(unittest.TestCase):
         self.assertTrue(result)
         self.assertFalse(update_payload["prefer_steam_launch"])
         self.assertFalse(update_payload["use_workshop_mods"])
+        self.assertTrue(update_payload["is_steam"])
+
+    def test_update_profile_keeps_existing_steam_launch_choice_when_path_changes(self):
+        manager = ProfileManager.__new__(ProfileManager)
+        temp_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_root, ignore_errors=True)
+        install_root = temp_root / "RimWorld"
+        install_root.mkdir(parents=True)
+
+        profile = SimpleNamespace(
+            id="default",
+            game_install_path="",
+            user_data_path="",
+            prefer_steam_launch=False,
+            use_workshop_mods=False,
+        )
+        update_payload = {}
+
+        class _UpdateQuery:
+            def where(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                return 1
+
+        manager._get_install_inspector = Mock(return_value=SimpleNamespace(
+            inspect=Mock(return_value=SimpleNamespace(is_steam=True, game_version="1.5.4100"))
+        ))
+        manager._sync_profile_to_disk = Mock()
+
+        with patch("backend.managers.mgr_profile.GameProfile.select", return_value=[SimpleNamespace(id="default")]), \
+             patch.object(manager, "get_profile", return_value=profile), \
+             patch("backend.managers.mgr_profile.GameManager.detect_executable", return_value=str(install_root / "RimWorldWin64.exe")), \
+             patch("backend.managers.mgr_profile.GameManager.get_game_version", return_value="1.5.4100"), \
+             patch("backend.managers.mgr_profile.GameProfile.update", side_effect=lambda **kwargs: update_payload.update(kwargs) or _UpdateQuery()), \
+             patch("backend.managers.mgr_profile.GameProfile.get_or_none", return_value=profile):
+            result = manager.update_profile("default", {
+                "game_install_path": str(install_root),
+            })
+
+        self.assertTrue(result)
+        self.assertFalse(update_payload["prefer_steam_launch"])
         self.assertTrue(update_payload["is_steam"])
 
     def test_update_profile_keeps_workshop_link_mode_when_enabled(self):
@@ -323,6 +366,7 @@ class TestProfileManager(unittest.TestCase):
 
         with patch("backend.managers.mgr_profile.GameProfile.select", return_value=[SimpleNamespace(id="default")]), \
              patch.object(manager, "get_profile", return_value=profile), \
+             patch("backend.managers.mgr_profile.GameManager.detect_executable", return_value=str(install_root / "RimWorldWin64.exe")), \
              patch("backend.managers.mgr_profile.GameManager.get_game_version", return_value="1.5.4100"), \
              patch("backend.managers.mgr_profile.GameProfile.update", side_effect=lambda **kwargs: update_payload.update(kwargs) or _UpdateQuery()), \
              patch("backend.managers.mgr_profile.GameProfile.get_or_none", return_value=profile):
@@ -372,8 +416,8 @@ class TestProfileManager(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertEqual(len(inserted_rows), 1)
-        self.assertFalse(inserted_rows[0]["prefer_steam_launch"])
-        self.assertTrue(inserted_rows[0]["use_workshop_mods"])
+        self.assertTrue(inserted_rows[0]["prefer_steam_launch"])
+        self.assertFalse(inserted_rows[0]["use_workshop_mods"])
         self.assertFalse(inserted_rows[0]["is_steam"])
         self.assertEqual(inserted_rows[0]["game_version"], "1.6.4100")
 
@@ -554,6 +598,11 @@ class TestPathChecker(unittest.TestCase):
         invalid_root.mkdir(parents=True, exist_ok=True)
 
         self.assertTrue(PathChecker.check_workshop_path(str(valid_root))["pass"])
+        missing_rimworld_root = temp_root / "steamapps" / "workshop" / "content" / "294100"
+        shutil.rmtree(valid_root)
+        pending_check = PathChecker.check_workshop_path(str(missing_rimworld_root))
+        self.assertTrue(pending_check["pass"])
+        self.assertEqual(pending_check["type"], "warn")
         self.assertFalse(PathChecker.check_workshop_path(str(invalid_root))["pass"])
 
 
@@ -569,7 +618,7 @@ class TestProfileRuntimeHelpers(unittest.TestCase):
         self.assertTrue(result["prefer_steam_launch"])
         self.assertFalse(result["use_workshop_mods"])
 
-    def test_normalize_profile_runtime_flags_forces_prefer_false_when_not_steam(self):
+    def test_normalize_profile_runtime_flags_keeps_manual_prefer_when_not_steam(self):
         result = normalize_profile_runtime_flags(
             False,
             prefer_steam_launch=True,
@@ -577,8 +626,8 @@ class TestProfileRuntimeHelpers(unittest.TestCase):
         )
 
         self.assertFalse(result["is_steam"])
-        self.assertFalse(result["prefer_steam_launch"])
-        self.assertTrue(result["use_workshop_mods"])
+        self.assertTrue(result["prefer_steam_launch"])
+        self.assertFalse(result["use_workshop_mods"])
 
     def test_detect_is_steam_managed_install_keeps_old_path_semantics_separate(self):
         self.assertTrue(detect_is_steam_managed_install("C:/Program Files (x86)/Steam/steamapps/common/RimWorld"))
@@ -599,6 +648,20 @@ class TestProfileRuntimeHelpers(unittest.TestCase):
         self.assertTrue(caps["steam_launch_enabled"])
         self.assertFalse(caps["workshop_deploy_enabled"])
         self.assertTrue(caps["workshop_detection_enabled"])
+
+    def test_resolve_profile_runtime_capabilities_keeps_manual_steam_launch_when_detection_fails(self):
+        context = SimpleNamespace(
+            is_steam=False,
+            is_steam_managed=False,
+            prefer_steam_launch=True,
+            use_workshop_mods=True,
+        )
+
+        with patch("backend.utils.profile_runtime.settings.config", SimpleNamespace(workshop_mods_path="D:/Workshop", steam_path="C:/Steam")):
+            caps = resolve_profile_runtime_capabilities(context)
+
+        self.assertTrue(caps["steam_launch_enabled"])
+        self.assertFalse(caps["workshop_deploy_enabled"])
 
 
 class TestGameInstallRegistry(unittest.TestCase):
@@ -2247,7 +2310,7 @@ class TestApiGameLaunch(unittest.TestCase):
         api._ensure_runtime_links_for_launch.assert_not_called()
         startfile.assert_called_once_with("steam://run/294100")
 
-    def test_game_launch_returns_error_when_steam_not_ready_for_direct_game_launch(self):
+    def test_game_launch_warns_when_steam_not_ready_for_direct_game_launch(self):
         api = API.__new__(API)
         profile = SimpleNamespace(
             id="default",
@@ -2281,9 +2344,10 @@ class TestApiGameLaunch(unittest.TestCase):
              patch("backend.api.PathChecker.check_steam_path", return_value={"pass": True}):
             res = API.game_launch(api, "default")
 
-        self.assertEqual(res["status"], "error")
-        self.assertEqual(res["data"]["runtime_session"]["state"], "idle")
-        self.assertEqual(res["data"]["failure_reason"], "steam_ready_timeout")
+        self.assertEqual(res["status"], "warning")
+        self.assertEqual(res["data"]["action"], "confirm_direct_launch")
+        self.assertEqual(res["data"]["reason"], "steam_not_ready")
+        self.assertEqual(res["data"]["steam_status"]["reason"], "steam_ready_timeout")
         api._launch_profile_with_runtime_links.assert_not_called()
 
     def test_game_launch_warns_when_direct_launching_steam_profile_with_workshop_links_while_steam_running(self):

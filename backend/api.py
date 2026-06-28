@@ -3227,7 +3227,7 @@ class API:
                         profile_id=profile_id,
                         steam_running=bool(steam_running),
                         reason="steam_path_invalid",
-                        message="当前环境无法按 Steam 方式启动，需要先确认是否改为直接启动。",
+                        message="当前环境配置为优先使用 Steam 启动，但未检测到有效的 Steam 程序路径。",
                         requires_fallback_confirm=True,
                         steam_status=self._attach_steam_user_hint(steam_status),
                     )
@@ -3241,14 +3241,13 @@ class API:
                     return ApiResponse.success( data={"runtime_session": session}, message="Steam 已就绪，已发起游戏启动，等待游戏进程确认。" )
 
                 failed_reason = str((ensured_status or {}).get("reason") or "steam_not_ready").strip() or "steam_not_ready"
-                failed_session = runtime_session_mgr.mark_launch_failed( failed_reason, message or "Steam 未能进入可用状态。" )
-                return ApiResponse.error(
-                    message or "Steam 未能进入可用状态。",
-                    data={
-                        "runtime_session": failed_session,
-                        "failure_reason": failed_reason,
-                        "steam_status": ensured_status or {},
-                    },
+                return self._build_direct_launch_confirmation(
+                    profile_id=profile_id,
+                    steam_running=bool((ensured_status or {}).get("running")),
+                    reason="steam_not_ready",
+                    message=message or "Steam 未能进入可用状态。",
+                    requires_fallback_confirm=True,
+                    steam_status={**(ensured_status or {}), "reason": failed_reason},
                 )
 
             # 这里只处理“当前环境启用了创意工坊模组链接，且 Steam 已运行”时的冲突提示。
@@ -3269,7 +3268,7 @@ class API:
 
             # 使用Steam启动，且Steam路径无效，提示用户
             if prefer_steam_launch and not steam_path_valid:
-                return ApiResponse.warning( message="未检测到有效的 Steam 程序路径，已自动切换为游戏本体直接启动。", data={"runtime_session": session} )
+                return ApiResponse.warning( message="未检测到有效的 Steam 程序路径，本次已改为游戏本体直接启动。", data={"runtime_session": session} )
             return ApiResponse.success( data={"runtime_session": session}, message="已发起游戏启动，等待游戏进程确认。" )
         except Exception as e:
             logger.error("启动游戏失败: %s", e, exc_info=True)

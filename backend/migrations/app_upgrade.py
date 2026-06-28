@@ -312,7 +312,7 @@ def _migrate_profile_steam_runtime_flags(result: AppUpgradeResult):
 
     这一步不再信任旧 `is_steam` 的路径语义，而是重新探测：
     - `is_steam`：当前副本是否像一个真实 Steam 正版副本；
-    - `prefer_steam_launch`：默认按历史缺省值视作 True，仅在重新探测为非 Steam 时关闭；
+    - `prefer_steam_launch`：默认按历史缺省值视作 True，之后保留用户选择；
     - `use_workshop_mods`：优先保留旧值，仅在 Steam 启动开启时归零。
     """
     if not str(settings.config.steam_path or "").strip():

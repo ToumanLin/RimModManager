@@ -1419,11 +1419,25 @@ export const useAppStore = defineStore('app', () => {
   }
 
   const WAIT_STEAM_EXIT_ACTION = 'wait_steam_exit'
+  const GAME_LAUNCH_ACTION = Object.freeze({
+    CONTINUE: 'continue',
+    CHECK_STEAM_STATUS: 'check_steam_status',
+    DISABLE_STEAM_LAUNCH: 'disable_steam_launch',
+    CANCEL: 'cancel',
+  })
   const GAME_LAUNCH_WARNING_REASON = Object.freeze({
     STEAM_PATH_INVALID: 'steam_path_invalid',
+    STEAM_NOT_READY: 'steam_not_ready',
     STEAM_RUNNING_WORKSHOP_CONFLICT: 'steam_running_workshop_conflict',
   })
   const sleep = (ms) => new Promise(resolve => window.setTimeout(resolve, ms))
+
+  const steamLaunchFallbackButtons = () => [
+    { label: '本次直启游戏', value: GAME_LAUNCH_ACTION.CONTINUE, kind: 'primary' },
+    { label: '检查 Steam 状态', value: GAME_LAUNCH_ACTION.CHECK_STEAM_STATUS, kind: 'secondary' },
+    { label: '关闭 Steam 优先启动', value: GAME_LAUNCH_ACTION.DISABLE_STEAM_LAUNCH, kind: 'danger' },
+    { label: '取消', value: GAME_LAUNCH_ACTION.CANCEL, kind: 'secondary' },
+  ]
 
   const buildGameLaunchWarningConfig = (gameRes) => {
     const reason = String(gameRes?.data?.reason || '').trim()
@@ -1432,12 +1446,18 @@ export const useAppStore = defineStore('app', () => {
       case GAME_LAUNCH_WARNING_REASON.STEAM_PATH_INVALID:
         return {
           type: 'warning',
-          mode: 'confirm',
+          mode: 'actions',
           title: 'Steam 启动不可用',
-          message: '当前环境配置为优先使用 Steam 启动，但未检测到有效的 Steam 程序路径。\n你可以改为直接启动游戏本体，或先修复 Steam 路径后重试。',
-          confirmText: '直接启动',
-          cancelText: '取消',
-          action: 'continue',
+          message: '当前环境配置为优先使用 Steam 启动，但未检测到有效的 Steam 程序路径。\n你可以只在本次改为直接启动，也可以检查 Steam 状态，或关闭这个开关并保存。',
+          actionButtons: steamLaunchFallbackButtons(),
+        }
+      case GAME_LAUNCH_WARNING_REASON.STEAM_NOT_READY:
+        return {
+          type: 'warning',
+          mode: 'actions',
+          title: 'Steam 暂时不可用',
+          message: `${fallbackMessage || 'Steam 未能进入可用状态。'}\n你可以只在本次改为直接启动，也可以检查 Steam 状态，或关闭这个开关并保存。`,
+          actionButtons: steamLaunchFallbackButtons(),
         }
       case GAME_LAUNCH_WARNING_REASON.STEAM_RUNNING_WORKSHOP_CONFLICT:
         return {
@@ -1466,6 +1486,26 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  const showSteamStatusForLaunch = async () => {
+    const statusRes = await window.pywebview.api.steam_client_status()
+    if (!checkResult(statusRes, '检查 Steam 状态')) return null
+    const hint = statusRes?.data?.user_hint || {}
+    await confirmStore.alert(
+      hint.title || 'Steam 状态',
+      hint.message || statusRes.message || '已完成 Steam 状态检查。',
+      { type: statusRes?.data?.ready ? 'success' : 'warning' }
+    )
+    return null
+  }
+
+  const disableSteamLaunchForProfile = async (profileId) => {
+    const targetProfileId = String(profileId || '').trim()
+    if (!targetProfileId) return null
+    const profileStore = useProfileStore()
+    await profileStore.updateProfile(targetProfileId, { prefer_steam_launch: false })
+    return null
+  }
+
   const resolveGameLaunchWarning = async (gameRes, requestedProfileId = null) => {
     if (gameRes?.status !== 'warning' || gameRes?.data?.action !== 'confirm_direct_launch') {
       return gameRes
@@ -1487,6 +1527,20 @@ export const useAppStore = defineStore('app', () => {
       )
       if (!ok) return null
       return window.pywebview.api.game_launch_resolve_warning(targetProfileId, warningConfig.action || 'continue')
+    }
+
+    if (warningConfig.mode === 'actions') {
+      const choice = await confirmStore.open({
+        title: warningConfig.title,
+        message: warningConfig.message,
+        mode: 'confirm',
+        type: warningConfig.type || 'warning',
+        actionButtons: warningConfig.actionButtons,
+      })
+      if (!choice || choice === GAME_LAUNCH_ACTION.CANCEL) return null
+      if (choice === GAME_LAUNCH_ACTION.CHECK_STEAM_STATUS) return await showSteamStatusForLaunch()
+      if (choice === GAME_LAUNCH_ACTION.DISABLE_STEAM_LAUNCH) return await disableSteamLaunchForProfile(targetProfileId)
+      return window.pywebview.api.game_launch_resolve_warning(targetProfileId, choice)
     }
 
     if (warningConfig.mode === 'wait_steam_exit') {
