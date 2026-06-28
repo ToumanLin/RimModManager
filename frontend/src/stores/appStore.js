@@ -125,6 +125,7 @@ export const useAppStore = defineStore('app', () => {
     self_mods_path: '',
     move_old_self_mods: false,
     enable_tool_mods: true,  // 是否启用工具 Mod
+    link_deployment_mode_full: false,  // 链接部署模式: true=完全重建, false=增量部署
 
     user_rules_path: '',
     community_rules_url: '',
@@ -161,6 +162,8 @@ export const useAppStore = defineStore('app', () => {
       mod_details_layout: JSON.parse(JSON.stringify(DEFAULT_DETAILS_LAYOUT)),   // Mod 详情面板布局配置
 
       show_dependency_graph: true,  // 是否显示依赖关系图
+      enable_active_section_collapse: false,  // 是否启用启用列表标题分组折叠（仅 active 列表生效）
+      default_collapse_active_sections: false,  // 若当前环境/列表还没有保存过折叠状态，首次是否默认折叠
       show_list_index: true,  // 是否显示列表索引列
       show_list_icon: true,       // 是否显示 Mod 图标
       show_list_mod_icon: true,       // 是否显示 Mod 图标
@@ -211,6 +214,7 @@ export const useAppStore = defineStore('app', () => {
     coexist_mod_folder_name_type: "workshop_id", // 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: true,       // 是否显示共存Mod提示
     check_language_support: true,        // 是否检查语言支持
+    language_packs_follow_targets: false, // 语言包是否贴紧其最后一个前置/依赖目标
     use_raw_ids: false,               // 是否使用原始 Mod ID
 
     // --- 调试 (Debug) ---

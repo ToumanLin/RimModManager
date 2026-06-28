@@ -11,9 +11,13 @@ from backend.load_order import (
     FORMAT_MODSCONFIG,
     FORMAT_RML,
     FORMAT_SAVEGAME,
+    FORMAT_SHARE_CODE,
     ParsedLoadOrderData,
     build_import_check_report,
+    build_share_code,
+    describe_share_code,
     parse_load_order_file,
+    parse_share_code,
 )
 from backend.database.models_ext import ModReplacement
 from backend.managers.mgr_profile import ProfileContext
@@ -34,6 +38,7 @@ if __name__ == "__main__":
 
 from backend.managers.mgr_files import FileManager
 from backend.settings import settings
+from backend.utils.tools import normalize_package_id, normalize_workshop_id
 from lxml import html
 etree = html.etree
 
@@ -41,6 +46,7 @@ EXPORT_FORMAT_MODSCONFIG = FORMAT_MODSCONFIG
 EXPORT_FORMAT_MODLIST = FORMAT_MODLIST
 EXPORT_FORMAT_RML = FORMAT_RML
 IMPORT_FORMAT_SAVEGAME = FORMAT_SAVEGAME
+IMPORT_FORMAT_SHARE_CODE = FORMAT_SHARE_CODE
 
 # load order 导入支持的文件类型，供 API 层弹原生文件选择框时复用。
 LOAD_ORDER_OPEN_FILE_TYPES = (
@@ -89,16 +95,10 @@ class LoadOrderManager:
         # 每次初始化（应用启动）时执行一次轮换检查
         self._rotate_backups()
 
-    def _normalize_package_id(self, package_id: Any) -> str:
-        # 包名统一转小写，避免不同来源文件大小写不一致导致匹配失败。
-        return str(package_id or "").strip().lower()
-
     def _normalize_workshop_id(self, workshop_id: Any) -> str | None:
         # 0 和空值都视为“没有可用工坊ID”，前端不应把它当成可订阅项目。
-        value = str(workshop_id or "").strip()
-        if not value or value == "0":
-            return None
-        return value
+        value = normalize_workshop_id(workshop_id)
+        return value or None
 
     def _build_mod_entries(self, mod_ids: list[str], mod_names: list[str] | None = None, mod_workshop_ids: list[str] | None = None):
         
@@ -113,7 +113,7 @@ class LoadOrderManager:
             package_id_raw = str(raw_package_id or "").strip()
             if not package_id_raw:
                 continue
-            package_id = self._normalize_package_id(package_id_raw)
+            package_id = normalize_package_id(package_id_raw)
             name = str(mod_names[index]).strip() if index < len(mod_names) and mod_names[index] else ""
             workshop_id_raw = str(mod_workshop_ids[index]).strip() if index < len(mod_workshop_ids) and mod_workshop_ids[index] else ""
             entries.append({
@@ -212,7 +212,7 @@ class LoadOrderManager:
             if self.context and self.context.is_healthy:
                 # 优先使用当前环境可见 Mod 数据，名称和工坊ID最贴近用户现场状态。
                 for mod in ModDAO.get_profile_mods(self.context):
-                    package_id = self._normalize_package_id(mod.get("package_id"))
+                    package_id = normalize_package_id(mod.get("package_id"))
                     if not package_id or package_id in visible_map:
                         continue
                     visible_map[package_id] = {
@@ -245,7 +245,7 @@ class LoadOrderManager:
                 .dicts()
             )
             for meta in meta_query:
-                package_id = self._normalize_package_id(meta.get("package_id"))
+                package_id = normalize_package_id(meta.get("package_id"))
                 if not package_id or package_id in meta_map:
                     continue
                 meta_map[package_id] = {
@@ -309,11 +309,33 @@ class LoadOrderManager:
             "errors": list(parsed.errors),
         }
 
+    def _build_read_result_from_parsed(self, parsed: ParsedLoadOrderData, modify_time: int = 0, source_path: str = ""):
+        """
+        把“文件解析结果 / 分享码解析结果”统一整理成 API 可直接返回的结构。
+
+        这样文件导入和分享码导入就不会各自维护一套字段拼装逻辑。
+        """
+        parsed_result = self._build_entries_from_parsed(parsed)
+        import_check = self._build_import_check(parsed)
+        return {
+            'active_mods': parsed_result.get('active_mods', []),
+            'modify_time': modify_time,
+            'format': parsed_result.get('format', EXPORT_FORMAT_MODSCONFIG),
+            'list_name': parsed_result.get('list_name', Path(source_path).stem if source_path else ''),
+            'mods': parsed_result.get('mods', []),
+            'mod_names': parsed_result.get('mod_names', []),
+            'mod_steam_workshop_ids': parsed_result.get('mod_steam_workshop_ids', []),
+            'workshop_ids': list(parsed.workshop_ids),
+            'warnings': parsed_result.get('warnings', []),
+            'errors': parsed_result.get('errors', []),
+            'import_check': import_check,
+        }
+
     def _build_export_entries(self, active_ids, use_raw_ids: bool = False):
         # 导出前统一生成结构化条目，避免两个导出分支重复查库和补名。
         normalized_ids = []
         for package_id in active_ids or []:
-            normalized = self._normalize_package_id(package_id)
+            normalized = normalize_package_id(package_id)
             if normalized:
                 normalized_ids.append(normalized)
 
@@ -322,6 +344,36 @@ class LoadOrderManager:
             for entry in entries:
                 entry["package_id_raw"] = entry["package_id"]
         return entries
+
+    def export_share_code(self, active_ids, list_name: str | None = None, use_raw_ids: bool = False) -> str:
+        """
+        导出分享码。
+
+        这里仍复用 manager 的元数据补全过程，让分享码尽量携带名称和工坊 ID，
+        但真正的编码规则交给 `backend.load_order.share_code`。
+        """
+        entries = self._build_export_entries(active_ids, use_raw_ids=use_raw_ids)
+        if not entries:
+            raise ValueError("当前没有可生成分享码的模组")
+
+        resolved_list_name = str(list_name or "").strip() or "Shared Load Order"
+        return build_share_code(
+            package_ids=[entry.get("package_id") or "" for entry in entries],
+            mod_names=[entry.get("name") or "" for entry in entries],
+            workshop_ids=[entry.get("workshop_id") or "" for entry in entries],
+            list_name=resolved_list_name,
+            game_version=self.context.game_version or "",
+        )
+
+    def read_share_code(self, share_code: str):
+        """
+        读取分享码并返回与 `read_active_mods` 对齐的结果结构。
+        """
+        parsed = parse_share_code(share_code)
+        result = self._build_read_result_from_parsed(parsed, modify_time=0, source_path=describe_share_code(share_code))
+        result["share_code"] = str(share_code or "").strip()
+        result["share_code_ref"] = describe_share_code(share_code)
+        return result
 
     def _default_export_name(self, export_format: str):
         # 不同格式使用不同默认文件名前缀，方便用户区分来源。
@@ -422,37 +474,28 @@ class LoadOrderManager:
         modify_time = int(os.path.getmtime(mods_config_file_path)*1000)
         try:
             parsed = parse_load_order_file(mods_config_file_path)
-            parsed_result = self._build_entries_from_parsed(parsed)
-            import_check = self._build_import_check(parsed)
+            return self._build_read_result_from_parsed(
+                parsed,
+                modify_time=modify_time,
+                source_path=mods_config_file_path,
+            )
         except Exception as e:
             logger.error(f"读取排序文件时出错: {e}")
             # 解析失败时返回空结果而不是抛异常，
             # 由 API 层决定对前端提示“解析失败”。
-            parsed_result = {
+            return {
+                'active_mods': [],
+                'modify_time': modify_time,
                 "format": EXPORT_FORMAT_MODSCONFIG,
-                "list_name": Path(mods_config_file_path).stem,
+                "list_name": Path(mods_config_file_path).stem if mods_config_file_path else "",
                 "mods": [],
-                "active_mods": [],
                 "mod_names": [],
                 "mod_steam_workshop_ids": [],
+                "workshop_ids": [],
                 "warnings": [],
                 "errors": [str(e)],
+                'import_check': {"summary": {}, "items": []},
             }
-            import_check = {"summary": {}, "items": []}
-
-        return {
-            'active_mods': parsed_result.get('active_mods', []),
-            'modify_time': modify_time,
-            'format': parsed_result.get('format', EXPORT_FORMAT_MODSCONFIG),
-            'list_name': parsed_result.get('list_name', Path(mods_config_file_path).stem),
-            'mods': parsed_result.get('mods', []),
-            'mod_names': parsed_result.get('mod_names', []),
-            'mod_steam_workshop_ids': parsed_result.get('mod_steam_workshop_ids', []),
-            'workshop_ids': parsed.workshop_ids if 'parsed' in locals() else [],
-            'warnings': parsed_result.get('warnings', []),
-            'errors': parsed_result.get('errors', []),
-            'import_check': import_check,
-        }
 
     def save_active_mods(self, active_ids, target_path=None, trigger_dialog=False, is_dirty=True, use_raw_ids=False, export_format: str = EXPORT_FORMAT_MODSCONFIG, list_name: str | None = None):
         """

@@ -1,19 +1,21 @@
 # backend/managers/mgr_github.py
-import requests
 import re
 import os
-import zipfile
 import shutil
+from typing import Any
+
+from backend.managers.mgr_download import DownloadManager
 from backend.utils.logger import logger
 from backend.settings import HOME_DIR, settings
 from backend.database.models import GithubModRecord, GithubTimeline, db
-from backend.utils.tools import current_ms
+from backend.managers.mgr_network import build_retry_session, merge_headers
+from backend.utils.tools import current_ms, extract_zip
+
+GITHUB_API_BASE = "https://api.github.com/repos"
+GITHUB_ACCEPT_HEADER = "application/vnd.github+json"
+
 
 class GithubManager:
-    API_BASE = "https://api.github.com/repos"
-
-    def __init__(self, download_mgr):
-        self.download_mgr = download_mgr
 
     def parse_repo_url(self, url: str):
         """解析 GitHub URL 提取 owner 和 repo"""
@@ -22,31 +24,50 @@ class GithubManager:
         owner = match.group(1)
         repo = match.group(2).replace(".git", "")
         return owner, repo
+    
+    def fetch_repo(self, owner: str, repo: str, *, timeout: tuple[int, int] = (10, 30)) -> dict[str, Any]:
+        with build_retry_session() as session:
+            response = session.get(f"{GITHUB_API_BASE}/{owner}/{repo}",
+                headers=merge_headers({"Accept": GITHUB_ACCEPT_HEADER}),
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    def fetch_latest_release(self, owner: str, repo: str, *, timeout: tuple[int, int] = (5, 20), missing_ok: bool = False ) -> dict[str, Any] | None:
+        with build_retry_session() as session:
+            response = session.get(
+                f"{GITHUB_API_BASE}/{owner}/{repo}/releases/latest",
+                headers=merge_headers({"Accept": GITHUB_ACCEPT_HEADER}),
+                timeout=timeout,
+            )
+            if missing_ok and response.status_code == 404: return None
+            response.raise_for_status()
+            return response.json()
 
     def fetch_repo_info(self, url: str):
         """获取仓库基础信息、默认分支以及最新 Release 信息"""
         owner, repo = self.parse_repo_url(url)
-        if not owner: return {"error": "无效的 GitHub 链接"}
+        if not owner or not repo: return {"error": "无效的 GitHub 链接"}
         try:
             # 1. 获取基础信息 (包含默认分支)
-            repo_res = requests.get(f"{self.API_BASE}/{owner}/{repo}", timeout=10).json()
+            repo_res = self.fetch_repo(owner, repo)
             if "message" in repo_res and repo_res["message"] == "Not Found":
                 return {"error": "找不到该仓库"}
                 
             default_branch = repo_res.get("default_branch", "main")
             
             # 2. 获取最新 Release
-            release_res = requests.get(f"{self.API_BASE}/{owner}/{repo}/releases/latest", timeout=5)
-            has_release = release_res.status_code == 200
-            release_info = release_res.json() if has_release else {}
+            release_info = self.fetch_latest_release(owner, repo, missing_ok=True)
+            has_release = bool(release_info)
             return {
                 "owner": owner,
                 "repo": repo,
                 "default_branch": default_branch,
                 "has_release": has_release,
-                "latest_release_tag": release_info.get("tag_name"),
-                "latest_release_name": release_info.get("name"),
-                "release_zip_url": release_info.get("zipball_url") # Github提供的源码打包ZIP
+                "latest_release_tag": release_info.get("tag_name") if release_info else "",
+                "latest_release_name": release_info.get("name") if release_info else "",
+                "release_zip_url": release_info.get("zipball_url") if release_info else "" # Github提供的源码打包ZIP
             }
         except Exception as e:
             return {"error": str(e)}
@@ -56,7 +77,7 @@ class GithubManager:
         with db.atomic():
             GithubTimeline.create(repo_url=repo_url, action=action, message=message)
 
-    def trigger_download(self, repo_url: str, install_type: str = "source", target_version: str = ""):
+    def trigger_download(self, download_mgr: DownloadManager, repo_url: str, install_type: str = "source", target_version: str = ""):
         """发起下载并绑定解压钩子"""
         owner, repo = self.parse_repo_url(repo_url)
         if not owner: return False
@@ -84,12 +105,8 @@ class GithubManager:
 
         # 推入全局下载队列 (下载到 Downloads)
         dl_dir = str(HOME_DIR / 'Downloads')
-        task_id = self.download_mgr.add_task(
-            url=download_url,
-            dest_dir=dl_dir,
-            filename=filename,
-            on_complete=on_download_complete,
-            on_error=on_download_error
+        task_id = download_mgr.add_task( url=download_url, dest_dir=dl_dir, filename=filename,
+            on_complete=on_download_complete, on_error=on_download_error
         )
         return task_id
 
@@ -100,8 +117,7 @@ class GithubManager:
         self_mods_dir = settings.config.self_mods_path
         try:
             # 1. 解压到临时目录
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_extract_dir)
+            extract_zip(zip_path, temp_extract_dir)
             # 2. 智能深潜：寻找包含 About/About.xml 的真实根目录
             mod_root_path = None
             for root, dirs, files in os.walk(temp_extract_dir):

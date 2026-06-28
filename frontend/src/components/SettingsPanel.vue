@@ -170,6 +170,18 @@
                     <CommonSwitch label="列表索引" v-model="formData.ui.show_list_index" description="控制列表中索引列的显示。" />
                     <CommonNumber label="拖动判定延迟" description="控制列表项拖动操作的判定延迟，单位是毫秒，默认值为 30 毫秒，为 0 时可能使点击操作出现抖动。" v-model="formData.ui.drag_delay" :step="10" :min="0" :max="500" />
                     <div class="col-span-2 p-2 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-2 gap-2">
+                      <CommonSwitch class="col-span-2" mini label="列表分组折叠" v-model="formData.ui.enable_active_section_collapse" description="仅在启用列表生效。名称或别名以 = 开头且以 = 结尾的纯标题模组会被识别为可折叠分组标题；折叠后拖动标题即整组拖动。^^可工坊订阅 [[分类排列标签合集]] 配合使用。^^" />
+                      <CommonSwitch :disabled="!formData.ui.enable_active_section_collapse" label="默认折叠" v-model="formData.ui.default_collapse_active_sections" description="开启后，启用列表中的标题分组会在初始显示时默认折叠。" />
+                      <div class="flex items-center justify-between gap-1" :class="{'pointer-events-none opacity-50': !formData.ui.enable_active_section_collapse}">
+                        <button @click="appStore.openSteamWorkshopById('2138932352')"
+                          class="px-2 py-1.5 bg-text-dim/15 hover:bg-text-dim/30 border border-text-dim/10 rounded-lg text-xs font-bold cursor-pointer transition-all">
+                          <span class="flex items-center gap-2">
+                            访问<p class="text-accent-cool">分类排列标签合集</p>工坊页面
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="col-span-2 p-2 rounded-2xl bg-text-main/2 border border-text-main/5 grid grid-cols-2 gap-2">
                       <CommonSwitch class="col-span-2" label="列表图标" v-model="formData.ui.show_list_icon" description="控制列表中的所有图标显示，包括简单视图和详细视图。" mini />
                       <CommonSwitch :disabled="!formData.ui.show_list_icon" label="列表 Mod 图标" v-model="formData.ui.show_list_mod_icon" description="控制列表中 Mod 图标显示，不影响详细视图。" />
                       <CommonSwitch :disabled="!formData.ui.show_list_icon" label="列表 Mod 类型图标" v-model="formData.ui.show_list_modtype_icon" description="控制列表中 Mod 类型图标显示，不影响详细视图。" />
@@ -192,6 +204,8 @@
                     <CommonSwitch class="col-span-1" label="自动激活依赖项" v-model="formData.auto_activate_dependencies" description="开启后，自动排序时将会自动激活停用的依赖项。" />
                     <CommonSwitch class="col-span-1" label="检查语言支持" v-model="formData.check_language_support" description="开启后，将会在 Mod 问题提示增加“语言支持”警告，提示 Mod 是否支持当前语言。" />
                     <CommonSwitch class="col-span-1" label="显示共存冲突提示" v-model="formData.show_coexistence_message" description="关闭后，将不会显示共存Mod的冲突提示信息。" />
+                    <CommonSwitch class="col-span-1" label="语言包贴紧前置" v-model="formData.language_packs_follow_targets" description="开启后，自动排序会尽量让语言包紧跟在它已启用的最后一个前置/依赖模组后方；如果找不到目标，就保持原来的默认底层位置。" />
+                    <CommonSwitch class="col-span-1" label="使用辅助工具模组" v-model="formData.enable_tool_mods" description="开启后，将在保存或自动排序时自动启用辅助工具模组，如提供日志获取等功能。" />
                     <CommonSelect class="col-span-1" label="自动排序策略" v-model="formData.auto_sort_strategy" showBottom
                       description="旧版更保守、更接近传统手工整理结果，但对带有置顶/置底倾向的模组及其关联链的处理效果较差；新版会更积极地把带有置顶/置底倾向的模组及其关联链推向列表两端。"
                       :options="[{label:'经典自动排序（旧版）', value:'classic_sort_logic'},{label:'两端强化排序（新版）', value:'edge_enhanced_sort_logic'}]" />
@@ -201,9 +215,11 @@
                     <CommonSelect class="col-span-1" label="共存Mod文件夹生成方式" v-model="formData.coexist_mod_folder_name_type" showBottom
                       description="影响创建共存Mod时的文件夹名称，处理优先级是 别名>原名>包名>工坊ID，所以即使Mod没有别名，也能按原名创建文件夹。" 
                       :options="[{label:'按工坊ID', value:'workshop_id'},{label:'按包名', value:'package_id'},{label:'按原名', value:'name'},{label:'按别名', value:'alias_name'}]" />
+                    <CommonSelect class="col-span-1" label="链接部署模式" v-model="formData.link_deployment_mode_full" showBottom
+                      description="影响启用管理器Mod或多环境下使用创意工坊Mod时的链接部署行为模式，增量部署会尽量保留已正确的链接，只处理变化项；完全重建会先移除全部旧链接，再按当前扫描结果重新部署。"
+                      :options="[{label:'增量部署（默认）', value:'incremental'},{label:'完全重建', value:'full'}]" />
                     <CommonNumber class="col-span-1" label="自动备份保留天数" description="管理自动备份的最长保留时间，手动备份不受影响。" v-model="formData.backup_retention_days" :step="1" :min="0" :max="365" />
                     <CommonSwitch class="col-span-1" label="使用原始 Mod ID" v-model="formData.use_raw_ids" description="开启后，将使用 Mod 的原始 ID 写入排序文件，而不是标准化的小写。" />
-                    <CommonSwitch class="col-span-1" label="使用辅助工具模组" v-model="formData.enable_tool_mods" description="开启后，将在保存或自动排序时自动启用辅助工具模组，如提供日志获取等功能。" />
                     
                   </div>
                 </div>

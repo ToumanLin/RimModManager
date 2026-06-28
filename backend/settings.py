@@ -113,6 +113,8 @@ class UIConfig:
     ])
 
     show_dependency_graph: bool = True  # 是否显示依赖关系图
+    enable_active_section_collapse: bool = False  # 是否启用启用列表标题分组折叠（仅 active 列表使用）
+    default_collapse_active_sections: bool = False  # 在没有历史折叠状态时，是否让标题分组首次默认折叠
     show_list_index: bool = True  # 是否显示列表索引列
     show_list_icon: bool = True  # 是否显示 Mod 图标
     show_list_mod_icon: bool = True  # 是否显示 Mod 图标
@@ -153,6 +155,7 @@ class AppConfig:
     # run_commands: List[str] = field(default_factory=list)   # 启动时运行的命令
     prefer_steam_launch: bool = True         # 是否通过 Steam 启动游戏
     enable_tool_mods: bool = False           # 是否启用 ToolMods 目录下的伴生模组
+    link_deployment_mode_full: bool = False # 链接部署模式: true=完全重建, false=增量部署
     use_raw_ids: bool = False               # 是否使用原始 Mod ID
     
     # --- 高级设置 ---
@@ -167,6 +170,7 @@ class AppConfig:
     coexist_mod_folder_name_type: str = "workshop_id" # 共存Mod生成方式: workshop_id, package_id, name, alias
     show_coexistence_message: bool = True      # 是否显示共存Mod提示
     check_language_support: bool = True        # 是否检查语言支持
+    language_packs_follow_targets: bool = False # 是否让语言包贴紧其最后一个前置/依赖目标
     
     # --- 社区设置 ---
     community_workshop_db_url: str = "https://github.com/RimSort/Steam-Workshop-Database/blob/main/steamDB.json"
