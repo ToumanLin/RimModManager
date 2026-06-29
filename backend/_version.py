@@ -1,5 +1,5 @@
 # backend/_version.py
-__version__ = "0.23.0"  # 主版本.次版本.补丁
+__version__ = "0.23.1"  # 主版本.次版本.补丁
 __db_version__ = "5"
 __build__ = "dev"  # dev, alpha, beta, stable, release
 
@@ -614,7 +614,7 @@ APP_CHANGELOG = [
                     { "type": "feature", "text": "支持全局日志结构化扫描与物理行号精准反查，实现超大日志的高效检索"},
                     { "type": "feature", "text": "集成 AI 工具权限配置与死锁检测机制，提升自动化诊断的安全性与稳定性"},
                     { "type": "feature", "text": "新增 AI 回复内容分格式复制及实时 Token 消耗统计展示"},
-                    { "type": "feature", "text": "支持基于 RMM_Companion 的游戏日志实时监视与错误自动分类功能"},
+                    { "type": "feature", "text": "支持基于 RimCrowCompanion 的游戏日志实时监视与错误自动分类功能"},
                     { "type": "optimize", "text": "优化日志指纹算法，通过特征抹除技术显著提升错误聚类的精确度"},
                     { "type": "optimize", "text": "引入日志随机读取机制，实现大规模日志详情的秒级回溯与加载"},
                     { "type": "optimize", "text": "统一软件与游戏日志的数据结构，增强日志查看器的虚拟滚动与多维过滤性能"},

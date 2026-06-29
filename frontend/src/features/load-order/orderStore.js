@@ -527,7 +527,7 @@ export const useOrderStore = defineStore('order', () => {
         mode: 'prompt',
         type: copied ? 'success' : 'warning',
         inputValue: shareCode,
-        placeholder: 'RMM1-...',
+        placeholder: 'RC-...',
         confirmText: '关闭',
         cancelText: '取消',
       })
@@ -597,10 +597,10 @@ export const useOrderStore = defineStore('order', () => {
   const promptImportShareCode = async (source_profile_id='') => {
     const shareCode = await confirmStore.open({
       title: '导入分享码',
-      message: '请粘贴 RMM1 开头的分享码，解析后会进入差异对比视图。',
+      message: '请粘贴 RC- 开头的分享码，解析后会进入差异对比视图。',
       mode: 'prompt',
       type: 'info',
-      placeholder: 'RMM1-...',
+      placeholder: 'RC-...',
       confirmText: '导入',
       cancelText: '取消',
     })

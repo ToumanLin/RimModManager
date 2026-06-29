@@ -83,16 +83,16 @@ class TestProfileManager(unittest.TestCase):
         api.profile_mgr = Mock()
         api.profile_mgr.update_profile.return_value = True
 
-        result = API.load_order_inactive_save(api, ["mod.a"], ["mod.temp"])
+        result = API.load_order_inactive_save(api, ["mod.a", "rmm.companion", "rimcrow.companion"], ["rmm.companion", "mod.temp"])
 
         self.assertEqual(result["status"], "success")
-        self.assertEqual(api.active_context.inactive_mods_order, ["mod.a"])
-        self.assertEqual(api.active_context.temp_mods_order, ["mod.temp"])
+        self.assertEqual(api.active_context.inactive_mods_order, ["mod.a", "rimcrow.companion"])
+        self.assertEqual(api.active_context.temp_mods_order, ["rimcrow.companion", "mod.temp"])
         api.profile_mgr.update_profile.assert_called_once_with(
             "profile-a",
             {
-                "inactive_mods_order": ["mod.a"],
-                "temp_mods_order": ["mod.temp"],
+                "inactive_mods_order": ["mod.a", "rimcrow.companion"],
+                "temp_mods_order": ["rimcrow.companion", "mod.temp"],
             },
         )
 
@@ -3104,11 +3104,11 @@ class TestApiSaveSettings(unittest.TestCase):
         api.profile_mgr = SimpleNamespace(build_profile_context=Mock(return_value=SimpleNamespace(user_data_path="D:/Profiles/runtime")))
         api.game_monitor = SimpleNamespace(get_runtime_session=Mock(return_value=RuntimeSession(profile_id="profile-b", state="running", source="manager")))
 
-        res = API.read_log_page(api, "game", "RMM_Realtime.log", 1, 500, "runtime")
+        res = API.read_log_page(api, "game", "RimCrow_Realtime.log", 1, 500, "runtime")
 
         self.assertEqual(res["status"], "success")
         api.game_log_mgr.read_log_page_for_root.assert_called_once_with(
-            "RMM_Realtime.log",
+            "RimCrow_Realtime.log",
             user_data_root="D:/Profiles/runtime",
             page=1,
             page_size=500,

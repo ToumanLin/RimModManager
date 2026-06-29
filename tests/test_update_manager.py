@@ -1,4 +1,7 @@
+import tempfile
 import unittest
+import zipfile
+from pathlib import Path
 from unittest.mock import patch
 
 from backend.managers.mgr_download import DownloadTask
@@ -293,6 +296,30 @@ class TestUpdateManagerSources(unittest.TestCase):
         self.assertEqual(manager.current_update_info.version, "0.22.7")
         self.assertEqual(manager.current_update_info.source_name, "蓝奏云")
         self.assertEqual(manager.current_update_info.local_status, "ready")
+
+    def test_hot_swap_from_rimmodmanager_launches_rimcrow_exe(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            install_root = root / "app"
+            install_root.mkdir()
+            current_exe = install_root / "RimModManager.exe"
+            current_exe.write_text("old", encoding="utf-8")
+            zip_path = root / "update.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.writestr("RimCrow/RimCrow.exe", "new")
+
+            manager = self._manager_with_sources([])
+            with patch("backend.managers.mgr_update.sys.executable", str(current_exe)), \
+                patch("backend.managers.mgr_update.backup_config_for_update"), \
+                patch("backend.managers.mgr_update.launch_new_application") as launch_mock, \
+                patch("backend.managers.mgr_update.os._exit", side_effect=SystemExit):
+                with self.assertRaises(SystemExit):
+                    manager.execute_hot_swap(str(zip_path))
+
+            new_exe = install_root / "RimCrow.exe"
+            self.assertTrue(new_exe.exists())
+            self.assertTrue((install_root / "RimModManager.exe.old").exists())
+            launch_mock.assert_called_once_with(str(new_exe))
 
 
 class TestConfiguredUpdateSources(unittest.TestCase):

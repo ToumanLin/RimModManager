@@ -231,7 +231,7 @@ def main():
 
         threading.Thread(
             target=guard,
-            name="rmm-desktop-startup-timeout",
+            name="desktop-startup-timeout",
             daemon=True,
         ).start()
 
@@ -266,7 +266,7 @@ def main():
         log_startup_perf("api_import_ready")
         
         # 记录启动信息
-        logger.info(f"Starting RimModManager... Ver: {__version__ or 'Dev'}")
+        logger.info(f"Starting RimCrow... Ver: {__version__ or 'Dev'}")
         logger.debug(f"Debug Mode: {settings.config.debug_mode}")
         logger.info(f"Launch Mode: {launch_mode}")
         
@@ -323,7 +323,7 @@ def main():
         import webview
         # 创建窗口
         window = webview.create_window(
-            'RimModManager', 
+            'RimCrow',
             url=entrypoint,
             js_api=api,
             width=window_width, # 读取记忆的窗口大小

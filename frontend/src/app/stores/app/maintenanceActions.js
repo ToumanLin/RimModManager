@@ -30,7 +30,7 @@ export const useMaintenanceActions = ({
   const logMaintenanceCheck = (event, payload = {}, level = 'info') => {
     // 统一启动/维护检测日志格式，排查“为什么没自动检查”时只需要搜索这个前缀。
     const method = level === 'warn' ? 'warn' : level === 'error' ? 'error' : 'info'
-    console[method]('[RMM][maintenance-check]', { event, ...payload })
+    console[method]('[RimCrow][maintenance-check]', { event, ...payload })
   }
 
   const formatDateTime = (timestamp) => {

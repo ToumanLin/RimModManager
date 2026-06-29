@@ -184,16 +184,8 @@
 
         <ModListQuickActions
           :list-id="props.listId"
-          :missing-install-summary="missingInstallSummary"
-          :missing-install-tooltip="missingInstallTooltip"
-          :missing-install-button-class="missingInstallButtonClass"
-          :supplement-summary="supplementSummary"
-          :supplement-tooltip="supplementTooltip"
-          :supplement-button-class="supplementButtonClass"
-          :invalid-mods-to-remove="invalidModsToRemove"
-          :open-missing-install-dialog="openMissingInstallDialog"
-          :open-supplement-dialog="openSupplementDialog"
-          :remove-invalid-mod="removeInvalidMod"
+          :model-value="props.modelValue"
+          :refresh-virtual-list="refreshVirtualList"
         />
 
       </div>
@@ -215,17 +207,13 @@ import { Motion } from 'motion-v';
 import { useAppStore } from '../../../app/stores/appStore';
 import { useModStore } from '../stores/modStore';
 import { useSearchStore } from '../stores/searchStore';
-import { ISSUE_TYPE } from '../../../shared/lib/constants';
 import ModItem from '../ModItem.vue';
 import ModListQuickActions from './ModListQuickActions.vue';
 import TagSearchInput from '../../../shared/components/tag-search/TagSearchInput.vue';
 import DependencyGraph from '../DependencyGraph.vue'
 import { useContextMenuStore } from '../../../shared/components/context-menu/contextMenuStore';
 import { useProfileStore } from '../../profiles/profileStore';
-import { useSupplementStore } from '../../supplement/supplementStore';
-import { useMissingInstallStore } from '../../supplement/missingInstallStore';
 import { normalizePackageId, normalizePackageToken } from '../lib/modIdentity';
-import { useModListQuickActions } from './useModListQuickActions'
 import { useModListQuery } from './useModListQuery'
 import { useModListIssues } from './useModListIssues'
 import { useModListSections } from './useModListSections'
@@ -248,8 +236,6 @@ const modStore = useModStore()
 const searchStore = useSearchStore()
 const menuStore = useContextMenuStore()
 const profileStore = useProfileStore()
-const supplementStore = useSupplementStore()
-const missingInstallStore = useMissingInstallStore()
 const toast = useToast();
 const vListRef = ref(null)  // 虚拟列表引用, 用于滚动到选中项
 
@@ -289,14 +275,6 @@ const getRealIndex = (id: string) => realIndexMap.value.get(normalizeId(id)) ?? 
 // 计算当前列表的错误概况
 const issuesSummary = computed(() => modStore.getListIssues(props.listId))
 
-const {
-  // 缺失安装
-  missingInstallSummary, missingInstallTooltip, missingInstallButtonClass, invalidModsToRemove, openMissingInstallDialog,
-  // 补全提示
-  supplementSummary, supplementTooltip, supplementButtonClass, openSupplementDialog,
-} = useModListQuickActions({
-  props, profileStore, supplementStore, missingInstallStore, issuesSummary, missingFileIssueType: ISSUE_TYPE.ERROR_MISSING_FILE, 
-})
 const {
   // 分割组状态
   sectionFeatureEnabled, splitGroupFeatureEnabled, currentSectionGroups, takeSectionGroupsByListId,
@@ -474,15 +452,13 @@ const {
 
 const {
   // 问题提示与操作
-  issueTooltip, removeInvalidMod, issueContextMenu,
+  issueTooltip, issueContextMenu,
 } = useModListIssues({
   props,
   appStore,
   modStore,
   menuStore,
   issuesSummary,
-  invalidModsToRemove,
-  refreshVirtualList,
   isFilterByIssue,
   toggleIssueTypeFilter,
   normalizeTokenId,

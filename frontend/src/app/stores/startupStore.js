@@ -32,9 +32,9 @@ export const useStartupStore = defineStore('startup', () => {
   }
 
   const logStartupCheck = (event, payload = {}, level = 'info') => {
-    // 与维护检查保持同一日志前缀，方便在控制台按 [RMM][maintenance-check] 过滤启动期检测。
+    // 与维护检查保持同一日志前缀，方便在控制台按 [RimCrow][maintenance-check] 过滤启动期检测。
     const method = level === 'warn' ? 'warn' : level === 'error' ? 'error' : 'info'
-    console[method]('[RMM][maintenance-check]', { event, ...payload })
+    console[method]('[RimCrow][maintenance-check]', { event, ...payload })
   }
 
   // 升级上下文由后端在启动时生成；这里把它转成前端动作，例如提示用户和强制扫描。

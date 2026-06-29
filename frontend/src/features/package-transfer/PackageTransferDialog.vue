@@ -598,14 +598,14 @@ const validateModConflictRows = () => {
 const getBundleFilters = () => {
   if (dialogMode.value === 'data-import') {
     const extensions = [
-      dataBundleSchema.value?.file_extension || '.rmmdata.zip',
-      ...(Array.isArray(dataBundleSchema.value?.legacy_file_extensions) ? dataBundleSchema.value.legacy_file_extensions : ['.rmmdata']),
+      dataBundleSchema.value?.file_extension || '.rimcrowdata.zip',
+      ...(Array.isArray(dataBundleSchema.value?.legacy_file_extensions) ? dataBundleSchema.value.legacy_file_extensions : ['.rmmdata.zip', '.rmmdata']),
     ]
       .map(item => String(item || '').trim())
       .filter(Boolean)
-    return [`RMM Data Package (${extensions.map(item => `*${item}`).join(';')})`, 'All Files (*.*)']
+    return [`RimCrow Data Package (${extensions.map(item => `*${item}`).join(';')})`, 'All Files (*.*)']
   }
-  return [`RMM Mod Package (*${modPackageSchema.value?.file_extension || '.rmmmods.zip'})`, 'All Files (*.*)']
+  return [`RimCrow Mod Package (*${modPackageSchema.value?.file_extension || '.rimcrowmods.zip'})`, 'All Files (*.*)']
 }
 
 const pickImportBundle = async () => {

@@ -8,8 +8,6 @@ export function useModListIssues({
   modStore,
   menuStore,
   issuesSummary,
-  invalidModsToRemove,
-  refreshVirtualList,
   isFilterByIssue,
   toggleIssueTypeFilter,
   normalizeTokenId,
@@ -48,20 +46,6 @@ export function useModListIssues({
     text += appStore.settings.check_language_support ? '\n__(可在设置中关闭语言支持检查)__' : ''
     return text
   })
-
-  // 移除无效的mod
-  const removeInvalidMod = async () => {
-    const invalidMods = invalidModsToRemove.value
-    if (invalidMods.length === 0) return
-    await modStore.runListHistoryTransaction({
-      type: 'batch-remove-list-items',
-      label: `移除 ${invalidMods.length} 个无效 Mod`,
-      trackedModIds: invalidMods
-    }, async () => {
-      modStore.removeUnavailableIdsCompletely(invalidMods)
-    })
-    await refreshVirtualList()
-  }
 
   // 问题提示右键菜单
   const issueContextMenu = async (event) => {
@@ -137,7 +121,6 @@ export function useModListIssues({
 
   return {
     issueTooltip,
-    removeInvalidMod,
     issueContextMenu,
   }
 }

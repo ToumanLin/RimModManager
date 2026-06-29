@@ -819,6 +819,13 @@ class FileManager:
     def ensure_browser_mode_shortcut(app_exe_path: str) -> Dict[str, Any]:
         """仅在缺失时创建 Browser mode 快捷方式，避免启动阶段做重校验。"""
         spec = FileManager.build_browser_mode_shortcut_spec(app_exe_path)
+        target_path = Path(str(spec.get("target_path") or ""))
+        if target_path.name.lower() == "rimcrow.exe":
+            for legacy_name in ("RimModManager.exe", "RimModManager [Browser mode].lnk"):
+                try:
+                    target_path.with_name(legacy_name).unlink(missing_ok=True)
+                except Exception as e:
+                    logger.debug(f"清理旧版入口失败: {legacy_name} - {e}")
         shortcut_path = str(spec.get("shortcut_path") or '').strip()
         if shortcut_path and os.path.exists(shortcut_path):
             return {

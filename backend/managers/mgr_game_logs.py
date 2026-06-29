@@ -238,7 +238,11 @@ class LogAnalyzer:
 
 
 class GameLogManager(BaseLogReader): # 继承基类
-    _GAME_LOG_FILENAMES = ('RMM_Realtime.log', 'RMM_Realtime-prev.log', 'Player.log', 'Player-prev.log')
+    REALTIME_LOG_NAME = 'RimCrow_Realtime.log'
+    REALTIME_PREV_LOG_NAME = 'RimCrow_Realtime-prev.log'
+    LEGACY_REALTIME_LOG_NAME = 'RMM_Realtime.log'
+    LEGACY_REALTIME_PREV_LOG_NAME = 'RMM_Realtime-prev.log'
+    _GAME_LOG_FILENAMES = (REALTIME_LOG_NAME, REALTIME_PREV_LOG_NAME, 'Player.log', 'Player-prev.log')
 
     def __init__(self, context: ProfileContext):
         # 游戏日志通常较长，这里限制为最近 2 万条结构化 Block，避免长时间运行后占用过多内存
@@ -248,7 +252,7 @@ class GameLogManager(BaseLogReader): # 继承基类
         # 实时监视器相关状态
         self._realtime_thread = None
         self._stop_event = threading.Event()
-        self.realtime_log_file = self.resolve_log_file_path('RMM_Realtime.log', must_exist=False)
+        self.realtime_log_file = self.resolve_log_file_path(self.REALTIME_LOG_NAME, must_exist=False)
         
         self._patterns = {
             'error': re.compile(
@@ -260,15 +264,31 @@ class GameLogManager(BaseLogReader): # 继承基类
             'warning': re.compile(r'warning', re.IGNORECASE)
         }
 
+    @classmethod
+    def _is_realtime_log_name(cls, filename: str) -> bool:
+        return filename in {
+            cls.REALTIME_LOG_NAME,
+            cls.REALTIME_PREV_LOG_NAME,
+            cls.LEGACY_REALTIME_LOG_NAME,
+            cls.LEGACY_REALTIME_PREV_LOG_NAME,
+        }
+
+    @classmethod
+    def _realtime_log_aliases(cls, filename: str) -> tuple[str, ...]:
+        if filename == cls.REALTIME_LOG_NAME:
+            return cls.REALTIME_LOG_NAME, cls.LEGACY_REALTIME_LOG_NAME
+        if filename == cls.REALTIME_PREV_LOG_NAME:
+            return cls.REALTIME_PREV_LOG_NAME, cls.LEGACY_REALTIME_PREV_LOG_NAME
+        return (filename,)
+
     def _build_realtime_log_paths(self, filename: str) -> list[str]:
         candidates = []
         context_root = str(getattr(self.context, "user_data_path", "") or "").strip()
+        filenames = self._realtime_log_aliases(filename)
         if context_root:
-            candidates.append(os.path.join(context_root, filename))
-        candidates.extend(
-            os.path.join(root, filename)
-            for root in GameManager.get_default_user_data_paths()
-        )
+            candidates.extend(os.path.join(context_root, item) for item in filenames)
+        for root in GameManager.get_default_user_data_paths():
+            candidates.extend(os.path.join(root, item) for item in filenames)
         return list(dict.fromkeys(candidates))
 
     def _build_log_path_candidates(self, filename: str) -> list[str]:
@@ -277,19 +297,19 @@ class GameLogManager(BaseLogReader): # 继承基类
             return []
         if normalized_name.startswith('Player'):
             return GameManager.get_default_player_log_paths(normalized_name)
-        if normalized_name.startswith('RMM_Realtime'):
+        if self._is_realtime_log_name(normalized_name):
             return self._build_realtime_log_paths(normalized_name)
         return []
 
     def resolve_log_file_path(self, filename: str, *, must_exist: bool = True) -> str:
-        """解析游戏日志路径：Player 固定默认目录，RMM_Realtime 跟随当前环境。"""
+        """解析游戏日志路径：Player 固定默认目录，RimCrow_Realtime 跟随当前环境。"""
         for filepath in self._build_log_path_candidates(filename):
             if not must_exist or os.path.exists(filepath):
                 return filepath
         return ""
 
     def get_preferred_log_directory(self) -> str:
-        for filename in ('RMM_Realtime.log', 'RMM_Realtime-prev.log', 'Player.log', 'Player-prev.log'):
+        for filename in self._GAME_LOG_FILENAMES:
             filepath = self.resolve_log_file_path(filename)
             if filepath:
                 return os.path.dirname(filepath)
@@ -315,8 +335,8 @@ class GameLogManager(BaseLogReader): # 继承基类
         for filename in self._GAME_LOG_FILENAMES:
             if player_only and not filename.startswith("Player"):
                 continue
-            if filename.startswith("RMM_Realtime") and normalized_root:
-                filepath = os.path.join(normalized_root, filename)
+            if self._is_realtime_log_name(filename) and normalized_root:
+                filepath = next((path for path in (os.path.join(normalized_root, item) for item in self._realtime_log_aliases(filename)) if os.path.exists(path)), "")
             else:
                 filepath = self.resolve_log_file_path(filename)
             if filepath and os.path.exists(filepath):
@@ -332,8 +352,8 @@ class GameLogManager(BaseLogReader): # 继承基类
 
     def read_log_page_for_root(self, filename, user_data_root: str = "", page=1, page_size=1000):
         normalized_name = os.path.basename(str(filename or "").strip())
-        if normalized_name.startswith('RMM_Realtime') and str(user_data_root or "").strip():
-            filepath = os.path.join(str(user_data_root).strip(), normalized_name)
+        if self._is_realtime_log_name(normalized_name) and str(user_data_root or "").strip():
+            filepath = next((path for path in (os.path.join(str(user_data_root).strip(), item) for item in self._realtime_log_aliases(normalized_name)) if os.path.exists(path)), "")
         else:
             filepath = self.resolve_log_file_path(normalized_name)
         if not filepath or not os.path.exists(filepath):
@@ -352,7 +372,7 @@ class GameLogManager(BaseLogReader): # 继承基类
 
     # 启动/停止实时监视器
     def start_realtime_monitor(self):
-        """启动后台线程来实时监视 RMM_Realtime.log 文件"""
+        """启动后台线程来实时监视 RimCrow_Realtime.log 文件"""
         if self._realtime_thread and self._realtime_thread.is_alive(): return # 已经启动
         # 确保日志文件存在
         if not os.path.exists(self.realtime_log_file):
@@ -471,7 +491,7 @@ class GameLogManager(BaseLogReader): # 继承基类
 
     def _analyze_page(self, page_blocks, filename):
         """游戏日志特有的分析逻辑"""
-        is_json_log = filename.startswith('RMM_Realtime') or filename.endswith('.json')
+        is_json_log = self._is_realtime_log_name(filename) or filename.endswith('.json')
         # 获取激活 Mod 列表用于交叉比对
         active_mods_set = set()
         try:
@@ -491,7 +511,7 @@ class GameLogManager(BaseLogReader): # 继承基类
     def _parse_file_to_blocks(self, filepath, keep_all=False, max_keep_blocks=None):
         """重写：使用基类方法处理 JSON，保留纯文本特化逻辑"""
         filename = os.path.basename(filepath)
-        is_json = filename.endswith('.json') or filename.startswith('RMM_Realtime')
+        is_json = filename.endswith('.json') or self._is_realtime_log_name(filename)
         
         # 如果是 JSON，直接复用基类的高效解析
         if is_json:

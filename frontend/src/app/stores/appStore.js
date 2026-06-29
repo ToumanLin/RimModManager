@@ -582,7 +582,7 @@ export const useAppStore = defineStore('app', () => {
   watch(() => settings.value.debug_mode, (enabled) => {
     // 让通用 checkResult 感知当前调试开关，避免 appStore 再维护一份重复实现。
     if (typeof window !== 'undefined') {
-      window.__RMM_DEBUG_MODE__ = !!enabled
+      window.__APP_DEBUG_MODE__ = !!enabled
     }
   }, { immediate: true });
   watch(currentTheme, (theme) => {

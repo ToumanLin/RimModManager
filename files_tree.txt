@@ -5,6 +5,7 @@
 ├── ·[.history]
 ├── ·[.pytest_cache]
 ├── ·[.ruff_cache]
+├── ·[.worktrees]
 ├── ·[backend]
 │   ├── ·[ai]
 │   │   ├──  __init__.py
@@ -417,6 +418,7 @@
 │   ├──  test_app_relocation.py
 │   ├──  test_bundle_managers.py
 │   ├──  test_database_runtime.py
+│   ├──  test_dlc_parser_cache_mode.py
 │   ├──  test_download_manager.py
 │   ├──  test_environment_runtime.py
 │   ├──  test_file_manager.py
@@ -471,5 +473,6 @@
 ├──  pyproject.toml
 ├──  README.md
 ├──  splash.png
+├──  splash1.png
 ├──  uv.lock
 └──  validate_environment.py

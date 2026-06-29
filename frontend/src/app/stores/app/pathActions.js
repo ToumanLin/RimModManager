@@ -180,7 +180,7 @@ export const usePathActions = ({ settings, requestModScan } = {}) => {
   const openUrl = (url) => {
     if(!url) { toast.warning("没有可打开的网址。请确认当前条目包含有效链接。"); return}
     if (isBrowserRuntime()) {
-      openManagedSubBrowserUrl(url, 'RimModManager')
+      openManagedSubBrowserUrl(url, 'RimCrow')
       return
     }
     if(settings.value.open_url_on_system){

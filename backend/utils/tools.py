@@ -50,6 +50,8 @@ PACKAGE_PLATFORM_KEYWORDS = {
     "linux": ("linux", "ubuntu", "debian", "appimage"),
 }
 SUPPORTED_UPDATE_PACKAGE_NAMES = ("rimcrow", "rimmodmanager")
+CURRENT_COMPANION_PACKAGE_ID = "rimcrow.companion"
+LEGACY_COMPANION_PACKAGE_IDS = ("rmm.companion",)
 
 
 def get_current_package_platform_keywords(system_name: str | None = None) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -169,6 +171,14 @@ def normalize_package_id(package_id: Any) -> str:
     return normalized
 
 
+def normalize_companion_package_id(package_id: Any) -> str:
+    """读取旧伴生包 ID 时归一到当前 ID，避免旧命名继续写回配置。"""
+    normalized = normalize_package_id(package_id)
+    if normalized in LEGACY_COMPANION_PACKAGE_IDS:
+        return CURRENT_COMPANION_PACKAGE_ID
+    return normalized
+
+
 def normalize_package_ids(package_ids: list[Any]) -> list[str]:
     """
     批量规范化 package_id，并在保持输入顺序的前提下去重。
@@ -177,6 +187,11 @@ def normalize_package_ids(package_ids: list[Any]) -> list[str]:
     它不依赖数据库模型，也不关心调用方是 DAO、导入检查还是 API。
     """
     normalized = [normalize_package_id(package_id) for package_id in package_ids]
+    return _dedupe_preserve_order([package_id for package_id in normalized if package_id])
+
+
+def normalize_companion_package_ids(package_ids: list[Any] | tuple[Any, ...] | None) -> list[str]:
+    normalized = [normalize_companion_package_id(package_id) for package_id in package_ids or []]
     return _dedupe_preserve_order([package_id for package_id in normalized if package_id])
 
 

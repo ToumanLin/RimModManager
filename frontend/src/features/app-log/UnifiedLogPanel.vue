@@ -25,7 +25,7 @@
           </div>
         </div>
 
-        <!-- 显式的实时模式切换按钮：优先绑定到 app.log / RMM_Realtime.log -->
+        <!-- 显式的实时模式切换按钮：优先绑定到 app.log / RimCrow_Realtime.log -->
         <button v-if="liveFileName"
           @click="switchToLive"
           class="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border transition-all"
@@ -442,11 +442,11 @@ defineExpose({
 // --- 模式判断 ---
 const LIVE_FILES = {
   app: ['app.log'],
-  game: ['RMM_Realtime.log']
+  game: ['RimCrow_Realtime.log']
 };
 const isLiveView = computed(() => LIVE_FILES[props.sourceType]?.includes(selectedFile.value));
 
-// 当前源类型下，匹配到的“实时文件”名（app: app.log, game: RMM_Realtime.log）
+// 当前源类型下，匹配到的“实时文件”名（app: app.log, game: RimCrow_Realtime.log）
 const liveFileName = computed(() => {
   const candidates = LIVE_FILES[props.sourceType] || [];
   const match = files.value.find(f => candidates.includes(f.name));

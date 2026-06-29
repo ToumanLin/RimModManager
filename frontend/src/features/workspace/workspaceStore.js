@@ -38,7 +38,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     pendingActions: [],
     resolve: null,
   })
-  const STARTUP_INVENTORY_ACK_KEY = 'rmm.startupInventoryPromptAck.v1'
+  const STARTUP_INVENTORY_ACK_KEY = 'rimcrow.startupInventoryPromptAck.v1'
+  const LEGACY_STARTUP_INVENTORY_ACK_KEY = 'rmm.startupInventoryPromptAck.v1'
 
   const storeSortOrder = {
     workshop: 0,
@@ -560,7 +561,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   ].join('|')
   const loadStartupPromptAck = () => {
     try {
-      return new Set(JSON.parse(localStorage.getItem(STARTUP_INVENTORY_ACK_KEY) || '[]'))
+      const saved = localStorage.getItem(STARTUP_INVENTORY_ACK_KEY) || localStorage.getItem(LEGACY_STARTUP_INVENTORY_ACK_KEY) || '[]'
+      return new Set(JSON.parse(saved))
     } catch {
       return new Set()
     }
@@ -572,6 +574,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (key) ack.add(key)
     })
     localStorage.setItem(STARTUP_INVENTORY_ACK_KEY, JSON.stringify([...ack].slice(-1000)))
+    localStorage.removeItem(LEGACY_STARTUP_INVENTORY_ACK_KEY)
   }
   const getPromptableStartupEvents = (changes = []) => {
     const targets = (Array.isArray(changes) ? changes : []).filter(item => item?.status)
@@ -607,6 +610,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       group.items = group.items.filter(item => !ids.has(item.id))
     })
     startupInventoryDialog.groups = startupInventoryDialog.groups.filter(group => group.items.length > 0)
+    if (startupInventoryDialog.groups.length === 0) closeStartupInventoryDialog()
   }
   const closeStartupInventoryDialog = () => {
     startupInventoryDialog.visible = false
@@ -1109,7 +1113,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const logWorkshopSearchDebug = (payload = {}) => {
     if (!isWorkshopSearchDebugEnabled()) return
-    console.groupCollapsed(`[RMM 工坊搜索] ${payload.isEnhancedMode ? '增强模式' : '普通模式'} ${payload.isAppend ? '追加结果' : '发起搜索'}`)
+    console.groupCollapsed(`[RimCrow 工坊搜索] ${payload.isEnhancedMode ? '增强模式' : '普通模式'} ${payload.isAppend ? '追加结果' : '发起搜索'}`)
     console.info('请求参数', payload.request)
     console.info('响应数据', payload.response)
     console.info('结果项目', payload.items)

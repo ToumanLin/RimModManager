@@ -50,14 +50,14 @@
                         </p>
                       </div>
                       <div class="flex items-center gap-2 shrink-0">
-                        <button @click="openDataBundleImportDialog" :disabled="isPending('data-import')" :class="isPending('data-import') ? 'rmm-action-disabled' : ''"
+                        <button @click="openDataBundleImportDialog" :disabled="isPending('data-import')" :class="isPending('data-import') ? 'app-action-disabled' : ''"
                           class="px-3 py-1.5 rounded-lg bg-bg-overlay/5 hover:bg-bg-overlay/10 border border-border-base/10 text-xs font-bold transition-all" >
                           <span class="inline-flex items-center gap-1">
                             <LoaderCircle v-if="isPending('data-import')" class="h-3 w-3 animate-spin" />
                             {{ isPending('data-import') ? '读取中' : '导入数据包' }}
                           </span>
                         </button>
-                        <button @click="openDataBundleModal" :disabled="isPending('data-export')" :class="isPending('data-export') ? 'rmm-action-disabled' : ''"
+                        <button @click="openDataBundleModal" :disabled="isPending('data-export')" :class="isPending('data-export') ? 'app-action-disabled' : ''"
                           class="px-4 py-1.5 rounded-lg bg-accent-primary hover:bg-accent-primary/85 text-on-accent-primary text-xs font-black shadow-[0_0_15px_rgba(var(--rgb-accent-primary),0.2)] transition-all" >
                           <span class="inline-flex items-center gap-1">
                             <LoaderCircle v-if="isPending('data-export')" class="h-3 w-3 animate-spin" />
@@ -76,7 +76,7 @@
                         </p>
                       </div>
                       <div class="flex items-center gap-2 shrink-0">
-                        <button @click="openModPackageImportDialog" :disabled="isPending('mod-import')" :class="isPending('mod-import') ? 'rmm-action-disabled' : ''"
+                        <button @click="openModPackageImportDialog" :disabled="isPending('mod-import')" :class="isPending('mod-import') ? 'app-action-disabled' : ''"
                           class="px-3 py-1.5 rounded-lg bg-bg-overlay/5 hover:bg-bg-overlay/10 border border-border-base/10 text-xs font-bold transition-all" >
                           <span class="inline-flex items-center gap-1">
                             <LoaderCircle v-if="isPending('mod-import')" class="h-3 w-3 animate-spin" />
@@ -151,7 +151,7 @@ const dataBundleSchema = ref({
   modules: [],
   profiles: [],
   presets: {},
-  file_extension: '.rmmdata.zip',
+  file_extension: '.rimcrowdata.zip',
 })
 const showDataBundleModal = ref(false)
 const pendingAction = ref('')
@@ -207,13 +207,13 @@ const openDataBundleImportDialog = async () => {
     if (!schema) return
 
     const extensions = [
-      schema.file_extension || '.rmmdata.zip',
-      ...(Array.isArray(schema.legacy_file_extensions) ? schema.legacy_file_extensions : ['.rmmdata']),
+      schema.file_extension || '.rimcrowdata.zip',
+      ...(Array.isArray(schema.legacy_file_extensions) ? schema.legacy_file_extensions : ['.rmmdata.zip', '.rmmdata']),
     ]
       .map(item => String(item || '').trim())
       .filter(Boolean)
     const bundlePath = await appStore.getFilePath('', [
-      `RMM Data Package (${extensions.map(item => `*${item}`).join(';')})`,
+      `RimCrow Data Package (${extensions.map(item => `*${item}`).join(';')})`,
       'All Files (*.*)',
     ])
     if (!bundlePath) return
@@ -237,7 +237,7 @@ const openModPackageImportDialog = async () => {
     if (!schema) return
 
     const bundlePath = await appStore.getFilePath('', [
-      `RMM Mod Package (*${schema.file_extension || '.rmmmods.zip'})`,
+      `RimCrow Mod Package (*${schema.file_extension || '.rimcrowmods.zip'})`,
       'All Files (*.*)',
     ])
     if (!bundlePath) return

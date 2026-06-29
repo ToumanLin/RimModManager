@@ -39,7 +39,7 @@ class StartupCoordinator:
 
         threading.Thread(
             target=self._run_background_warmup,
-            name="rmm-startup-warmup",
+            name="startup-warmup",
             daemon=True,
         ).start()
         return True

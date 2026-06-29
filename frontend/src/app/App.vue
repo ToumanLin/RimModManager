@@ -82,7 +82,7 @@
 
                   <!-- 扫描按钮 -->
                   <div role="button" :aria-disabled="isBaseActionDisabled('scan')"
-                    :class="[{'scan': appStore.isScanRunning}, isBaseActionDisabled('scan') ? 'rmm-action-disabled' : '']" v-tooltip="'扫描文件变动，并同步当前环境的 Mod 列表'"
+                    :class="[{'scan': appStore.isScanRunning}, isBaseActionDisabled('scan') ? 'app-action-disabled' : '']" v-tooltip="'扫描文件变动，并同步当前环境的 Mod 列表'"
                     data-tour="scan-button"
                     class="col-span-1 py-1 rounded-lg bg-bg-overlay/5 border border-border-base/5 group
                           text-sm text-text-soft font-bold uppercase tracking-wider relative cursor-pointer
@@ -94,7 +94,7 @@
                     <span >{{ appStore.isScanRunning ? '扫描中...' : '扫描' }}</span>
 
                     <button v-show="!appStore.isScanRunning" v-tooltip="'重新检查所有文件，包括未变动的文件，比较耗时'"
-                      :disabled="isBaseActionDisabled('force-scan')" :class="isBaseActionDisabled('force-scan') ? 'rmm-action-disabled' : ''"
+                      :disabled="isBaseActionDisabled('force-scan')" :class="isBaseActionDisabled('force-scan') ? 'app-action-disabled' : ''"
                       class="absolute bottom-full py-1 px-2 mb-1.5 rounded-lg bg-accent-secondary/50 border border-border-base/10 transition-all duration-500
                           text-sm text-text-dim font-bold uppercase tracking-wider opacity-0 invisible group-hover:opacity-100 group-hover:visible
                           hover:bg-accent-secondary/80 hover:text-text-main hover:border-border-base/18"
@@ -104,7 +104,7 @@
 
                   </div>
                   <!-- 自动排序按钮 -->
-                  <button data-tour="autosort-button" :disabled="isBaseActionDisabled('autosort')" :class="isBaseActionDisabled('autosort') ? 'rmm-action-disabled' : ''"
+                  <button data-tour="autosort-button" :disabled="isBaseActionDisabled('autosort')" :class="isBaseActionDisabled('autosort') ? 'app-action-disabled' : ''"
                     class="col-span-1 py-1 rounded-lg text-sm font-bold uppercase tracking-wider bg-accent-tip/80 text-on-accent-tip hover:bg-accent-tip shadow-lg shadow-accent-tip/10
                           flex items-center justify-center gap-1 transition-all duration-300 relative overflow-hidden"
                           @click="runBaseAction('autosort', () => modStore.autoSortMods())" v-tooltip="'根据规则设定自动排序当前启用的所有模组，如果排序效果不如旧版理想，可在设置中切换回旧版排序逻辑。'"
@@ -119,7 +119,7 @@
                     :class="[modStore.isDirty
                         ? 'bg-accent-secondary text-on-accent-secondary hover:bg-accent-warn hover:text-on-accent-warn shadow-[0_0_15px_rgba(var(--rgb-accent-warn),0.4)] animate-pulse-soft'
                         : 'bg-accent-primary/60 text-on-accent-primary hover:bg-accent-primary shadow-lg shadow-accent-primary/10',
-                        isBaseActionDisabled('save') ? 'rmm-action-disabled' : ''
+                        isBaseActionDisabled('save') ? 'app-action-disabled' : ''
                     ]"
                     @click="runBaseAction('save', () => orderStore.saveLoadOrder())"
                   >
@@ -134,7 +134,7 @@
                   </button>
 
                   <!-- 启动游戏 -->
-                  <button data-tour="launch-button" :disabled="isBaseActionDisabled('launch')" :class="isBaseActionDisabled('launch') ? 'rmm-action-disabled' : ''"
+                  <button data-tour="launch-button" :disabled="isBaseActionDisabled('launch')" :class="isBaseActionDisabled('launch') ? 'app-action-disabled' : ''"
                     class="col-span-3 py-3 mt-1 rounded-lg bg-accent-success text-on-accent-success text-mdfont-bold
                           shadow-lg shadow-accent-success/20 flex items-center justify-center gap-2
                           transition-all duration-200 uppercase tracking-widest

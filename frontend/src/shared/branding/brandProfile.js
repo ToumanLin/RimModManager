@@ -5,7 +5,7 @@ const privateLogoUrl = Object.values(privateLogoModules)[0] || ''
 export const brandProfile = {
   project: {
     name: 'RimCrow',
-    description: 'RimCrow 用于整理模组、调整排序、管理 RimWorld 本地环境，原名 RimModManager。',
+    description: 'RimCrow 用于整理模组、调整排序和管理 RimWorld 本地环境。',
   },
   branding: {
     logoUrl: privateLogoUrl || defaultLogoUrl,

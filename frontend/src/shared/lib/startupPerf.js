@@ -1,8 +1,8 @@
 const getStartupStart = () => {
-  if (!globalThis.__RMM_STARTUP_PERF_START__) {
-    globalThis.__RMM_STARTUP_PERF_START__ = performance.now()
+  if (!globalThis.__APP_STARTUP_PERF_START__) {
+    globalThis.__APP_STARTUP_PERF_START__ = performance.now()
   }
-  return globalThis.__RMM_STARTUP_PERF_START__
+  return globalThis.__APP_STARTUP_PERF_START__
 }
 
 const formatFields = (fields = {}) => Object.fromEntries(

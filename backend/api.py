@@ -42,7 +42,7 @@ from backend.settings import DATA_DIR, HOME_DIR, TOOL_MODS_DIR, settings, RULES_
 from backend.utils.event_bus import EventBus
 from backend._version import __version__, __build__, get_all_changelogs
 from backend.utils.redaction import redact_sensitive_data
-from backend.utils.tools import normalize_package_id, normalize_path_for_compare, normalize_path_for_storage, normalize_workshop_id
+from backend.utils.tools import normalize_companion_package_ids, normalize_package_id, normalize_path_for_compare, normalize_path_for_storage, normalize_workshop_id
 from backend.utils.tools import current_ms, generate_path_hash
 from backend.utils.constants import RIMWORLD_DLC_OPTIONS, RIMWORLD_STEAM_APP_ID_STR, get_steam_elanguage_options
 from backend.i18n.language_registry import normalize_language_code
@@ -600,12 +600,12 @@ class API:
     def _log_maintenance_check(event: str, check_id: str, **fields):
         """统一检测日志格式。
 
-        前后端都使用 [RMM][maintenance-check] 前缀，排查启动检测时可以按 id/event 快速过滤。
+        前后端都使用 [RimCrow][maintenance-check] 前缀，排查启动检测时可以按 id/event 快速过滤。
         """
         parts = [f"event={event}", f"id={check_id}"]
         for key, value in fields.items():
             parts.append(f"{key}={value}")
-        logger.info("[RMM][maintenance-check] 维护状态检查：%s", " ".join(parts))
+        logger.info("[RimCrow][maintenance-check] 维护状态检查：%s", " ".join(parts))
 
     @staticmethod
     def _build_delete_response(target_name: str, total: int, result: dict, success_message: str = ""):
@@ -904,7 +904,7 @@ class API:
         with tempfile.NamedTemporaryFile(
             mode="wb",
             suffix=suffix,
-            prefix="rmm-import-",
+            prefix="load-order-import-",
             delete=False,
         ) as temp_file:
             temp_file.write(content or b"")
@@ -1168,7 +1168,7 @@ class API:
             payload = json.dumps(full_paths, ensure_ascii=False)
             self._window.evaluate_js(
                 "window.setTimeout(function () {"
-                f"  if (window.__rmm_handleNativeBackupDrop) window.__rmm_handleNativeBackupDrop({payload});"
+                f"  if (window.__handleNativeBackupDrop) window.__handleNativeBackupDrop({payload});"
                 "}, 0);"
             )
         except Exception as e:
@@ -2090,9 +2090,9 @@ class API:
             suggested_name = str(payload.get("filename") or "").strip()
             if not suggested_name:
                 if preset == "rules":
-                    suggested_name = f"RimModManager_Rules_{datetime.now().strftime('%Y%m%d')}{DataBundleManager.FILE_EXTENSION}"
+                    suggested_name = f"RimCrow_Rules_{datetime.now().strftime('%Y%m%d')}{DataBundleManager.FILE_EXTENSION}"
                 else:
-                    suggested_name = f"RimModManager_Data_{datetime.now().strftime('%Y%m%d')}{DataBundleManager.FILE_EXTENSION}"
+                    suggested_name = f"RimCrow_Data_{datetime.now().strftime('%Y%m%d')}{DataBundleManager.FILE_EXTENSION}"
             suggested_name = _ensure_bundle_filename_extension(
                 suggested_name,
                 DataBundleManager.FILE_EXTENSION,
@@ -2104,7 +2104,7 @@ class API:
                 default_filename=suggested_name,
                 file_types=(
                     _build_dialog_file_type_label(
-                        'RMM Data Package',
+                        'RimCrow Data Package',
                         [DataBundleManager.FILE_EXTENSION, *DataBundleManager.LEGACY_FILE_EXTENSIONS],
                     ),
                     'All Files (*.*)',
@@ -2176,7 +2176,7 @@ class API:
         """导出模组实体包。"""
         payload = payload or {}
         try:
-            suggested_name = str(payload.get("filename") or "").strip() or f"RimModManager_Mods_{datetime.now().strftime('%Y%m%d')}{self.mod_package_mgr.FILE_EXTENSION}"
+            suggested_name = str(payload.get("filename") or "").strip() or f"RimCrow_Mods_{datetime.now().strftime('%Y%m%d')}{self.mod_package_mgr.FILE_EXTENSION}"
             suggested_name = _ensure_bundle_filename_extension(
                 suggested_name,
                 self.mod_package_mgr.FILE_EXTENSION,
@@ -2187,7 +2187,7 @@ class API:
                 default_filename=suggested_name,
                 file_types=(
                     _build_dialog_file_type_label(
-                        'RMM Mod Package',
+                        'RimCrow Mod Package',
                         [self.mod_package_mgr.FILE_EXTENSION, *self.mod_package_mgr.LEGACY_FILE_EXTENSIONS],
                     ),
                     'All Files (*.*)',
@@ -2892,14 +2892,16 @@ class API:
         """
         if not self.active_context: return ApiResponse.error("环境配置上下文缺失")
         try:
-            payload = {"inactive_mods_order": inactive_ids}
+            normalized_inactive_ids = normalize_companion_package_ids(inactive_ids)
+            normalized_temp_ids = normalize_companion_package_ids(temp_ids) if temp_ids is not None else None
+            payload = {"inactive_mods_order": normalized_inactive_ids}
             if temp_ids is not None:
-                payload["temp_mods_order"] = temp_ids
+                payload["temp_mods_order"] = normalized_temp_ids
             result = self.profile_mgr.update_profile(self.active_context.profile_id, payload)
             if result:
-                object.__setattr__(self.active_context, "inactive_mods_order", list(inactive_ids or []))
+                object.__setattr__(self.active_context, "inactive_mods_order", normalized_inactive_ids)
                 if temp_ids is not None:
-                    object.__setattr__(self.active_context, "temp_mods_order", list(temp_ids or []))
+                    object.__setattr__(self.active_context, "temp_mods_order", normalized_temp_ids)
                 return ApiResponse.success()
             return ApiResponse.error("更新配置失败")
         except Exception as e:
@@ -3024,7 +3026,7 @@ class API:
                 return ApiResponse.error("加载顺序管理器未初始化")
             res = self.load_order_mgr.read_share_code(share_code)
             return ApiResponse.success({
-                "file": res.get("share_code_ref", "share://RMM1"),
+                "file": res.get("share_code_ref", "share://RC"),
                 "active_ids": res.get('active_mods', []),
                 "modify_time": res.get('modify_time', 0),
                 "format": res.get('format', 'share_code'),
@@ -4452,7 +4454,7 @@ class API:
             "preset": "rules",
             "module_keys": list(DataBundleManager.RULE_PRESET),
             "dynamic_rule_ids": list(dynamic_rule_ids or []),
-            "filename": f"RimModManager_Rules_{datetime.now().strftime('%Y%m%d')}{DataBundleManager.FILE_EXTENSION}",
+            "filename": f"RimCrow_Rules_{datetime.now().strftime('%Y%m%d')}{DataBundleManager.FILE_EXTENSION}",
         })
 
     @log_api_call
@@ -4461,7 +4463,7 @@ class API:
         try:
             path = file_mgr.select_file_dialog(file_types=(
                 _build_dialog_file_type_label(
-                    'RMM Data Package',
+                    'RimCrow Data Package',
                     [DataBundleManager.FILE_EXTENSION, *DataBundleManager.LEGACY_FILE_EXTENSIONS, '.json'],
                 ),
                 'All Files (*.*)',
@@ -4579,7 +4581,7 @@ class API:
         return ApiResponse.success({"task_id": task_id}, "下载任务已添加")
 
     @log_api_call
-    def open_sub_browser(self, url='', title = 'RimModManager'):
+    def open_sub_browser(self, url='', title = 'RimCrow'):
         """打开或更新 浏览器子窗口"""
         if self.is_browser_runtime() or not self._window:
             target_url = build_sub_browser_target_url(self._browser_base_url, url, title) if self.is_browser_runtime() else str(url or "")

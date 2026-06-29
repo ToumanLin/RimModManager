@@ -129,27 +129,27 @@ class TestGameLogPathResolution(unittest.TestCase):
         self.assertEqual(contexts["Config error in TestThing: bad value"]["phase"], "startup")
         self.assertEqual(contexts["Could not resolve cross-reference to ThingDef named MissingThing "]["phase"], "runtime")
 
-    def test_game_log_manager_reads_rmm_realtime_from_profile_root(self):
+    def test_game_log_manager_reads_rimcrow_realtime_from_profile_root(self):
         default_root = self.temp_dir / "default-userdata"
         profile_root = self.temp_dir / "profile-userdata"
         default_root.mkdir(parents=True)
         profile_root.mkdir(parents=True)
-        (default_root / "RMM_Realtime.log").write_text('{"message":"default realtime"}\n', encoding="utf-8")
-        (profile_root / "RMM_Realtime.log").write_text('{"message":"profile realtime"}\n', encoding="utf-8")
+        (default_root / "RimCrow_Realtime.log").write_text('{"message":"default realtime"}\n', encoding="utf-8")
+        (profile_root / "RimCrow_Realtime.log").write_text('{"message":"profile realtime"}\n', encoding="utf-8")
 
         manager = GameLogManager(SimpleNamespace(user_data_path=str(profile_root)))
         with patch("backend.managers.mgr_game_logs.GameManager.get_default_user_data_paths", return_value=[str(default_root)]):
-            filepath = manager.resolve_log_file_path("RMM_Realtime.log")
-            page = manager.read_log_page("RMM_Realtime.log", page=1, page_size=20)
+            filepath = manager.resolve_log_file_path("RimCrow_Realtime.log")
+            page = manager.read_log_page("RimCrow_Realtime.log", page=1, page_size=20)
 
-        self.assertEqual(filepath, str(profile_root / "RMM_Realtime.log"))
+        self.assertEqual(filepath, str(profile_root / "RimCrow_Realtime.log"))
         self.assertEqual(page["status"], "success")
         self.assertIn("profile realtime", page["blocks"][0]["message"])
 
-    def test_rmm_realtime_log_fills_missing_context_without_overwriting(self):
+    def test_rimcrow_realtime_log_fills_missing_context_without_overwriting(self):
         profile_root = self.temp_dir / "profile-userdata"
         profile_root.mkdir(parents=True)
-        (profile_root / "RMM_Realtime.log").write_text(
+        (profile_root / "RimCrow_Realtime.log").write_text(
             (
                 '{"level":"ERROR","message":"System.NullReferenceException: Object reference not set to an instance of an object",'
                 '"details":"  at ExampleMod.Runtime.Worker.Tick ()",'
@@ -162,7 +162,7 @@ class TestGameLogPathResolution(unittest.TestCase):
         with patch("backend.managers.mgr_game_logs.GameManager.get_default_user_data_paths", return_value=[]), \
              patch("backend.managers.mgr_game_logs.LoadOrderManager") as load_order_manager_cls:
             load_order_manager_cls.return_value.read_active_mods.return_value = {"active_mods": []}
-            page = manager.read_log_page("RMM_Realtime.log", page=1, page_size=20)
+            page = manager.read_log_page("RimCrow_Realtime.log", page=1, page_size=20)
 
         context = page["blocks"][0]["context"]
         self.assertEqual(context["inferredType"], "NullReference")
@@ -170,10 +170,24 @@ class TestGameLogPathResolution(unittest.TestCase):
         self.assertEqual(context["phase"], "runtime")
         self.assertEqual(context["relatedNamespaces"], ["ExampleMod.Runtime.Worker"])
 
+    def test_legacy_rmm_realtime_log_still_resolves_when_new_file_is_missing(self):
+        profile_root = self.temp_dir / "profile-userdata"
+        profile_root.mkdir(parents=True)
+        (profile_root / "RMM_Realtime.log").write_text('{"message":"legacy realtime"}\n', encoding="utf-8")
+
+        manager = GameLogManager(SimpleNamespace(user_data_path=str(profile_root)))
+        with patch("backend.managers.mgr_game_logs.GameManager.get_default_user_data_paths", return_value=[]):
+            filepath = manager.resolve_log_file_path("RimCrow_Realtime.log")
+            page = manager.read_log_page("RimCrow_Realtime.log", page=1, page_size=20)
+
+        self.assertEqual(filepath, str(profile_root / "RMM_Realtime.log"))
+        self.assertEqual(page["status"], "success")
+        self.assertIn("legacy realtime", page["blocks"][0]["message"])
+
     def test_game_log_page_can_reach_older_blocks_beyond_cache_limit(self):
         profile_root = self.temp_dir / "profile-userdata"
         profile_root.mkdir(parents=True)
-        log_file = profile_root / "RMM_Realtime.log"
+        log_file = profile_root / "RimCrow_Realtime.log"
         log_file.write_text(
             "\n".join(f'{{"level":"INFO","message":"game line {idx}"}}' for idx in range(20005)) + "\n",
             encoding="utf-8",
@@ -183,7 +197,7 @@ class TestGameLogPathResolution(unittest.TestCase):
         with patch("backend.managers.mgr_game_logs.GameManager.get_default_user_data_paths", return_value=[]), \
              patch("backend.managers.mgr_game_logs.LoadOrderManager") as load_order_manager_cls:
             load_order_manager_cls.return_value.read_active_mods.return_value = {"active_mods": []}
-            page = manager.read_log_page("RMM_Realtime.log", page=41, page_size=500)
+            page = manager.read_log_page("RimCrow_Realtime.log", page=41, page_size=500)
 
         self.assertEqual(page["status"], "success")
         self.assertFalse(page["has_more"])

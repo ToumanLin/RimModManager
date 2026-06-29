@@ -21,7 +21,7 @@
               <CommonSwitch label="自动检查更新" v-model="formData.enable_auto_update_check" description="开启后，软件启动时会自动提醒新版本。" mini />
             </div>
             <div class="flex flex-wrap gap-2">
-              <button type="button" @click="handleShowChangelog()" :disabled="isPending('changelog')" :class="isPending('changelog') ? 'rmm-action-disabled' : ''"
+              <button type="button" @click="handleShowChangelog()" :disabled="isPending('changelog')" :class="isPending('changelog') ? 'app-action-disabled' : ''"
                 class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-accent-tip/10 bg-accent-tip/15 px-3 py-1.5 text-xs font-bold transition-all hover:bg-accent-tip/30">
                 <LoaderCircle v-if="isPending('changelog')" class="size-3 animate-spin" />
                 {{ isPending('changelog') ? '读取中' : '更新日志' }}
@@ -57,13 +57,13 @@
                   <div v-if="item.note" class="mt-0.5 text-xs leading-relaxed text-text-dim">{{ item.note }}</div>
                 </div>
                 <div class="flex shrink-0 gap-2">
-                  <button type="button" @click="openExternalUrl(item.url)" class="rmm-about-icon-button" title="打开链接">
+                  <button type="button" @click="openExternalUrl(item.url)" class="about-icon-button" title="打开链接">
                     <ExternalLink class="size-3.5" />
                   </button>
-                  <button type="button" @click="copyText(item.url)" class="rmm-about-icon-button" title="复制地址">
+                  <button type="button" @click="copyText(item.url)" class="about-icon-button" title="复制地址">
                     <Copy class="size-3.5" />
                   </button>
-                  <button v-if="item.password" type="button" @click="copyText(item.password)" class="rmm-about-icon-button" title="复制密码">
+                  <button v-if="item.password" type="button" @click="copyText(item.password)" class="about-icon-button" title="复制密码">
                     <KeyRound class="size-3.5" />
                   </button>
                 </div>
@@ -87,10 +87,10 @@
                   <div class="mt-0.5 text-xs leading-relaxed text-text-dim">{{ item.note }}</div>
                 </div>
                 <div class="flex shrink-0 gap-2">
-                  <button v-if="item.url" type="button" @click="openExternalUrl(item.url)" class="rmm-about-icon-button" title="打开链接">
+                  <button v-if="item.url" type="button" @click="openExternalUrl(item.url)" class="about-icon-button" title="打开链接">
                     <ExternalLink class="size-3.5" />
                   </button>
-                  <button type="button" @click="copyText(item.copyValue)" class="rmm-about-icon-button" :title="item.copyTitle">
+                  <button type="button" @click="copyText(item.copyValue)" class="about-icon-button" :title="item.copyTitle">
                     <Copy class="size-3.5" />
                   </button>
                 </div>
@@ -116,10 +116,10 @@
                       <div class="mt-0.5 break-all select-text font-mono text-[0.72rem] text-text-dim">{{ item.url }}</div>
                     </div>
                     <div class="flex shrink-0 gap-2">
-                      <button type="button" @click="openExternalUrl(item.url)" class="rmm-about-icon-button" title="打开链接">
+                      <button type="button" @click="openExternalUrl(item.url)" class="about-icon-button" title="打开链接">
                         <ExternalLink class="size-3.5" />
                       </button>
-                      <button type="button" @click="copyText(item.url)" class="rmm-about-icon-button" title="复制地址">
+                      <button type="button" @click="copyText(item.url)" class="about-icon-button" title="复制地址">
                         <Copy class="size-3.5" />
                       </button>
                     </div>
@@ -387,7 +387,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.rmm-about-icon-button {
+.about-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -400,7 +400,7 @@ onMounted(() => {
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.rmm-about-icon-button:hover {
+.about-icon-button:hover {
   background: rgba(var(--rgb-bg-overlay), 0.1);
   color: rgb(var(--rgb-text-main));
 }

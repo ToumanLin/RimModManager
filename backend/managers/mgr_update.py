@@ -724,13 +724,19 @@ class UpdateManager:
 
             # 2. 定位新版本 Payload
             payload_dir = None
+            payload_exe_name = exe_name
+            exe_candidates = [exe_name]
+            if os.name == "nt" and exe_name.lower() == "rimmodmanager.exe":
+                exe_candidates.insert(0, "RimCrow.exe")
             for root, dirs, files in os.walk(extract_path):
-                if exe_name in files:
+                payload_exe_name = next((name for name in exe_candidates if name in files), "")
+                if payload_exe_name:
                     payload_dir = root
                     break
             
             if not payload_dir:
-                if os.path.exists(os.path.join(extract_path, exe_name)):
+                payload_exe_name = next((name for name in exe_candidates if os.path.exists(os.path.join(extract_path, name))), "")
+                if payload_exe_name:
                     payload_dir = extract_path
                 else:
                     raise Exception("无法在更新包中找到主程序文件")
@@ -770,7 +776,7 @@ class UpdateManager:
                 pass
 
             logger.info("正在启动新版本。")
-            launch_new_application()
+            launch_new_application(os.path.join(install_root, payload_exe_name))
 
             # 8. 当前旧进程功成身退，立即退出
             logger.info("旧版本进程准备退出。")
