@@ -6,7 +6,7 @@
       <div class="modal-section p-4">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div class="flex min-w-0 items-center gap-3">
-            <BrandSignature logo-class="size-14 -m-1.5" tone-class="text-text-main" />
+            <IconSelfOriginal class="size-12 -m-1.5" />
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
                 <h4 class="text-sm font-bold text-text-main">{{ aboutMeta.project.name }}</h4>
@@ -130,11 +130,12 @@
           </div>
         </div>
 
-        <div v-if="donate.enabled" class="modal-section p-4">
-          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div v-if="donate.enabled" class="flex gap-4 items-center modal-section p-4 xl:col-span-2">
+          <BrandSignature logo-class="size-16 -m-3" tone-class="text-text-main" />
+          <div class="flex-1 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div class="min-w-0">
               <h4 class="text-sm font-bold text-text-main">{{ donate.title }}</h4>
-              <p class="mt-1 text-xs leading-relaxed text-text-dim">{{ donate.description }}</p>
+              <p class="mt-1 text-xs leading-relaxed text-text-dim whitespace-pre-line">{{ donate.description }}</p>
             </div>
             <button type="button" @click="showDonateModal = true"
               class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-base/10 bg-bg-overlay/5 px-3 py-1.5 text-xs font-bold transition-all hover:bg-bg-overlay/10">
@@ -157,36 +158,51 @@
       </div>
     </div>
 
-    <CommonModalShell
-      :show="showDonateModal && appStore.uiState.showSettingsPanel"
-      title="支持项目"
-      description="微信和支付宝可直接扫这一张融合收款码。"
-      size="custom"
-      :z-index="130"
-      accent="tip"
-      panel-class="w-auto max-w-[calc(100vw-1.5rem)] border-border-base/18"
-      content-class="p-4"
-      @close="showDonateModal = false"
-    >
-      <div class="w-fit max-w-[calc(100vw-3.5rem)] space-y-3">
-        <div v-if="donate.qrImageUrl" class="w-fit rounded-xl border border-border-base/10 bg-bg-overlay/5 p-2">
-          <img :src="donate.qrImageUrl" alt="支持项目收款码" class="block max-h-[calc(100vh-12rem)] max-w-[min(22rem,calc(100vw-5rem))] rounded-lg object-contain" />
+    <Teleport to="body">
+      <Transition name="donate-modal-fade">
+        <div v-if="isDonateModalVisible" class="fixed inset-0 z-130 flex items-center justify-center px-3 py-4 text-text-main selection:bg-bg-overlay/10">
+          <button type="button" class="absolute inset-0 bg-overlay-scrim backdrop-blur-md" aria-label="关闭打赏弹窗" @click="closeDonateModal"></button>
+          <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(var(--rgb-accent-primary),0.10),transparent_32%),radial-gradient(circle_at_bottom_left,rgba(var(--rgb-accent-special),0.08),transparent_34%)]"></div>
+
+          <section class="modal-surface relative z-10 flex w-[min(28rem,calc(100vw-1.5rem))] max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border-border-base/18"
+            role="dialog" aria-modal="true" aria-label="打赏支持">
+            <div class="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-border-base/18 to-transparent"></div>
+            <div class="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-accent-tip/10 blur-3xl"></div>
+
+            <header class="modal-header relative z-10 flex shrink-0 items-start justify-between gap-4 px-5 py-4">
+              <div class="min-w-0">
+                <h2 class="truncate text-lg font-black tracking-wide text-text-main">打赏支持</h2>
+                <p class="mt-1 text-xs leading-relaxed text-text-dim">感谢支持！微信和支付宝都可以扫 ~</p>
+              </div>
+              <button type="button" class="modal-close-button" aria-label="关闭" @click="closeDonateModal">
+                <X class="size-4" />
+              </button>
+            </header>
+
+            <div class="relative z-10 min-h-0 overflow-y-auto p-4 custom-scrollbar">
+              <div class="w-full max-w-full flex flex-col gap-3">
+                <div v-if="donate.qrImageUrl" class="rounded-xl border border-border-base/10 bg-bg-overlay/5 p-2">
+                  <img :src="donate.qrImageUrl" alt="打赏收款码" class="block h-auto w-full max-h-[calc(100vh-12rem)] rounded-lg object-contain" />
+                </div>
+                <p class="min-w-0 w-full wrap-break-word text-xs leading-relaxed text-text-dim whitespace-pre-line">{{ donate.description }}</p>
+              </div>
+            </div>
+          </section>
         </div>
-        <p class="text-xs leading-relaxed text-text-dim">{{ donate.description }}</p>
-      </div>
-    </CommonModalShell>
+      </Transition>
+    </Teleport>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { Copy, ExternalLink, HeartHandshake, KeyRound, LoaderCircle } from 'lucide-vue-next'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Copy, ExternalLink, HeartHandshake, KeyRound, LoaderCircle, X } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
 import { useAppStore } from '../../../app/stores/appStore'
 import CommonSwitch from '../../../shared/components/input/CommonSwitch.vue'
-import CommonModalShell from '../../../shared/components/modal/CommonModalShell.vue'
 import BrandSignature from '../../../shared/branding/BrandSignature.vue'
 import brandProfile from '../../../shared/branding/brandProfile'
+import { IconSelfOriginal } from '../../../shared/lib/constants.js'
 
 defineProps({
   formData: { type: Object, required: true },
@@ -196,6 +212,7 @@ const appStore = useAppStore()
 const toast = useToast()
 const pendingAction = ref('')
 const showDonateModal = ref(false)
+const isDonateModalVisible = computed(() => showDonateModal.value && appStore.uiState.showSettingsPanel)
 
 const DEFAULT_ABOUT_META = Object.freeze({
   project: {
@@ -216,7 +233,7 @@ const DEFAULT_ABOUT_META = Object.freeze({
   credits: [],
   donate: {
     enabled: false,
-    title: '支持项目',
+    title: '打赏支持',
     description: '',
     qrImageUrl: '',
   },
@@ -267,7 +284,7 @@ const normalizeAboutMeta = (rawMeta) => {
       .filter(item => item.name),
     donate: {
       enabled: !!rawMeta?.donate?.enabled,
-      title: String(rawMeta?.donate?.title || '支持项目').trim(),
+      title: String(rawMeta?.donate?.title || '打赏支持').trim(),
       description: String(rawMeta?.donate?.description || '').trim(),
       qrImageUrl: String(rawMeta?.donate?.qr_image_url || '').trim(),
     },
@@ -341,6 +358,14 @@ const feedbackItems = computed(() => [
 const donate = computed(() => aboutMeta.value.donate)
 
 const isPending = (action) => pendingAction.value === action
+const closeDonateModal = () => {
+  showDonateModal.value = false
+}
+const handleDonateModalKeydown = (event) => {
+  if (event.key !== 'Escape' || !isDonateModalVisible.value) return
+  event.preventDefault()
+  closeDonateModal()
+}
 const runPendingAction = async (action, runner) => {
   if (pendingAction.value) return
   pendingAction.value = action
@@ -381,8 +406,20 @@ const copyText = async (text) => {
   }
 }
 
+watch(isDonateModalVisible, (visible) => {
+  if (visible) {
+    window.addEventListener('keydown', handleDonateModalKeydown)
+    return
+  }
+  window.removeEventListener('keydown', handleDonateModalKeydown)
+}, { immediate: true })
+
 onMounted(() => {
   void loadAboutMeta()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleDonateModalKeydown)
 })
 </script>
 
@@ -403,5 +440,26 @@ onMounted(() => {
 .about-icon-button:hover {
   background: rgba(var(--rgb-bg-overlay), 0.1);
   color: rgb(var(--rgb-text-main));
+}
+
+.donate-modal-fade-enter-active,
+.donate-modal-fade-leave-active {
+  transition: opacity 0.22s ease;
+}
+
+.donate-modal-fade-enter-from,
+.donate-modal-fade-leave-to {
+  opacity: 0;
+}
+
+.donate-modal-fade-enter-active section,
+.donate-modal-fade-leave-active section {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+}
+
+.donate-modal-fade-enter-from section,
+.donate-modal-fade-leave-to section {
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
 }
 </style>

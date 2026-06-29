@@ -66,8 +66,8 @@
   "credits": [],
   "donate": {
     "enabled": true,
-    "title": "支持项目",
-    "description": "如果这个工具节省了你的时间，可以扫码支持后续维护。",
+    "title": "打赏支持",
+    "description": "如果你觉得这个工具用起来不错，也可以请我喝杯奶茶哦 ~ \n卤蛋鸡爪烤脆肠、辣条雪糕棒棒糖、瓜子花生矿泉水、啤酒饮料八宝粥，统统可投喂 o(≧▽≦)o ",
     "qr_image_url": "/project-assets/donate-qr.png"
   }
 }
