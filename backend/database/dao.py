@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
+import json
 import operator
 import os
 from pathlib import Path
@@ -81,6 +82,51 @@ def _normalize_path_hashes(path_hashes: Sequence[str] | str) -> list[str]:
 def _sanitize_model_payload(payload: dict[str, Any], valid_field_names: set[str]) -> dict[str, Any]:
     """过滤掉模型上不存在的字段，避免批量写入时混入 UI 临时字段。"""
     return {key: value for key, value in payload.items() if key in valid_field_names}
+
+
+def _coerce_json_list(value: Any) -> list[Any]:
+    """兼容旧库里被二次 JSON 编码的列表字段。"""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+        except (TypeError, ValueError):
+            return [text]
+        if isinstance(parsed, list):
+            return parsed
+        if parsed in (None, ""):
+            return []
+        return [parsed]
+    return [value]
+
+
+def normalize_user_mod_data_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """统一用户自定义数据的可变字段格式，避免旧格式继续扩散。"""
+    normalized = dict(payload or {})
+    normalized["mod_id"] = normalize_package_id(normalized.get("mod_id"))
+    for field_name in ("tags", "ignored_issues"):
+        if field_name in normalized:
+            normalized[field_name] = [str(item).strip() for item in _coerce_json_list(normalized.get(field_name)) if str(item).strip()]
+    if "interlock_id" in normalized:
+        interlock_id = normalized.get("interlock_id")
+        if hasattr(interlock_id, "id"):
+            interlock_id = interlock_id.id
+        normalized["interlock_id"] = str(interlock_id or "").strip() or None
+    return normalized
+
+
+def normalize_interlock_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """统一联锁组结构，导入导出和迁移共用同一套格式。"""
+    normalized = dict(payload or {})
+    normalized["id"] = str(normalized.get("id") or "").strip()
+    normalized["chain"] = normalize_package_ids(_coerce_json_list(normalized.get("chain")))
+    return normalized
 
 
 def _normalize_language_fields(asset: dict[str, Any]) -> dict[str, Any]:
@@ -967,7 +1013,7 @@ class ModDAO:
                 clean_batch = []
                 for user_data in batch:
                     clean_data = _sanitize_model_payload(user_data, valid_field_names)
-                    clean_data["mod_id"] = normalize_package_id(clean_data.get("mod_id"))
+                    clean_data = normalize_user_mod_data_payload(clean_data)
                     if clean_data["mod_id"]:
                         clean_batch.append(clean_data)
                 if not clean_batch:
