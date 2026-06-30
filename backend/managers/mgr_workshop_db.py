@@ -118,11 +118,18 @@ class WorkshopDBManager:
         with open(path, "r", encoding="utf-8-sig") as handle:
             return json.load(handle)
 
-    def _require_dataset_field(self, payload: dict[str, Any], field: str, expected_type: type, dataset_label: str) -> Any:
+    def _require_dataset_field(self, payload: dict[str, Any], field: str, expected_type: type | tuple[type, ...], dataset_label: str) -> Any:
         value = payload.get(field) if isinstance(payload, dict) else None
         if not isinstance(value, expected_type):
             raise ValueError(f"{dataset_label} 数据文件缺少有效字段: {field}")
         return value
+
+    def _require_dataset_version(self, payload: dict[str, Any], dataset_label: str) -> str:
+        value = self._require_dataset_field(payload, "version", (str, int, float), dataset_label)
+        version = str(value).strip()
+        if not version:
+            raise ValueError(f"{dataset_label} 数据文件缺少有效字段: version")
+        return version
 
     def _replace_ext_table_rows(self, model: Any, rows: list[dict[str, Any]], *, batch_size: int = 500) -> None:
         """
@@ -158,7 +165,7 @@ class WorkshopDBManager:
 
             data = self._read_dataset_payload(path)
 
-            version = str(self._require_dataset_field(data, "version", str, "SteamDB"))
+            version = self._require_dataset_version(data, "SteamDB")
             raw_db = self._require_dataset_field(data, "database", dict, "SteamDB")
 
             batch = []
@@ -219,7 +226,7 @@ class WorkshopDBManager:
 
             content = self._read_dataset_payload(path)
 
-            version = str(self._require_dataset_field(content, "version", str, "UseThisInstead"))
+            version = self._require_dataset_version(content, "UseThisInstead")
             rules = self._require_dataset_field(content, "rules", list, "UseThisInstead")
 
             batch = []
