@@ -74,6 +74,47 @@ class TestDataBundleManager(unittest.TestCase):
 
         self.assertEqual(inspected["format"], "rmm.data.bundle")
 
+    def test_inspect_bundle_reports_invalid_manifest_lists(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundle_path = Path(temp_dir) / "broken-preview.rimcrowdata.zip"
+            with zipfile.ZipFile(bundle_path, "w") as bundle:
+                bundle.writestr("manifest.json", '{"format":"rimcrow.data.bundle","schema_version":1,"modules":{},"profiles":{}}')
+
+            manager = DataBundleManager(_StubProfileManager(), ai_mgr=None, rule_mgr_provider=lambda: None)
+
+            inspected = manager.inspect_bundle(str(bundle_path))
+
+        self.assertEqual(inspected["modules"], [])
+        self.assertEqual(inspected["profiles"], [])
+        self.assertTrue(any("modules" in item for item in inspected["warnings"]))
+        self.assertTrue(any("profiles" in item for item in inspected["warnings"]))
+
+    def test_import_bundle_rejects_manifest_module_missing_payload_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundle_path = Path(temp_dir) / "broken.rimcrowdata.zip"
+            with zipfile.ZipFile(bundle_path, "w") as bundle:
+                bundle.writestr("manifest.json", '{"format":"rimcrow.data.bundle","schema_version":1,"modules":[{"key":"settings"}],"profiles":[]}')
+
+            manager = DataBundleManager(_StubProfileManager(), ai_mgr=None, rule_mgr_provider=lambda: None)
+
+            with self.assertRaises(ValueError) as ctx:
+                manager.import_bundle(str(bundle_path))
+
+        self.assertIn("settings", str(ctx.exception))
+
+    def test_import_bundle_rejects_profiles_module_missing_profile_list(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundle_path = Path(temp_dir) / "broken-profiles.rimcrowdata.zip"
+            with zipfile.ZipFile(bundle_path, "w") as bundle:
+                bundle.writestr("manifest.json", '{"format":"rimcrow.data.bundle","schema_version":1,"modules":[{"key":"profiles"}]}')
+
+            manager = DataBundleManager(_StubProfileManager(), ai_mgr=None, rule_mgr_provider=lambda: None)
+
+            with self.assertRaises(ValueError) as ctx:
+                manager.import_bundle(str(bundle_path))
+
+        self.assertIn("profiles", str(ctx.exception))
+
     def test_build_profile_conflict_entries_collects_all_same_name_profiles(self):
         profile_mgr = _StubProfileManager([
             {
