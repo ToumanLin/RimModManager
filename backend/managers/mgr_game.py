@@ -26,6 +26,12 @@ class GameManager:
     游戏管理：路径检测、启动游戏
     """
 
+    PROCESS_NAMES_BY_SYSTEM = {
+        'Windows': ("RimWorldWin64.exe", "RimWorldWin.exe"),
+        'Darwin': ("RimWorldMac",),
+        'Linux': ("RimWorldLinux", "RimWorldLinux.x86_64", "RimWorldWin64.exe", "RimWorldWin.exe"),
+    }
+
     @classmethod
     def get_default_user_data_paths(cls) -> list[str]:
         """返回与 Profile 环境无关的默认用户数据目录候选。"""

@@ -1163,7 +1163,7 @@ class TestSteamManagerPlatformGuards(unittest.TestCase):
         manager.steam_exe = ""
 
         with patch("backend.managers.mgr_steam.platform.system", return_value="Darwin"), \
-             patch("backend.managers.mgr_steam.subprocess.Popen") as popen:
+             patch("backend.platform.runtime.subprocess.Popen") as popen:
             SteamManager.launch_via_steam_cmd(manager, app_id="294100")
 
         popen.assert_called_once_with(["open", "steam://run/294100"])
