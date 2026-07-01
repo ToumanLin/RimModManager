@@ -9,7 +9,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.managers.mgr_steam import SteamManager
-from backend.paths.game_locations import get_default_steam_root_candidates, normalize_steam_root
+from backend.paths.game_locations import (
+    get_default_steam_data_root_candidates,
+    get_default_steam_root_candidates,
+    normalize_steam_root,
+)
 from backend.settings import settings
 
 
@@ -184,6 +188,13 @@ class TestSteamActionReadiness(unittest.TestCase):
             candidates = get_default_steam_root_candidates()
 
         self.assertEqual(candidates, ["/Applications", "/Users/test/Applications"])
+
+    def test_default_steam_data_root_candidates_use_macos_application_support(self):
+        with patch("backend.paths.game_locations.platform.system", return_value="Darwin"), \
+             patch("backend.paths.game_locations.os.path.expanduser", return_value="/Users/test"):
+            candidates = get_default_steam_data_root_candidates()
+
+        self.assertEqual(candidates, ["/Users/test/Library/Application Support/Steam"])
 
     @patch("backend.managers.mgr_steam.platform.system", return_value="Linux")
     def test_ensure_tools_uses_linux_steamcmd_archive(self, _platform_system):

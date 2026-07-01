@@ -103,6 +103,16 @@ def get_default_steam_root_candidates(system_name: str | None = None) -> list[st
     ], system_name=resolved_system_name)
 
 
+def get_default_steam_data_root_candidates(system_name: str | None = None) -> list[str]:
+    resolved_system_name = _resolved_system_name(system_name)
+    if resolved_system_name == "Darwin":
+        home = os.path.expanduser("~")
+        return unique_paths([
+            os.path.join(home, "Library", "Application Support", "Steam"),
+        ], system_name=resolved_system_name)
+    return get_default_steam_root_candidates(system_name=resolved_system_name)
+
+
 def find_app_bundle_path(executable_or_install_path: str) -> str:
     path = Path(str(executable_or_install_path or "").strip())
     if not str(path):

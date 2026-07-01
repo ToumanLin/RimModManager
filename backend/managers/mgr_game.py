@@ -15,6 +15,7 @@ from backend.paths.game_locations import (
     find_rimworld_install_from_steam,
     get_default_player_log_paths,
     get_default_steam_root_candidates,
+    get_default_steam_data_root_candidates,
     get_default_user_data_paths,
 )
 from backend.paths.core import unique_paths
@@ -197,7 +198,7 @@ class GameManager:
                         candidate_paths.append(install_loc)
         candidate_paths.extend([
             os.path.join(root, "steamapps", "common", "RimWorld")
-            for root in get_default_steam_root_candidates(system_name=system_name)
+            for root in get_default_steam_data_root_candidates(system_name=system_name)
         ])
 
         for install_loc in unique_paths(candidate_paths, system_name=system_name):
@@ -224,7 +225,7 @@ class GameManager:
 
     @staticmethod
     def _detect_steam_root_candidates() -> list[str]:
-        return get_default_steam_root_candidates(system_name=platform.system())
+        return get_default_steam_data_root_candidates(system_name=platform.system())
 
     @staticmethod
     def _library_contains_rimworld(library_path: str, folder_data: dict | None = None) -> bool:
